@@ -13,6 +13,9 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: write
     outputs:
       channel: ${{ steps.identity.outputs.channel }}
       version: ${{ steps.identity.outputs.version }}
@@ -52,9 +55,15 @@ jobs:
           archive=pathlib.Path('dist/xur-app-x86_64.tar.gz')
           pathlib.Path('dist/build.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],'sha256':hashlib.file_digest(archive.open('rb'),'sha256').hexdigest(),'checks':'eng/test-fast.sh passed','hardwareTests':'Not run'},indent=2)+'\n')
           PY
+      - name: Prune superseded channel candidates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: ${{ steps.identity.outputs.channel }}
+        run: python3 eng/ci-artifacts.py "$RELEASE_CHANNEL"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: release-candidate-${{ github.sha }}
+          name: release-candidate-${{ steps.identity.outputs.channel }}-${{ github.sha }}
+          compression-level: 0
           retention-days: 7
           path: |
             dist/xur-app-x86_64.tar.gz
@@ -74,13 +83,14 @@ jobs:
       name: ${{ needs.build.outputs.channel }}
     permissions:
       contents: write
-      actions: read
+      actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Download this run's tested candidate
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-candidate-$GITHUB_SHA" --dir .build/ci-artifact
+          RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-candidate-$RELEASE_CHANNEL-$GITHUB_SHA" --dir .build/ci-artifact
       - name: Sign and publish approved build
         env:
           GH_TOKEN: ${{ github.token }}
@@ -95,3 +105,8 @@ jobs:
           printf '%s\n' "$XUR_UPDATE_SIGNING_KEY_PEM" > "$XUR_UPDATE_SIGNING_KEY"
           unset XUR_UPDATE_SIGNING_KEY_PEM
           python3 eng/ci-release.py --channel "$RELEASE_CHANNEL" --version "$RELEASE_VERSION" --commit "$GITHUB_SHA"
+      - name: Remove published candidate from Actions storage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
+        run: python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --published

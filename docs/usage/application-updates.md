@@ -156,7 +156,9 @@ Never approve a candidate you have not reviewed. A superseded branch build is
 rejected before publication; approve the newest successful candidate instead.
 A new push supersedes the previous workflow on that branch, including a candidate
 waiting for approval, so an unattended approval cannot block subsequent builds.
-Failed checks retain diagnostic artifacts for seven days.
+Failed checks retain diagnostic artifacts for seven days. Only the newest candidate
+per channel is retained; after publication its Actions artifact is deleted. The
+public release assets stay on GitHub Releases.
 
 Nightly uses a small `nightly` release pointer to an immutable per-build release.
 Stable uses GitHub's latest non-prerelease. Signed metadata binds each release to
