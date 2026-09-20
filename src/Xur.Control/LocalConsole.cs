@@ -20,15 +20,16 @@ public static class LocalConsole
     static bool serialLogs;
     static int page;
     static int selection;
-    static readonly string[] Options = ["Status and login", "Tailscale QR", "IP addresses", "Hardware", "Logs", "Reboot", "Shut down"];
-    static readonly string[] UpdateOptions = ["Check for updates", "Update OS", "Toggle automatic updates", "Reboot (interrupts workloads)", "Roll back OS", "Back to updates"];
-    static readonly string[] AppUpdateOptions = ["Check for updates", "Update Xur", "Roll back Xur", "Back to updates"];
-    static readonly string[] UpdateMenuOptions = ["Xur application", "Operating system", "Back to menu"];
-    public static bool ViewingApplicationUpdates { get {lock(Sync)return view=="application-updates";} }
-    static string[] CurrentOptions => view=="update-menu" ? UpdateMenuOptions : view=="application-updates" ? AppUpdateOptions : view=="updates" ? UpdateOptions : appliance?.Installer==false ? [..Options,"Updates"] : Options;
-    public static bool ViewingUpdates { get { lock(Sync)return view=="updates"; } }
+    static ConsoleScreen? maintenance;
+    public static string[] RootOptions(bool installer=false) => installer
+        ? ["Status and login", "Tailscale QR", "IP addresses", "Hardware", "Logs", "Power"]
+        : ["Status and login", "Tailscale QR", "IP addresses", "Hardware", "Logs", "Updates", "Power"];
+    static string[] Options => RootOptions(appliance?.Installer==true);
+    static string[] CurrentOptions => view=="maintenance" ? maintenance!.Options.Select(o=>o.Display).ToArray() : Options;
+    public static bool ViewingMaintenance { get {lock(Sync)return view=="maintenance";} }
     static bool Plain => Environment.GetEnvironmentVariable("XUR_CONSOLE") == "stdio";
-    public const string Menu = "\n1. Status and login\n2. Tailscale QR\n3. IP addresses\n4. Hardware\n5. Logs\n6. Reboot\n7. Shut down\n8. Updates\nSelection: ";
+    public static string Menu(bool installer=false) => "\n"+string.Join('\n',RootOptions(installer).Select((label,i)=>$"{i+1}. {label}"))+"\n0. Exit\nSelection: ";
+    public static char RootKey(int index,bool installer=false) => (installer ? "12345w" : "12345uw")[index];
 
     public static async Task Start(Appliance app, Bootstrap auth)
     {
@@ -94,44 +95,54 @@ public static class LocalConsole
     {
         lock(Sync)
         {
-            if(action==ConsoleKeyAction.Enter)return view=="qr" || serialLogs ? '0' : view=="update-menu" ? "ho0"[selection] : view=="application-updates" ? "efgu"[selection] : view=="updates" ? "cda6bu"[selection] : (char)('1'+selection);
-            if(action==ConsoleKeyAction.Back)return view is "updates" or "application-updates" ? 'u' : '0';
+            if(action==ConsoleKeyAction.Enter)
+            {
+                if(view=="qr" || serialLogs)return '0';
+                if(view=="maintenance")return maintenance!.Options[selection].Enabled ? maintenance.Options[selection].Key : null;
+                return RootKey(selection,appliance?.Installer==true);
+            }
+            if(action==ConsoleKeyAction.Back)return '0';
             if(view=="qr")return null; // Its single selectable action is Back to menu.
             if(action==ConsoleKeyAction.PageDown)return 'n';
             if(action==ConsoleKeyAction.PageUp)return 'p';
             if(action==ConsoleKeyAction.Up)selection=(selection+CurrentOptions.Length-1)%CurrentOptions.Length;
             else if(action==ConsoleKeyAction.Down)selection=(selection+1)%CurrentOptions.Length;
-            else if(action>=ConsoleKeyAction.One && action<=ConsoleKeyAction.Nine)selection=Math.Min(action-ConsoleKeyAction.One,CurrentOptions.Length-1);
+            else if(action>=ConsoleKeyAction.One && action<=ConsoleKeyAction.Nine)
+            {
+                var index=action-ConsoleKeyAction.One;
+                if(index>=CurrentOptions.Length)return null;
+                selection=index;
+            }
             Render();return null;
         }
     }
-    public static void OpenUpdateMenu()
+    public static void OpenMaintenance(ConsoleScreen screen,bool refreshOnly=false)
     {
-        lock(Sync) { view="update-menu";title="Updates";body="";selection=0;serialLogs=false;page=0;Render(); }
-    }
-    public static void OpenApplicationUpdates(ApplicationUpdateStatus? status,bool refreshOnly=false)
-    {
-        lock(Sync) {
-            if(refreshOnly && view!="application-updates")return;
-            if(view!="application-updates")selection=0;
-            view="application-updates";title="Xur updates";serialLogs=false;page=0;
-            body=status==null ? "Could not load application updates." :
-                $"Installed: {status.Current.Version}\nAvailable: {status.Available?.Version ?? "Check for updates"}\nServer: {status.Server}\n\n{status.Operation?.Stage}: {status.Operation?.Message}\n\nLocal build testing can be enabled in web Settings.";
-            Render();
+        lock(Sync)
+        {
+            if(refreshOnly && (view!="maintenance" || maintenance?.Id!=screen.Id))return;
+            if(view!="maintenance" || maintenance?.Id!=screen.Id){selection=0;page=0;}
+            else if(maintenance!=null)
+            {
+                var key=maintenance.Options[Math.Min(selection,maintenance.Options.Length-1)].Key;
+                var index=Array.FindIndex(screen.Options,o=>o.Key==key);
+                selection=index<0?0:index;
+            }
+            maintenance=screen;view="maintenance";title=screen.Title;body=screen.Body;serialLogs=false;Render();
         }
     }
-    public static void OpenUpdates(OsUpdateStatus? status, string? error=null)
+    public static char? SelectLine(string line)
     {
-        lock(Sync) {
-            if(view!="updates")selection=0;
-            view="updates";title="OS updates";serialLogs=false;page=0;
-            body=error ?? (status==null ? "Loading..." :
-                $"Installed: {status.Current?.Version}\nAvailable: {status.Available?.Version ?? "Check for updates"}\n"+
-                $"Pending: {(status.RollbackQueued ? status.Previous?.Version : status.Pending?.Version) ?? "None"}\n"+
-                $"Automatic updates: {(status.Automatic ? "On" : "Paused")}\n"+
-                $"Operation: {(status.Busy ? "Working" : status.Operation?.Stage ?? "Idle")}\n{status.Operation?.Message}");
-            Render();
+        var key=Command(line);
+        if(key is >= '1' and <= '9')
+        {
+            lock(Sync)
+            {
+                if(key-'1'>=CurrentOptions.Length)return null;
+                selection=key.Value-'1';return Navigate(ConsoleKeyAction.Enter);
+            }
         }
+        return key;
     }
     public static void Show(string heading,string text)
     { lock(Sync) { view="detail"; title=heading; body=Clean(text); serialLogs=false; page=0; Render(); } }
@@ -153,7 +164,7 @@ public static class LocalConsole
         // DA/DSR replies contain digits too. Only an entire option line is a command.
         if(line.Any(char.IsControl))return null;
         line=line.Trim().ToLowerInvariant();
-        return line.Length==1 && "0123456789npcdabefghou".Contains(line[0]) ? line[0] : null;
+        return line.Length==1 && "0123456789npcdabefghourtvswy".Contains(line[0]) ? line[0] : null;
     }
     public static string Clean(string text)
     {
@@ -230,7 +241,7 @@ public static class LocalConsole
     {
         if(Plain)
         {
-            var text=view=="qr"?QrText():body+(view=="status"&&ConnectedQr?"\n"+string.Join('\n',ServeQr()):"");
+            var text=view=="qr"?QrText():body+(view=="status"&&ConnectedQr?"\n"+string.Join('\n',ServeQr()):"")+"\n"+string.Join('\n',CurrentOptions.Select((o,i)=>$"{i+1}. {o}"))+"\n0. Back";
             if(LastFrames.GetValueOrDefault("stdio")==text)return;
             LastFrames["stdio"]=text;Console.WriteLine("Xur setup\n"+text);return;
         }

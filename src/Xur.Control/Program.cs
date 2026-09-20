@@ -18,34 +18,39 @@ async Task Root()
         try { using var client=LocalClient.Create(Path.Combine(run,"control.sock"));
             running=(await client.GetAsync("/local/status")).IsSuccessStatusCode; } catch { }
     if(!running) { await StartHost(); return; }
+    using var menuClient=LocalClient.Create(Path.Combine(run,"control.sock"));
+    var status=await menuClient.GetFromJsonAsync<JsonElement>("/local/status");
+    var installer=status.TryGetProperty("installer",out var mode) && mode.GetBoolean();
+    var menu=new ConsoleMaintenance(menuClient,installer,local:true);
     while(true)
     {
-        Console.Write(LocalConsole.Menu);
-        var choice=Console.ReadLine(); if(choice==null) return;
-        if(choice.Trim()=="8") { await InteractiveUpdates();continue; }
-        var action=choice.Trim() switch { "1"=>"status", "2"=>"qr", "3"=>"network", "4"=>"hardware", "5"=>"logs", "6"=>"reboot", "7"=>"poweroff", _=>"" };
-        if(action.Length>0) await RunCommand(action,false);
-        if(choice.Trim()=="1") await RunCommand("login",false);
+        Console.Write(LocalConsole.Menu(installer));
+        var choice=Console.ReadLine()?.Trim();if(choice is null or "0")return;
+        if(!int.TryParse(choice,out var selected) || selected<1 || selected>LocalConsole.RootOptions(installer).Length)continue;
+        var key=LocalConsole.RootKey(selected-1,installer);
+        if(key is 'u' or 'w'){await InteractiveMaintenance(menu,key=='u'?"updates":"power");continue;}
+        var action=key switch { '1'=>"status", '2'=>"qr", '3'=>"network", '4'=>"hardware", '5'=>"logs", _=>"" };
+        if(action.Length>0)await RunCommand(action,false);
+        if(key=='1')await RunCommand("login",false);
     }
 }
 
-async Task InteractiveUpdates()
+async Task InteractiveMaintenance(ConsoleMaintenance menu,string view)
 {
-    while(true)
+    await menu.Open(view);
+    Task<string?>? read=null;
+    string lastFrame="";
+    while(!menu.Closed)
     {
-        Console.Write("\nUpdates\n1. Xur application\n2. Operating system\n0. Back to menu\nSelection: ");
-        var choice=Console.ReadLine()?.Trim();if(choice is null or "0")return;
-        if(choice is not ("1" or "2"))continue;
-        var application=choice=="1";var prefix=application?"application-updates":"updates";
-        var actions=application?new[]{"status","check","update","rollback"}:new[]{"status","check","stage","enable","disable","rollback"};
-        var labels=application?new[]{"Show status","Check for updates","Update Xur","Roll back Xur"}:new[]{"Show status","Check for updates","Update OS","Enable automatic updates","Pause automatic updates","Roll back OS"};
-        while(true)
-        {
-            Console.Write("\n"+(application?"Xur application":"Operating system")+"\n"+string.Join('\n',labels.Select((label,i)=>(i+1)+". "+label))+"\n0. Back to updates\nSelection: ");
-            choice=Console.ReadLine()?.Trim();if(choice==null)return;if(choice=="0")break;
-            if(int.TryParse(choice,out var selected) && selected>=1 && selected<=actions.Length)
-                await RunCommand(actions[selected-1]=="status"?prefix:prefix+"/"+actions[selected-1],false);
-        }
+        var screen=menu.Screen;
+        var frame="\n"+screen.Title+"\n"+screen.Body+"\n"+string.Join('\n',screen.Options.Select((o,i)=>$"{i+1}. {o.Display}"))+"\n0. Back\nSelection: ";
+        if(frame!=lastFrame){Console.Write(frame);lastFrame=frame;}
+        read??=Task.Run(Console.ReadLine);
+        if(await Task.WhenAny(read,Task.Delay(5000))!=read){await menu.Refresh();continue;}
+        var choice=(await read)?.Trim();read=null;lastFrame="";if(choice==null)return;
+        if(choice=="0"){await menu.Select('0');continue;}
+        if(int.TryParse(choice,out var selected) && selected>=1 && selected<=screen.Options.Length)
+            await menu.Select(screen.Options[selected-1].Key);
     }
 }
 
@@ -53,7 +58,7 @@ async Task RunCommand(string action, bool json)
 {
     var run = Environment.GetEnvironmentVariable("XUR_RUN") ?? "/run/xur";
     using var client = LocalClient.Create(Path.Combine(run,"control.sock"));
-    var result = action is "qr" or "poweroff" or "reboot" || (action.StartsWith("updates/",StringComparison.Ordinal) || action.StartsWith("application-updates/",StringComparison.Ordinal))
+    var result = action is "qr" or "poweroff" or "reboot" or "update-all/start" || (action.StartsWith("updates/",StringComparison.Ordinal) || action.StartsWith("application-updates/",StringComparison.Ordinal))
         ? await client.PostAsync("/local/"+action,null) : await client.GetAsync("/local/"+action);
     Console.WriteLine(await result.Content.ReadAsStringAsync());
 }
@@ -347,13 +352,23 @@ async Task StartHost()
         return Results.Redirect("/reboot?boot="+appliance.BootId);
     });
     app.MapGet("/local/console-frame",(int? columns,int? rows)=>Results.Text(LocalConsole.ExportFrame(columns??100,rows??40),"text/plain; charset=utf-8"));
-    app.MapGet("/local/status",()=>Results.Text(JsonSerializer.Serialize(new { urls=appliance.Urls(),tailscale=appliance.TailscaleState, diskWrites="ApprovalRequired" })));
+    app.MapGet("/local/status",()=>Results.Text(JsonSerializer.Serialize(new { urls=appliance.Urls(),tailscale=appliance.TailscaleState, diskWrites="ApprovalRequired",installer=appliance.Installer })));
     app.MapGet("/local/network",()=>Results.Json(appliance.Network()));
     app.MapGet("/local/login",()=>Results.Text(auth.AccountConfigured ? "User: "+auth.Username+"\nSign in with your username and password." : "User: xur\nAccess code: "+auth.DisplayCode));
     app.MapGet("/local/tailscale",()=>Results.Json(new { state=appliance.TailscaleState, url=appliance.TailUrl }));
     app.MapGet("/local/hardware",async()=>Results.Text(await appliance.Agent.GetStringAsync("/hardware")));
     app.MapGet("/local/logs",async()=>Results.Text(await appliance.Agent.GetStringAsync("/logs")));
     app.MapPost("/local/qr",()=>{ appliance.StartQr();return Results.Text("Real QR enrollment started on local and serial consoles"); });
+    app.MapGet("/local/update-all",async Task<IResult>()=> {
+        if(appliance.Installer)return Results.Conflict();
+        using var result=await appliance.Agent.GetAsync("/update-all");
+        return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
+    });
+    app.MapPost("/local/update-all/start",async Task<IResult>()=> {
+        if(appliance.Installer)return Results.Conflict();
+        using var result=await appliance.Agent.PostAsync("/update-all",null);
+        return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
+    });
     app.MapPost("/local/{action}",async(string action)=>{ if(action is not ("reboot" or "poweroff")) return Results.BadRequest(); return Results.StatusCode((int)(await appliance.Agent.PostAsync("/power/"+action,null)).StatusCode); });
     app.MapProfiles(appliance,profileManager,catalog);
     app.MapUpdates(appliance);
@@ -380,15 +395,7 @@ async Task StartHost()
         }
     });
     app.Lifetime.ApplicationStopping.Register(LocalConsole.Stop);
-    async Task ShowUpdates(bool refreshOnly=false)
-    {
-        if(appliance.Installer){LocalConsole.OpenUpdates(null,"OS updates are available after installation.");return;}
-        try {
-            var status=await appliance.Agent.GetFromJsonAsync<OsUpdateStatus>("/updates");
-            if(!refreshOnly || LocalConsole.ViewingUpdates)LocalConsole.OpenUpdates(status);
-        }
-        catch { if(!refreshOnly || LocalConsole.ViewingUpdates)LocalConsole.OpenUpdates(null,"Could not load update status. Check the web manager or logs."); }
-    }
+    var consoleMenu=new ConsoleMaintenance(appliance.Agent,appliance.Installer);
     async Task Input(TextReader input, bool physical)
     {
         var keys=new ConsoleKeyReader();var buffer=new char[1];Task<int>? read=null;
@@ -396,7 +403,7 @@ async Task StartHost()
         {
             char? key;
             if(Environment.GetEnvironmentVariable("XUR_CONSOLE")=="stdio")
-            { var line=await input.ReadLineAsync(); if(line==null)break;key=LocalConsole.Command(line); }
+            { var line=await input.ReadLineAsync(); if(line==null)break;key=LocalConsole.SelectLine(line); }
             else
             {
                 read??=input.ReadAsync(buffer,0,1);
@@ -414,37 +421,27 @@ async Task StartHost()
             if(key==null)continue;
             try
             {
+                if(LocalConsole.ViewingMaintenance && key is not ('n' or 'p'))
+                {
+                    await consoleMenu.Select(key.Value);
+                    if(consoleMenu.Closed)LocalConsole.Status(appliance,auth);
+                    else LocalConsole.OpenMaintenance(consoleMenu.Screen);
+                    continue;
+                }
                 switch(key.Value)
                 {
-                    case '0':
-                        if(LocalConsole.ViewingUpdates || LocalConsole.ViewingApplicationUpdates)LocalConsole.OpenUpdateMenu();else LocalConsole.Status(appliance,auth);break;
-                    case '1': LocalConsole.Status(appliance,auth); break;
-                    case '3': LocalConsole.OpenNetwork(); break;
-                    case '2': appliance.StartQr(); break;
-                    case '4': LocalConsole.Show("Hardware",await appliance.Agent.GetStringAsync("/hardware")); break;
-                    case 'h':
-                        LocalConsole.OpenApplicationUpdates(await appliance.Agent.GetFromJsonAsync<ApplicationUpdateStatus>("/application-updates"));break;
-                    case 'e': case 'f': case 'g':
-                        if(!LocalConsole.ViewingApplicationUpdates)break;
-                        await appliance.Agent.PostAsJsonAsync("/application-updates",new ApplicationUpdateRequest(key.Value switch {'e'=>"check",'f'=>"update",_=>"rollback"}));
-                        LocalConsole.OpenApplicationUpdates(await appliance.Agent.GetFromJsonAsync<ApplicationUpdateStatus>("/application-updates"));break;
-                    case '8': case 'u': LocalConsole.OpenUpdateMenu();break;
-                    case 'o': await ShowUpdates(); break;
-                    case 'c': case 'd': case 'a': case 'b':
-                        if(!LocalConsole.ViewingUpdates)break;
-                        var updateAction=key.Value switch { 'c'=>"check",'d'=>"stage",'b'=>"rollback",_=> (await appliance.Agent.GetFromJsonAsync<OsUpdateStatus>("/updates"))!.Automatic ? "disable" : "enable" };
-                        var updateResult=await appliance.Agent.PostAsJsonAsync("/updates",new OsUpdateAction(updateAction));
-                        if(!updateResult.IsSuccessStatusCode)LocalConsole.OpenUpdates(null,"Action unavailable. Check update status in the web manager.");
-                        else await ShowUpdates();
-                        break;
+                    case '0': case '1': LocalConsole.Status(appliance,auth);break;
+                    case '3': LocalConsole.OpenNetwork();break;
+                    case '2': appliance.StartQr();break;
+                    case '4': LocalConsole.Show("Hardware",await appliance.Agent.GetStringAsync("/hardware"));break;
+                    case 'u': case 'w':
+                        await consoleMenu.Open(key=='u'?"updates":"power");LocalConsole.OpenMaintenance(consoleMenu.Screen);break;
                     case '5':
                         LocalConsole.UpdateLogs(await appliance.Agent.GetStringAsync("/console-logs")); LocalConsole.OpenLogs();
                         if(physical)await Processes.Run("chvt",["2"]);
                         break;
                     case 'n': LocalConsole.Page(1); break;
                     case 'p': LocalConsole.Page(-1); break;
-                    case '6': await appliance.Agent.PostAsync("/power/reboot",null); break;
-                    case '7': await appliance.Agent.PostAsync("/power/poweroff",null); break;
                 }
             }
             catch { LocalConsole.Show("Action unavailable","The web setup remains running. Press 0 for the menu."); }
@@ -473,8 +470,11 @@ async Task StartHost()
         while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {
             await Task.Delay(5000);
-            if(LocalConsole.ViewingUpdates)await ShowUpdates(refreshOnly:true);
-            if(LocalConsole.ViewingApplicationUpdates)try {LocalConsole.OpenApplicationUpdates(await appliance.Agent.GetFromJsonAsync<ApplicationUpdateStatus>("/application-updates"),refreshOnly:true);}catch{}
+            if(LocalConsole.ViewingMaintenance)
+            {
+                await consoleMenu.Refresh();
+                LocalConsole.OpenMaintenance(consoleMenu.Screen,refreshOnly:true);
+            }
             try { LocalConsole.UpdateLogs(await appliance.Agent.GetStringAsync("/console-logs")); } catch { }
         }
     });

@@ -11,8 +11,8 @@ def key(name):
     qmp('send-key',{'keys':[{'type':'qcode','data':name}]});time.sleep(.3)
 def screen():return execute(a.name,['/usr/bin/cat','/dev/vcs3'])['output']
 def status():return json.loads(execute(a.name,['/var/lib/xur/app/current/host/os-update','status'])['output'])
-key('esc');key('8');key('ret');assert 'Operating system' in screen()
-key('2');key('ret')
+key('esc');key('6');key('ret');assert 'Operating system' in screen()
+key('3');key('ret')
 for _ in range(30):
     if 'Automatic updates: On' in screen():break
     time.sleep(1)
@@ -29,8 +29,8 @@ for _ in range(30):
     if status()['automatic']:break
     time.sleep(1)
 else:raise AssertionError('Terminal enable did not reach the OS updater')
-key('esc');time.sleep(6);assert 'Operating system' in screen() and 'Toggle automatic updates' not in screen()
+key('esc');time.sleep(6);assert 'Operating system' in screen() and 'Pause automatic updates' not in screen()
 key('esc')
-assert 'Status and login' in screen() and 'Toggle automatic updates' not in screen()
+assert 'Status and login' in screen() and 'Pause automatic updates' not in screen()
 receipt={'suite':'UpdatesConsole','result':'Passed','realVirtualKeyboard':True,'installedStatus':True,'pauseAndEnable':True,'escapeReturnsToRoot':True,'updatesSubmenu':True,'backReturnsToParent':True,'media':json.loads((vm/'vm-manifest.json').read_text())}
 (repo/'.build/evidence/updates-console.json').write_text(json.dumps(receipt,indent=2)+'\n');print(json.dumps(receipt))

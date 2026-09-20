@@ -33,4 +33,5 @@ python3 tests/Xur.Integration.Tests/application-update.py > .build/fast/applicat
 python3 tests/Xur.Integration.Tests/online-installer.py > .build/fast/online-installer.json
 python3 tests/Xur.Integration.Tests/github-release.py > .build/fast/github-release.json
 python3 tests/Xur.Integration.Tests/terminal.py > .build/fast/terminal.json
+python3 tests/Xur.Integration.Tests/console-menu.py > .build/fast/console-menu.json
 printf 'Fast checks passed in %ss. Logs: .build/fast/\n' "$((SECONDS-start))"

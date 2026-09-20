@@ -1,5 +1,8 @@
 # Consoles on unassigned displays
 
+See the [console menu guide](../usage/console-menu.md) for updates, power actions,
+and keyboard navigation.
+
 Each connected output on an unassigned GPU displays the shared terminal menu.
 Loading a workstation releases the console on its selected GPU before starting
 Plasma. Other cards retain their console. Stopping the workstation waits for

@@ -26,6 +26,9 @@ public static class Commands
         var application=new Command("application-updates");root.Subcommands.Add(application);
         Add(application,"status","application-updates",json:true);
         foreach(var action in new[]{"check","update","rollback"})Add(application,action,"application-updates/"+action);
+        var all=new Command("update-all");root.Subcommands.Add(all);
+        Add(all,"status","update-all",json:true);
+        Add(all,"start","update-all/start");
         Add(root,"shutdown","poweroff"); Add(root,"reboot","reboot");
         return root.Parse(args).InvokeAsync();
     }
