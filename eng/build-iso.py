@@ -3,6 +3,7 @@
 Never selects a physical installation disk or changes host security policy.
 """
 import argparse,fcntl,hashlib,json,os,pathlib,shutil,subprocess,tarfile,time,urllib.request
+from builder_ready import wait_for_cloud_init
 repo=pathlib.Path(__file__).resolve().parents[1];os.chdir(repo)
 p=argparse.ArgumentParser(description=__doc__);p.add_argument('--check',action='store_true',help='Check local build prerequisites without changing anything');p.add_argument('--output',default='dist/xur-installer-x86_64.iso',help='Output ISO beneath dist/');p.add_argument('--inspect-existing',action='store_true',help='Inspect and retrieve the completed Fedora build; requires an identical build context');args=p.parse_args()
 root=pathlib.Path(os.environ.get('XUR_BUILD_ROOT',pathlib.Path.home()/'.local/share/xur-build'));vm=root/'vm';cache=pathlib.Path(os.environ.get('XUR_BUILD_CACHE',pathlib.Path.home()/'.cache/xur-build'))
@@ -44,7 +45,7 @@ if subprocess.run(ssh+['true'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNU
  else:raise SystemExit('Fedora builder SSH did not become ready')
 if not args.inspect_existing:
  # Cloud-init installs build packages on the first boot; existing builders return immediately.
- run(ssh+['sudo cloud-init status --wait || test "$(cloud-init status --format json | python3 -c \'import json,sys; print(json.load(sys.stdin).get("status", ""))\')" = done'])
+ wait_for_cloud_init(ssh)
  run(scp+['eng/prepare-fedora-builder.sh','eng/toolchain-lock.json','builder@127.0.0.1:.'])
  run(ssh+['sudo bash prepare-fedora-builder.sh toolchain-lock.json'])
  # Use the already pinned Image Builder. Fresh builders can prepare it with prepare-fedora-builder.sh.
