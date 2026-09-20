@@ -68,7 +68,8 @@ public static class GpuInventory
             var name=driver switch {"hyperv_drm"=>"Hyper-V virtual display","simple-framebuffer" or "simpledrm"=>"Firmware display",_=>string.IsNullOrEmpty(driver)?"Display adapter":driver+" display"};
             output.Add(new(id,driver=="hyperv_drm"?"Microsoft":"Display",name,driver,"",0,nodes,["Display adapter; no compute runtime"],cards,displays));
         }
-        return output.OrderBy(g=>g.Pci,StringComparer.Ordinal).ToArray();
+        var devices=output.OrderBy(g=>g.Pci,StringComparer.Ordinal).ToArray();
+        return sysRoot=="/sys"&&devRoot=="/dev"?new GpuLabels().Assign(devices):devices;
     }
     public static async Task VerifyReleased(GpuDevice[] gpus)
     {

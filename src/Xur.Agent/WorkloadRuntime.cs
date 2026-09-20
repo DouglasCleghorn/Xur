@@ -114,8 +114,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             }
             if(instance!=null&&w.Recipe.Kind=="Model")
             {
-                var policy=await Processes.Run("podman",["update","--restart=no",Name(w.Id)],10);
-                if(policy.ExitCode!=0)throw Failure("Could not suspend engine startup retries",policy);
+                await new EngineRestartPolicy().Set(Name(w.Id),instance.InstanceId,"no");
             }
             if(w.Recipe.Engine is "vLLM" or "vLLM-Omni")await new ModelCatalog(Path.GetDirectoryName(directory)!).ValidateEngineCheckpoint(w.Recipe);
             if(instance==null)
@@ -161,8 +160,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             var startupSince=DateTimeOffset.UtcNow.AddSeconds(-1).ToString("O");
             if(w.Recipe.Kind=="Model")
             {
-                var policy=await Processes.Run("podman",["update","--restart=no",Name(w.Id)],10);
-                if(policy.ExitCode!=0)throw Failure("Could not suspend engine startup retries",policy);
+                await new EngineRestartPolicy().Set(Name(w.Id),instance.InstanceId,"no");
             }
             if(instance.State!="running")
             {
@@ -194,8 +192,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                     {
                         if(w.Recipe.Kind=="Model")
                         {
-                            var policy=await Processes.Run("podman",["update","--restart=unless-stopped",Name(w.Id)],10);
-                            if(policy.ExitCode!=0)throw Failure("Could not enable healthy engine restart policy",policy);
+                            await new EngineRestartPolicy().Set(Name(w.Id),instance.InstanceId,"unless-stopped");
                         }
                         return instance;
                     }}catch(HttpRequestException){}catch(TaskCanceledException){}

@@ -25,6 +25,26 @@ public static class ProfileEndpoints
         app.MapPost("/api/storage/usage/refresh",()=>Safe(()=>Relay("/storage-usage/refresh",JsonContent.Create(new{}))));
         app.MapPost("/storage/refresh",async()=>await Safe(async()=>{using var r=await appliance.Agent.PostAsJsonAsync("/storage-usage/refresh",new{});r.EnsureSuccessStatusCode();return Results.Redirect("/storage");}));
         app.MapGet("/api/tool-updates",()=>Safe(()=>Relay("/tool-updates")));
+        app.MapPost("/workstations/manage",async Task<IResult>(HttpContext ctx)=> {
+            try {
+                var form=await ctx.Request.ReadFormAsync();var id=form["id"].ToString();
+                switch(form["action"].ToString()) {
+                    case "create":
+                        StationUser user;
+                        if(form["user"]=="temporary")user=new("temporary",0,true);
+                        else {
+                            var accounts=await appliance.Agent.GetFromJsonAsync<StationAccount[]>("/station-users")??[];
+                            var account=accounts.SingleOrDefault(a=>a.Username==form["user"].ToString())??throw new InvalidOperationException("Select a workstation user.");
+                            user=new(account.Username,account.Uid);
+                        }
+                        await manager.CreateStation(form["name"].ToString(),user);break;
+                    case "rename":await manager.RenameStation(id,form["name"].ToString());break;
+                    case "delete":await manager.DeleteStation(id);break;
+                    default:throw new InvalidOperationException("Unknown workstation action.");
+                }
+                return Results.Redirect("/workstations?saved=true");
+            } catch(InvalidOperationException e) {return Results.Redirect("/workstations?error="+Uri.EscapeDataString(e.Message));}
+        });
         app.MapGet("/api/workstations/identities",()=>Safe(async()=>Results.Json(await manager.Stations())));
         app.MapGet("/api/station-allocations",()=>Safe(()=>Relay("/station-allocations")));
         app.MapGet("/api/station-devices",()=>Safe(()=>Relay("/station-devices")));

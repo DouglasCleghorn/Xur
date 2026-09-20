@@ -1,0 +1,7 @@
+(()=>{
+ const tabs=[...document.querySelectorAll('[data-file-tab]')];
+ function select(){const q=new URLSearchParams(location.search),active=q.get('tab')||(q.has('user')?'workstation':'storage');for(const tab of tabs){const on=tab.dataset.fileTab===active||(active!=='workstation'&&tab.dataset.fileTab==='storage');tab.setAttribute('aria-selected',String(on));tab.tabIndex=on?0:-1;document.getElementById(tab.getAttribute('aria-controls')).hidden=!on;}}
+ for(const tab of tabs){tab.onclick=()=>{const url=new URL(location.href);url.searchParams.set('tab',tab.dataset.fileTab);history.pushState(null,'',url);select();};tab.onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const index=e.key==='Home'?0:e.key==='End'?tabs.length-1:(tabs.indexOf(tab)+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[index].click();tabs[index].focus();};}
+ window.addEventListener('popstate',select);select();
+ window.xurFileNavigation=(nav,segments,up)=>{nav.replaceChildren();const button=(text,action)=>{const b=document.createElement('button');b.type='button';b.className='quiet';b.textContent=text;b.onclick=action;return b;};const back=button('↑ Up',up);back.disabled=!up;nav.append(back);segments.forEach((segment,i)=>{if(i)nav.append(document.createTextNode(' / '));const b=button(segment.name,segment.open);if(i===segments.length-1)b.setAttribute('aria-current','location');nav.append(b);});};
+})();

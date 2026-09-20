@@ -45,7 +45,7 @@ public sealed class ModelLab
         var state=await observe().WaitAsync(TimeSpan.FromSeconds(15));var published=await routes().WaitAsync(TimeSpan.FromSeconds(10));
         return Definitions(state).Where(TextModel).DistinctBy(w=>(w.Id,w.Fingerprint,w.Route)).Select(w=>{
             var i=state.Runtime.Instances.FirstOrDefault(i=>i.Id==w.Id&&i.Fingerprint==w.Fingerprint&&i.State=="running");
-            return i!=null&&published.Any(r=>r.Name==w.Route&&r.WorkloadId==w.Id&&r.Endpoint==i.Endpoint)?new LabTarget(w,i):null;
+            return i!=null&&published.Any(r=>r.Name==w.Route&&r.WorkloadId==w.Id&&r.Endpoint==i.Endpoint)?new LabTarget(w,i,state.Runtime.Gpus.Where(g=>w.Gpus.Contains(g.Pci)).ToArray()):null;
         }).OfType<LabTarget>().DistinctBy(t=>t.Workload.Id).ToArray();
     }
     async Task<LabTarget> Target(string id)=>(await Targets()).FirstOrDefault(t=>t.Workload.Id==id)??throw new InvalidOperationException("Load a text-chat model and wait until its endpoint is ready.");

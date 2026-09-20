@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace Xur.Control;
 
-public sealed record ApiKeyInfo(string Id,string Name,string Scope,DateTimeOffset CreatedAt,DateTimeOffset ExpiresAt,
+public sealed record ApiKeyInfo(string Id,string Name,string Scope,DateTimeOffset CreatedAt,DateTimeOffset? ExpiresAt,
     DateTimeOffset? RevokedAt=null,DateTimeOffset? LastUsedAt=null,long Requests=0,string? LastMethod=null,string? LastPath=null);
 public sealed record ApiKeyRecord(ApiKeyInfo Info,string Hash);
 public sealed record ApiKeyCreate(string Name,string Scope="diagnostics",int Days=30);
@@ -29,11 +29,11 @@ public sealed class ApiKeys
         var name=request.Name?.Trim()??"";
         if(name.Length is <1 or >80 || name.Any(char.IsControl))throw new ArgumentException("Use a key name between 1 and 80 characters.");
         if(request.Scope is not ("diagnostics" or "testing" or "automation"))throw new ArgumentException("Choose a valid access level.");
-        if(request.Days is <1 or >365)throw new ArgumentException("Choose an expiry between 1 and 365 days.");
+        if(request.Days is <0 or >365)throw new ArgumentException("Choose Never or an expiry between 1 and 365 days.");
         lock(sync)
         {
-            if(records.Count(r=>r.Info.RevokedAt==null && r.Info.ExpiresAt>clock.GetUtcNow())>=100)throw new ArgumentException("Revoke an existing key before creating another (100 active keys maximum).");
-            var info=new ApiKeyInfo(Guid.NewGuid().ToString("N"),name,request.Scope,clock.GetUtcNow(),clock.GetUtcNow().AddDays(request.Days));
+            if(records.Count(r=>r.Info.RevokedAt==null && (r.Info.ExpiresAt==null || r.Info.ExpiresAt>clock.GetUtcNow()))>=100)throw new ArgumentException("Revoke an existing key before creating another (100 active keys maximum).");
+            var info=new ApiKeyInfo(Guid.NewGuid().ToString("N"),name,request.Scope,clock.GetUtcNow(),request.Days==0?null:clock.GetUtcNow().AddDays(request.Days));
             var token="xur_"+info.Id+"_"+Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
             Save([..records,new(info,Hash(token))]);
             return new(info,token);
@@ -54,7 +54,7 @@ public sealed class ApiKeys
         lock(sync)
         {
             var record=records.FirstOrDefault(r=>r.Info.Id==token.Substring(4,32));
-            return record!=null && record.Info.RevokedAt==null && record.Info.ExpiresAt>clock.GetUtcNow()
+            return record!=null && record.Info.RevokedAt==null && (record.Info.ExpiresAt==null || record.Info.ExpiresAt>clock.GetUtcNow())
                 && CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(record.Hash),Encoding.ASCII.GetBytes(Hash(token)))?record.Info:null;
         }
     }

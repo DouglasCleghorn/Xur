@@ -17,7 +17,10 @@ public record StationUser(string Username,int Uid,bool Temporary=false);
 public record StationAccount(string Username,int Uid,string Name,string Home);
 public record StationUserCreate(string Name);
 public record Profile(string Id,string Name,long Revision,Workload[] Workloads);
-public record GpuDevice(string Pci,string Vendor,string Name,string Driver,string RuntimeId,long MemoryMiB,string[] Nodes,string[] Problems,string[]? Cards=null,string[]? Displays=null);
+public record GpuDevice(string Pci,string Vendor,string Name,string Driver,string RuntimeId,long MemoryMiB,string[] Nodes,string[] Problems,string[]? Cards=null,string[]? Displays=null,string? ShortId=null)
+{
+    public string DisplayName=>string.IsNullOrEmpty(ShortId)?Name:ShortId+" · "+Name;
+}
 public record RuntimeInstance(string Id,string Fingerprint,string InstanceId,int Pid,string BootId,string Endpoint,string State,string[] Gpus);
 public record RuntimeObservation(string Generation,GpuDevice[] Gpus,RuntimeInstance[] Instances);
 public record RuntimeStart(Workload Workload);

@@ -45,7 +45,11 @@ worker does not retain authenticated pages or API responses.
   Fetch Metadata header. Bearer-only responses do not opt into compression.
 - **Tailscale Serve:** only the dedicated private Unix socket accepts Tailscale
   identity, matched to the confirmed administrator. Public listeners ignore that
-  identity header. Tailscale browser mutations still require antiforgery tokens.
+  identity header. Serve rewrites the Host for Unix backends, so only that
+  private socket accepts its overwritten `X-Forwarded-Host` to recover the original
+  HTTPS origin. Public listeners ignore forwarding headers. Malformed or multiple
+  forwarded hosts are rejected; Origin and Fetch Metadata checks still apply.
+  Tailscale browser mutations still require antiforgery tokens.
 - **Local console:** `/local/*` is accessible only through the private local Unix
   socket. It is not exposed through LAN HTTPS or the Serve socket.
 - **Top-level safe navigation:** external links may open a GET/HEAD page. They do

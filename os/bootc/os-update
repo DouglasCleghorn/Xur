@@ -50,15 +50,19 @@ def verify_stage(after):
         raise RuntimeError('An OS update is available but no deployment was staged. Review the update log and retry.')
 
 def observe():
-    result = snapshot(boot_status())
-    result['automatic'] = read(STATE / 'settings.json', {'automatic': True})['automatic']
-    result['operation'] = read(STATE / 'operation.json')
-    result['logs'] = (STATE / 'operation.log').read_text(errors='replace')[-24000:] if (STATE / 'operation.log').exists() else ''
-    result['busy'] = False
+    busy = False
     if (STATE / 'lock').exists():
         with (STATE / 'lock').open('r') as lock:
             try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError: result['busy'] = True
+            except BlockingIOError: busy = True
+    # bootc status waits on the deployment lock held by upgrade. Keep progress
+    # readable using the snapshot taken immediately before starting the operation.
+    result = read(STATE / 'deployment.json') if busy else None
+    if result is None: result = snapshot(boot_status())
+    result['automatic'] = read(STATE / 'settings.json', {'automatic': True})['automatic']
+    result['operation'] = read(STATE / 'operation.json')
+    result['logs'] = (STATE / 'operation.log').read_text(errors='replace')[-24000:] if (STATE / 'operation.log').exists() else ''
+    result['busy'] = busy
     if result['operation'] and result['operation']['stage'] == 'Running' and not result['busy']:
         result['operation'] = {**result['operation'], 'stage': 'Interrupted', 'message': 'Operation interrupted. Current deployment status is shown above.'}
     return result
@@ -80,6 +84,7 @@ def main():
             save(STATE / 'settings.json', {'automatic': action == 'enable'}); return
         if action == 'auto' and not read(STATE / 'settings.json', {'automatic': True})['automatic']: return
         before = snapshot(boot_status())
+        save(STATE / 'deployment.json', before)
         if not before['current'] or before['current']['image'] != CHANNEL:
             raise RuntimeError('The booted deployment does not track the configured upstream channel')
         if before['pending'] or before['rollbackQueued']:

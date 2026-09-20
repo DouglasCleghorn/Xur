@@ -40,9 +40,10 @@ public sealed class StorageUsage
             var disks=nodes.Where(n=>S(n,"type")=="disk" && !S(n,"path").StartsWith("/dev/zram")).Select(n=>new StorageDiskUsage(S(n,"path"),S(n,"model"),N(n,"size"),Storage.Flatten(n).Where(c=>c.GetProperty("mountpoints").EnumerateArray().Any(m=>m.ValueKind==JsonValueKind.String)).Select(c=>S(c,"path")).Distinct().ToArray(),Storage.Flatten(n).SelectMany(c=>c.GetProperty("mountpoints").EnumerateArray().Where(m=>m.ValueKind==JsonValueKind.String).Select(m=>m.GetString()!)).Distinct().ToArray())).ToArray();
             lock(gate)snapshot=snapshot with {Filesystems=filesystems,Disks=disks};
             var categories=new List<StorageCategory>();
-            categories.Add(await Measure("Models",["/var/lib/xur/models","/var/lib/xur/model-sets"]));
+            var caches=ModelCaches("/var/lib/containers/storage/volumes");
+            categories.Add(await Measure("Models",["/var/lib/xur/models","/var/lib/xur/model-sets",..caches]));
             categories.Add(await Measure("Workstation streaming",["/var/lib/xur-streaming","/var/lib/xur-streaming-runtime"]));
-            categories.Add(await Measure("Containers & engines",["/var/lib/containers/storage"]));
+            categories.Add(await Measure("Containers & engines",["/var/lib/containers/storage"],caches));
             categories.Add(await Measure("User files",["/var/home"]));
             categories.Add(await Measure("Xur application versions",["/var/lib/xur/app"]));
             categories.Add(await Measure("System logs",["/var/log"]));
@@ -53,13 +54,16 @@ public sealed class StorageUsage
         }
         catch {lock(gate)snapshot=snapshot with {CapturedAt=DateTimeOffset.UtcNow,Scanning=false,Error="Storage usage could not be read. Refresh to retry."};}
     }
-    static async Task<StorageCategory> Measure(string name,string[] paths)
+    public static string[] ModelCaches(string volumes)=>Directory.Exists(volumes)
+        ? Directory.GetDirectories(volumes,"xur-cache-*").Where(p=>new DirectoryInfo(p).LinkTarget==null).Select(p=>p+"/_data").Where(p=>Directory.Exists(p)&&new DirectoryInfo(p).LinkTarget==null).ToArray():[];
+    static string EscapePattern(string path)=>path.Replace("\\","\\\\").Replace("*","\\*").Replace("?","\\?").Replace("[","\\[");
+    public static async Task<StorageCategory> Measure(string name,string[] paths,string[]? excluded=null)
     {
         var existing=paths.Where(p=>Directory.Exists(p)||File.Exists(p)).ToArray();if(existing.Length==0)return new(name,paths,0);
         try
         {
             // One invocation deduplicates hardlinked model files across both paths.
-            var r=await Processes.Run("du",["--summarize","--one-file-system","--block-size=1","--",..existing],120);
+            var r=await Processes.Run("du",["--summarize","--one-file-system","--block-size=1",..(excluded??[]).Select(p=>"--exclude="+EscapePattern(p)),"--",..existing],120);
             if(r.ExitCode!=0)return new(name,paths,null,"Usage unavailable");
             long total=0;foreach(var line in r.Output.Split('\n',StringSplitOptions.RemoveEmptyEntries)){var field=line.Split('\t',2)[0];if(!long.TryParse(field,out var bytes))return new(name,paths,null,"Usage unavailable");total=checked(total+bytes);}
             return new(name,paths,total);

@@ -21,3 +21,10 @@ Keep build output, runtime state, test captures and private credentials in ignor
 `.build/` or `dist/` paths. Generated evidence belongs in `.build/evidence/`, never
 in source archives. Do not package, deploy, commit or push without the user's
 instruction for that action.
+
+## Screenshots
+
+Track every screenshot used or published in `docs/screenshots.md`, including its
+location, purpose, capture version/date and privacy review. Regenerated private
+test screenshots can share a documented capture-family entry. Before each
+release, review images affected by UI changes and update or retire stale images.

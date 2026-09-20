@@ -15,15 +15,17 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
    if(r.request().method()==='POST'){
     assert.equal(r.request().headers().requestverificationtoken,'fixture-token');posts.push(u.pathname);
     if(u.pathname.endsWith('/revoke')){keys[0].revokedAt=new Date().toISOString();return json({});}
-    const body=r.request().postDataJSON();keys=[{...body,id:'test-key',createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+86400000).toISOString(),requests:0}];return json({key:keys[0],token:secret});
+    const body=r.request().postDataJSON();keys=[{...body,id:'test-key',createdAt:new Date().toISOString(),expiresAt:body.days===0?null:new Date(Date.now()+86400000).toISOString(),requests:0}];return json({key:keys[0],token:secret});
    }
    if(u.pathname==='/api/api-keys')return json(keys);
    return r.fulfill({contentType:'text/html',body:html});
   });
   await page.goto('http://keys.test/settings/api-keys');await page.getByText('No API keys yet.').waitFor();
+  await page.locator('[name=days]').selectOption('0');
   await page.locator('[name=name]').fill('<img src=x onerror=alert(1)>');await page.getByRole('button',{name:'Create key',exact:true}).click();
   await page.locator('#api-key-created:not([hidden])').waitFor();assert.equal(await page.locator('#api-key-secret').inputValue(),secret);
   assert.equal(await page.locator('#api-key-list img').count(),0);
+  await page.getByText('diagnostics · Active · Expires Never',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Done',exact:true}).click();assert.equal(await page.locator('#api-key-secret').inputValue(),'');
   await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Mobile page must not overflow');
   page.on('dialog',d=>d.accept());await page.getByRole('button',{name:'Revoke',exact:true}).click();await page.getByText('Key revoked.',{exact:true}).waitFor();

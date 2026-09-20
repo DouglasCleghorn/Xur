@@ -4,12 +4,30 @@
 @inject IHttpContextAccessor Context
 <PageTitle>Workstations · Xur</PageTitle>
 <div class="page-heading"><h1>Workstations</h1><a class="button secondary" href="/profiles">Profiles</a></div>
+@if(Saved) { <p class="notice" role="status">Workstation saved.</p> }
 @if(DisplaySaved) { <p class="notice" role="status">Virtual display resolution applied.</p> }
 @if(Error!=null) { <p class="notice error" role="alert">@Error</p> }
 @if(Device.Installer) { <p>Workstations are available after installation.</p> }
 else if(stations==null) { <p role="alert">Could not read workstations. <a href="/workstations">Try again</a></p> }
 else
 {
+    <section class="panel" aria-labelledby="station-library-title">
+        <div class="section-heading"><h2 id="station-library-title">Manage workstations</h2></div>
+        <p class="secondary-text">Names and Moonlight pairing are shared across profiles. GPU and USB assignments belong to each profile. Deleting a workstation keeps its user files.</p>
+        @foreach(var definition in definitions) {
+            var references=stations.FirstOrDefault(s=>s.Workload.Id==definition.Id);
+            <article class="station-library-row">
+                <div><strong>@definition.Name</strong><small>@(definition.User?.Temporary==true?"Temporary user":definition.User?.Username??"Existing workstation user") · @definition.Id</small>
+                    @if(references!=null) { @foreach(var profile in references.Profiles) { <a href="/profiles/edit?id=@profile.Id">@profile.Name</a> } }
+                    else { <small>Not in a profile yet</small> }
+                </div>
+                <details><summary>Edit</summary><form method="post" action="/workstations/manage"><AntiforgeryToken /><input type="hidden" name="action" value="rename" /><input type="hidden" name="id" value="@definition.Id" /><label>Name<input name="name" maxlength="80" value="@definition.Name" required /></label><button class="secondary" disabled="@busy">Save name</button></form><p class="secondary-text">To use a different user, create a new workstation.</p></details>
+                <form method="post" action="/workstations/manage"><AntiforgeryToken /><input type="hidden" name="action" value="delete" /><input type="hidden" name="id" value="@definition.Id" /><button class="quiet danger-text" disabled="@(busy||references!=null)" title="@(references!=null?"Remove this workstation from its profiles and unload it first":"Deletes the workstation entry; user files are kept")">Delete</button></form>
+            </article>
+        }
+        <details><summary>New workstation</summary><form class="actions" method="post" action="/workstations/manage"><AntiforgeryToken /><input type="hidden" name="action" value="create" /><label>Name<input name="name" required maxlength="80" placeholder="My desktop" /></label><label>User<select name="user"><option value="temporary">Temporary user</option>@foreach(var account in users) { <option value="@account.Key">@account.Value</option> }</select></label><button disabled="@busy">Create workstation</button></form><p class="secondary-text">Choose this workstation in a profile to assign its GPU and devices.</p></details>
+        <details><summary>Add user</summary><form class="station-add-user actions"><AntiforgeryToken /><label>Name<input name="name" required maxlength="60" /></label><button class="secondary" disabled="@busy">Add user</button><p role="status"></p></form></details>
+    </section>
     @if(stations.Length==0) { <p>Add a workstation to a <a href="/profiles">profile</a> to get started.</p> }
     <div class="workstation-grid">
     @foreach(var station in stations)
@@ -17,7 +35,7 @@ else
         var w=station.Workload;
         <section class="panel station-card" data-station="@w.Id">
             <div class="section-heading"><h2>@w.Name</h2><span class="state-label @(station.State=="running"?"running":"")">@station.State</span></div>
-            <dl class="station-facts"><dt>User</dt><dd>@(w.User?.Temporary==true?"Temporary user":UserLabel(w))</dd><dt>GPU</dt><dd>@(station.Gpu?.Name??"GPU unavailable") <small>@string.Join(", ",w.Gpus)</small></dd><dt>Display</dt><dd>@(station.Gpu?.Displays is {Length:>0}?string.Join(", ",station.Gpu.Displays):"No display detected.")</dd><dt>Streaming</dt><dd>@(station.Stream?.State??"Stopped") @if(station.Stream?.Headless==true) { <span class="secondary-text">· Virtual display</span> }</dd></dl>
+            <dl class="station-facts"><dt>User</dt><dd>@(w.User?.Temporary==true?"Temporary user":UserLabel(w))</dd><dt>GPU</dt><dd>@(station.Gpu?.DisplayName??"GPU unavailable") <small>@string.Join(", ",w.Gpus)</small></dd><dt>Display</dt><dd>@(station.Gpu?.Displays is {Length:>0}?string.Join(", ",station.Gpu.Displays):"No display detected.")</dd><dt>Streaming</dt><dd>@(station.Stream?.State??"Stopped") @if(station.Stream?.Headless==true) { <span class="secondary-text">· Virtual display</span> }</dd></dl>
             @if(allocations.GetValueOrDefault(w.Id) is {} allocation)
             {
                 <p class="secondary-text">@(allocation.Primary?"Primary workstation · ":"")@allocation.Usb.Length USB devices · @allocation.Audio.Length audio interfaces</p>
@@ -65,6 +83,8 @@ else
     <script src="/workstations.js" defer></script>
 }
 @code {
+    [SupplyParameterFromQuery] public bool Saved {get;set;}
+    StationDefinition[] definitions=[];
     [SupplyParameterFromQuery] public bool DisplaySaved {get;set;}
     [SupplyParameterFromQuery] public string? Error {get;set;}
     Dictionary<string,string> users=[];
@@ -77,6 +97,6 @@ else
         var request=Context.HttpContext!.Request;host=request.Host.Host;secure=request.IsHttps||Context.HttpContext.Features.Get<EndpointIdentity>()?.Kind=="serve";
         https="https://"+(host.Contains(':')?"["+host+"]":host)+":"+(Device.Port+363)+"/workstations";
         try{allocations=(await Device.Agent.GetFromJsonAsync<StationDeviceAllocation[]>("/station-allocations")??[]).ToDictionary(a=>a.WorkloadId);}catch{}
-        try{users=(await Device.Agent.GetFromJsonAsync<StationAccount[]>("/station-users")??[]).ToDictionary(u=>u.Username,u=>u.Name);var state=await Manager.State();busy=state.Operation?.Stage is "Applying" or "Cancelling" or "Failed";stations=WorkstationView.Build(state,await Device.Agent.GetFromJsonAsync<StationStreamStatus[]>("/workstations")??[]);}catch{}
+        try{definitions=await Manager.Stations();users=(await Device.Agent.GetFromJsonAsync<StationAccount[]>("/station-users")??[]).ToDictionary(u=>u.Username,u=>u.Name);var state=await Manager.State();busy=state.Operation?.Stage is "Applying" or "Cancelling" or "Failed";stations=WorkstationView.Build(state,await Device.Agent.GetFromJsonAsync<StationStreamStatus[]>("/workstations")??[]);}catch{}
     }
 }

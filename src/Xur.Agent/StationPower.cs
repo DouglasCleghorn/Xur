@@ -16,6 +16,11 @@ public static class StationPower
           if [ "$1" = headless ]; then
             kwriteconfig6 --file powerdevilrc --group "$profile" --group Display --key DimDisplayWhenIdle --type bool --notify false
             kwriteconfig6 --file powerdevilrc --group "$profile" --group Display --key TurnOffDisplayWhenIdle --type bool --notify false
+          else
+            # A user may have previously run headless. Restore physical display
+            # idle sleep without allowing the host to suspend.
+            kwriteconfig6 --file powerdevilrc --group "$profile" --group Display --key DimDisplayWhenIdle --type bool --notify true
+            kwriteconfig6 --file powerdevilrc --group "$profile" --group Display --key TurnOffDisplayWhenIdle --type bool --notify true
           fi
         done
         """;

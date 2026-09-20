@@ -140,27 +140,44 @@ The terminal root menu groups both update paths under **Updates**. Choose
 Updates, then to the root menu. The noninteractive `xur application-updates …`
 and `xur updates …` commands remain available.
 
-## Public release publication
+## Release channels and GitHub approval
 
-Source pushes do not publish application updates. After testing, committing and
-pushing the source, package a version locally with the command above. To inspect
-its verified public assets, then explicitly publish them:
+Every push to `main` builds a Nightly candidate; every push to `release` builds a
+Stable candidate. Nightly describes the development channel, not a daily timer.
+The release workflow runs fast checks, packages a candidate, and retains it for
+seven days. It then waits for DouglasCleghorn to approve the matching GitHub
+Environment before signing or publishing. Admin bypass is disabled. The owner
+can approve their own commits because this project currently has one maintainer.
 
-```bash
-python3 eng/publish-github.py --version VERSION
-python3 eng/publish-github.py --version VERSION --publish
-# Optionally add: --iso dist/xur-installer-x86_64.iso
-```
+In GitHub Actions, open **Build and approve release**, inspect the successful
+build and commit, then use **Review deployments** for `nightly` or `stable`.
+The signing key is an environment secret and is unavailable to build/test jobs.
+Never approve a candidate you have not reviewed. A superseded branch build is
+rejected before publication; approve the newest successful candidate instead.
 
-Publication checks the package signature, hashes and source manifest, requires a
-clean checkout matching `origin/main`, and requires a public GitHub repository.
-It creates a draft release, uploads `latest`, the hash-named descriptor,
-signature and archive, plus the source archive (and optional ISO/checksum), then
-publishes it as latest. Failed uploads leave a draft, never a partial public
-update. Each asset must be under 2 GiB. Keep signing keys on the release computer;
-GitHub receives public artifacts only. CI source checks do not need a signing key.
+Nightly uses a small `nightly` release pointer to an immutable per-build release.
+Stable uses GitHub's latest non-prerelease. Signed metadata binds each release to
+its channel. Downloads resolve the pointer before fetching metadata and payload,
+so a concurrent publication cannot mix release assets.
 
-`--build-only` on `eng/package-update.sh` retains the existing local build route
-without VM tests; run `bash eng/test-fast.sh` separately when using it. It records
-that release validation was skipped rather than claiming a VM pass. Public
-publishing always remains a separate explicit command.
+**Settings → Update channel** selects Nightly or Stable. Switching channels does
+not install immediately; check for updates and apply the selected release.
+Moving from a newer Nightly to an older Stable is allowed if its data/features
+remain compatible. Replay protection applies separately within each channel.
+Existing legacy releases retain their previous global replay guard. If a channel
+has not published a release yet, the check fails without changing the running app.
+
+## Local build testing
+
+`eng/package-update.sh --build-only --version VERSION` retains the existing local
+build route without VM tests. Run `bash eng/test-fast.sh` separately. The package
+records that VM validation was skipped rather than claiming a VM pass. Enable
+**Settings → Local build testing** at the bottom of Settings and configure the
+local repository. Signatures and compatibility checks remain required. Turn off
+local testing to return to the selected public channel.
+
+The older `eng/publish-github.py` is a manual maintainer recovery path, outside the
+CI approval flow. Use it only after explicit publication authorization. Normal
+public updates use the gated workflow. Both paths publish source archives and
+signed app bundles, not private build state or signing keys. ISO media remains a
+separate build and validation process.

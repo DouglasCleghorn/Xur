@@ -2,7 +2,7 @@ namespace Xur.Domain;
 public record LabMessage(string Role,string Content);
 public record LabRequest(string WorkloadId,string Prompt,int Requests=5,int Concurrency=1,int MaxTokens=256,double Temperature=0,bool Warmup=true);
 public record LabChatRequest(string WorkloadId,LabMessage[] Messages,int MaxTokens=512,double Temperature=0.7);
-public record LabTarget(Workload Workload,RuntimeInstance Instance);
+public record LabTarget(Workload Workload,RuntimeInstance Instance,GpuDevice[]? Gpus=null);
 public record LabRunningWorkload(string Id,string Name,string Kind,string Engine,string Image,string[] Gpus,string State,string InstanceId,string Fingerprint);
 public record LabContext(DateTimeOffset At,string? Profile,string Bundle,LabRunningWorkload[] Workloads,GpuDevice[] Gpus);
 public record LabSample(DateTimeOffset At,GpuTelemetry[] Gpus,string? Error=null,LabRunningWorkload[]? Workloads=null);

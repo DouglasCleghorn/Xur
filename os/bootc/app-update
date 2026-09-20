@@ -4,6 +4,7 @@ import fcntl,hashlib,http.client,json,os,pathlib,re,shutil,socket,sqlite3,subpro
 ROOT=pathlib.Path('/var/lib/xur/app');CONFIG=pathlib.Path('/etc/xur/application-updates.json');KEY=pathlib.Path('/etc/xur/application-update-key.pem')
 GITHUB='https://github.com/DouglasCleghorn/Xur/releases'
 PUBLIC=GITHUB+'/latest/download'
+NIGHTLY=GITHUB+'/download/nightly'
 STATE=ROOT/'update.json';TX=ROOT/'transaction.json';BLOCK=ROOT/'maintenance';SERVICES=['xur-control','xur-agent','xur-gateway']
 def atomic(path,data):
     path.parent.mkdir(parents=True,exist_ok=True);tmp=path.with_name(path.name+'.tmp')
@@ -25,9 +26,14 @@ def current():
 def busy():
     try:return call(['systemctl','show','-p','ActiveState','--value','xur-app-update.service'],5).decode().strip() in ('active','activating','deactivating')
     except (subprocess.SubprocessError,OSError):return False
+def channel():return read(CONFIG,{}).get('channel','stable')
+def select_channel(value):
+    if value not in ('nightly','stable'):raise ValueError('Choose nightly or stable')
+    atomic(CONFIG,{**read(CONFIG,{}),'channel':value,'development':False})
+    (ROOT/'available.json').unlink(missing_ok=True)
 def source():
     config=read(CONFIG,{})
-    return config.get('server','') if config.get('development') is True else PUBLIC
+    return config.get('server','') if config.get('development') is True else NIGHTLY if channel()=='nightly' else PUBLIC
 def configure(server):
     config=read(CONFIG,{})
     if config.get('development') is not True:raise ValueError('Enable local build testing in Settings first')
@@ -35,7 +41,7 @@ def configure(server):
 def development(enabled):
     atomic(CONFIG,{**read(CONFIG,{}),'development':enabled})
     (ROOT/'available.json').unlink(missing_ok=True)
-def status():return {'server':source(),'development':read(CONFIG,{}).get('development') is True,'current':current(),'previous':read(ROOT/'previous.json'),'available':read(ROOT/'available.json'),'operation':read(STATE),'busy':busy()}
+def status():return {'server':source(),'development':read(CONFIG,{}).get('development') is True,'channel':channel(),'current':current(),'previous':read(ROOT/'previous.json'),'available':read(ROOT/'available.json'),'operation':read(STATE),'busy':busy()}
 def normalized(value):
     value=value.strip()
     if '://' not in value:value='http://'+value
@@ -71,6 +77,11 @@ def fetch(url,path,limit):
 def check(stage):
     server=source()
     if not server:raise ValueError('Set the update server address first')
+    if server==NIGHTLY:
+        fetch(server+'/latest',stage/'channel-latest',128)
+        tag=(stage/'channel-latest').read_text().strip()
+        if not re.fullmatch(r'nightly-[0-9]+(?:[.][0-9]+)+',tag):raise ValueError('Invalid nightly release pointer')
+        server=GITHUB+'/download/'+tag
     pinned=fetch(server+'/latest',stage/'latest',128)
     if server==PUBLIC and (not pinned or not pinned.startswith(GITHUB+'/download/')):raise ValueError('GitHub did not resolve an immutable release')
     server=pinned or server
@@ -82,7 +93,11 @@ def check(stage):
     entry=read(stage/'release.json')
     if entry.get('schema')!=1 or entry.get('hostAbi')!=1 or entry.get('dataSchema')!=1 or entry.get('id')!=identity or entry.get('file')!=identity+'.tar.gz':raise ValueError('Release is incompatible with this installation')
     if not isinstance(entry.get('bytes'),int) or not 0<entry['bytes']<=2*1024**3 or not re.fullmatch('[a-f0-9]{64}',entry.get('sha256','')):raise ValueError('Invalid release metadata')
-    if entry.get('sequence',0)<read(ROOT/'highest-sequence.json',0):raise ValueError('Repository offered an older release; use Roll back for the previous installation')
+    if read(CONFIG,{}).get('development') is not True and entry.get('channel','stable')!=channel():raise ValueError('Signed release does not match the selected channel')
+    key='development' if read(CONFIG,{}).get('development') is True else channel()
+    floor=read(ROOT/'channel-sequences.json',{}).get(key,0)
+    if 'channel' not in entry:floor=max(floor,read(ROOT/'highest-sequence.json',0))
+    if entry.get('sequence',0)<floor:raise ValueError('Repository offered an older release in this channel; use Roll back for the previous installation')
     atomic(ROOT/'available.json',entry);return entry
 
 def unpack(archive,target,entry):
@@ -173,6 +188,8 @@ def activate(entry):
         atomic(ROOT/('release-'+entry['id']+'.json'),entry)
         atomic(ROOT/'previous.json',old)
         atomic(ROOT/'highest-sequence.json',max(read(ROOT/'highest-sequence.json',0),entry.get('sequence',0)))
+        sequences=read(ROOT/'channel-sequences.json',{});key=entry.get('channel','stable')
+        sequences[key]=max(sequences.get(key,0),entry.get('sequence',0));atomic(ROOT/'channel-sequences.json',sequences)
         TX.unlink();BLOCK.unlink(missing_ok=True);progress('Complete','Application updated')
     except Exception:
         if TX.exists():recover()
@@ -187,6 +204,7 @@ if __name__=='__main__':
         except BlockingIOError:raise SystemExit('An application update is already running')
         try:
             if action=='configure':configure(sys.argv[2])
+            elif action=='channel':select_channel(sys.argv[2])
             elif action=='development':
                 if sys.argv[2] not in ('true','false'):raise ValueError('Invalid development setting')
                 development(sys.argv[2]=='true')

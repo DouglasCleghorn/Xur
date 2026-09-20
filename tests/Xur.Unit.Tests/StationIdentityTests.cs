@@ -19,6 +19,8 @@ static class StationIdentityTests
                 check(first.Workloads[0].Id==second.Workloads[0].Id && first.Workloads[0].Fingerprint!=second.Workloads[0].Fingerprint,"Changing GPUs across profiles preserves station pairing identity but restarts the desktop");
                 check(second.Workloads[0].User==user,"Reusing a station retains its workstation account");
                 var renamed=await manager.SaveSelection(second.Id,second.Revision,[new(identity,recipe.Id,["0000:02:00.0"],null,identity,"Doug’s desktop")]);
+                check((await manager.State()).Profiles.All(p=>p.Workloads[0].Name=="Gaming desktop"),"Profile reuse cannot rename an existing workstation");
+                await manager.RenameStation(identity,"Doug’s desktop");
                 check((await manager.State()).Profiles.All(p=>p.Workloads[0].Name=="Doug’s desktop"),"Station name is shared across profiles");
                 check((await manager.Preview(first.Id)).Target.Workloads[0].Name=="Doug’s desktop","Launch preview resolves the latest workstation name");
                 var view=WorkstationView.Build(await manager.State(),[]);
@@ -27,6 +29,13 @@ static class StationIdentityTests
                 check(third.Workloads[0].Id!=identity,"An explicitly new workstation never inherits another pairing");
                 bool refused=false;try{await manager.Save(renamed with {Workloads=[renamed.Workloads[0] with {User=new("someone",1001)}]});}catch(InvalidOperationException){refused=true;}
                 check(refused && store.Get<Profile>("profile",second.Id)!.Workloads[0].User==user,"Changing user behind a paired identity is rejected transactionally");
+                bool inUse=false;try{await manager.DeleteStation(identity);}catch(InvalidOperationException){inUse=true;}
+                check(inUse,"Workstations referenced by profiles cannot be deleted");
+                var unused=await manager.CreateStation("Unused",new("temporary",0,true));
+                await manager.RenameStation(unused.Id,"Renamed unused");
+                check((await manager.Stations()).Any(s=>s.Id==unused.Id&&s.Name=="Renamed unused"),"Standalone workstations can be created and renamed");
+                await manager.DeleteStation(unused.Id);
+                check(!(await manager.Stations()).Any(s=>s.Id==unused.Id),"Unused workstations can be deleted");
                 await manager.Delete(first.Id,first.Revision);await manager.Delete(second.Id,renamed.Revision);
                 check((await manager.Stations()).Any(s=>s.Id==identity),"Deleting all referencing profiles retains the reusable workstation identity");
                 // Simulate a pre-identity database; migration must retain the exact old runtime key.

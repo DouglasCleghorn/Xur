@@ -118,7 +118,7 @@
   row.querySelector('.recipe-label').textContent=station?'Workstation':engine==='Podman'?'Container':'Model';
   row.querySelector('.container-library-link').hidden=engine!=='Podman';
   row.querySelector('.recipe-choice').hidden=station;row.querySelector('.station-devices').hidden=!station;row.querySelectorAll('.station-devices input').forEach(input=>input.disabled=!station);
-  row.querySelector('.station-user-choice').hidden=!station||!!row.querySelector('[name=stationId]').value;row.querySelector('.station-identity-choice').hidden=!station;
+  row.querySelector('.station-user-choice').hidden=!station||!!row.querySelector('[name=stationId]').value;row.querySelector('.station-new-name').hidden=!station||!!row.querySelector('[name=stationId]').value;row.querySelector('.station-identity-choice').hidden=!station;
   select.dataset.placeholder=station?'Search workstations…':engine==='Podman'?'Search containers…':'Search models…';
   for(const option of select.options){
    option.hidden=!!option.value&&(station?option.dataset.kind!=='Workstation':option.dataset.engine!==engine||option.dataset.kind==='Workstation');
@@ -159,7 +159,7 @@
   const row=event.target.closest('.workload-editor');if(!row)return;
   if(event.target.matches('.station-primary')&&event.target.checked) rows.querySelectorAll('.station-primary').forEach(input=>{if(input!==event.target)input.checked=false;});
   if(event.target.name==='stationId'){
-   row.querySelector('.station-user-choice').hidden=!!event.target.value;
+   row.querySelector('.station-user-choice').hidden=!!event.target.value;row.querySelector('.station-new-name').hidden=!!event.target.value;
    const option=event.target.selectedOptions[0];row.querySelector('[name=stationName]').value=option.dataset.name||'';
    const user=row.querySelector('[name=stationUser]');const value=option.dataset.user||'temporary';
    if(value==='legacy'&&![...user.options].some(o=>o.value===value))user.add(new Option('Existing workstation user','legacy'));

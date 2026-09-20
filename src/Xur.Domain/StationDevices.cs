@@ -3,7 +3,7 @@ namespace Xur.Domain;
 // Persist identities, never Linux bus numbers, ALSA indices or /dev node names.
 public record StationDevices(bool Primary=false,string[]? Usb=null);
 public record UsbPeripheral(string Id,string Name,string Identity,string Path,bool Hub,bool RootHub,
-    string[] Ancestors,string[] Nodes,bool Storage=false);
+    string[] Ancestors,string[] Nodes,bool Storage=false,string? Serial=null);
 public record StationPeripheral(string Node,string Kind,string? UsbId=null,string? Gpu=null,string? Station=null);
 public record StationDeviceInventory(UsbPeripheral[] Usb,StationPeripheral[] Devices,string[] Errors);
 public record StationDeviceAllocation(string WorkloadId,bool Primary,string[] Usb,string[] Nodes,string[] Audio,string[] Problems);

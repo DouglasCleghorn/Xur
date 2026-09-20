@@ -14,7 +14,7 @@ else
         @foreach(var card in status.Cards)
         {
             var g=card.Telemetry;var r=g.Reading;
-            <section class="gpu-panel" data-gpu="@g.Device.Pci" id="gpu-@g.Device.Pci.Replace(":","-").Replace(".","-")"><div class="gpu-card-heading"><h2>@g.Device.Name</h2><span class="secondary-text">@g.Device.Vendor</span></div><p class="gpu-identity">@g.Device.Pci</p>
+            <section class="gpu-panel" data-gpu="@g.Device.Pci" id="gpu-@g.Device.Pci.Replace(":","-").Replace(".","-")"><div class="gpu-card-heading"><h2>@g.Device.DisplayName</h2><span class="secondary-text">@g.Device.Vendor</span></div><p class="gpu-identity">@g.Device.Pci</p>
                 <div class="gpu-workloads" aria-label="Assigned workloads">@if(card.Workloads.Length==0) { <span class="secondary-text">No workloads assigned</span> } @foreach(var w in card.Workloads) { <span><strong>@w.Name</strong><span class="state-label @(w.State=="running"?"running":"pending")">@w.State</span></span> }</div>
                 <div class="gpu-readings"><div><span>GPU use</span><strong data-reading="utilization">@Value(r.Utilization,"%")</strong></div><div><span>VRAM used</span><strong data-reading="memoryUsedMiB">@Value(r.MemoryUsedMiB/1024," GiB")</strong></div><div><span>Power</span><strong data-reading="powerWatts">@Value(r.PowerWatts," W")</strong></div><div><span>Temperature</span><strong data-reading="temperatureC">@Value(r.TemperatureC," °C")</strong></div></div>
                 <div class="gpu-charts"><GpuHistoryChart Metric="memoryUsedMiB" Title="VRAM" /><GpuHistoryChart Metric="powerWatts" Title="Power" /></div>

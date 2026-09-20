@@ -65,7 +65,7 @@ public sealed class GpuPower
         }
         catch(Exception e) when(e is IOException or UnauthorizedAccessException or InvalidOperationException){message="Could not read the driver's power controls.";}
         bool supported=current!=null&&(min!=null||intelSustained)&&max!=null&&normal!=null&&max>0&&(min??0)<=max&&normal>=(min??0)&&normal<=max&&(g.Vendor=="NVIDIA"||cap!=null);
-        return new(new(g.Pci,id,g.Name,g.Vendor,current,min,max,normal,saved.TryGetValue(id,out var wanted)?wanted:null,supported&&configurationError==null,configurationError??errors.GetValueOrDefault(id)??(supported?(intelSustained?"Sustained limit (PL1). Xur caps it at the card’s rated default; the driver validates lower values.":null):message),saved.ContainsKey(id)),cap);
+        return new(new(g.Pci,id,g.DisplayName,g.Vendor,current,min,max,normal,saved.TryGetValue(id,out var wanted)?wanted:null,supported&&configurationError==null,configurationError??errors.GetValueOrDefault(id)??(supported?(intelSustained?"Sustained limit (PL1). Xur caps it at the card’s rated default; the driver validates lower values.":null):message),saved.ContainsKey(id)),cap);
     }
     async Task<Probe[]> Probes()
     {

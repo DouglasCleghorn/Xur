@@ -93,7 +93,7 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
                 if(recipe.Kind!="Workstation" || selection.StationId==null)old??=known.FirstOrDefault(w=>w.Fingerprint==candidate.Fingerprint && !used.Contains(w.Id));
                 var key=station?.Id ?? old?.Id ?? store.Allocate("workload");
                 if(recipe.Kind=="Workstation") {
-                    var label=selection.StationName?.Trim();
+                    var label=station?.Name ?? selection.StationName?.Trim();
                     if(string.IsNullOrEmpty(label))label=station?.Name ?? old?.Name ?? "Workstation "+key;
                     if(label.Length>80 || label.Any(char.IsControl))throw new InvalidOperationException("Use a workstation name of at most 80 characters without control characters.");
                     definitions.Add(new(key,label,user));candidate=candidate with{Name=label};

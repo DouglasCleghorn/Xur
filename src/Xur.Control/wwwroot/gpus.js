@@ -23,7 +23,7 @@
   for(const link of topology?.links??[]){
    if(link.connection!=='NVLink')continue;
    const row=document.createElement('div');row.className='topology-link';
-   for(const pci of [link.from,link.to]){const a=document.createElement('a');a.href='#gpu-'+pci.replaceAll(':','-').replaceAll('.','-');a.textContent=(data.cards.find(c=>c.telemetry.device.pci===pci)?.telemetry.device.name??'GPU')+' · '+pci;row.append(a);}
+   for(const pci of [link.from,link.to]){const a=document.createElement('a');a.href='#gpu-'+pci.replaceAll(':','-').replaceAll('.','-');a.textContent=(data.cards.find(c=>c.telemetry.device.pci===pci)?.telemetry.device.displayName??'GPU')+' · '+pci;row.append(a);}
    const state=document.createElement('span');state.className='link-status';state.textContent='↔ NVLink · '+link.state;const detail=document.createElement('small');detail.textContent=(link.linkCount??'?')+' links'+(link.speedGBps!=null?' · '+link.speedGBps+' GB/s per link':'');state.append(detail);row.insertBefore(state,row.lastChild);links.append(row);
   }
   document.querySelector('#topology-note').textContent=topology?.error??(links.children.length?'NVLink connects these cards; memory remains allocated per GPU.':topology?.state==='NotApplicable'?'No NVIDIA GPUs are present.':topology?.state==='Observed'?'The driver did not report an NVLink pair. See Diagnostics for the topology output.':'NVLink topology has not been read yet.');

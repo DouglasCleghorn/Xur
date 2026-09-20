@@ -7,16 +7,16 @@ const fs=require('fs'),assert=require('assert/strict');
   await page.route('https://stations.test/**',r=>{
    const u=new URL(r.request().url());if(u.pathname.startsWith('/api/'))return r.fulfill({contentType:'application/json',body:'{"topology":{"links":[]}}'});
    const asset=/\.(css|js|ttf|svg)$/.test(u.pathname);
-   return r.fulfill({body:fs.readFileSync(asset?'src/Xur.Control/wwwroot'+u.pathname:'.build/fast/control-panel/profile-edit.html'),contentType:u.pathname.endsWith('.js')?'application/javascript':u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.ttf')?'font/ttf':u.pathname.endsWith('.svg')?'image/svg+xml':'text/html'});
+   return r.fulfill({body:fs.readFileSync(asset?'src/Xur.Control/wwwroot'+u.pathname:'.build/fast/control-panel/'+(u.pathname==='/workstations'?'workstations':'profile-edit')+'.html'),contentType:u.pathname.endsWith('.js')?'application/javascript':u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.ttf')?'font/ttf':u.pathname.endsWith('.svg')?'image/svg+xml':'text/html'});
   });
   for(const width of [1440,390]) {
    await page.setViewportSize({width,height:1000});await page.goto('https://stations.test/profile-edit');
    assert.equal(await page.locator('[name=stationId]').inputValue(),'w1');
    assert.equal(await page.locator('[name=stationName]').inputValue(),'Gaming');
-   assert(await page.locator('.station-user-choice').isHidden());
+   assert(await page.locator('.station-user-choice').isHidden());assert(await page.locator('.station-new-name').isHidden());
    await page.getByRole('combobox',{name:'Workstation',exact:true}).click();
    await page.getByRole('option',{name:'New workstation',exact:true}).click();
-   assert.equal(await page.locator('[name=stationId]').inputValue(),'');assert(await page.locator('.station-user-choice').isVisible());
+   assert.equal(await page.locator('[name=stationId]').inputValue(),'');assert(await page.locator('.station-user-choice').isVisible());assert(await page.locator('.station-new-name').isVisible());
    await page.locator('[name=stationName]').fill('Another desktop');
    await page.getByRole('combobox',{name:'Workstation',exact:true}).click();await page.getByRole('option',{name:'Gaming · w1',exact:true}).click();
    assert.equal(await page.locator('[name=stationName]').inputValue(),'Gaming');assert.equal(await page.locator('[name=stationUser]').inputValue(),'legacy');
@@ -24,6 +24,7 @@ const fs=require('fs'),assert=require('assert/strict');
    assert.equal(await page.locator('[name=stationId]').nth(1).inputValue(),'');assert.equal(await page.locator('[name=stationName]').nth(1).inputValue(),'');
    const rows=page.locator('.workload-editor');
    await rows.nth(0).locator('.station-devices summary').click();
+   await rows.nth(0).getByText('Serial: hub-serial',{exact:false}).first().waitFor();assert.equal(await rows.nth(0).getByText('Duplicate serial number.',{exact:false}).count(),2);
    await rows.nth(0).locator('.station-primary').check();await rows.nth(0).locator('.station-usb').first().check();
    await rows.nth(1).locator('.station-devices summary').click();await rows.nth(1).locator('.station-primary').check();
    assert(!(await rows.nth(0).locator('.station-primary').isChecked()),'Only one primary station');
@@ -36,6 +37,11 @@ const fs=require('fs'),assert=require('assert/strict');
    assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),'Profile editor overflow at '+width);
    await page.screenshot({path:'.build/fast/control-panel/station-identity-'+width+'.png',fullPage:true});
   }
+  await page.goto('https://stations.test/workstations');
+  await page.getByRole('heading',{name:'Manage workstations'}).waitFor();
+  assert(await page.getByRole('button',{name:'Delete',exact:true}).isDisabled(),'Referenced workstation cannot be deleted');
+  await page.getByText('New workstation',{exact:true}).click();await page.getByRole('button',{name:'Create workstation',exact:true}).waitFor();
+  assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),'Workstation management overflow');
   assert.deepEqual(errors,[]);console.log(JSON.stringify({suite:'StationIdentityUi',result:'Passed',reuseAndCreate:true,desktopAndMobile:true}));
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -27,7 +27,7 @@ WorkstationUpdateTests.Run(Check);
 await NvidiaDeviceTests.Run(Check);
 await NvLinkTopologyTests.Run(Check);
 StationStreamingTests.Run(Check);
-Check(Xur.Agent.ServerPower.Configuration.Contains("--what=sleep:idle")&&!Xur.Agent.ServerPower.Configuration.Contains("--what=shutdown"),"Server sleep protection leaves reboot and shutdown available");
+Check(Xur.Agent.ServerPower.Configuration.Contains("--what=sleep ")&&!Xur.Agent.ServerPower.Configuration.Contains("--what=shutdown"),"Server sleep protection leaves reboot and shutdown available");
 Check(LocalConsole.WebAddresses([]).Contains("Waiting for network"),"Console explains network address acquisition instead of showing an empty list");
 Check(LocalConsole.WebAddresses(["https://192.0.2.1:8443/"]).Contains("192.0.2.1"),"Console shows acquired addresses immediately");
 await StationGraphicsTests.Run(Check);
@@ -38,6 +38,7 @@ await ModelLabApiTests.Run(Check);
 ApiKeyTests.Run(Check);
 await StationDeviceAccessTests.Run(Check);
 await EngineStartupTests.Run(Check);
+await EngineRestartPolicyTests.Run(Check);
 await ParallelStopGateTests.Run(Check);
 await StationNetworkPolicyTests.Run(Check);
 await TimezoneTests.Run(Check);
@@ -161,6 +162,31 @@ var filesystemJson="""
 var storageFilesystems=Xur.Agent.StorageUsage.Filesystems(filesystemJson);
 Check(storageFilesystems.Length==2 && storageFilesystems[0].Source=="/dev/vda3" && storageFilesystems[0].Mounts.Length==2 && storageFilesystems.Sum(f=>f.Bytes)==3000,"Storage deduplicates bind-mounted system filesystems and excludes RAM disks");
 Check(storageFilesystems[0].Used==400 && storageFilesystems[0].Available==500,"Available space remains observed rather than pretending reserved blocks are free");
+var usageRoot=Path.Combine(Path.GetTempPath(),"xur-usage-"+Guid.NewGuid());
+try {
+ var cache=usageRoot+"/volumes/xur-cache-1/_data";Directory.CreateDirectory(cache);Directory.CreateDirectory(usageRoot+"/overlay");
+ File.WriteAllBytes(cache+"/weights",new byte[1024*1024]);File.WriteAllBytes(usageRoot+"/overlay/engine",new byte[32768]);
+ Directory.CreateSymbolicLink(usageRoot+"/volumes/xur-cache-link",usageRoot+"/volumes/xur-cache-1");
+ var caches=Xur.Agent.StorageUsage.ModelCaches(usageRoot+"/volumes");
+ var modelsUsage=await Xur.Agent.StorageUsage.Measure("Models",caches);
+ var engineUsage=await Xur.Agent.StorageUsage.Measure("Engines",[usageRoot],caches);
+ var totalUsage=await Xur.Agent.StorageUsage.Measure("Total",[usageRoot]);
+ Check(caches.SequenceEqual(new[]{cache})&&modelsUsage.Bytes>=1024*1024,"Model usage discovers persistent caches without following links");
+ Check(modelsUsage.Bytes+engineUsage.Bytes==totalUsage.Bytes,"Model caches are excluded from engine totals without double counting");
+}finally{Directory.Delete(usageRoot,true);}
+var labelsRoot=Path.Combine(Path.GetTempPath(),"xur-gpu-labels-"+Guid.NewGuid());
+try {
+ var a=new GpuDevice("0000:01:00.0","NVIDIA","3090","nvidia","GPU-a",24576,[],[]);var b=a with{Pci="0000:41:00.0",RuntimeId="GPU-b"};
+ var labels=new Xur.Agent.GpuLabels(labelsRoot).Assign([b,a]);
+ Check(labels.Select(g=>g.ShortId).Distinct().Count()==2,"Identical GPU models receive unique short labels");
+ var moved=new Xur.Agent.GpuLabels(labelsRoot).Assign([b with{Pci=a.Pci},a with{Pci=b.Pci}]);
+ Check(moved.All(g=>g.ShortId==labels.Single(p=>p.RuntimeId==g.RuntimeId).ShortId),"GPU labels follow hardware UUIDs across PCI changes and restarts");
+ var unavailable=new Xur.Agent.GpuLabels(labelsRoot).Assign([a with{Pci=b.Pci,RuntimeId=""}]);
+ Check(unavailable[0].ShortId==labels.Single(g=>g.RuntimeId==a.RuntimeId).ShortId,"GPU labels survive a temporary unavailable driver");
+ var replaced=new Xur.Agent.GpuLabels(labelsRoot).Assign([a with{Pci=b.Pci,RuntimeId="GPU-new"}]);
+ Check(!labels.Any(g=>g.ShortId==replaced[0].ShortId),"Replacement cards do not inherit another hardware UUID's label");
+ Check(Xur.Agent.ServerPower.Configuration.Contains("--what=sleep ")&&!Xur.Agent.ServerPower.Configuration.Contains("sleep:idle"),"Server sleep protection does not block display idle");
+}finally{Directory.Delete(labelsRoot,true);}
 var modelFile=new ModelFile("model.gguf",new("https://huggingface.co/a/b/resolve/"+new string('a',40)+"/model.gguf",new string('a',64),100,"apache-2.0","a/b",new string('a',40)));
 var importedRecipe=new Recipe("model-test","Model","registry.example/model@sha256:"+new string('a',64),[],8080,"/health","CPU",0,0,"",Files:[modelFile],SettingsSource:"revision-a");
 var importedWorkload=new Workload("44","Model",importedRecipe,[],"workload-44");

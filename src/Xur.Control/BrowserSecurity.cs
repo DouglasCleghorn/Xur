@@ -5,6 +5,21 @@ namespace Xur.Control;
 public sealed class PublicStaticAsset;
 public static class BrowserSecurity
 {
+    public static bool ServeOrigin(HttpContext context)
+    {
+        if(context.Features.Get<EndpointIdentity>()?.Kind!="serve")return true;
+        context.Request.Scheme="https";
+        // Serve replaces Host with localhost for Unix backends. It overwrites
+        // X-Forwarded-Host with the browser's original Host. Trust this only on
+        // the dedicated owner-only Unix socket, never on public listeners.
+        var forwarded=context.Request.Headers["X-Forwarded-Host"];
+        if(forwarded.Count==0)return true;
+        if(forwarded.Count!=1 || !Uri.TryCreate("https://"+forwarded[0],UriKind.Absolute,out var uri) ||
+            uri.UserInfo.Length>0 || uri.AbsolutePath!="/" || uri.Query.Length>0 || uri.Fragment.Length>0 ||
+            forwarded[0]!.Contains(',') || forwarded[0]!.Contains('/') || forwarded[0]!.Contains('\\'))return false;
+        context.Request.Host=HostString.FromUriComponent(uri.Authority);
+        return true;
+    }
     public static bool SameOrigin(HttpRequest request)
     {
         var origin=request.Headers.Origin.ToString();

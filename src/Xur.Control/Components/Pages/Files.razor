@@ -5,19 +5,25 @@
 @if(Device.Installer) { <p>Workstation files are available after installation.</p> }
 else
 {
-    <section class="panel" id="usage-explorer"><div class="section-heading"><h2>Disk usage</h2><button type="button" class="secondary" id="usage-refresh">Refresh</button></div>
-        <nav id="usage-path" aria-label="Storage path"></nav><p id="usage-status" role="status">Reading mount points…</p>
+    <div class="file-tabs" role="tablist" aria-label="File locations">
+        <button type="button" id="storage-files-tab" role="tab" data-file-tab="storage" aria-controls="usage-explorer" aria-selected="true">Storage files</button>
+        <button type="button" id="workstation-files-tab" role="tab" data-file-tab="workstation" aria-controls="file-explorer" aria-selected="false" tabindex="-1">Workstation files</button>
+    </div>
+    <section class="panel" id="usage-explorer" role="tabpanel" aria-labelledby="storage-files-tab"><div class="section-heading"><h2>Disk usage</h2><button type="button" class="secondary" id="usage-refresh">Refresh</button></div>
+        <nav class="file-path" id="usage-path" aria-label="Storage path"></nav><p id="usage-status" role="status">Reading mount points…</p>
         <div id="usage-list" aria-label="Mount points and folder sizes"></div>
-        <p class="secondary-text">Allocated space, largest first. Shared filesystems can appear at several mount points. Links and nested mounts are not traversed. Scans are bounded; partial sizes are lower bounds. File downloads are available below.</p>
-    </section><script src="/storage-explorer.js" defer></script>
-    <h2>Workstation files</h2>
-    <p class="secondary-text">Browse workstation home folders and download files. Proton logs appear as <code>steam-&lt;appid&gt;.log</code> after a game runs with logging enabled.</p>
-    <section class="panel" id="file-explorer">
+        <p class="secondary-text">Allocated space, largest first. Shared filesystems can appear at several mount points. Links and nested mounts are not traversed. Scans are bounded; partial sizes are lower bounds. Use Workstation files to download files from a workstation home folder.</p>
+    </section>
+    <section class="panel" id="file-explorer" role="tabpanel" aria-labelledby="workstation-files-tab" hidden>
+        <div class="section-heading"><h2>Workstation files</h2><button type="button" class="secondary" id="file-refresh">Refresh</button></div>
+        <p class="secondary-text">Browse workstation home folders and download files. Proton logs appear as <code>steam-&lt;appid&gt;.log</code> after a game runs with logging enabled.</p>
         <form id="file-controls" class="actions"><label>User<select id="file-user" name="user" required><option value="">Loading users…</option></select></label><label>Filter this folder<input id="file-filter" type="search" name="q" maxlength="200" placeholder="File or folder name" /></label><button class="secondary">Search</button></form>
-        <nav aria-label="Folder path" id="file-breadcrumbs"></nav>
+        <nav class="file-path" aria-label="Folder path" id="file-breadcrumbs"></nav>
         <p id="file-status" role="status">Loading files…</p>
         <div id="file-list" role="list" aria-label="Files and folders"></div>
         <p class="secondary-text">Hidden folders are included. Links are listed but not followed. Steam’s original folder is usually <code>.local/share/Steam</code>.</p>
     </section>
+    <script src="/file-navigation.js" defer></script>
+    <script src="/storage-explorer.js" defer></script>
     <script src="/files.js" defer></script>
 }

@@ -13,7 +13,7 @@
 @if(!Device.Installer && application!=null)
 {
     <section class="panel" id="application-update" data-current="@application.Current.Id" data-operation="@application.Operation?.Id" data-busy="@application.Busy.ToString().ToLowerInvariant()">
-        <h2>Xur application</h2>
+        <h2>Xur application</h2><p>Channel: @(application?.Development==true?"Local build testing":application?.Channel??"stable") · <a href="/settings#update-channel">Change channel</a></p>
         <p>Installed: <strong>@application.Current.Version</strong></p>
         <p>Source: @(application.Development?"Local build testing":"GitHub Releases") · <a href="/settings#development-updates">Settings</a></p>
         @if(application.Available!=null) { <p>Available: <strong>@application.Available.Version</strong></p> }

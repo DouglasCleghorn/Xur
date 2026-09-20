@@ -19,7 +19,7 @@
                     <label class="profile-choice"><input type="radio" name="id" value="@profile.Id" checked="@(profile.Id==(state.Active?.Id??state.Profiles.OrderBy(p=>p.Name).First().Id))" disabled="@Busy" required />
                     <span><strong>@profile.Name</strong><span class="secondary-text">@profile.Workloads.Length @(profile.Workloads.Length==1?"workload":"workloads") · @profile.Workloads.SelectMany(w=>w.Gpus).Distinct().Count() @(profile.Workloads.SelectMany(w=>w.Gpus).Distinct().Count()==1?"GPU":"GPUs")</span>
                     @foreach(var workload in profile.Workloads) {
-                        <span class="profile-workload"><span>@workload.Name</span><small>@workload.Recipe.Kind · @(workload.Recipe.Kind=="Workstation"?(workload.User?.Username??"Default user"):workload.Recipe.Name)</small></span>
+                        <span class="profile-workload"><span>@workload.Name</span><small>@workload.Recipe.Kind · @(workload.Recipe.Kind=="Workstation"?(workload.User?.Username??"Default user"):workload.Recipe.Name) · @string.Join(", ",workload.Gpus.Select(pci=>state.Runtime.Gpus.FirstOrDefault(g=>g.Pci==pci)?.ShortId??pci))</small></span>
                     }
                     @if(profile.Workloads.Length==0) { <small>No workloads configured</small> }
                     </span></label>

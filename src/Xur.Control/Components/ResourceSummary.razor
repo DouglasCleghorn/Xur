@@ -17,7 +17,7 @@
     <div class="control-vram"><a class="resource-title" href="/gpus">VRAM</a>
     @if(gpus?.Gpus.Length>0) {
         @foreach(var gpu in gpus.Gpus) {
-            <UsageBar Key="@gpu.Device.Pci" Label="@(gpu.Device.Name+" · "+gpu.Device.Pci)" Link="@("/gpus#gpu-"+gpu.Device.Pci.Replace(":","-").Replace(".","-"))" Used="@(gpu.Reading.MemoryUsedMiB*1048576)" Total="@(gpu.Reading.MemoryTotalMiB*1048576)" />
+            <UsageBar Key="@gpu.Device.Pci" Label="@(gpu.Device.DisplayName+" · "+gpu.Device.Pci)" Link="@("/gpus#gpu-"+gpu.Device.Pci.Replace(":","-").Replace(".","-"))" Used="@(gpu.Reading.MemoryUsedMiB*1048576)" Total="@(gpu.Reading.MemoryTotalMiB*1048576)" />
         }
     } else { <span class="secondary-text">@(gpus==null?"Not reported":"No GPUs detected")</span> }
     </div>

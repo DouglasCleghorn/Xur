@@ -9,7 +9,7 @@
    const data=await response.json();report.value=JSON.stringify(data,null,2);summary.textContent=data.summary;devices.replaceChildren();
    for(const entry of data.inventory){
     const item=document.createElement('article'),title=document.createElement('h3'),reason=document.createElement('p');
-    title.textContent=entry.gpu.name;reason.textContent=entry.workstationEligible?'Available for workstation':entry.excludedBecause.join('; ');item.append(title,reason);devices.append(item);
+    title.textContent=(entry.gpu.displayName||entry.gpu.name);reason.textContent=entry.workstationEligible?'Available for workstation':entry.excludedBecause.join('; ');item.append(title,reason);devices.append(item);
    }
    copy.disabled=false;download.disabled=false;
   }catch(e){summary.textContent=e.message;report.value='';devices.replaceChildren();}

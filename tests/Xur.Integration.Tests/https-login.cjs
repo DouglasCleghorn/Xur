@@ -5,7 +5,7 @@ const assert=require('assert/strict');
 (async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'xur-https-'));
  let process,browser,agent;const tls='https://127.0.0.1:19063',plain='http://127.0.0.1:18700';
- const local=(socket,url)=>new Promise((resolve,reject)=>{http.get({socketPath:path.join(root,socket),path:url},r=>{let body='';r.on('data',x=>body+=x);r.on('end',()=>resolve({status:r.statusCode,body,headers:r.headers}));}).on('error',reject);});
+ const local=(socket,url,headers={})=>new Promise((resolve,reject)=>{http.get({socketPath:path.join(root,socket),path:url,headers},r=>{let body='';r.on('data',x=>body+=x);r.on('end',()=>resolve({status:r.statusCode,body,headers:r.headers}));}).on('error',reject);});
  const start=async(request)=>{
   process=spawn(path.resolve('.build/context/publish/control/Xur.Control'),[],{env:{...global.process.env,XUR_MODE:'Installer',XUR_RUN:root,XUR_PORT:'18700',XUR_CONSOLE:'stdio'},stdio:['pipe','ignore','ignore'],detached:true});
   for(let n=0;n<100;n++){try{if((await request.get(tls+'/health')).ok())return;}catch{}await new Promise(r=>setTimeout(r,100));}
@@ -22,6 +22,11 @@ const assert=require('assert/strict');
   const rejected=await request.post(plain+'/api/auth/login',{data:{username:'owner',password:'not-a-real-password'},maxRedirects:0});assert.equal(rejected.status(),426);
   const serve=await local('serve.sock','/login');assert.equal(serve.status,200);assert(serve.headers['set-cookie'].some(x=>x.includes('secure')));
   assert.equal((await local('serve.sock','/local/login')).status,404);
+  const proxyHeaders={Origin:'https://xur.example.ts.net','X-Forwarded-Host':'xur.example.ts.net','Sec-Fetch-Site':'same-origin'};
+  assert.equal((await local('serve.sock','/health',proxyHeaders)).status,200,'Private Serve socket restores the original host');
+  assert.equal((await local('serve.sock','/health',{...proxyHeaders,Origin:'https://evil.example'})).status,403);
+  assert.equal((await local('serve.sock','/health',{...proxyHeaders,'X-Forwarded-Host':'xur.example.ts.net,evil.example'})).status,400);
+  assert.equal((await request.get(tls+'/health',{headers:proxyHeaders})).status(),403,'Public listener must ignore forwarded host');
   const code=(await local('control.sock','/local/login')).body.match(/Access code: ([0-9A-Z-]+)/)[1];
   const manifest=await request.get(tls+'/manifest.webmanifest');assert(manifest.ok());const app=await manifest.json();assert.equal(app.display,'standalone');assert.equal(app.icons.length,2);
   for(const icon of app.icons)assert((await request.get(tls+icon.src)).ok());
@@ -40,6 +45,12 @@ const assert=require('assert/strict');
   const loginResponse=await posted;assert.equal(loginResponse.status(),302,'Login form must redirect after authentication');
   await page.waitForURL(tls+'/');
   const cookies=await context.cookies();assert(cookies.find(c=>c.name==='xur.session')?.secure);assert(cookies.find(c=>c.name==='xur.csrf.https')?.secure);
+  const htmlHeaders={Accept:'text/html'};
+  for(const action of ['/profiles/load','/profiles/cancel','/storage/trim','/settings/ntp']) {
+   const error=await request.post(tls+action,{headers:htmlHeaders,form:{},maxRedirects:0});assert.equal(error.status(),400);assert(error.headers()['content-type'].includes('text/html'));assert((await error.text()).includes('This form expired'));
+  }
+  const missing=await request.get(tls+'/no-such-page',{headers:htmlHeaders});assert.equal(missing.status(),404);assert((await missing.text()).includes('This page could not be found'));
+  const blockedForm=await request.post(tls+'/profiles/load',{headers:{...htmlHeaders,Origin:'https://evil.example'},form:{}});assert.equal(blockedForm.status(),403);assert((await blockedForm.text()).includes('rejected for your security'));
   const csrf=await page.locator('meta[name=xur-csrf]').getAttribute('content');
   const headers={RequestVerificationToken:csrf,'Accept-Encoding':'gzip'};
   const first=await request.get(tls+'/api/status',{headers});assert.equal(first.status(),200);assert.equal(first.headers()['content-encoding'],'gzip');assert(first.headers().etag);assert((await first.json()).bootId);

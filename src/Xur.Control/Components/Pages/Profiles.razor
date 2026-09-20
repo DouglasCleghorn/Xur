@@ -90,6 +90,6 @@ else
     bool Busy=>state?.Operation?.Stage is "Applying" or "Cancelling" or "Failed";
     Workload? Definition(string id)=>state?.Active?.Workloads.FirstOrDefault(w=>w.Id==id) ?? state?.Profiles.SelectMany(p=>p.Workloads).FirstOrDefault(w=>w.Id==id);
     string WorkloadName(string id)=>Definition(id)?.Recipe.Name ?? "Workload "+id;
-    string[] DeviceNames(Profile p)=>p.Workloads.SelectMany(w=>w.Gpus.Length==0?new[]{"CPU"}:w.Gpus.Select(id=>state!.Runtime.Gpus.SingleOrDefault(g=>g.Pci==id)?.Name ?? "GPU "+id)).Distinct().ToArray();
+    string[] DeviceNames(Profile p)=>p.Workloads.SelectMany(w=>w.Gpus.Length==0?new[]{"CPU"}:w.Gpus.Select(id=>state!.Runtime.Gpus.SingleOrDefault(g=>g.Pci==id)?.DisplayName ?? "GPU "+id)).Distinct().ToArray();
     protected override async Task OnInitializedAsync() { if(!Device.Installer)try {state=await Manager.State();accounts=await Device.Agent.GetFromJsonAsync<StationAccount[]>("/station-users") ?? [];}catch{} }
 }

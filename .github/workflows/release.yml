@@ -1,0 +1,90 @@
+name: Build and approve release
+on:
+  push:
+    branches: [main, release]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      channel: ${{ steps.identity.outputs.channel }}
+      version: ${{ steps.identity.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: 10.0.401
+      - id: identity
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_NAME" == main ]]; then channel=nightly; else channel=stable; fi
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "version=$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - name: Prepare native build tools and browser
+        run: |
+          python3 eng/ci-native.py
+          mkdir -p .build/browser .build/downloads
+          npm install --prefix .build/browser playwright@1.58.2
+          .build/browser/node_modules/.bin/playwright install --with-deps chromium
+          python3 - <<'PY'
+          import hashlib,json,pathlib,urllib.request
+          lock=json.loads(pathlib.Path('eng/toolchain-lock.json').read_text())['tailscale']
+          archive=pathlib.Path('.build/downloads/tailscale.tgz')
+          urllib.request.urlretrieve(lock['url'],archive)
+          assert hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()==lock['sha256']
+          PY
+      - name: Test and package unsigned build
+        run: |
+          export XUR_DOTNET="$(command -v dotnet)"
+          bash eng/test-fast.sh
+          python3 website/build.py
+          node tests/Xur.Integration.Tests/website-ui.cjs
+          python3 eng/build-app-bundle.py --from-published
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          archive=pathlib.Path('dist/xur-app-x86_64.tar.gz')
+          pathlib.Path('dist/build.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],'sha256':hashlib.file_digest(archive.open('rb'),'sha256').hexdigest(),'checks':'eng/test-fast.sh passed','hardwareTests':'Not run'},indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-candidate-${{ github.sha }}
+          retention-days: 7
+          path: |
+            dist/xur-app-x86_64.tar.gz
+            dist/build.json
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: ${{ needs.build.outputs.channel }}
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Download this run's tested candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-candidate-$GITHUB_SHA" --dir .build/ci-artifact
+      - name: Sign and publish approved build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          XUR_UPDATE_SIGNING_KEY_PEM: ${{ secrets.XUR_UPDATE_SIGNING_KEY_PEM }}
+          RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          test -n "$XUR_UPDATE_SIGNING_KEY_PEM"
+          umask 077
+          export XUR_UPDATE_SIGNING_KEY="$RUNNER_TEMP/xur-release-key.pem"
+          trap 'rm -f "$XUR_UPDATE_SIGNING_KEY"' EXIT
+          printf '%s\n' "$XUR_UPDATE_SIGNING_KEY_PEM" > "$XUR_UPDATE_SIGNING_KEY"
+          unset XUR_UPDATE_SIGNING_KEY_PEM
+          python3 eng/ci-release.py --channel "$RELEASE_CHANNEL" --version "$RELEASE_VERSION" --commit "$GITHUB_SHA"

@@ -22,3 +22,15 @@ with patch.object(subprocess,'run',side_effect=subprocess.CalledProcessError(1,[
  except subprocess.CalledProcessError:pass
  else:raise AssertionError('Signature failures must stop staging')
 print('OS staging checks passed: same-channel upgrade, signature failure, staged and current deployments, no-op rejection')
+
+import tempfile,pathlib,fcntl,json
+observe=m['observe']
+with tempfile.TemporaryDirectory() as temp:
+ root=pathlib.Path(temp);cached=m['snapshot']({'status':{'booted':deployment('old')}})
+ (root/'deployment.json').write_text(json.dumps(cached));(root/'operation.json').write_text(json.dumps({'stage':'Running'}));(root/'operation.log').write_text('Downloading layers')
+ with (root/'lock').open('w') as lock:
+  fcntl.flock(lock,fcntl.LOCK_EX)
+  with patch.dict(observe.__globals__,STATE=root,boot_status=lambda:(_ for _ in ()).throw(AssertionError('Must not wait for bootc while upgrading'))):
+   progress=observe();assert progress['busy'] and progress['current']['version']=='old' and progress['logs']=='Downloading layers'
+ with patch.dict(observe.__globals__,STATE=root,boot_status=lambda:{'status':{'booted':deployment('new')}}):
+  assert observe()['current']['version']=='new'

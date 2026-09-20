@@ -2,7 +2,7 @@
 from pathlib import Path
 import os
 
-ROOTS=('src','tools','tests','catalog','os','eng','docs','.github')
+ROOTS=('src','tools','tests','catalog','os','eng','docs','.github','website')
 TOP=('README.md','AGENTS.md','.gitignore','Directory.Build.props','global.json','LICENSE')
 EXCLUDED={'bin','obj','node_modules','__pycache__','.pytest_cache','.venv','venv',
           '.build','dist','artifacts','evidence','TestResults','test-results','playwright-report','.git','.vs','.idea','.vscode'}

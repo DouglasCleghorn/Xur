@@ -7,6 +7,7 @@
 else if(usage==null) { <p role="alert">Storage usage is unavailable.</p> }
 else
 {
+    @if(TrimStarted) { <p class="notice" role="status">TRIM started. Its result appears below when it finishes.</p> }
     @if(usage.Error!=null) { <p class="notice error" role="alert">@usage.Error</p> }
     <p class="secondary-text" role="status">@(usage.Scanning?"Calculating storage usage…":usage.CapturedAt is {} captured?"Updated "+captured.ToLocalTime().ToString("HH:mm:ss"):"Waiting for storage usage")</p>
     <section class="storage-filesystems" aria-label="Filesystems">
@@ -25,10 +26,10 @@ else
         <p class="secondary-text">TRIM returns unused filesystem blocks to the SSD; it does not delete files or increase free space. Filesystem and controller support is checked when it runs.</p>
         @foreach(var mount in trim.Mounts.Where(m=>m.Ssd).GroupBy(m=>string.IsNullOrEmpty(m.Uuid)?m.Source.Split('[')[0]:m.Uuid).Select(g=>g.OrderByDescending(m=>m.TrimSupported).First())) {
             var last=trim.Results.FirstOrDefault(r=>trim.Mounts.Any(m=>m.Id==r.Id&&m.Source.Split('[')[0]==mount.Source.Split('[')[0]));
-            <article class="storage-disk-row"><div><strong>@mount.Path</strong><span class="secondary-text">@mount.Source</span></div><span>@(mount.ReadOnly?"Read only":mount.TrimSupported?"Discard supported":"Discard unavailable")</span>
+            <article class="storage-disk-row trim-row"><div><strong>@mount.Path</strong><span class="secondary-text">@mount.Source</span></div><span>@(mount.ReadOnly?"Read only":mount.TrimSupported?"Discard supported":"Discard unavailable")</span>
             @if(mount.TrimSupported) { <form method="post" action="/storage/trim"><AntiforgeryToken /><input type="hidden" name="id" value="@mount.Id" /><button class="secondary" disabled="@trim.Busy">Trim SSD</button></form> }
-            @if(last!=null) { <p role="status">@(last.Success==true?"Completed":last.Success==false?"Failed":"Running") · @(last.FinishedAt?.ToLocalTime().ToString("g")) · @last.Message</p> }
-            else { <span class="secondary-text">No manual TRIM recorded</span> }
+            @if(last!=null) { <p class="trim-result" role="status">@(last.Success==true?"Completed":last.Success==false?"Failed":"Running") · @(last.FinishedAt?.ToLocalTime().ToString("g")) · @last.Message</p> }
+            else { <span class="secondary-text trim-result">No manual TRIM recorded</span> }
             </article>
         }
         @if(!trim.Mounts.Any(m=>m.Ssd)) { <p>No mounted SSDs reported.</p> }
@@ -44,7 +45,7 @@ else
             <article class="storage-usage-row"><div><strong>@category.Name</strong><details><summary>Locations</summary>@foreach(var path in category.Paths) { <code class="mount-path">@path</code> }</details></div>
                 <div class="storage-category-bar" aria-hidden="true"><span style="@("width:"+Percent(category.Bytes)+"%")"></span></div><span class="storage-size">@(category.Bytes is {} bytes?Size(bytes):category.Error)</span></article>
         }
-        <p class="secondary-text storage-note">Folder totals can differ from filesystem usage because of shared data, snapshots, and filesystem metadata. Model caches inside containers are counted under Containers &amp; engines.</p>
+        <p class="secondary-text storage-note">Folder totals can differ from filesystem usage because of shared data, snapshots, and filesystem metadata. Models includes Xur downloads and persistent model engine caches. Those caches are excluded from Containers &amp; engines. Model folders elsewhere remain in their containing category.</p>
     </section>
     <section aria-labelledby="persistent-volumes"><h2 id="persistent-volumes">Persistent volumes</h2>
         @foreach(var volume in usage.Volumes??[])
@@ -63,6 +64,7 @@ else
     <script src="/storage-usage.js" defer data-scanning="@usage.Scanning.ToString().ToLowerInvariant()"></script>
 }
 @code {
+    [SupplyParameterFromQuery] public bool TrimStarted {get;set;}
     [SupplyParameterFromQuery] public bool TrimError {get;set;}
     TrimStatus? trim;StorageUsageSnapshot? usage;ProfileState? profiles;
     string VolumeUsers(string id)=>string.Join(", ",profiles?.Profiles.SelectMany(p=>p.Workloads).Where(w=>w.Recipe.Container?.Mounts.Any(m=>m.Volume==id)==true).Select(w=>w.Name).Distinct()??[]);

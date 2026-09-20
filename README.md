@@ -103,3 +103,8 @@ GitHub publication is a [separate explicit step](docs/usage/application-updates.
 Build artifacts live in `dist/`; private runtime state, VM disks, logs and test
 captures live under `.build/`. Neither belongs in Git. Docker Hub images must use
 Google's mirror as described in [repository rules](AGENTS.md).
+
+The public project site and short guides live in [`website/`](website/README.md),
+ready for Cloudflare Pages at **xur.app**. Release candidates build on every push
+to `main` (Nightly) or `release` (Stable) and require maintainer approval in GitHub
+before publication. See [release channels](docs/usage/application-updates.md).

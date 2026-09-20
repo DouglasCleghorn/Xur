@@ -1,7 +1,7 @@
 name: Source checks
 on:
   push:
-    branches: [main]
+    branches: [main, release]
   pull_request:
 permissions:
   contents: read
@@ -21,3 +21,4 @@ jobs:
           python3 tests/Xur.Integration.Tests/online-installer.py
           python3 tests/Xur.Integration.Tests/github-release.py
           python3 tests/Xur.Integration.Tests/source-manifest.py
+          python3 website/build.py

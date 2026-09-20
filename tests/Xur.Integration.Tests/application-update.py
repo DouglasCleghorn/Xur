@@ -112,5 +112,28 @@ with tempfile.TemporaryDirectory() as t:
  try:u.check(stage)
  except ValueError as e:assert 'older release' in str(e)
  else:raise AssertionError('Downgrade accepted')
+ # Each signed channel has its own replay floor; selecting stable after a newer
+ # nightly remains possible without accepting older metadata in either channel.
+ u.select_channel('nightly');assert u.source()==u.NIGHTLY
+ entry['channel']='nightly';entry['sequence']=20;sign()
+ def channel_fetch(url,path,limit):
+  if url==u.NIGHTLY+'/latest':path.write_text('nightly-1.3');return
+  if url==u.GITHUB+'/download/nightly-1.3/latest':path.write_text(identity);return
+  if url.startswith(u.GITHUB+'/download/nightly-1.3/'):
+   path.write_bytes(signature.read_bytes() if url.endswith('.sig') else descriptor.read_bytes());return
+  return fetch(url,path,limit)
+ u.fetch=channel_fetch;assert u.check(stage)==entry
+ assert (stage/'source').read_text()==u.GITHUB+'/download/nightly-1.3'
+ (root/'channel-sequences.json').write_text(json.dumps({'nightly':20,'stable':5}))
+ u.select_channel('stable');entry['channel']='stable';entry['sequence']=6;sign()
+ assert u.check(stage)==entry # Older than nightly and legacy global floor.
+ entry['sequence']=4;sign()
+ try:u.check(stage)
+ except ValueError as e:assert 'older release' in str(e)
+ else:raise AssertionError('Same-channel replay accepted')
+ entry['sequence']=21;entry['channel']='nightly';sign()
+ try:u.check(stage)
+ except ValueError as e:assert 'selected channel' in str(e)
+ else:raise AssertionError('Wrong signed channel accepted')
  u.fetch=original_fetch
 print(json.dumps({'suite':'UpdateSources','result':'Passed','localOptIn':True,'pinnedGitHubRelease':True,'signedMetadata':True,'rollbackGuard':True}))

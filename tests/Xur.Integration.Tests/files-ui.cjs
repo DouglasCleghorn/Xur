@@ -14,14 +14,21 @@ const fs=require('fs'),assert=require('assert/strict');
  });
  for(const width of [1440,390]){
   await page.setViewportSize({width,height:900});await page.goto('http://files.test/files');
-  await page.getByText('3 items',{exact:true}).waitFor();
+  await page.getByRole('tab',{name:'Storage files',exact:true}).waitFor();
+  assert(await page.locator('#file-explorer').isHidden());
   await page.locator('#usage-list').getByRole('button',{name:'/var',exact:true}).click();
   await page.locator('#usage-list').getByRole('button',{name:'models/',exact:true}).waitFor();
   assert.equal(await page.locator('#usage-list script').count(),0);
 
+  await page.locator('#usage-list').getByRole('button',{name:'models/',exact:true}).click();
+  await page.waitForURL('**folder=models');
+  await page.goBack();await page.waitForURL('**folder=');
+  await page.getByRole('tab',{name:'Workstation files',exact:true}).click();
+  assert(await page.locator('#usage-explorer').isHidden());
+  await page.getByText('3 items',{exact:true}).waitFor();
   assert.equal(await page.locator('#file-list script').count(),0);
   assert((await page.getByRole('link',{name:'Download',exact:true}).getAttribute('href')).includes('path=steam-123.log'));
-  await page.getByRole('link',{name:'.local',exact:true}).click();await page.getByText('1 items',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'.local',exact:true}).click();await page.getByText('1 items',{exact:true}).waitFor();
   assert((await page.getByRole('link',{name:'Download',exact:true}).getAttribute('href')).includes('path=.local%2Fsteam-123.log'));
   await page.goBack();await page.getByText('3 items',{exact:true}).waitFor();
   assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),'Files overflow at '+width);

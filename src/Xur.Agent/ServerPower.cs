@@ -13,7 +13,7 @@ public sealed class ServerPower
 
         [Service]
         Type=exec
-        ExecStart=/usr/bin/systemd-inhibit --what=sleep:idle --mode=block --who=Xur "--why=Xur serves remote desktops and workloads" /usr/bin/sleep infinity
+        ExecStart=/usr/bin/systemd-inhibit --what=sleep --mode=block --who=Xur "--why=Xur serves remote desktops and workloads" /usr/bin/sleep infinity
         Restart=always
         RestartSec=5
 
@@ -34,6 +34,7 @@ public sealed class ServerPower
                     File.SetUnixFileMode(path+".tmp",(UnixFileMode)420);
                     File.Move(path+".tmp",path,true);
                     await Check(["daemon-reload"]);
+                    await Check(["restart",Unit]);
                 }
                 await Check(["enable","--now",Unit]);
                 Error=null;

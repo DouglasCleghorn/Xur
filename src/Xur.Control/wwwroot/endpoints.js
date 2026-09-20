@@ -15,11 +15,11 @@
    const response=await window.xurFetch('/api/model-lab/targets',{signal:AbortSignal.timeout(30000)});
    if(!response.ok)throw Error('Could not refresh endpoints. Try again.');
    const targets=await response.json();if(!Array.isArray(targets))throw Error('Could not read endpoints. Try again.');
-   const signature=JSON.stringify(targets.map(t=>[t.workload,t.instance.instanceId]));
+   const signature=JSON.stringify(targets.map(t=>[t.workload,t.instance.instanceId,t.gpus]));
    if(signature!==previous){
     list.replaceChildren();
-    for(const {workload:w} of targets){
-     const card=el('article',null,'panel endpoint-card');card.append(el('h3',w.name),el('p',(w.recipe.hub?.repository||w.recipe.name)+' · '+w.recipe.engine,'secondary-text'),el('p','GPUs: '+w.gpus.join(', '),'secondary-text'));
+    for(const {workload:w,gpus=[]} of targets){
+     const card=el('article',null,'panel endpoint-card');card.append(el('h3',w.name),el('p',(w.recipe.hub?.repository||w.recipe.name)+' · '+w.recipe.engine,'secondary-text'),el('p','GPUs: '+w.gpus.map(pci=>gpus.find(g=>g.pci===pci)?.shortId||pci).join(', '),'secondary-text'));
      const base=location.origin+'/inference/'+encodeURIComponent(w.route)+'/v1';
      address(card,'Base URL',base);address(card,'Chat completions',base+'/chat/completions');address(card,'Model list',base+'/models',true);
      list.append(card);

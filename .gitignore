@@ -53,3 +53,6 @@ Thumbs.db
 *.dmp
 # Do NOT ignore all JSON/PNG/XML: maintained recipes, app icons and protocols ship.
 # Keep generated logs, reports and screenshots inside .build/ instead.
+
+# Public website output
+/website/dist/

@@ -76,6 +76,7 @@ static class StationDeviceTests
             var gpu=new GpuDevice("0000:01:00.0","NVIDIA","RTX","nvidia","",1,[],[]);
             var virtualInput=sys+"/devices/virtual/input/input20";Write(virtualInput+"/phys",StationSeats.Physical("2")+"/input0");Link(sys+"/class/input/event40",virtualInput+"/event40");Write(dev+"/input/event40");
             var observed=StationDeviceInventoryReader.Read([gpu],sys,dev);
+            check(observed.Usb.Single(d=>d.Hub).Serial=="hub-serial","USB inventory exposes the hardware serial for identification");
             check(observed.Usb.Length==2&&observed.Usb.Single(d=>!d.Hub).Ancestors.SequenceEqual([hub]),"USB discovery follows real sysfs parent topology");
             check(observed.Devices.Single(d=>d.Node.EndsWith("event7")).UsbId==observed.Usb.Single(d=>!d.Hub).Id,"Input node maps to its physical USB device through symlinks");
             check(observed.Devices.Single(d=>d.Kind=="Audio").Gpu==gpu.Pci,"HDMI audio sibling function maps to the correct PCI GPU through upstream bridges");

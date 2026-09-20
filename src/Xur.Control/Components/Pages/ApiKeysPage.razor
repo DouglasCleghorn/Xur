@@ -8,7 +8,7 @@
         <div class="lab-fields">
             <label>Name<input name="name" maxlength="80" placeholder="Diagnostics assistant" required /></label>
             <label>Access<select name="scope"><option value="diagnostics">Diagnostics</option><option value="testing">Diagnostics + model testing</option><option value="automation">Automation</option></select></label>
-            <label>Expires in<select name="days"><option value="1">1 day</option><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option><option value="365">1 year</option></select></label>
+            <label>Expires in<select name="days"><option value="1">1 day</option><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option><option value="365">1 year</option><option value="0">Never</option></select></label>
         </div>
         <p id="api-key-scope" class="secondary-text">Read system status, profiles, GPU metrics, logs and graphics reports. No file downloads or configuration changes.</p>
         <button>Create key</button>

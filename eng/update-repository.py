@@ -12,7 +12,8 @@ def keys():
     public=subprocess.check_output(['openssl','pkey','-in',str(KEY),'-pubout'])
     if PUB.exists() and PUB.read_bytes()!=public:raise RuntimeError('Signing key differs from the trusted ISO key')
     PUB.write_bytes(public)
-def publish(version):
+def publish(version,channel="development"):
+    if channel not in ("development","nightly","stable"):raise ValueError("Invalid release channel")
     context_lock=(ROOT/".build/context.lock").open("w");fcntl.flock(context_lock,fcntl.LOCK_SH)
     keys();PUBLIC.mkdir(parents=True,exist_ok=True)
     bundle=ROOT/'.build/context/rootfs/usr/share/xur/app-bundle'
@@ -21,7 +22,7 @@ def publish(version):
     archive=PUBLIC/(meta['id']+'.tar.gz');temp=archive.with_suffix('.partial')
     with tarfile.open(temp,'w:gz',dereference=True,compresslevel=1) as tar:tar.add(bundle,arcname='.')
     temp.replace(archive)
-    entry={'schema':1,'hostAbi':1,'dataSchema':1,'id':meta['id'],'version':version,'sequence':int(time.time()),'file':archive.name,'bytes':archive.stat().st_size,'sha256':hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()}
+    entry={'schema':1,'hostAbi':1,'dataSchema':1,'id':meta['id'],'version':version,'channel':channel,'sequence':int(time.time()),'file':archive.name,'bytes':archive.stat().st_size,'sha256':hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()}
     # Versioned descriptors avoid a manifest/signature race during publication.
     descriptor=PUBLIC/(meta['id']+'.json');descriptor.write_text(json.dumps(entry,sort_keys=True)+'\n')
     subprocess.run(['openssl','pkeyutl','-sign','-inkey',str(KEY),'-rawin','-in',str(descriptor),'-out',str(descriptor)+'.sig'],check=True)

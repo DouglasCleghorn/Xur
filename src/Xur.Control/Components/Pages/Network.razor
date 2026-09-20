@@ -5,19 +5,7 @@
 <PageTitle>Settings · Xur</PageTitle>
 
 <h1>Settings</h1>
-@if(!Device.Installer && application!=null) {
-<section class="panel" id="development-updates"><h2>Local build testing</h2>
-<p>Public updates use GitHub Releases. Enable this only to test builds from your own update server. All builds still require Xur’s trusted signature; this does not allow unsigned builds or bypass rollback protection.</p>
-<form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="development" />
-<label class="inline-option"><input type="checkbox" name="development" value="true" checked="@application.Development" /> Allow local build testing</label><button disabled="@application.Busy">Save</button></form>
-@if(application.Development) {
-<form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="configure" />
-<label>Local update server<input name="server" value="@application.Server" placeholder="192.168.0.134:8088" maxlength="2048" required /></label><button disabled="@application.Busy">Save server</button></form>
-<p>Turning this off restores GitHub Releases and keeps your local server address for next time.</p>
-}
-</section>
-}
-<section class="panel"><h2>API access</h2><p>Give scripts and assistants their own expiring, revocable credentials.</p><a class="button secondary" href="/settings/api-keys">Manage API keys</a></section>
+<section class="panel"><h2>API access</h2><p>Give scripts and assistants their own revocable credentials with optional expiration.</p><a class="button secondary" href="/settings/api-keys">Manage API keys</a></section>
 @if(Auth.AccountConfigured) { <section class="panel"><h2>Account</h2><p>@Auth.Username</p><form method="post" action="/auth/logout"><AntiforgeryToken /><button class="secondary">Sign out</button></form></section> }
 <section class="panel"><h2>Hugging Face</h2>
 <p>@(hfConfigured ? "Access token saved." : "No access token saved.")</p>
@@ -77,13 +65,29 @@
 }
 <a class="button secondary" href="/settings">Refresh addresses</a>
 </section>
-<section class="panel"><h2>Web manager</h2><p>Open an address reachable from your browser on HTTPS port @(Device.Port+363). Link-local IPv6 addresses require the correct interface scope.</p>
-@foreach (var url in Device.Urls()) { <p><a href="@url">@url</a></p> }
+<section class="panel"><h2>Web access</h2>
+<p>Open an address reachable from your browser on HTTPS port @(Device.Port+363). This machine uses a persistent self-signed certificate; your browser will ask you to trust it. Link-local IPv6 addresses require the correct interface scope.</p>
+@foreach(var url in Device.Urls()) { <p><a href="@url">@url</a></p> }
+<p>For remote access with a trusted HTTPS certificate, use <a href="/tailscale">Tailscale Serve</a>.</p>
 </section>
 
-<section class="panel"><h2>HTTPS</h2><p>This machine creates its own persistent certificate; your browser will ask you to trust it.</p>
-@foreach(var url in Device.Urls()) { var secure=new UriBuilder(url){Scheme="https",Port=Device.Port+363}; <p><a href="@secure.Uri">@secure.Uri</a></p> }
+@if(!Device.Installer && application!=null) {
+<section class="panel" id="update-channel"><h2>Update channel</h2>
+<form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="channel" /><label>Channel<select name="channel"><option value="stable" selected="@(application.Channel=="stable")">Stable</option><option value="nightly" selected="@(application.Channel=="nightly")">Nightly</option></select></label><button disabled="@application.Busy">Save channel</button></form>
+<p>Nightly builds come from each main-branch commit after approval. Stable builds come from the release branch. Switching channels changes the source; check Updates to install its latest approved build. Switching to stable may install an older version. Compatibility checks still protect your configuration.</p>
+@if(application.Development) { <p>Local build testing currently overrides this channel. Saving a channel turns local testing off.</p> }
 </section>
+<section class="panel" id="development-updates"><h2>Local build testing</h2>
+<p>Public updates use GitHub Releases. Enable this only to test builds from your own update server. All builds still require Xur’s trusted signature; this does not allow unsigned builds or bypass rollback protection.</p>
+<form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="development" />
+<label class="inline-option"><input type="checkbox" name="development" value="true" checked="@application.Development" /> Allow local build testing</label><button disabled="@application.Busy">Save</button></form>
+@if(application.Development) {
+<form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="configure" />
+<label>Local update server<input name="server" value="@application.Server" placeholder="192.0.2.10:8088" maxlength="2048" required /></label><button disabled="@application.Busy">Save server</button></form>
+<p>Turning this off restores GitHub Releases and keeps your local server address for next time.</p>
+}
+</section>
+}
 
 @code {
     ApplicationUpdateStatus? application;TimezoneStatus? timezone;NtpStatus? ntp;bool hfConfigured;

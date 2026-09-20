@@ -23,7 +23,7 @@ public static class StationDeviceInventoryReader
             var root=Regex.IsMatch(Path.GetFileName(path),@"^usb\d+$");
             var name=string.Join(' ',new[]{ReadFile(path+"/manufacturer"),ReadFile(path+"/product")}.Where(x=>x.Length>0));
             if(name.Length==0)name=(hub?"USB hub ":"USB device ")+vendor+":"+product;
-            usb.Add(new(Identity(vendor,product,serial,port),name,serial.Length>0?"Serial":"Port",real,hub,root,[],[],Entries(path).Any(p=>ReadFile(p+"/bInterfaceClass")=="08")));
+            usb.Add(new(Identity(vendor,product,serial,port),name,serial.Length>0?"Serial":"Port",real,hub,root,[],[],Entries(path).Any(p=>ReadFile(p+"/bInterfaceClass")=="08"),serial.Length>0?serial:null));
         }
         usb=usb.Select(d=>d with{Ancestors=usb.Where(h=>h.Hub&&IsChild(d.Path,h.Path)).Select(h=>h.Path).ToArray()}).ToList();
         foreach(var (subsystem,kind) in new[]{("input","Input"),("hidraw","Hidraw"),("sound","Audio")})

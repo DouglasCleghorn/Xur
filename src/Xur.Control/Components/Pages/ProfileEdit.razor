@@ -40,8 +40,8 @@ else if(state!=null && profile!=null)
                         <option value="">New workstation</option>
                         @foreach(var station in stations) { <option value="@station.Id" data-name="@station.Name" data-user="@(station.User==null?"legacy":station.User.Temporary?"temporary":station.User.Username)" selected="@(w?.Recipe.Kind=="Workstation" && w.Id==station.Id)">@station.Name · @station.Id</option> }
                     </select></label>
-                    <label>Workstation name<input name="stationName" maxlength="80" value="@(w?.Recipe.Kind=="Workstation"?w.Name:"")" placeholder="My desktop" /></label>
-                    <small>Reuse a workstation to keep its Moonlight pairing across profiles and GPUs. Switching GPUs restarts the desktop. The name is shared by all profiles; choose New workstation to use a different user.</small>
+                    <label class="station-new-name" hidden="@(w?.Recipe.Kind=="Workstation" && stations.Any(s=>s.Id==w.Id))">Workstation name<input name="stationName" maxlength="80" value="@(w?.Recipe.Kind=="Workstation"?w.Name:"")" placeholder="My desktop" /></label>
+                    <small>Reuse a workstation to keep its Moonlight pairing across profiles and GPUs. Switching GPUs restarts the desktop. Manage existing workstation names on the Workstations page. Choose New workstation to set up another desktop.</small>
                 </div>
                 <label class="station-user-choice" hidden="@(w?.Recipe.Kind is not (null or "Workstation"))">User<select name="stationUser" class="searchable" data-placeholder="Search users…">
                     @if(w is {Recipe.Kind:"Workstation",User:null}) { <option value="legacy" selected>Existing workstation user</option> }
@@ -56,7 +56,9 @@ else if(state!=null && profile!=null)
                     @if(peripherals.Errors.Length>0) { <p role="alert">Device inventory is incomplete. Saved assignments are retained.</p> }
                     @foreach(var peripheral in peripherals.Usb.Where(d=>!d.RootHub)) {
                         <label class="usb-choice"><input type="checkbox" class="station-usb" name="usb-@row" value="@peripheral.Id" checked="@(w?.Devices?.Usb?.Contains(peripheral.Id)==true)" />
-                        <span>@peripheral.Name @(peripheral.Hub?"· Hub and connected devices":"")<small>@(peripheral.Identity=="Serial"?"Follows its serial number between ports":"Tied to this port; reconnect here after reboot") @(peripheral.Storage?"· Storage access is not assigned":"")</small></span></label>
+                        <span>@peripheral.Name @(peripheral.Hub?"· Hub and connected devices":"")<small>Serial: @(string.IsNullOrEmpty(peripheral.Serial)?"Not reported":peripheral.Serial) · Port: @System.IO.Path.GetFileName(peripheral.Path)</small>
+                        @if(!string.IsNullOrEmpty(peripheral.Serial) && peripherals.Usb.Count(d=>!d.RootHub && d.Serial==peripheral.Serial)>1) { <small class="error" role="alert">Duplicate serial number. @(peripherals.Usb.Count(d=>d.Id==peripheral.Id)>1?"These devices cannot be assigned reliably; use a hub with a unique serial.":"Device IDs distinguish these devices; verify the port before assigning.")</small> }
+                        <small>@(peripheral.Identity=="Serial"?"Follows its serial number between ports":"Tied to this port; reconnect here after reboot") @(peripheral.Storage?"· Storage access is not assigned":"")</small></span></label>
                     }
                     @foreach(var missing in (w?.Devices?.Usb??[]).Where(id=>!peripherals.Usb.Any(d=>d.Id==id))) {
                         <label class="usb-choice"><input type="checkbox" class="station-usb" name="usb-@row" value="@missing" checked /><span>Disconnected saved device<small>@missing</small></span></label>
@@ -72,7 +74,7 @@ else if(state!=null && profile!=null)
                     <label>GPU @(g+1)<select name="gpus-@row" class="searchable" data-placeholder="Search GPUs…">
                         <option value="">Select GPU</option>
                         @foreach(var gpu in state.Runtime.Gpus)
-                        { <option value="@gpu.Pci" data-compute="@(gpu.Problems.Length==0 ? "true" : "false")" data-display="@(gpu.Cards is {Length:>0} ? "true" : "false")" data-vendor="@gpu.Vendor" data-memory="@gpu.MemoryMiB" selected="@(w!.Gpus.ElementAtOrDefault(gpuIndex)==gpu.Pci)">@gpu.Name · @(gpu.Displays is {Length:>0}?string.Join(", ",gpu.Displays):"No display detected.") · @gpu.Pci</option> }
+                        { <option value="@gpu.Pci" data-compute="@(gpu.Problems.Length==0 ? "true" : "false")" data-display="@(gpu.Cards is {Length:>0} ? "true" : "false")" data-vendor="@gpu.Vendor" data-memory="@gpu.MemoryMiB" selected="@(w!.Gpus.ElementAtOrDefault(gpuIndex)==gpu.Pci)">@gpu.DisplayName · @(gpu.Displays is {Length:>0}?string.Join(", ",gpu.Displays):"No display detected.") · @gpu.Pci</option> }
                     </select></label>
                 }
                 </div>
@@ -83,7 +85,7 @@ else if(state!=null && profile!=null)
         <template id="gpu-template"><label>GPU<select class="searchable" data-placeholder="Search GPUs…">
             <option value="">Select GPU</option>
             @foreach(var gpu in state.Runtime.Gpus)
-            { <option value="@gpu.Pci" data-compute="@(gpu.Problems.Length==0 ? "true" : "false")" data-display="@(gpu.Cards is {Length:>0} ? "true" : "false")" data-vendor="@gpu.Vendor" data-memory="@gpu.MemoryMiB">@gpu.Name · @(gpu.Displays is {Length:>0}?string.Join(", ",gpu.Displays):"No display detected.") · @gpu.Pci</option> }
+            { <option value="@gpu.Pci" data-compute="@(gpu.Problems.Length==0 ? "true" : "false")" data-display="@(gpu.Cards is {Length:>0} ? "true" : "false")" data-vendor="@gpu.Vendor" data-memory="@gpu.MemoryMiB">@gpu.DisplayName · @(gpu.Displays is {Length:>0}?string.Join(", ",gpu.Displays):"No display detected.") · @gpu.Pci</option> }
         </select></label></template>
         <div class="actions action-bar"><button>Save profile</button><button type="button" class="secondary" id="add-workload">Add workload</button><a class="button quiet" href="/profiles">Cancel</a></div>
     </form>

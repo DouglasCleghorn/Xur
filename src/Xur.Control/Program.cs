@@ -90,10 +90,11 @@ async Task StartHost()
         k.ListenUnixSocket(serveSocket,l=>l.Use(next=>connection=>{connection.Features.Set(new EndpointIdentity("serve"));return next(connection);}));
     });
     var app = builder.Build();
+    app.UseBrowserErrors(Path.Combine(identityDirectory,"response-spool"));
     var maintenance=new ApplicationMaintenance();
     _=ApplicationIdentity.Id;
     app.Use(async(ctx,next)=> {
-        if(ctx.Features.Get<EndpointIdentity>()?.Kind=="serve")ctx.Request.Scheme="https";
+        if(!BrowserSecurity.ServeOrigin(ctx)){ctx.Response.StatusCode=400;return;}
         if(ctx.Features.Get<EndpointIdentity>()==null&&!ctx.Request.IsHttps)
         {
             var url="https://"+new HostString(ctx.Request.Host.Host,appliance.Port+363)+ctx.Request.PathBase+ctx.Request.Path+ctx.Request.QueryString;
@@ -184,7 +185,11 @@ async Task StartHost()
     app.MapGet("/api/storage/mounts",async()=>{var r=await appliance.Agent.GetAsync("/storage/mounts");return Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);});
     app.MapGet("/api/storage/explore",async(string id,string? path,bool? refresh)=>{var r=await appliance.Agent.GetAsync("/storage/explore?id="+Uri.EscapeDataString(id)+"&path="+Uri.EscapeDataString(path??"")+"&refresh="+(refresh==true?"true":"false"));return Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);});
     app.MapGet("/api/storage/trim",async()=>{var r=await appliance.Agent.GetAsync("/storage/trim");return Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);});
-    app.MapPost("/storage/trim",async(HttpContext ctx)=>{var f=await ctx.Request.ReadFormAsync();var r=await appliance.Agent.PostAsJsonAsync("/storage/trim",new TrimRequest(f["id"].ToString()));return Results.Redirect(r.IsSuccessStatusCode?"/storage?trimStarted=true":"/storage?trimError=true");});
+    app.MapPost("/storage/trim",async(HttpContext ctx)=>{
+        try {var f=await ctx.Request.ReadFormAsync();using var r=await appliance.Agent.PostAsJsonAsync("/storage/trim",new TrimRequest(f["id"].ToString()));return Results.Redirect(r.IsSuccessStatusCode?"/storage?trimStarted=true":"/storage?trimError=true");}
+        catch(HttpRequestException){return Results.Redirect("/storage?trimError=true");}
+        catch(TaskCanceledException){return Results.Redirect("/storage?trimError=true");}
+    });
     app.MapGet("/api/ntp",async()=> {var r=await appliance.Agent.GetAsync("/ntp");return Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);});
     app.MapPost("/settings/ntp",async(HttpContext ctx)=> {
         var form=await ctx.Request.ReadFormAsync();var servers=form["servers"].ToString().Split(new[]{'\r','\n'},StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries);

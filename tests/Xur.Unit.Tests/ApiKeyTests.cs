@@ -17,6 +17,12 @@ static class ApiKeyTests
             check(store.List()[0].Requests==1 && store.List()[0].LastUsedAt==clock.Now,"API key usage survives restart without retaining request bodies");
             store.Revoke(created.Key.Id);store=new(dir,clock);check(store.Authenticate(token)==null,"Revocation persists and takes effect immediately");
             var expired=store.Create(new("Short-lived",Days:1));clock.Now=clock.Now.AddDays(1);check(store.Authenticate(expired.Token)==null,"API keys expire at the exact expiry boundary");
+            var permanent=store.Create(new("Permanent",Days:0));clock.Now=clock.Now.AddYears(10);store=new(dir,clock);
+            check(permanent.Key.ExpiresAt==null && store.Authenticate(permanent.Token)!=null,"Never-expiring keys persist and remain valid after ten years");
+            store.Revoke(permanent.Key.Id);store=new(dir,clock);check(store.Authenticate(permanent.Token)==null,"Never-expiring keys can still be revoked");
+            for(int i=0;i<100;i++)store.Create(new("Permanent "+i,Days:0));
+            bool capped=false;try{store.Create(new("Too many",Days:0));}catch(ArgumentException){capped=true;}
+            check(capped,"Never-expiring keys count towards the active-key limit");
             foreach(var scope in new[]{"diagnostics","testing","automation"})
                 foreach(var denied in new[]{"/api/api-keys","/api/api-keys/id/revoke","/api/auth/login","/api/bootstrap","/local/login","/settings","/api/install/approve","/API/API-KEYS/","/api/%61pi-keys","/api/../local/login"})
                     check(!ApiKeys.Allows(scope,"POST",denied),"API key cannot escalate via "+scope+" "+denied);

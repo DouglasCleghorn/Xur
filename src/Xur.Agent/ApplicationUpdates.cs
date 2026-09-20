@@ -15,9 +15,14 @@ public sealed class ApplicationUpdates
         await gate.WaitAsync();try
         {
             if(await UpdateAll.Running())throw new InvalidOperationException("Wait for Update All to finish.");
-            if(request.Action is not ("configure" or "development" or "check" or "update" or "rollback"))throw new InvalidOperationException("Unknown application update action.");
+            if(request.Action is not ("configure" or "development" or "channel" or "check" or "update" or "rollback"))throw new InvalidOperationException("Unknown application update action.");
             var state=await Processes.Run("systemctl",["is-active","--quiet","xur-app-update.service"],5);
             if(state.ExitCode==0)throw new InvalidOperationException("An application update is already running.");
+            if(request.Action=="channel") {
+                if(request.Channel is not ("nightly" or "stable"))throw new InvalidOperationException("Choose nightly or stable.");
+                var saved=await Processes.Run(Program,["channel",request.Channel],10);
+                if(saved.ExitCode!=0)throw new InvalidOperationException("Could not save the update channel.");return;
+            }
             if(request.Action=="development") {
                 var saved=await Processes.Run(Program,["development",request.Development?"true":"false"],10);
                 if(saved.ExitCode!=0)throw new InvalidOperationException("Could not save local build testing setting.");
