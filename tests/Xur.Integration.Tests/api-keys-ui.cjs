@@ -2,7 +2,7 @@ const {chromium}=require('../../.build/browser/node_modules/playwright');
 const {execFileSync}=require('child_process'),fs=require('fs'),path=require('path'),assert=require('assert/strict');
 (async()=>{
  const out=path.resolve('.build/fast/api-keys');fs.mkdirSync(out,{recursive:true});
- execFileSync(path.join(process.env.HOME,'.local/share/xur-build/dotnet/dotnet'),['run','--project','tests/Xur.Unit.Tests','-c','Release','--','--control-panel-render',out],{stdio:'pipe'});
+ execFileSync(process.env.XUR_DOTNET||path.join(process.env.HOME,'.local/share/xur-build/dotnet/dotnet'),['run','--project','tests/Xur.Unit.Tests','-c','Release','--','--control-panel-render',out],{stdio:'pipe'});
  const html=fs.readFileSync(path.join(out,'api-keys.html'),'utf8').replace(/(<form id="api-key-create"[^>]*>)/,'$1<input name="__RequestVerificationToken" value="fixture-token">');
  let keys=[],secret='test-only-secret',posts=[];
  const browser=await chromium.launch({headless:true});
