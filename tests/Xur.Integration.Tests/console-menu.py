@@ -17,6 +17,9 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
     installer=False
     polling=False;poll_reads=0;refreshed=threading.Event()
     class Handler(http.server.BaseHTTPRequestHandler):
+        # Match Kestrel: keep framed responses alive instead of closing the Unix
+        # socket after every HTTP/1.0 response (which races client reads in CI).
+        protocol_version="HTTP/1.1"
         def log_message(self,*args):pass
         def do_GET(self):
             global poll_reads
@@ -63,11 +66,11 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
     try:
         output=run('6\n1\n0\n7\n1\n0\n2\n2\n0\n0\n')
         assert 'Update All' in output and 'nightly' in output and 'Update checks finished.' in output, output
-        assert 'Confirm reboot' in output and 'Confirm shut down' in output
+        assert 'Confirm reboot' in output and 'Confirm shut down' in output, output
         assert posts==['/local/update-all/start','/local/poweroff'],posts
         posts.clear()
         output=run('6\n3\n3\n0\n2\n2\n0\n0\n0\n')
-        assert 'Enable automatic updates' in output and 'Signature verification failed.' in output
+        assert 'Enable automatic updates' in output and 'Signature verification failed.' in output, output
         assert posts==['/local/updates/disable','/local/application-updates/update'],posts
         output=run(args=('update-all','status','--json'));assert json.loads(output)['operation']['stage']=='Complete'
         run(args=('update-all','start'));assert posts[-1]=='/local/update-all/start'
@@ -78,7 +81,7 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
             assert refreshed.wait(12),'Status did not refresh while the text menu waited for input'
             output,error=process.communicate('0\n0\n',timeout=10)
             assert process.returncode==0,error
-            assert 'Background refresh observed' in output
+            assert 'Background refresh observed' in output, output
         finally:
             if process.poll() is None:process.kill();process.communicate()
         polling=False
@@ -87,9 +90,9 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
         assert posts==['/local/network/settings','/local/network/keep'],posts
         assert network_payload['interface']=='eno1' and network_payload['macAddress']=='02:00:00:00:00:10'
         assert network_payload['ipv4']['addresses']==['192.0.2.20/24'] and network_payload['ipv6']['method']=='auto'
-        assert 'Keep settings' in output
+        assert 'Keep settings' in output, output
         installer=True;posts.clear()
         output=run('6\n1\n0\n0\n0\n')
-        assert '6. Power' in output and 'Updates' not in output and 'Confirm reboot' in output and not posts
+        assert '6. Power' in output and 'Updates' not in output and 'Confirm reboot' in output and not posts, output
     finally:server.shutdown();server.server_close()
 print(json.dumps({'suite':'ConsoleMenu','realCli':True,'updateAll':True,'powerConfirmationAndCancellation':True,'failureFeedback':True,'backgroundRefreshWhileReadingInput':True,'installerMode':True,'staticNetworkTextEntryAndKeep':True}))
