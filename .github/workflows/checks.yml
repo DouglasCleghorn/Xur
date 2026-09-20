@@ -15,6 +15,7 @@ jobs:
           dotnet-version: 10.0.401
       - run: |
           dotnet run --project tests/Xur.Unit.Tests -c Release
+          XUR_DOTNET="$(command -v dotnet)" python3 tests/Xur.Integration.Tests/console-menu.py
           dotnet build src/Xur.Gateway -c Release
           XUR_DOTNET="$(command -v dotnet)" dotnet run --project tests/Xur.Profile.Tests -c Release
           python3 tests/Xur.Integration.Tests/application-update.py

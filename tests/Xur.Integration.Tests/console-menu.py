@@ -51,13 +51,18 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
     class Server(socketserver.ThreadingUnixStreamServer):daemon_threads=True
     server=Server(str(pathlib.Path(temp)/'control.sock'),Handler)
     threading.Thread(target=server.serve_forever,daemon=True).start()
+    transcript=repo/'.build/fast/console-menu-transcript.log'
+    transcript.parent.mkdir(parents=True,exist_ok=True)
+    transcript.write_text('')
     def run(lines='',args=()):
         result=subprocess.run([sdk,str(binary),*args],env=dict(os.environ,XUR_RUN=temp),input=lines,text=True,capture_output=True,timeout=25)
+        with transcript.open('a') as log:
+            log.write(f'Arguments: {args!r}; input: {lines!r}; exit: {result.returncode}\n{result.stdout}\n{result.stderr}\n')
         assert result.returncode==0,result.stderr
         return result.stdout
     try:
         output=run('6\n1\n0\n7\n1\n0\n2\n2\n0\n0\n')
-        assert 'Update All' in output and 'nightly' in output and 'Update checks finished.' in output
+        assert 'Update All' in output and 'nightly' in output and 'Update checks finished.' in output, output
         assert 'Confirm reboot' in output and 'Confirm shut down' in output
         assert posts==['/local/update-all/start','/local/poweroff'],posts
         posts.clear()
