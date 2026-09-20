@@ -1,0 +1,37 @@
+version: 2
+
+# One weekly version-update PR spanning every supported ecosystem below.
+# Security updates retain GitHub's separate scheduling and PR behavior.
+multi-ecosystem-groups:
+  weekly-dependencies:
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Denver
+    open-pull-requests-limit: 1
+
+updates:
+  - package-ecosystem: nuget
+    directories:
+      - /src/Xur.Agent
+      - /src/Xur.Control
+      - /src/Xur.Domain
+      - /src/Xur.Gateway
+      - /tools/Xur.Cli
+      - /tests/Xur.Unit.Tests
+      - /tests/Xur.Profile.Tests
+    patterns: ["*"]
+    multi-ecosystem-group: weekly-dependencies
+
+  - package-ecosystem: github-actions
+    directory: /
+    patterns: ["*"]
+    multi-ecosystem-group: weekly-dependencies
+
+  # SDK PRs also need a reviewed refresh of eng/toolchain-lock.json's download
+  # URL/checksum and workflow SDK pins. Dependabot cannot edit custom lock files.
+  - package-ecosystem: dotnet-sdk
+    directory: /
+    patterns: ["*"]
+    multi-ecosystem-group: weekly-dependencies
