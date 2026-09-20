@@ -1,0 +1,31 @@
+@page "/tailscale"
+@inject Appliance Device
+<PageTitle>Tailscale · Xur</PageTitle>
+<script src="/page-poll.js" data-path="/api/page-state/tailscale" data-version="@PagePolling.Tailscale(Device)" defer></script>
+<h1>Tailscale</h1>
+<section class="panel">
+    <p>@Device.TailscaleState</p>
+    @if(Device.TailscaleState != "Running")
+    {
+        @if(Device.TailLoginUrl is { Length: >0 } loginUrl)
+        {
+            <a class="button" href="@loginUrl" target="_blank" rel="noopener noreferrer">Authorize this machine</a>
+        }
+        else if(Device.QrRunning)
+        {
+            <p>Preparing Tailscale login…</p>
+        }
+        else
+        {
+            <form method="post" action="/tailscale/start"><AntiforgeryToken /><button>Sign in to Tailscale</button></form>
+        }
+    }
+    @if(Device.TailUrl.Length>0) { <p><a href="@Device.TailUrl">@Device.TailUrl</a></p> }
+    @if(Device.TailscaleState == "Running" && Device.ConfirmedAdministrator == null)
+    {
+        <p>@Device.TailIdentity</p>
+        <form method="post" action="/tailscale/confirm"><AntiforgeryToken /><button>Use this account to manage Xur</button></form>
+    }
+    @if(Device.ConfirmedAdministrator != null) { <p>@Device.ConfirmedAdministrator</p> }
+</section>
+@code { protected override async Task OnInitializedAsync() => await Device.RefreshTailscale(); }

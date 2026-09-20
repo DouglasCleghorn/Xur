@@ -1,0 +1,5 @@
+FROM quay.io/fedora/fedora-bootc@sha256:2c38c5f71a43993e07577629ef8e1695420ed38143482340215abdcea85a31fd AS common
+RUN dnf install -y podman pciutils usbutils util-linux NetworkManager iproute libicu openssl-libs firewalld && \
+    firewall-offline-cmd --add-port=8080/tcp --add-port=8443/tcp && dnf clean all
+# The installed host is the signed upstream image in upstream-lock.json.
+# This build stage supplies only the separate live installer environment.

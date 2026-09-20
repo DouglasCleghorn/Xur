@@ -1,0 +1,13 @@
+[Unit]
+Description=Stage upstream OS updates independently of the Xur manager
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/var/lib/xur/installed
+
+[Service]
+Type=oneshot
+ExecStart=/var/lib/xur/app/current/host/os-update auto
+TimeoutStartSec=2h
+UMask=0077
+StandardOutput=journal
+StandardError=journal

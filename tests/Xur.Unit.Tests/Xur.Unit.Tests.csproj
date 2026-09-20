@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/Xur.Control/Xur.Control.csproj" /><ProjectReference Include="../../src/Xur.Agent/Xur.Agent.csproj" /></ItemGroup>
+</Project>

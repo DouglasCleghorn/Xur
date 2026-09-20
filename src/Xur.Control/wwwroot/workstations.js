@@ -1,0 +1,9 @@
+(() => {
+ for(const card of document.querySelectorAll('.station-card')){
+  card.querySelector('.copy-station-address')?.addEventListener('click',async e=>{const text=card.querySelector('.station-address').textContent;try{await navigator.clipboard.writeText(text);e.target.textContent='Copied';}catch{const range=document.createRange();range.selectNodeContents(card.querySelector('.station-address'));getSelection().removeAllRanges();getSelection().addRange(range);}});
+  const form=card.querySelector('.station-pair');if(!form)continue;
+  const status=form.querySelector('[role=status]'),select=form.elements.pairingId;
+  form.querySelector('.refresh-pairings').addEventListener('click',async()=>{try{const r=await (window.xurFetch ?? window.fetch)('/api/workstations/'+form.dataset.station+'/pairings');const data=await r.json();if(!r.ok)throw Error(data.error||'Could not read pairing requests.');select.replaceChildren(new Option('Select client',''));for(const p of data.pairings)select.add(new Option(p.name+' · '+p.address,p.id));status.textContent=data.pairings.length?'Select your client and enter its PIN.':'Start pairing in Moonlight, then refresh.';}catch(e){status.textContent=e.message;}});
+  form.addEventListener('submit',async e=>{e.preventDefault();const button=form.querySelector('button:not([type])');button.disabled=true;try{const r=await (window.xurFetch ?? window.fetch)('/api/workstations/'+form.dataset.station+'/pair',{method:'POST',headers:{'Content-Type':'application/json','RequestVerificationToken':form.elements.__RequestVerificationToken.value},body:JSON.stringify({pairingId:select.value,pin:form.elements.pin.value,name:form.elements.name.value})});if(!r.ok){const d=await r.json();throw Error(d.error||'Pairing failed.');}form.elements.pin.value='';status.textContent='Paired. Open Desktop in Moonlight.';}catch(e){status.textContent=e.message;}finally{button.disabled=false;}});
+ }
+})();

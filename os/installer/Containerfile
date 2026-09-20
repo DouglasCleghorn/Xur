@@ -1,0 +1,27 @@
+FROM localhost/xur-common:x86_64 AS live
+RUN dnf install -y anaconda anaconda-install-img-deps anaconda-dracut dracut-config-generic dracut-network \
+    grub2-efi-x64-cdboot grub2-pc-modules grub2-tools-extra shim-x64 \
+    xorriso squashfs-tools isomd5sum python3 plymouth tar jq skopeo openssl && dnf clean all
+RUN mkdir -p /boot/efi && cp -ra /usr/lib/efi/*/*/EFI /boot/efi && \
+    if test -f /usr/share/anaconda/list-harddrives-stub; then cp /usr/share/anaconda/list-harddrives-stub /usr/bin/list-harddrives; fi && \
+    systemctl mask anaconda.service anaconda-direct.service anaconda-shell@.service && \
+    systemctl set-default multi-user.target && \
+    rm -f /usr/lib/systemd/system-generators/systemd-gpt-auto-generator && \
+    mkdir -p /var/roothome && \
+    kernel=$(find /usr/lib/modules -name vmlinuz -printf '%h\n' | head -n1) && \
+    DRACUT_NO_XATTR=1 dracut --force --zstd --no-hostonly --add "anaconda" "$kernel/initramfs.img" "${kernel##*/}"
+COPY rootfs/ /
+COPY installer-rootfs/ /
+RUN (test -x /sbin/modprobe || ln -s /usr/bin/modprobe /usr/sbin/modprobe) && \
+    (test -x /sbin/sysctl || ln -s /usr/bin/sysctl /usr/sbin/sysctl) && \
+    test -x /sbin/modprobe && test -x /sbin/sysctl && \
+    chmod 755 /usr/libexec/xur-network /usr/libexec/xur-run-install /usr/libexec/xur-installer-app /usr/libexec/xur-live-app /usr/libexec/xur-resolve-install-source && \
+    ln -s /usr/bin/ldconfig /usr/sbin/ldconfig && \
+    python3 -c 'import pyudev; pyudev.Context()' && \
+    printf '/run/xur/app/releases/[^/]+/(control|agent|gateway)(/.*)? system_u:object_r:bin_t:s0\n/usr/share/xur/app-bundle/(control|agent|gateway)(/.*)? system_u:object_r:bin_t:s0\n/usr/lib/xur/control/Xur\\.Control -- system_u:object_r:bin_t:s0\n/usr/lib/xur/agent/Xur\\.Agent -- system_u:object_r:bin_t:s0\n/usr/lib/xur/agent/console(/.*)? system_u:object_r:bin_t:s0\n/usr/lib/xur/gateway/Xur\\.Gateway -- system_u:object_r:bin_t:s0\n' >> /etc/selinux/targeted/contexts/files/file_contexts.local && \
+    ln -s /usr/lib/xur/control/Xur.Control /usr/bin/xur && \
+    ln -s /usr/lib/xur/control/Xur.Control /usr/bin/xur-control && \
+    ln -s /usr/lib/xur/agent/Xur.Agent /usr/bin/xur-agent && \
+    ln -s /usr/lib/xur/gateway/Xur.Gateway /usr/bin/xur-gateway && \
+    systemctl enable xur-installer-app-prepare.service xur-installer-app-verify.service xur-gateway.service xur-agent.service xur-control.service xur-network.service tailscaled.service && \
+    systemctl mask autovt@.service autovt@tty1.service autovt@tty2.service autovt@tty3.service getty@tty1.service getty@tty2.service getty@tty3.service serial-getty@ttyS0.service

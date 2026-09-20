@@ -1,0 +1,36 @@
+@page "/gpus"
+@inject Appliance Device
+@inject ProfileManager Profiles
+<PageTitle>GPUs · Xur</PageTitle>
+<div class="page-heading"><h1>GPUs</h1><a class="button secondary" href="/gpus/power">Power limits</a><label class="gpu-range-label">History<select id="gpu-history-range"><option value="15">15 minutes</option><option value="60">1 hour</option><option value="1440">24 hours</option></select></label></div>
+@if(Device.Installer) { <p>GPU monitoring is available after installation.</p> }
+else if(status==null) { <p role="alert">GPU monitoring is unavailable.</p> }
+else
+{
+    <p class="secondary-text" id="gpu-updated" role="status">@(status.CapturedAt==null?"Reading GPUs…":"Updated "+status.CapturedAt.Value.ToLocalTime().ToString("HH:mm:ss"))</p>
+    <p class="notice error" id="gpu-error" hidden="@(status.Error==null)" role="alert">@status.Error</p>
+    <section class="panel" id="gpu-topology"><div class="section-heading"><h2>GPU connections</h2><a href="/diagnostics">Diagnostics</a></div><div class="topology-links" id="topology-links"></div><p id="topology-note" class="secondary-text">Reading NVLink topology…</p></section>
+    <div class="gpu-grid">
+        @foreach(var card in status.Cards)
+        {
+            var g=card.Telemetry;var r=g.Reading;
+            <section class="gpu-panel" data-gpu="@g.Device.Pci" id="gpu-@g.Device.Pci.Replace(":","-").Replace(".","-")"><div class="gpu-card-heading"><h2>@g.Device.Name</h2><span class="secondary-text">@g.Device.Vendor</span></div><p class="gpu-identity">@g.Device.Pci</p>
+                <div class="gpu-workloads" aria-label="Assigned workloads">@if(card.Workloads.Length==0) { <span class="secondary-text">No workloads assigned</span> } @foreach(var w in card.Workloads) { <span><strong>@w.Name</strong><span class="state-label @(w.State=="running"?"running":"pending")">@w.State</span></span> }</div>
+                <div class="gpu-readings"><div><span>GPU use</span><strong data-reading="utilization">@Value(r.Utilization,"%")</strong></div><div><span>VRAM used</span><strong data-reading="memoryUsedMiB">@Value(r.MemoryUsedMiB/1024," GiB")</strong></div><div><span>Power</span><strong data-reading="powerWatts">@Value(r.PowerWatts," W")</strong></div><div><span>Temperature</span><strong data-reading="temperatureC">@Value(r.TemperatureC," °C")</strong></div></div>
+                <div class="gpu-charts"><GpuHistoryChart Metric="memoryUsedMiB" Title="VRAM" /><GpuHistoryChart Metric="powerWatts" Title="Power" /></div>
+                <details class="gpu-details"><summary>Details &amp; processes</summary>
+                    <dl><dt>Driver</dt><dd>@g.Device.Driver <span data-driver-version>@g.DriverVersion</span></dd><dt>GPU identity</dt><dd>@(g.Device.RuntimeId.Length==0?g.Device.Pci:g.Device.RuntimeId)</dd><dt>VRAM total</dt><dd data-reading="memoryTotalMiB">@Value(r.MemoryTotalMiB/1024," GiB")</dd><dt>VRAM free</dt><dd data-reading="memoryFreeMiB">@Value(r.MemoryFreeMiB/1024," GiB")</dd><dt>Power limit</dt><dd data-reading="powerLimitWatts">@Value(r.PowerLimitWatts," W")</dd><dt>Fan</dt><dd data-reading="fanPercent">@Value(r.FanPercent,"%")</dd><dt>Fan speed</dt><dd data-reading="fanRpm">@Value(r.FanRpm," RPM")</dd><dt>Graphics clock</dt><dd data-reading="graphicsClockMHz">@Value(r.GraphicsClockMHz," MHz")</dd><dt>Memory clock</dt><dd data-reading="memoryClockMHz">@Value(r.MemoryClockMHz," MHz")</dd><dt>Performance state</dt><dd data-reading="performanceState">@(r.PerformanceState??"Not reported")</dd><dt>Display outputs</dt><dd>@(g.Device.Displays is {Length:>0}?string.Join(", ",g.Device.Displays):"No display detected.")</dd><dt>Device nodes</dt><dd>@string.Join(", ",(g.Device.Cards??[]).Concat(g.Device.Nodes))</dd></dl>
+                    <div class="gpu-charts"><GpuHistoryChart Metric="utilization" Title="GPU use" /><GpuHistoryChart Metric="temperatureC" Title="Temperature" /></div>
+                    <h3>Device processes</h3><div class="gpu-processes">@foreach(var process in g.Processes) { <div><span>@process.Name</span><span>PID @process.Pid</span><span>@Value(process.MemoryMiB," MiB")</span></div> } @if(g.Processes.Length==0) { <p class="secondary-text">No device processes observed</p> }</div>
+                </details>
+            </section>
+        }
+    </div>
+    @if(status.Cards.Length==0 && status.CapturedAt!=null) { <p>No GPUs were detected. <a href="/diagnostics">Open Diagnostics</a></p> }
+    <script src="/gpus.js" defer></script>
+}
+@code {
+    GpuStatusView? status;
+    static string Value(double? value,string unit)=>value is {} n?n.ToString(unit==" GiB"?"0.0":"0.#")+unit:"Not reported";
+    protected override async Task OnInitializedAsync(){if(!Device.Installer)try{status=await GpuStatusView.Observe(Device,Profiles);}catch{}}
+}

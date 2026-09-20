@@ -1,0 +1,15 @@
+[Unit]
+Description=Xur workload streaming gateway
+After=local-fs.target
+
+[Service]
+ExecStart=/usr/bin/xur-gateway
+WorkingDirectory=/usr/lib/xur/gateway
+Restart=on-failure
+RestartSec=2
+UMask=0077
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

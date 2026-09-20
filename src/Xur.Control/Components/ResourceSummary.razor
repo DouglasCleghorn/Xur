@@ -1,0 +1,37 @@
+@inject Appliance Device
+<section class="panel control-resources" aria-label="Resource usage">
+    <div class="control-storage"><a class="resource-title" href="/storage">Storage devices</a><div id="control-storage-devices" class="control-storage-devices">
+    @if(storage?.Disks.Length>0) {
+        @foreach(var disk in storage.Disks) {
+            var filesystems=storage.Filesystems.Where(f=>disk.Filesystems.Contains(f.Source)||f.Mounts.Intersect(disk.Mounts).Any()).ToArray();
+            <article class="control-disk"><div class="control-disk-heading"><a href="/storage" title="@disk.Model">@(string.IsNullOrWhiteSpace(disk.Model)?disk.Path:disk.Model)</a><span>@Size(disk.Bytes)</span></div><div class="secondary-text control-disk-path">@disk.Path</div>
+            @if(filesystems.Length==0) { <span class="secondary-text">@(disk.Mounts.Length==0?"Not mounted":"Usage unavailable")</span> }
+            @foreach(var fs in filesystems) {
+                <div class="control-disk-fs"><span title="@string.Join(", ",fs.Mounts)">@(fs.Mounts.FirstOrDefault()??fs.Source)</span><meter min="0" max="@fs.Bytes" value="@fs.Used" aria-label="@("Used space on "+fs.Source)"></meter><span>@Size(fs.Used) / @Size(fs.Bytes)</span></div>
+            }
+            </article>
+        }
+    } else { <span class="secondary-text">@(storage==null?"Storage devices unavailable":storage.Scanning?"Reading storage devices…":"No storage devices detected")</span> }
+    </div><span class="secondary-text" id="control-storage-status">Filesystem usage is cached; shared filesystems can appear under more than one device.</span></div>
+    <UsageBar Key="ram" Label="RAM" Link="/monitoring" Used="@system?.MemoryUsedBytes" Total="@system?.MemoryTotalBytes" />
+    <div class="control-vram"><a class="resource-title" href="/gpus">VRAM</a>
+    @if(gpus?.Gpus.Length>0) {
+        @foreach(var gpu in gpus.Gpus) {
+            <UsageBar Key="@gpu.Device.Pci" Label="@(gpu.Device.Name+" · "+gpu.Device.Pci)" Link="@("/gpus#gpu-"+gpu.Device.Pci.Replace(":","-").Replace(".","-"))" Used="@(gpu.Reading.MemoryUsedMiB*1048576)" Total="@(gpu.Reading.MemoryTotalMiB*1048576)" />
+        }
+    } else { <span class="secondary-text">@(gpus==null?"Not reported":"No GPUs detected")</span> }
+    </div>
+    <p class="secondary-text" id="control-usage-status" role="status">Usage refreshes every 10 seconds.</p>
+</section>
+<script src="/resource-summary.js" defer></script>
+@code {
+    SystemSnapshot? system;GpuTelemetrySnapshot? gpus;StorageUsageSnapshot? storage;
+    static string Size(long bytes)=>bytes>=1099511627776?$"{bytes/1099511627776d:0.0} TiB":$"{bytes/1073741824d:0.0} GiB";
+    protected override async Task OnInitializedAsync()
+    {
+        async Task System(){try{system=await Device.Agent.GetFromJsonAsync<SystemSnapshot>("/system");}catch{}}
+        async Task Gpus(){try{gpus=await Device.Agent.GetFromJsonAsync<GpuTelemetrySnapshot>("/gpu-telemetry?minutes=15");}catch{}}
+        async Task Storage(){try{storage=await Device.Agent.GetFromJsonAsync<StorageUsageSnapshot>("/storage-usage");}catch{}}
+        await Task.WhenAll(System(),Gpus(),Storage());
+    }
+}

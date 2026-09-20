@@ -1,0 +1,35 @@
+@inject Appliance Device
+@inject ProfileManager Profiles
+
+@if(snapshot is not { } system)
+{
+    <p>Loading system status…</p>
+}
+else
+{
+    <div class="metrics dashboard-metrics">
+        <section class="gpu-panel"><h2>CPU</h2><strong data-system="cpu">@system.CpuPercent.ToString("N0")%</strong></section>
+        <section class="gpu-panel"><h2>Memory</h2><strong data-system="memory">@GiB(system.MemoryUsedBytes) / @GiB(system.MemoryTotalBytes) GiB</strong></section>
+        <section class="gpu-panel"><h2>Storage</h2><strong data-system="storage">@GiB(system.DiskUsedBytes) / @GiB(system.DiskTotalBytes) GiB</strong></section>
+        <section class="gpu-panel"><h2>Uptime</h2><strong data-system="uptime">@TimeSpan.FromSeconds(system.UptimeSeconds).ToString(@"d\.hh\:mm")</strong></section>
+    </div>
+    <div class="section-heading"><h2>Network</h2><label class="gpu-range-label">History<select id="network-history-range"><option value="15">15 minutes</option><option value="60">1 hour</option><option value="1440">24 hours</option></select></label></div>
+    <p id="network-updated" class="secondary-text" role="status">Reading network traffic…</p>
+    <div class="gpu-grid" id="network-panels"></div>
+    <template id="network-panel-template"><section class="gpu-panel"><div class="gpu-card-heading"><h2 data-network-name></h2><span data-network-state class="state-label"></span></div><div class="gpu-readings"><div><span>Receiving</span><strong data-network-rx></strong></div><div><span>Sending</span><strong data-network-tx></strong></div><div><span>Received since boot</span><strong data-network-rxtotal></strong></div><div><span>Sent since boot</span><strong data-network-txtotal></strong></div></div><div class="gpu-charts"><GpuHistoryChart Metric="receiveBytesPerSecond" Title="Receive" /><GpuHistoryChart Metric="sendBytesPerSecond" Title="Send" /></div></section></template>
+    <section class="panel"><h2>Workloads</h2>
+        <div class="section-heading"><p>Loaded profile: <strong>@(profiles?.Active?.Name ?? "None")</strong></p><a class="button secondary" href="/profiles">Manage profiles</a></div>
+        @if(profiles?.Runtime.Instances.Length>0)
+        { @foreach(var instance in profiles.Runtime.Instances) { <div class="service-row"><strong>@(profiles.Active?.Workloads.FirstOrDefault(w=>w.Id==instance.Id)?.Recipe.Name ?? "Workload "+instance.Id)</strong><span class="state-label @(instance.State=="running"?"running":"pending")">@instance.State</span></div> } }
+        else { <p>No workloads running.</p> }
+    </section>
+    <section class="panel"><details><summary>System services</summary>
+        @foreach(var service in system.Services.Where(s=>!s.Managed && s.State=="active")) { <p>@service.Description <span class="pill">@service.State</span></p> }
+    </details></section>
+}
+<script src="/dashboard.js" defer></script>
+@code {
+    SystemSnapshot? snapshot;ProfileState? profiles;
+    static string GiB(long bytes)=>(bytes/1073741824d).ToString("N1");
+    protected override async Task OnInitializedAsync() { try { profiles=await Profiles.State(); } catch { } try { snapshot=await Device.Agent.GetFromJsonAsync<SystemSnapshot>("/system"); } catch { } }
+}

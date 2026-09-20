@@ -1,0 +1,17 @@
+@page "/diagnostics"
+<PageTitle>Diagnostics · Xur</PageTitle>
+<h1>Diagnostics</h1>
+<section class="panel" id="display-diagnostics">
+    <h2>GPUs &amp; workstations</h2>
+    <p id="diagnostic-summary" role="status">Collecting display information…</p>
+    <div class="actions">
+        <button type="button" id="diagnostic-copy" disabled>Copy report</button>
+        <button type="button" id="diagnostic-download" class="secondary" disabled>Download report</button>
+        <button type="button" id="diagnostic-refresh" class="secondary" disabled>Refresh</button>
+    </div>
+    <p id="diagnostic-copy-status" role="status"></p>
+    <div id="diagnostic-devices"></div>
+    <label for="diagnostic-report">Diagnostic report</label>
+    <textarea id="diagnostic-report" readonly spellcheck="false" rows="18"></textarea>
+</section>
+<script src="/diagnostics.js" defer></script>

@@ -1,0 +1,47 @@
+@inject Appliance Device
+@if(!Device.Installer)
+{
+    <p>Xur is installed.</p>
+}
+else if(operation != null)
+{
+    <section class="panel"><h2>Installation @operation.Stage.ToLowerInvariant()</h2><a class="button" href="/install/progress">View progress</a></section>
+}
+else if(inventory == null || !ready)
+{
+    <p>Loading disks…</p><a href="/">Refresh</a>
+}
+else if(available.Length == 0)
+{
+    <section class="panel"><p>No disks available for installation.</p><a href="/">Refresh disks</a></section>
+}
+else
+{
+    <section class="panel">
+        <h2>Select a disk</h2>
+        <p>The selected disk will be erased.</p>
+        <form method="post" action="/install/plan">
+            <AntiforgeryToken />
+            <div class="disk-options">
+            @foreach(var disk in available)
+            {
+                <label class="disk-option">
+                    <input type="radio" name="path" value="@disk.Path" required />
+                    <span><strong>@(disk.Model.Length == 0 ? disk.Path : disk.Model)</strong><br />@((disk.Bytes/1073741824d).ToString("N1")) GiB · @disk.Path<br /><small>@disk.Serial</small></span>
+                </label>
+            }
+            </div>
+            <button>Continue</button>
+        </form>
+    </section>
+}
+@code {
+    Inventory? inventory; Disk[] available=[]; Operation? operation; bool ready;
+    protected override async Task OnInitializedAsync()
+    {
+        var state=await Device.AgentStatus();
+        if(state is { } s && s.TryGetProperty("operation",out var op) && op.ValueKind==JsonValueKind.Object) operation=op.Deserialize<Operation>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        ready=state is { } status && status.TryGetProperty("scan",out var scan) && scan.GetProperty("state").GetString()!="Starting";
+        inventory=await Device.Inventory(); available=inventory?.Disks?.Where(d=>d.Blocked.Length==0).ToArray() ?? [];
+    }
+}

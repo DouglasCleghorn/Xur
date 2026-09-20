@@ -1,0 +1,75 @@
+@page "/workstations"
+@inject Appliance Device
+@inject ProfileManager Manager
+@inject IHttpContextAccessor Context
+<PageTitle>Workstations · Xur</PageTitle>
+<div class="page-heading"><h1>Workstations</h1><a class="button secondary" href="/profiles">Profiles</a></div>
+@if(DisplaySaved) { <p class="notice" role="status">Virtual display resolution applied.</p> }
+@if(Error!=null) { <p class="notice error" role="alert">@Error</p> }
+@if(Device.Installer) { <p>Workstations are available after installation.</p> }
+else if(stations==null) { <p role="alert">Could not read workstations. <a href="/workstations">Try again</a></p> }
+else
+{
+    @if(stations.Length==0) { <p>Add a workstation to a <a href="/profiles">profile</a> to get started.</p> }
+    <div class="workstation-grid">
+    @foreach(var station in stations)
+    {
+        var w=station.Workload;
+        <section class="panel station-card" data-station="@w.Id">
+            <div class="section-heading"><h2>@w.Name</h2><span class="state-label @(station.State=="running"?"running":"")">@station.State</span></div>
+            <dl class="station-facts"><dt>User</dt><dd>@(w.User?.Temporary==true?"Temporary user":UserLabel(w))</dd><dt>GPU</dt><dd>@(station.Gpu?.Name??"GPU unavailable") <small>@string.Join(", ",w.Gpus)</small></dd><dt>Display</dt><dd>@(station.Gpu?.Displays is {Length:>0}?string.Join(", ",station.Gpu.Displays):"No display detected.")</dd><dt>Streaming</dt><dd>@(station.Stream?.State??"Stopped") @if(station.Stream?.Headless==true) { <span class="secondary-text">· Virtual display</span> }</dd></dl>
+            @if(station.Stream?.Error!=null) { <p role="alert">@station.Stream.Error</p> }
+            <div class="actions"><form method="post" action="/profiles/load" class="actions"><AntiforgeryToken />
+                @if(station.Profiles.Length>1) { <label>Profile<select name="id">@foreach(var profile in station.Profiles) { <option value="@profile.Id">@profile.Name</option> }</select></label> }
+                else { <input type="hidden" name="id" value="@station.Profiles[0].Id" /> }
+                <button class="secondary" disabled="@(busy||station.State=="running")">Load profile</button></form>
+                @if(station.State=="running" && station.Stream?.State!="Ready") { <form method="post" action="/workstations/stream"><AntiforgeryToken /><input type="hidden" name="id" value="@w.Id" /><button>Start streaming</button></form> }
+                <a class="button quiet" href="/api/workloads/@w.Id/logs">Logs</a>
+                <a class="button quiet" href="@("/files?user="+Uri.EscapeDataString(w.User is {Temporary:false}?w.User.Username:(w.User?.Temporary==true?"xurtmp":"xurws")+Canonical.Hash(w.Id)[..12]))">Browse files</a>
+                @if(station.State=="running") { <a class="button quiet" href="/api/workstations/@w.Id/graphics" target="_blank" rel="noopener">Graphics report</a> }</div>
+            @if(station.Stream?.Headless==true)
+            {
+                <details><summary>Streaming resolution</summary>
+                    <p>When you launch Desktop, the virtual display follows Moonlight's resolution and frame rate. Resuming an existing session keeps its last display mode. After changing Moonlight settings, quit Desktop in Moonlight and launch it again, or apply a mode here.</p>
+                    @if(station.State=="running")
+                    {
+                        <form class="actions" method="post" action="/workstations/display"><AntiforgeryToken /><input type="hidden" name="id" value="@w.Id" />
+                            <label>Width<input name="width" type="number" min="320" max="7680" step="2" value="1920" required /></label>
+                            <label>Height<input name="height" type="number" min="240" max="4320" step="2" value="1080" required /></label>
+                            <label>Refresh rate (Hz)<input name="fps" type="number" min="10" max="240" value="60" required /></label>
+                            <button class="secondary" disabled="@busy">Apply resolution</button>
+                        </form>
+                        <a href="/api/workstations/@w.Id/display" target="_blank" rel="noopener">Current display details</a>
+                    }
+                </details>
+            }
+            <details><summary>Game troubleshooting</summary><p>If a Steam game exits or shows a blank screen, set its Launch Options to <code>PROTON_LOG=1 %command%</code>, reproduce once, then remove that option. The log is <code>steam-&lt;appid&gt;.log</code> in this workstation user's home. Review it before sharing.</p><p>The Graphics report checks Vulkan, OpenGL and installed graphics packages using this workstation's device access. On NVIDIA it also runs a short encoder test and includes GPU mapping and active encoder sessions.</p></details>
+            <details class="station-connect"><summary>Connect with Moonlight</summary>
+                <ol><li><a href="https://moonlight-stream.org/" target="_blank" rel="noopener noreferrer">Install Moonlight</a> on your client.</li><li>Load this workstation's profile. In Moonlight, add <code class="station-address">@StationLauncher.Address(host,station.Stream?.Port??47989)</code> <button type="button" class="quiet copy-station-address">Copy address</button>.</li><li>Select this computer in Moonlight. Enter its PIN below to pair, then choose <strong>Desktop</strong>.</li></ol>
+                <p>Streaming encryption is required on every connection. For access outside your LAN, connect both devices through <a href="/tailscale">Tailscale</a> and use Xur's tailnet address.</p>
+                @if(secure)
+                {
+                    <form class="station-pair" data-station="@w.Id"><AntiforgeryToken /><label>Client<select name="pairingId" required><option value="">Refresh to find a pairing request</option></select></label><div class="pair-fields"><label>PIN<input name="pin" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" required /></label><label>Client name<input name="name" maxlength="80" value="Moonlight" required /></label></div><div class="actions"><button type="button" class="secondary refresh-pairings">Refresh clients</button><button disabled="@(station.Stream?.State!="Ready")">Pair client</button></div><p role="status"></p></form>
+                }
+                else { <p><a href="@https">Open the encrypted manager</a> to pair a client. On your LAN, the browser will ask you to trust this machine's certificate. Tailscale HTTPS also works.</p> }
+                <details><summary>Launch shortcuts</summary><p>After pairing, download a shortcut for your client. Moonlight must already be installed.</p><div class="actions"><a class="button secondary" href="/api/workstations/@w.Id/launcher?platform=windows">Windows shortcut</a><a class="button secondary" href="/api/workstations/@w.Id/launcher?platform=linux">Linux shortcut</a><a class="button secondary" href="/api/workstations/@w.Id/launcher?platform=macos">macOS shortcut</a></div></details>
+            </details>
+        </section>
+    }
+    </div>
+    <script src="/workstations.js" defer></script>
+}
+@code {
+    [SupplyParameterFromQuery] public bool DisplaySaved {get;set;}
+    [SupplyParameterFromQuery] public string? Error {get;set;}
+    Dictionary<string,string> users=[];
+    string UserLabel(Workload w){var username=w.User?.Username??"xurws"+Canonical.Hash(w.Id)[..12];return users.GetValueOrDefault(username,username);}
+    WorkstationView[]? stations;bool busy,secure;string host="",https="";
+    protected override async Task OnInitializedAsync()
+    {
+        if(Device.Installer)return;
+        var request=Context.HttpContext!.Request;host=request.Host.Host;secure=request.IsHttps||Context.HttpContext.Features.Get<EndpointIdentity>()?.Kind=="serve";
+        https="https://"+(host.Contains(':')?"["+host+"]":host)+":"+(Device.Port+363)+"/workstations";
+        try{users=(await Device.Agent.GetFromJsonAsync<StationAccount[]>("/station-users")??[]).ToDictionary(u=>u.Username,u=>u.Name);var state=await Manager.State();busy=state.Operation?.Stage is "Applying" or "Cancelling" or "Failed";stations=WorkstationView.Build(state,await Device.Agent.GetFromJsonAsync<StationStreamStatus[]>("/workstations")??[]);}catch{}
+    }
+}

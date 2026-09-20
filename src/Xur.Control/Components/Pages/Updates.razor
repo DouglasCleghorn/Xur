@@ -1,0 +1,106 @@
+@page "/updates"
+@inject Appliance Device
+<PageTitle>Updates · Xur</PageTitle>
+<h1>Updates</h1>
+@if(all?.Operation is {} operation) {
+    <section class="operation-strip" aria-live="polite"><strong>Update All · @operation.Stage</strong><p>@operation.Message</p>
+    @foreach(var result in operation.Results) { <p><strong>@result.Name:</strong> @result.Message</p> }
+    </section>
+}
+@if(all?.Busy==true) { <script src="/page-poll.js" data-path="/api/page-state/updates" data-version="@Canonical.Hash(all)" defer></script> }
+
+@if(Device.Installer) { <p>Updates are available after installation.</p> }
+@if(!Device.Installer && application!=null)
+{
+    <section class="panel" id="application-update" data-current="@application.Current.Id" data-operation="@application.Operation?.Id" data-busy="@application.Busy.ToString().ToLowerInvariant()">
+        <h2>Xur application</h2>
+        <p>Installed: <strong>@application.Current.Version</strong></p>
+        <p>Source: @(application.Development?"Local build testing":"GitHub Releases") · <a href="/settings#development-updates">Settings</a></p>
+        @if(application.Available!=null) { <p>Available: <strong>@application.Available.Version</strong></p> }
+        <div class="actions">
+            <form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="check" /><button class="secondary" disabled="@(application.Busy || application.Server.Length==0)">Check for updates</button></form>
+            @if(application.Available!=null && application.Available.Id!=application.Current.Id)
+            { <form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="update" /><button disabled="@application.Busy">Update Xur</button></form> }
+            @if(application.Previous!=null)
+            { <form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="rollback" /><button class="secondary" disabled="@application.Busy">Roll back Xur</button></form> }
+        </div>
+        @if(application.Operation!=null) { <p role="status">@application.Operation.Stage · @application.Operation.Message</p><small>Operation @application.Operation.Id</small> }
+        @if(application.Busy) { <p>The manager will reconnect after the update.</p> }
+    </section>
+    <script src="/application-updates.js" defer></script>
+}
+@if(!Device.Installer && state==null) { <p role="alert">Could not load OS update status.</p><a href="/updates">Refresh</a> }
+else if(state!=null)
+{
+    <section class="panel" id="os-update" data-operation="@state.Operation?.Id" data-busy="@state.Busy.ToString().ToLowerInvariant()">
+        <h2>Operating system</h2>
+        <p>Bazzite · kernel, NVIDIA drivers and desktop components</p>
+        <p>Installed: <strong>@state.Current?.Version</strong></p>
+        @if(state.Current!=null) { <details><summary>Image</summary><code>@state.Current.Image</code><p><code>@state.Current.Digest</code></p></details> }
+        @if(state.Pending!=null || state.RollbackQueued)
+        {
+            <p><strong>@(state.RollbackQueued ? "Previous version queued" : "Update ready"): @(state.RollbackQueued ? state.Previous?.Version : state.Pending?.Version)</strong></p>
+            <p>Rebooting will interrupt all running workstations and AI services.</p>
+            <form method="post" action="/power/reboot"><AntiforgeryToken /><button disabled="@state.Busy">Reboot to finish</button></form>
+        }
+        else
+        {
+            @if(state.Available!=null && state.Available.Digest!=state.Current?.Digest)
+            { <p>Available: <strong>@state.Available.Version</strong></p> }
+            <div class="actions">
+                <form method="post" action="/updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="check" /><button class="secondary" disabled="@state.Busy">Check for updates</button></form>
+                @if(state.Available!=null && state.Available.Digest!=state.Current?.Digest)
+                { <form method="post" action="/updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="stage" /><button disabled="@state.Busy">Update</button></form> }
+            </div>
+        }
+        <p>Automatic OS updates: @(state.Automatic ? "On" : "Paused"). Updates take effect after reboot.</p>
+        <form method="post" action="/updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="@(state.Automatic ? "disable" : "enable")" /><button class="secondary" disabled="@state.Busy">@(state.Automatic ? "Pause automatic updates" : "Enable automatic updates")</button></form>
+        @if(state.Previous!=null && state.Pending==null && !state.RollbackQueued)
+        {
+            <details><summary>Previous version: @state.Previous.Version</summary>
+                <p>Queue the previous OS deployment. Application data is retained. A reboot is required.</p>
+                <form method="post" action="/updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="rollback" /><button class="secondary" disabled="@state.Busy">Roll back OS</button></form>
+            </details>
+        }
+    </section>
+    @if(state.Operation!=null || state.Busy)
+    {
+        <section class="panel"><h2>@(state.Busy ? "Working" : state.Operation?.Stage)</h2>
+            <p>@state.Operation?.Message</p><p>Operation @state.Operation?.Id</p>
+            <pre>@state.Logs</pre>
+        </section>
+    }
+}
+@if(!Device.Installer)
+{
+    <section class="panel"><div class="section-heading"><h2>Tools and engines</h2><a class="button quiet" href="/updates">Refresh</a></div>
+    @if(tools==null) { <p role="alert">Could not read tool versions. Refresh to try again.</p> }
+    else
+    {
+        <p>Engine versions below are the catalog defaults. Updating Xur does not replace the engine pinned by a saved workload.</p>
+        <div class="tool-updates-grid">
+        @foreach(var tool in tools)
+        {
+            <article class="tool-update-row"><div><h3>@tool.Name</h3><strong>@tool.Version</strong>
+                @if(tool.Downloaded.HasValue) { <span class="secondary-text"> · @(tool.Downloaded.Value?"Downloaded":"Not downloaded")</span> }
+                <details><summary>Details</summary><p>@tool.Detail</p>@if(tool.Image!=null) { <code>@tool.Image</code> }</details>
+            </div></article>
+        }
+        </div>
+    }
+    </section>
+}
+@code {
+    UpdateAllStatus? all;
+    ToolUpdateInfo[]? tools;
+    OsUpdateStatus? state;
+    ApplicationUpdateStatus? application;
+    protected override async Task OnInitializedAsync()
+    {
+        if(Device.Installer)return;
+        try {all=await Device.Agent.GetFromJsonAsync<UpdateAllStatus>("/update-all");}catch{}
+        try {application=await Device.Agent.GetFromJsonAsync<ApplicationUpdateStatus>("/application-updates");}catch{}
+        try {state=await Device.Agent.GetFromJsonAsync<OsUpdateStatus>("/updates");}catch{}
+        try {tools=await Device.Agent.GetFromJsonAsync<ToolUpdateInfo[]>("/tool-updates");}catch{}
+    }
+}

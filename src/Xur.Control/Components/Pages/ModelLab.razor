@@ -1,0 +1,34 @@
+@page "/model-lab"
+@inject Appliance Device
+<PageTitle>Model lab · Xur</PageTitle>
+<div class="page-heading"><div><h1>Model lab</h1><p class="secondary-text">Test a running LLM or measure its performance.</p></div><a class="button quiet" href="/models">Downloaded models</a></div>
+@if(Device.Installer) { <p>Model tools are available after installation.</p> }
+else
+{
+<div id="model-lab">
+    <form id="lab-token" hidden><AntiforgeryToken /></form>
+    <div class="lab-toolbar"><label>Running model<select id="lab-target"><option value="">Loading models…</option></select></label><button type="button" id="lab-refresh" class="secondary">Refresh</button></div>
+    <p id="lab-target-info" class="secondary-text" role="status"></p>
+    <div class="lab-tabs" aria-label="Model tools"><button type="button" id="lab-bench-tab" aria-pressed="true">Benchmarks</button><button type="button" id="lab-chat-tab" aria-pressed="false" class="quiet">Test chat</button></div>
+    <div id="lab-bench">
+        <div class="lab-grid">
+            <section class="panel"><h2>New benchmark</h2><form id="benchmark-form">
+                <label>Prompt<textarea id="bench-prompt" rows="4" maxlength="16000" required>Explain how a computer works, step by step, for someone new to the topic.</textarea></label>
+                <div class="lab-fields"><label>Requests<input id="bench-requests" type="number" min="1" max="64" value="5" required /></label><label>Concurrency<input id="bench-concurrency" type="number" min="1" max="8" value="1" required /></label><label>Max output tokens<input id="bench-tokens" type="number" min="1" max="4096" value="256" required /></label><label>Temperature<input id="bench-temperature" type="number" min="0" max="2" step="0.1" value="0" required /></label></div>
+                <label class="lab-checkbox"><input id="bench-warmup" type="checkbox" checked /> One warm-up request, excluded from timing results</label>
+                <button id="bench-start" disabled>Run benchmark</button><p id="bench-status" role="status"></p>
+            </form><details><summary>What this measures</summary><p>Performance, not answer quality. Time to first token measures the first content or reasoning chunk. Throughput uses server-reported output tokens and measured request wall time, including concurrent overlap. Missing token counts stay unknown.</p><p>The same prompt is reused, so engine prompt caching can improve results. GPU memory is sampled about every two seconds; very brief peaks can be missed. Sampling and other active workloads can affect performance. Runs stop after 15 minutes.</p><p>Prompts, responses, model revision, launch settings, GPU readings and running-workload snapshots are saved on disk and retained across reboots.</p></details></section>
+            <section class="panel"><div class="section-heading"><h2>Saved runs</h2><button type="button" id="bench-history-refresh" class="quiet">Refresh</button></div><p class="secondary-text">Latest 100 runs. Earlier results remain on disk.</p><div id="bench-history" class="lab-history" role="list"></div></section>
+        </div>
+        <section class="panel" id="bench-detail" hidden><div class="section-heading"><h2 id="bench-title">Benchmark results</h2><div class="actions"><button type="button" id="bench-cancel" class="secondary" hidden>Cancel run</button><a class="button quiet" id="bench-export">Export JSON</a></div></div><p id="bench-progress" role="status"></p><div id="bench-metrics" class="lab-metrics"></div><div id="bench-vram" class="lab-vram"></div><details open><summary>Run context</summary><div id="bench-context"></div></details><details><summary>Request results and responses</summary><div id="bench-responses"></div></details></section>
+    </div>
+    <section class="panel" id="lab-chat" hidden>
+        <div class="section-heading"><h2>Test chat</h2><button type="button" id="chat-clear" class="quiet">Clear chat</button></div>
+        <p class="secondary-text">Chat stays in this tab and is cleared when you leave. Benchmark responses are saved separately.</p>
+        <details><summary>Generation settings</summary><label>System prompt<textarea id="chat-system" rows="2" maxlength="16000" placeholder="Optional instructions for the model"></textarea></label><div class="lab-fields"><label>Max output tokens<input id="chat-tokens" type="number" min="1" max="4096" value="512" /></label><label>Temperature<input id="chat-temperature" type="number" min="0" max="2" step="0.1" value="0.7" /></label></div></details>
+        <div id="chat-messages" class="lab-messages" role="log" aria-label="Conversation"></div>
+        <form id="chat-form"><label>Message<textarea id="chat-prompt" rows="3" maxlength="16000" required placeholder="Ask the selected model a question…"></textarea></label><div class="actions"><button id="chat-send" disabled>Send</button><button type="button" id="chat-stop" class="secondary" hidden>Stop</button><span class="secondary-text">Ctrl + Enter to send</span></div></form><p id="chat-status" role="status"></p>
+    </section>
+</div>
+<script src="/model-lab.js" defer></script>
+}

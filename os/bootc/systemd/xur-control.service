@@ -1,0 +1,18 @@
+[Unit]
+Description=Xur setup and appliance control
+After=xur-gateway.service xur-agent.service systemd-vconsole-setup.service
+Requires=xur-gateway.service xur-agent.service
+
+[Service]
+ExecStartPre=/usr/bin/dmesg --console-off
+ExecStart=/usr/bin/xur-control
+WorkingDirectory=/usr/lib/xur/control
+Restart=on-failure
+RestartSec=3
+UMask=0077
+StandardOutput=null
+StandardError=journal
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+
+[Install]
+WantedBy=multi-user.target

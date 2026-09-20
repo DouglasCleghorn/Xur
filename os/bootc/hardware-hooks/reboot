@@ -1,0 +1,4 @@
+#!/usr/bin/bash
+# Used only in bazzite-hardware-setup.service's private PATH. Its rpm-ostree
+# adjustments already stage a deployment; the operator chooses when to reboot.
+printf '%s\n' 'Hardware configuration staged. Reboot from Xur to apply it.'

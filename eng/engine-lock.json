@@ -1,0 +1,41 @@
+{
+  "resolvedAt": "2026-09-13",
+  "engines": {
+    "server": {
+      "manifestDigest": "sha256:e33f80e54fc3f403118ab92b24f21dc1a3125ffd0c7725532028eca8128b548d",
+      "architecture": "amd64",
+      "version": "b10920",
+      "upstreamRevision": "eafe15a5e3d87dd68ae33acf6a7cbd9415a0ac5e"
+    },
+    "server-cuda": {
+      "manifestDigest": "sha256:6b4e57594fbb8fb1111bfe64a470570586bb4649a1d38647680a4ec3ed159695",
+      "architecture": "amd64",
+      "version": "b10920",
+      "upstreamRevision": "eafe15a5e3d87dd68ae33acf6a7cbd9415a0ac5e"
+    },
+    "server-rocm": {
+      "manifestDigest": "sha256:4b1e4cee27366a6250b88960a8dd2ad6a111ced7a1b9a234ff0f53299bedca8f",
+      "architecture": "amd64",
+      "version": "b10920",
+      "upstreamRevision": "eafe15a5e3d87dd68ae33acf6a7cbd9415a0ac5e"
+    },
+    "server-vulkan": {
+      "manifestDigest": "sha256:09800bdcf619dbea87cd22194c3210ebbb80c943e5d93fb27e4e5bb6f6e7b1ce",
+      "architecture": "amd64",
+      "version": "b10920",
+      "upstreamRevision": "eafe15a5e3d87dd68ae33acf6a7cbd9415a0ac5e"
+    },
+    "vllm": {
+      "manifestDigest": "sha256:082ca6f035279109041ffd3fe0695cb568b29bc580b35c4f297a66a08b216c1b",
+      "architecture": "amd64",
+      "upstreamRevision": "98dff2a81d747d1dba01a47f939f48c3526d4206",
+      "version": "0.29.0"
+    },
+    "omni": {
+      "manifestDigest": "sha256:4780186f168af96634917208596675439fa71cb5ed3440a30e8c21ca1defc451",
+      "architecture": "amd64",
+      "upstreamRevision": "eb11446b7f2e30ca582f8aff3afe12e9a2e66f6c",
+      "version": "0.28.0"
+    }
+  }
+}

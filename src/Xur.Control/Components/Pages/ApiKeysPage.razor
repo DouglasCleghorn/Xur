@@ -1,0 +1,24 @@
+@page "/settings/api-keys"
+<PageTitle>API keys · Xur</PageTitle>
+<div class="page-heading"><h1>API keys</h1><a href="/settings">Settings</a></div>
+<section class="panel">
+    <h2>Create a key</h2>
+    <p>Use a separate key for each script or assistant. Keys survive reboots and updates; only a hash is stored.</p>
+    <form id="api-key-create"><AntiforgeryToken />
+        <div class="lab-fields">
+            <label>Name<input name="name" maxlength="80" placeholder="Diagnostics assistant" required /></label>
+            <label>Access<select name="scope"><option value="diagnostics">Diagnostics</option><option value="testing">Diagnostics + model testing</option><option value="automation">Automation</option></select></label>
+            <label>Expires in<select name="days"><option value="1">1 day</option><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option><option value="365">1 year</option></select></label>
+        </div>
+        <p id="api-key-scope" class="secondary-text">Read system status, profiles, GPU metrics, logs and graphics reports. No file downloads or configuration changes.</p>
+        <button>Create key</button>
+    </form>
+    <p id="api-key-message" role="status"></p>
+    <div id="api-key-created" hidden><h3>Copy your key now</h3><p>This is the only time the full key is shown.</p><label>API key<input id="api-key-secret" readonly autocomplete="off" spellcheck="false" /></label><div class="actions"><button type="button" id="api-key-copy">Copy key</button><button type="button" id="api-key-dismiss" class="secondary">Done</button></div></div>
+</section>
+<section class="panel"><div class="section-heading"><h2>Keys</h2><button type="button" class="quiet" id="api-key-refresh">Refresh</button></div><div id="api-key-list">Loading keys…</div></section>
+<section class="panel"><h2>Use the API</h2><p>Send <code>Authorization: Bearer YOUR_API_KEY</code> over HTTPS. API keys cannot create other keys or sign into the web app.</p>
+<pre id="api-key-example"></pre>
+<p>Useful endpoints: <code>/api/workstations</code>, <code>/api/workloads/10/logs</code>, <code>/api/workstations/10/graphics</code>, <code>/api/diagnostics/display</code>, <code>/api/model-lab/targets</code>.</p>
+<p>Diagnostics can contain usernames, hardware details and logs. Testing can run inference and benchmarks on loaded models. Automation can also change profiles, workloads and system settings, download workstation files, install updates and reboot.</p></section>
+<script src="/api-keys.js" defer></script>

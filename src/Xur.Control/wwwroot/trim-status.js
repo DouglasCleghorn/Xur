@@ -1,0 +1,1 @@
+(()=>{async function poll(){try{if(!document.hidden){const r=await (window.xurFetch??window.fetch)('/api/storage/trim');if(r.ok&&!(await r.json()).busy){location.reload();return;}}}catch{}setTimeout(poll,3000);}setTimeout(poll,3000);})();

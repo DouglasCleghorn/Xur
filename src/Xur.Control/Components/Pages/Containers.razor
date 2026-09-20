@@ -1,0 +1,37 @@
+@page "/containers"
+@inject Appliance Device
+@inject RecipeCatalog Catalog
+<PageTitle>Containers · Xur</PageTitle>
+<div class="page-heading"><h1>Containers</h1><a class="button secondary" href="/profiles">Profiles</a></div>
+@if(Device.Installer) { <p>Containers are available after installation.</p> }
+else
+{
+    <section aria-labelledby="prepared-containers"><h2 id="prepared-containers">Ready to use</h2>
+    @foreach(var recipe in Catalog.Recipes.Where(r=>r.Kind=="Container"))
+    {
+        <article class="panel"><div class="section-heading"><strong>@recipe.Name</strong><span>@recipe.Vendor · @recipe.GpuCount GPUs</span></div>
+            <details><summary>Image &amp; storage</summary><code class="mount-path">@recipe.Image</code>
+                @foreach(var mount in recipe.Container!.Mounts) { <p><code>@mount.Destination</code> · @(mount.ReadOnly?"Read only":"Persistent")</p> }
+            </details>
+        </article>
+    }
+    @if(!Catalog.Recipes.Any(r=>r.Kind=="Container")) { <p>No containers prepared yet.</p> }
+    </section>
+    <section class="panel container-form"><h2>Prepare container</h2>
+        <form id="container-form">
+            <AntiforgeryToken />
+            <div class="field-grid"><label>Source<select name="source"><option value="image">Container image</option><option value="build">Dockerfile</option></select></label><label>Name <small>optional</small><input name="name" maxlength="80" /></label></div>
+            <label id="container-image">Image<input name="image" placeholder="mirror.gcr.io/library/nginx:stable" /></label>
+            <div id="container-build" hidden><label>Dockerfile<textarea name="dockerfile" spellcheck="false" placeholder="FROM …"></textarea></label><label>Build files <small>optional, text files up to 8 MiB</small><input type="file" name="files" multiple /></label></div>
+            <div class="field-grid"><label>Run on<select name="vendor"><option>CPU</option><option>NVIDIA</option><option>AMD</option><option>Intel</option></select></label><label id="container-gpu-count" hidden>GPU count<input name="gpuCount" type="number" min="1" max="16" value="1" /></label></div>
+            <h3>Persistent storage</h3><div id="container-volumes"></div><button type="button" class="secondary" id="add-container-volume">Add volume</button>
+            <details><summary>Advanced</summary><div class="field-grid"><label>Internal HTTP port<input name="port" type="number" value="8080" min="0" max="65535" /><small>Use 0 for a service without HTTP.</small></label><label>Health path<input name="healthPath" value="/" /></label></div>
+                <label>Command <small>JSON array; leave empty to use the image default</small><textarea name="command" placeholder='["python", "-m", "server"]'></textarea></label>
+                <label>Environment <small>one NAME=value per line</small><textarea name="environment" spellcheck="false"></textarea></label>
+            </details>
+            <p role="alert" id="container-error" hidden></p><div class="actions"><button id="prepare-container">Prepare container</button></div>
+        </form>
+    </section>
+    <details class="container-history"><summary>Preparation history</summary><section id="container-jobs" aria-label="Container preparation"></section></details>
+    <script src="/containers.js"></script>
+}

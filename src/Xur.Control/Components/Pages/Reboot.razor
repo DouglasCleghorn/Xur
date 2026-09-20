@@ -1,0 +1,11 @@
+@page "/reboot"
+@layout Xur.Control.Components.Layout.LoginLayout
+@inject Appliance Device
+@inject NavigationManager Navigation
+<PageTitle>Restarting Xur</PageTitle>
+<h1>Restarting Xur</h1>
+<p id="reboot-status" role="status" data-boot-id="@OriginalBoot">Waiting for the server to come back online…</p>
+<script src="/reboot.js" defer></script>
+@code {
+    string OriginalBoot => System.Web.HttpUtility.ParseQueryString(new Uri(Navigation.Uri).Query)["boot"] is { } boot && Guid.TryParse(boot,out _) ? boot : Device.BootId;
+}

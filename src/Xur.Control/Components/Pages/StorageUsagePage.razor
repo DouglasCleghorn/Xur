@@ -1,0 +1,79 @@
+@page "/storage"
+@inject Appliance Device
+@inject ProfileManager Profiles
+<PageTitle>Storage · Xur</PageTitle>
+<div class="page-heading"><h1>Storage</h1>@if(!Device.Installer) { <form method="post" action="/storage/refresh"><AntiforgeryToken /><button class="secondary" disabled="@(usage?.Scanning==true)">Refresh usage</button></form> }</div>
+@if(Device.Installer) { <p>Storage usage is available after installation.</p> }
+else if(usage==null) { <p role="alert">Storage usage is unavailable.</p> }
+else
+{
+    @if(usage.Error!=null) { <p class="notice error" role="alert">@usage.Error</p> }
+    <p class="secondary-text" role="status">@(usage.Scanning?"Calculating storage usage…":usage.CapturedAt is {} captured?"Updated "+captured.ToLocalTime().ToString("HH:mm:ss"):"Waiting for storage usage")</p>
+    <section class="storage-filesystems" aria-label="Filesystems">
+        @foreach(var fs in usage.Filesystems)
+        {
+            <article class="panel"><div class="section-heading"><h2>@fs.Mounts[0]</h2><span class="secondary-text">@fs.Type</span></div>
+                <div class="storage-numbers"><strong>@Size(fs.Used) <small>used of @Size(fs.Bytes)</small></strong><span>@Size(fs.Available) available</span></div>
+                <meter min="0" max="@fs.Bytes" value="@fs.Used" aria-label="@("Used space on "+fs.Source)">@Size(fs.Used)</meter>
+                <details><summary>@fs.Source</summary><p>Mounts</p>@foreach(var mount in fs.Mounts) { <code class="mount-path">@mount</code> }</details>
+            </article>
+        }
+    </section>
+    <section class="panel" aria-labelledby="trim-heading"><div class="section-heading"><h2 id="trim-heading">SSD TRIM</h2><a href="/storage">Refresh status</a></div>
+    @if(trim==null) { <p>TRIM status unavailable.</p> } else {
+        <p>Scheduled TRIM: <strong>@(trim.Timer.Split('\n').Contains("ActiveState=active")?"Enabled":"Not active")</strong></p>
+        <p class="secondary-text">TRIM returns unused filesystem blocks to the SSD; it does not delete files or increase free space. Filesystem and controller support is checked when it runs.</p>
+        @foreach(var mount in trim.Mounts.Where(m=>m.Ssd).GroupBy(m=>string.IsNullOrEmpty(m.Uuid)?m.Source.Split('[')[0]:m.Uuid).Select(g=>g.OrderByDescending(m=>m.TrimSupported).First())) {
+            var last=trim.Results.FirstOrDefault(r=>trim.Mounts.Any(m=>m.Id==r.Id&&m.Source.Split('[')[0]==mount.Source.Split('[')[0]));
+            <article class="storage-disk-row"><div><strong>@mount.Path</strong><span class="secondary-text">@mount.Source</span></div><span>@(mount.ReadOnly?"Read only":mount.TrimSupported?"Discard supported":"Discard unavailable")</span>
+            @if(mount.TrimSupported) { <form method="post" action="/storage/trim"><AntiforgeryToken /><input type="hidden" name="id" value="@mount.Id" /><button class="secondary" disabled="@trim.Busy">Trim SSD</button></form> }
+            @if(last!=null) { <p role="status">@(last.Success==true?"Completed":last.Success==false?"Failed":"Running") · @(last.FinishedAt?.ToLocalTime().ToString("g")) · @last.Message</p> }
+            else { <span class="secondary-text">No manual TRIM recorded</span> }
+            </article>
+        }
+        @if(!trim.Mounts.Any(m=>m.Ssd)) { <p>No mounted SSDs reported.</p> }
+        <details><summary>Scheduled TRIM</summary><pre>@trim.Timer
+@trim.LastScheduledRun</pre></details>
+        @if(trim.Busy) { <p role="status">TRIM is running. This page refreshes when it finishes.</p><script src="/trim-status.js" defer></script> }
+    }
+    @if(TrimError) { <p role="alert">TRIM could not start. Another operation may be running or the storage device changed. Refresh and try again.</p> }
+    </section>
+    <section class="storage-breakdown" aria-labelledby="folder-usage"><div class="section-heading"><h2 id="folder-usage">Folder usage</h2></div>
+        @foreach(var category in usage.Categories)
+        {
+            <article class="storage-usage-row"><div><strong>@category.Name</strong><details><summary>Locations</summary>@foreach(var path in category.Paths) { <code class="mount-path">@path</code> }</details></div>
+                <div class="storage-category-bar" aria-hidden="true"><span style="@("width:"+Percent(category.Bytes)+"%")"></span></div><span class="storage-size">@(category.Bytes is {} bytes?Size(bytes):category.Error)</span></article>
+        }
+        <p class="secondary-text storage-note">Folder totals can differ from filesystem usage because of shared data, snapshots, and filesystem metadata. Model caches inside containers are counted under Containers &amp; engines.</p>
+    </section>
+    <section aria-labelledby="persistent-volumes"><h2 id="persistent-volumes">Persistent volumes</h2>
+        @foreach(var volume in usage.Volumes??[])
+        {
+            <article class="storage-usage-row"><div><strong>@volume.Name</strong><details><summary>Location</summary><code class="mount-path">@volume.Path</code></details></div>
+                <span>@VolumeUsers(volume.Id)</span><span>@(volume.Bytes is {} bytes?Size(bytes):"Measuring…")</span></article>
+        }
+        @if(usage.Volumes is not {Length:>0}) { <p>No persistent container volumes.</p> }
+    </section>
+    <section aria-labelledby="storage-disks"><div class="section-heading"><h2 id="storage-disks">Disks</h2></div>
+        @foreach(var disk in usage.Disks)
+        {
+            <article class="storage-disk-row"><div><strong>@(disk.Model.Length==0?disk.Path:disk.Model)</strong><span class="secondary-text">@disk.Path</span></div><span>@Size(disk.Bytes)</span><div>@if(disk.Filesystems.Length==0) { <span class="secondary-text">No mounted filesystem</span> } @foreach(var fs in disk.Filesystems) { <code class="mount-path">@fs</code> }</div></article>
+        }
+    </section>
+    <script src="/storage-usage.js" defer data-scanning="@usage.Scanning.ToString().ToLowerInvariant()"></script>
+}
+@code {
+    [SupplyParameterFromQuery] public bool TrimError {get;set;}
+    TrimStatus? trim;StorageUsageSnapshot? usage;ProfileState? profiles;
+    string VolumeUsers(string id)=>string.Join(", ",profiles?.Profiles.SelectMany(p=>p.Workloads).Where(w=>w.Recipe.Container?.Mounts.Any(m=>m.Volume==id)==true).Select(w=>w.Name).Distinct()??[]);
+    static string Size(long bytes)=>bytes>=1024L*1024*1024?$"{bytes/(1024d*1024*1024):0.0} GiB":bytes>=1024*1024?$"{bytes/(1024d*1024):0.0} MiB":$"{bytes/1024d:0.0} KiB";
+    string Percent(long? bytes)=>(100d*(bytes??0)/Math.Max(1,usage!.Categories.Max(c=>c.Bytes??0))).ToString("0.0",System.Globalization.CultureInfo.InvariantCulture);
+    protected override async Task OnInitializedAsync()
+    {
+        if(Device.Installer)return;
+        async Task Usage(){try{usage=await Device.Agent.GetFromJsonAsync<StorageUsageSnapshot>("/storage-usage");}catch{}}
+        async Task ProfilesRead(){try{profiles=await Profiles.State();}catch{}}
+        async Task TrimRead(){try{trim=await Device.Agent.GetFromJsonAsync<TrimStatus>("/storage/trim");}catch{}}
+        await Task.WhenAll(Usage(),ProfilesRead(),TrimRead());
+    }
+}

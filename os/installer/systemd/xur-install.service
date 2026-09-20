@@ -1,0 +1,13 @@
+[Unit]
+Description=Install only the explicitly approved Xur disk
+ConditionKernelCommandLine=xur.installer=1
+ConditionPathExists=/run/xur/approved.ks
+After=xur-agent.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/xur-run-install
+TimeoutStartSec=infinity
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal

@@ -1,0 +1,12 @@
+[Unit]
+Description=Request DHCP on each usable wired adapter
+After=NetworkManager.service
+Requires=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/xur-network
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

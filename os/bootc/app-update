@@ -1,0 +1,217 @@
+#!/usr/bin/python3
+"""Root-only, signed application update transactions. Never changes workload data."""
+import fcntl,hashlib,http.client,json,os,pathlib,re,shutil,socket,sqlite3,subprocess,sys,tarfile,tempfile,time,urllib.parse,urllib.request,uuid
+ROOT=pathlib.Path('/var/lib/xur/app');CONFIG=pathlib.Path('/etc/xur/application-updates.json');KEY=pathlib.Path('/etc/xur/application-update-key.pem')
+GITHUB='https://github.com/DouglasCleghorn/Xur/releases'
+PUBLIC=GITHUB+'/latest/download'
+STATE=ROOT/'update.json';TX=ROOT/'transaction.json';BLOCK=ROOT/'maintenance';SERVICES=['xur-control','xur-agent','xur-gateway']
+def atomic(path,data):
+    path.parent.mkdir(parents=True,exist_ok=True);tmp=path.with_name(path.name+'.tmp')
+    with tmp.open('w') as f:json.dump(data,f);f.flush();os.fsync(f.fileno())
+    tmp.replace(path)
+    fd=os.open(path.parent,os.O_DIRECTORY);os.fsync(fd);os.close(fd)
+def read(path,default=None):return json.loads(path.read_text()) if path.exists() else default
+def call(argv,timeout=60):return subprocess.run(argv,check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout).stdout
+class UnixHTTP(http.client.HTTPConnection):
+    def __init__(self,path):super().__init__('localhost',timeout=10);self.path=path
+    def connect(self):self.sock=socket.socket(socket.AF_UNIX);self.sock.settimeout(10);self.sock.connect(self.path)
+def local(path,sock='/run/xur/control.sock'):
+    c=UnixHTTP(sock)
+    try:c.request('GET',path);r=c.getresponse();assert r.status==200;return json.loads(r.read())
+    finally:c.close()
+def current():
+    meta=read(ROOT/'current/bundle.json',{})
+    return {'id':meta.get('id'),'version':read(ROOT/('release-'+meta.get('id','unknown')+'.json'),meta).get('version',meta.get('id','Unknown')[:12])}
+def busy():
+    try:return call(['systemctl','show','-p','ActiveState','--value','xur-app-update.service'],5).decode().strip() in ('active','activating','deactivating')
+    except (subprocess.SubprocessError,OSError):return False
+def source():
+    config=read(CONFIG,{})
+    return config.get('server','') if config.get('development') is True else PUBLIC
+def configure(server):
+    config=read(CONFIG,{})
+    if config.get('development') is not True:raise ValueError('Enable local build testing in Settings first')
+    atomic(CONFIG,{**config,'server':normalized(server)})
+def development(enabled):
+    atomic(CONFIG,{**read(CONFIG,{}),'development':enabled})
+    (ROOT/'available.json').unlink(missing_ok=True)
+def status():return {'server':source(),'development':read(CONFIG,{}).get('development') is True,'current':current(),'previous':read(ROOT/'previous.json'),'available':read(ROOT/'available.json'),'operation':read(STATE),'busy':busy()}
+def normalized(value):
+    value=value.strip()
+    if '://' not in value:value='http://'+value
+    u=urllib.parse.urlsplit(value)
+    if u.scheme not in ('http','https') or not u.hostname or u.username or u.password or u.query or u.fragment or u.path not in ('','/'):raise ValueError('Enter an IP or domain, optionally with scheme and port')
+    port=u.port or 8088
+    host='['+u.hostname+']' if ':' in u.hostname else u.hostname
+    return f'{u.scheme}://{host}:{port}'
+def github_asset(url):
+    u=urllib.parse.urlsplit(url)
+    if u.scheme!='https' or u.username or u.password or u.port not in (None,443):return False
+    if u.hostname in ('release-assets.githubusercontent.com','objects.githubusercontent.com'):return True
+    return u.hostname=='github.com' and u.path.startswith('/DouglasCleghorn/Xur/releases/download/')
+def fetch(url,path,limit):
+    # Only the fixed public GitHub source may redirect to its HTTPS asset CDN.
+    # Development servers cannot redirect, supply credentials or disable TLS checks.
+    public=url.startswith(GITHUB+'/');release_base=None
+    class Redirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self,req,fp,code,msg,headers,newurl):
+            nonlocal release_base
+            if not public or not github_asset(newurl):raise ValueError('Untrusted repository redirect')
+            u=urllib.parse.urlsplit(newurl)
+            if u.hostname=='github.com':release_base=newurl.rsplit('/',1)[0]
+            return super().redirect_request(req,fp,code,msg,headers,newurl)
+    with urllib.request.build_opener(Redirect()).open(url,timeout=30) as response,path.open('wb') as out:
+        count=0
+        while chunk:=response.read(1024*1024):
+            count+=len(chunk)
+            if count>limit:raise ValueError('Download exceeds allowed size')
+            out.write(chunk)
+        out.flush();os.fsync(out.fileno())
+    return release_base
+def check(stage):
+    server=source()
+    if not server:raise ValueError('Set the update server address first')
+    pinned=fetch(server+'/latest',stage/'latest',128)
+    if server==PUBLIC and (not pinned or not pinned.startswith(GITHUB+'/download/')):raise ValueError('GitHub did not resolve an immutable release')
+    server=pinned or server
+    (stage/'source').write_text(server)
+    identity=(stage/'latest').read_text().strip()
+    if not re.fullmatch('[a-f0-9]{64}',identity):raise ValueError('Invalid release identity')
+    fetch(server+'/'+identity+'.json',stage/'release.json',65536);fetch(server+'/'+identity+'.json.sig',stage/'release.sig',128)
+    call(['openssl','pkeyutl','-verify','-pubin','-inkey',str(KEY),'-rawin','-in',str(stage/'release.json'),'-sigfile',str(stage/'release.sig')])
+    entry=read(stage/'release.json')
+    if entry.get('schema')!=1 or entry.get('hostAbi')!=1 or entry.get('dataSchema')!=1 or entry.get('id')!=identity or entry.get('file')!=identity+'.tar.gz':raise ValueError('Release is incompatible with this installation')
+    if not isinstance(entry.get('bytes'),int) or not 0<entry['bytes']<=2*1024**3 or not re.fullmatch('[a-f0-9]{64}',entry.get('sha256','')):raise ValueError('Invalid release metadata')
+    if entry.get('sequence',0)<read(ROOT/'highest-sequence.json',0):raise ValueError('Repository offered an older release; use Roll back for the previous installation')
+    atomic(ROOT/'available.json',entry);return entry
+
+def unpack(archive,target,entry):
+    with tarfile.open(archive,'r:gz') as tar:
+        members=tar.getmembers();names=set();total=0
+        for m in members:
+            p=pathlib.PurePosixPath(m.name)
+            if p.is_absolute() or '..' in p.parts or m.issym() or m.islnk() or not (m.isfile() or m.isdir()) or m.name in names:raise ValueError('Unsafe archive entry')
+            names.add(m.name);total+=m.size
+        if total>4*1024**3 or len(members)>20000:raise ValueError('Expanded archive exceeds limits')
+        tar.extractall(target,filter='data')
+    meta=read(target/'bundle.json',{})
+    if meta.get('id')!=entry['id'] or meta.get('hostAbi')!=1:raise ValueError('Bundle identity mismatch')
+    files=meta.get('files',{})
+    if hashlib.sha256(json.dumps(files,sort_keys=True).encode()).hexdigest()!=meta['id']:raise ValueError('Bundle file manifest mismatch')
+    actual={str(p.relative_to(target)) for p in target.rglob('*') if p.is_file()}-{'bundle.json'}
+    if actual!=set(files):raise ValueError('Unexpected or missing bundle files')
+    for name,digest in files.items():
+        if hashlib.file_digest((target/name).open('rb'),'sha256').hexdigest()!=digest:raise ValueError('Bundle file hash mismatch')
+    for name in ('control/Xur.Control','agent/Xur.Agent','gateway/Xur.Gateway','host/app-update'):
+        if not os.access(target/name,os.X_OK):raise ValueError('Missing application executable')
+    for p in target.rglob('*'):p.chmod(p.stat().st_mode & ~0o022)
+def link(identity):
+    if not re.fullmatch('[a-f0-9]{64}',identity) or not (ROOT/'releases'/identity/'bundle.json').is_file():raise ValueError('Release not installed')
+    tmp=ROOT/'next';tmp.unlink(missing_ok=True);tmp.symlink_to('releases/'+identity);tmp.replace(ROOT/'current')
+    fd=os.open(ROOT,os.O_DIRECTORY);os.fsync(fd);os.close(fd)
+def progress(stage,message):atomic(STATE,{'id':OP,'stage':stage,'message':message,'updated':int(time.time())})
+def healthy(identity,seconds=60):
+    for _ in range(seconds):
+        try:
+            if local('/local/application-health')['id']==identity and local('/application-health','/run/xur/agent.sock')['id']==identity and local('/health','/run/xur/gateway-admin.sock').get('id')==identity:return True
+        except (OSError,ValueError,AssertionError,http.client.HTTPException):pass
+        time.sleep(1)
+    return False
+def recover():
+    tx=read(TX)
+    if not tx:return
+    progress('Recovering','Restoring the previous application version')
+    call(['systemctl','stop',*SERVICES],120);link(tx['previous']);call(['systemctl','start','xur-gateway','xur-agent','xur-control'],120)
+    if not healthy(tx['previous']):raise ValueError('Previous application did not become healthy; transaction retained for recovery')
+    TX.unlink();BLOCK.unlink(missing_ok=True);progress('RolledBack','Previous application restored')
+def compatible(entry):
+    features=read(ROOT/'releases'/entry['id']/'host/application-features.json',[])
+    if (ROOT.parent/'manager-account.json').exists() and 'manager-account-v1' not in features:
+        raise ValueError('This version cannot manage your username and password. Select a version with manager account support.')
+    if 'container-workloads-v1' not in features:
+        for recipe in (ROOT.parent/'catalog-selected').glob('*.json'):
+            if read(recipe,{}).get('kind')=='Container':
+                raise ValueError('This version cannot manage your containers. Select a version with container workload support.')
+    if 'station-users-v1' in features:return
+    def uses_users(value):
+        if isinstance(value,list):return any(uses_users(v) for v in value)
+        if not isinstance(value,dict):return False
+        if value.get('User') is not None and 'Recipe' in value:return True
+        return any(uses_users(v) for v in value.values())
+    database=ROOT.parent/'profiles.db'
+    required=False
+    if database.exists():
+        with sqlite3.connect(database.as_uri()+'?mode=ro',uri=True) as db:
+            for kind,document in db.execute("SELECT kind,json FROM documents WHERE kind IN ('profile','active','journal')"):
+                value=json.loads(document)
+                if kind=='journal' and value.get('Stage') in ('Complete','Cancelled'):continue
+                required=required or uses_users(value)
+    for receipt in (ROOT.parent/'workloads').glob('*.json'):
+        try:required=required or uses_users(read(receipt))
+        except FileNotFoundError:pass
+    if required:raise ValueError('This version cannot manage the workstation users used by your profiles. Select a version with workstation user support.')
+def activate(entry):
+    old=current()
+    if old['id']==entry['id']:atomic(ROOT/('release-'+entry['id']+'.json'),entry);progress('Complete','This version is already installed');return
+    compatible(entry)
+    progress('Draining','Waiting for active requests and profile changes to finish')
+    atomic(BLOCK,{'operation':OP})
+    try:
+        for _ in range(300):
+            state=local('/local/application-health')
+            agent=local('/application-health','/run/xur/agent.sock')
+            if state['active']==0 and not state['profileBusy'] and not agent.get('busy',False):break
+            time.sleep(1)
+        else:raise ValueError('Requests or profile changes are still active; update was not applied')
+        compatible(entry)
+        atomic(TX,{'previous':old['id'],'target':entry['id'],'operation':OP})
+        progress('Activating','Starting the new application version')
+        call(['systemctl','stop',*SERVICES],120);link(entry['id']);call(['systemctl','start','xur-gateway','xur-agent','xur-control'],120)
+        if not healthy(entry['id']):raise ValueError('New application health checks failed')
+        atomic(ROOT/('release-'+entry['id']+'.json'),entry)
+        atomic(ROOT/'previous.json',old)
+        atomic(ROOT/'highest-sequence.json',max(read(ROOT/'highest-sequence.json',0),entry.get('sequence',0)))
+        TX.unlink();BLOCK.unlink(missing_ok=True);progress('Complete','Application updated')
+    except Exception:
+        if TX.exists():recover()
+        else:BLOCK.unlink(missing_ok=True)
+        raise
+if __name__=='__main__':
+    os.umask(0o077);ROOT.mkdir(parents=True,exist_ok=True);OP=uuid.uuid4().hex
+    action=sys.argv[1] if len(sys.argv)>1 else 'status'
+    if action=='status':print(json.dumps(status()));sys.exit()
+    with (ROOT/'update.lock').open('w') as lock:
+        try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:raise SystemExit('An application update is already running')
+        try:
+            if action=='configure':configure(sys.argv[2])
+            elif action=='development':
+                if sys.argv[2] not in ('true','false'):raise ValueError('Invalid development setting')
+                development(sys.argv[2]=='true')
+            elif action=='recover':recover();BLOCK.unlink(missing_ok=True)
+            elif action=='rollback':
+                previous=read(ROOT/'previous.json')
+                if not previous:raise ValueError('No previous application version')
+                activate(previous)
+            elif action in ('check','update'):
+                if TX.exists():raise ValueError('Recover the previous interrupted transaction first')
+                progress('Checking','Checking the update repository')
+                with tempfile.TemporaryDirectory(prefix='download-',dir=ROOT) as directory:
+                    stage=pathlib.Path(directory);entry=check(stage)
+                    if action=='check':progress('Complete','Update check finished')
+                    else:
+                        progress('Downloading','Downloading and verifying application files')
+                        archive=stage/'bundle.tar.gz';fetch((stage/'source').read_text()+'/'+entry['file'],archive,entry['bytes'])
+                        if archive.stat().st_size!=entry['bytes'] or hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()!=entry['sha256']:raise ValueError('Download hash mismatch')
+                        unpack(archive,stage/'bundle',entry)
+                        release=ROOT/'releases'/entry['id'];release.parent.mkdir(exist_ok=True)
+                        if not release.exists():(stage/'bundle').rename(release)
+                        else:
+                            # Validate an existing release too; never activate stale tampered files.
+                            for name,digest in read(stage/'bundle/bundle.json')['files'].items():
+                                if hashlib.file_digest((release/name).open('rb'),'sha256').hexdigest()!=digest:raise ValueError('Installed release changed')
+                        call(['restorecon','-RF',str(release)],120);activate(entry)
+            else:raise ValueError('Unknown update action')
+        except Exception as e:
+            if read(STATE,{}).get('stage')!='RolledBack':progress('Failed',str(e) if isinstance(e,ValueError) else 'Update failed; inspect the system journal')
+            print(type(e).__name__+': '+str(e),file=sys.stderr);sys.exit(1)

@@ -1,0 +1,12 @@
+#!/usr/bin/bash
+set -eu
+while IFS=: read -r device kind; do
+    test "$kind" = ethernet || continue
+    nmcli device set "$device" managed yes
+    connection="xur-dhcp-$device"
+    if ! nmcli connection show "$connection" >/dev/null 2>&1; then
+        nmcli connection add type ethernet ifname "$device" con-name "$connection" \
+          connection.autoconnect yes ipv4.method auto ipv6.method auto
+    fi
+    nmcli --wait 0 connection up "$connection" || true
+done < <(nmcli -t -f DEVICE,TYPE device status)

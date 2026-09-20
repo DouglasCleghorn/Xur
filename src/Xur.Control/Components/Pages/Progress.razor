@@ -1,0 +1,20 @@
+@page "/install/progress"
+@inject Appliance Device
+<PageTitle>Installation · Xur</PageTitle>
+<h1>Installation</h1>
+<section class="panel operation" aria-label="Operation">
+    <div class="section-title"><h2>Operation</h2><span class="pill" id="operation-stage">@(operation?.Stage ?? "Not started")</span></div>
+    <p id="operation-message">@(operation?.Message ?? "Select a disk to begin installation.")</p>
+    <dl><dt>ID</dt><dd id="operation-id">@(operation?.Id ?? "—")</dd><dt>Last update</dt><dd id="operation-updated">@(operation?.Updated.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</dd></dl>
+    <form id="reboot-form" hidden="@(operation?.Stage!="Complete")" method="post" action="/power/reboot"><AntiforgeryToken /><button>Reboot into Xur</button></form>
+</section>
+<section class="panel log-panel"><h2>Logs</h2><pre id="install-logs" tabindex="0">@logs</pre><p id="log-connection" role="status"></p></section>
+<script src="/progress.js" defer></script>
+@code {
+    Operation? operation; string logs="";
+    protected override async Task OnInitializedAsync() {
+        var state=await Device.AgentStatus();
+        if(state is { } s && s.TryGetProperty("operation",out var op) && op.ValueKind==JsonValueKind.Object) operation=op.Deserialize<Operation>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        try { logs=await Device.Agent.GetStringAsync("/logs"); } catch { logs="Waiting for logs…"; }
+    }
+}

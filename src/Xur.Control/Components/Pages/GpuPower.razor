@@ -1,0 +1,41 @@
+@page "/gpus/power"
+@inject Appliance Device
+<PageTitle>GPU power · Xur</PageTitle>
+<div class="page-heading"><h1>GPU power</h1><a class="button secondary" href="/gpus">GPU monitoring</a></div>
+<p class="secondary-text">Limits are saved per card and restored after reboot.</p>
+@if(error!=null) { <p class="notice error" role="alert">@error</p> }
+@if(saved) { <p class="notice" role="status">Power setting saved.</p> }
+@if(Device.Installer) { <p>Power controls are available after installation.</p> }
+else if(state==null) { <p role="alert">Could not read GPU power controls.</p> }
+else if(state.Cards.Length==0) { <p>No GPUs detected.</p> }
+else
+{
+    <div class="gpu-power-grid">
+        @foreach(var card in state.Cards)
+        {
+            <section class="gpu-panel" data-power-gpu="@card.Pci">
+                <div class="gpu-card-heading"><h2>@card.Name</h2><span class="secondary-text">@card.Vendor</span></div>
+                <p class="gpu-identity">@card.Pci</p>
+                <div class="gpu-readings"><div><span>Current limit</span><strong>@Watts(card.CurrentWatts)</strong></div><div><span>Saved setting</span><strong>@(card.SavedWatts is {} w?Watts(w):card.HasSavedSetting?"Driver default":"Not set")</strong></div></div>
+                @if(card.CanChange)
+                {
+                    <form method="post" action="/gpus/power/save" class="gpu-power-form">
+                        <AntiforgeryToken /><input type="hidden" name="pci" value="@card.Pci" /><input type="hidden" name="identity" value="@card.Identity" />
+                        <label>Power limit (W)<input type="number" name="watts" required min="@Invariant(card.MinimumWatts??1)" max="@Invariant(card.MaximumWatts)" step="1" value="@Invariant(card.SavedWatts??card.CurrentWatts)" /></label>
+                        <p class="secondary-text">@(card.MinimumWatts is {} minimum?Watts(minimum)+"–"+Watts(card.MaximumWatts):"Up to "+Watts(card.MaximumWatts)) · Default @Watts(card.DefaultWatts)</p>
+                        <div class="actions"><button type="submit">Save limit</button><button type="submit" name="reset" value="true" formnovalidate class="secondary">Use default</button></div>
+                    </form>
+                }
+                @if(card.Message!=null) { <p class="secondary-text" role="status">@card.Message</p> }
+            </section>
+        }
+    </div>
+}
+@code {
+    [SupplyParameterFromQuery] public string? error {get;set;}
+    [SupplyParameterFromQuery] public bool saved {get;set;}
+    Xur.Domain.GpuPowerSnapshot? state;
+    protected override async Task OnInitializedAsync(){if(!Device.Installer)try{state=await Device.Agent.GetFromJsonAsync<Xur.Domain.GpuPowerSnapshot>("/gpu-power");}catch{}}
+    static string Invariant(double? watts)=>watts?.ToString("0.###",System.Globalization.CultureInfo.InvariantCulture)??"";
+    static string Watts(double? watts)=>watts is {} value?value.ToString("0.#")+" W":"Not reported";
+}

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Avoid the SDK 10 Razor generator regression: dotnet/razor#13184.
+       Compile Razor with the SDK's non-generator pipeline instead. -->
+  <PropertyGroup><UseRazorSourceGenerator>false</UseRazorSourceGenerator></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Xur.Domain/Xur.Domain.csproj" />
+    <ProjectReference Include="../../tools/Xur.Cli/Xur.Cli.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="QRCoder" Version="1.7.0" />
+    <PackageReference Include="Spectre.Console" Version="0.57.2" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
+  </ItemGroup>
+</Project>

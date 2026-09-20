@@ -1,0 +1,102 @@
+#!/usr/bin/python3
+"""Upstream OS operations. Runs without xur-control or xur-agent for automatic updates."""
+import fcntl, json, os, pathlib, subprocess, sys, time
+
+STATE = pathlib.Path('/var/lib/xur/updates')
+CONFIG = pathlib.Path('/etc/xur/upstream.json')
+CHANNEL = 'ghcr.io/ublue-os/bazzite-nvidia-open:stable'
+
+def read(path, default=None):
+    return json.loads(path.read_text()) if path.exists() else default
+
+def save(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    temp = path.with_suffix('.tmp')
+    with temp.open('w') as stream:
+        json.dump(value, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
+    temp.replace(path)
+
+def boot_status():
+    return json.loads(subprocess.check_output(['bootc', 'status', '--json'], text=True, timeout=30))
+
+def entry(value):
+    if not value or not value.get('image'): return None
+    image = value['image']
+    return dict(version=image.get('version') or image['imageDigest'],
+                digest=image['imageDigest'], image=image['image']['image'],
+                downloadOnly=value.get('downloadOnly', False))
+
+def snapshot(raw):
+    status = raw['status']
+    current = status.get('booted') or {}
+    return dict(current=entry(current), pending=entry(status.get('staged')),
+                previous=entry(status.get('rollback')),
+                available=entry({'image': current.get('cachedUpdate')}),
+                rollbackQueued=raw.get('spec', {}).get('bootOrder') == 'rollback')
+
+def observe():
+    result = snapshot(boot_status())
+    result['automatic'] = read(STATE / 'settings.json', {'automatic': True})['automatic']
+    result['operation'] = read(STATE / 'operation.json')
+    result['logs'] = (STATE / 'operation.log').read_text(errors='replace')[-24000:] if (STATE / 'operation.log').exists() else ''
+    result['busy'] = False
+    if (STATE / 'lock').exists():
+        with (STATE / 'lock').open('r') as lock:
+            try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError: result['busy'] = True
+    if result['operation'] and result['operation']['stage'] == 'Running' and not result['busy']:
+        result['operation'] = {**result['operation'], 'stage': 'Interrupted', 'message': 'Operation interrupted. Current deployment status is shown above.'}
+    return result
+
+def main():
+    if os.geteuid() != 0: raise RuntimeError('Root is required')
+    if not pathlib.Path('/var/lib/xur/installed').exists(): raise RuntimeError('Updates are available after installation')
+    if read(CONFIG, {}).get('channel') != CHANNEL: raise RuntimeError('Unsupported upstream update source')
+    action = sys.argv[1] if len(sys.argv) == 2 else ''
+    if action == 'status':
+        print(json.dumps(observe())); return
+    if action not in ('check', 'stage', 'rollback', 'auto', 'enable', 'disable'):
+        raise RuntimeError('Unknown update action')
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (STATE / 'lock').open('a') as lock:
+        try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError: raise RuntimeError('An OS update operation is already running')
+        if action in ('enable', 'disable'):
+            save(STATE / 'settings.json', {'automatic': action == 'enable'}); return
+        if action == 'auto' and not read(STATE / 'settings.json', {'automatic': True})['automatic']: return
+        before = snapshot(boot_status())
+        if not before['current'] or before['current']['image'] != CHANNEL:
+            raise RuntimeError('The booted deployment does not track the configured upstream channel')
+        if before['pending'] or before['rollbackQueued']:
+            if action == 'auto': return
+            raise RuntimeError('A deployment is already queued. Reboot before changing it')
+        if action == 'rollback' and not before['previous']: raise RuntimeError('No previous deployment is available')
+        operation = dict(id=str(time.time_ns()), action=action, stage='Running', updated=time.time(), message='')
+        save(STATE / 'operation.json', operation)
+        with (STATE / 'operation.log').open('w') as log:
+            try:
+                if action in ('check', 'auto'):
+                    subprocess.run(['bootc', 'upgrade', '--check'], stdout=log, stderr=log, check=True, timeout=600)
+                if action in ('stage', 'auto'):
+                    # The channel is fixed locally; browsers cannot supply image references.
+                    # Signature enforcement is explicit even on the first post-install update.
+                    subprocess.run(['bootc', 'switch', '--enforce-container-sigpolicy', CHANNEL], stdout=log, stderr=log, check=True, timeout=7200)
+                if action == 'rollback':
+                    subprocess.run(['bootc', 'rollback'], stdout=log, stderr=log, check=True, timeout=300)
+                after = snapshot(boot_status())
+                if action == 'rollback' and not after['rollbackQueued']: raise RuntimeError('Boot order did not change')
+                if after['pending'] and after['pending']['image'] != CHANNEL: raise RuntimeError('Unexpected staged image')
+                operation.update(stage='Complete', message='Reboot to finish' if after['pending'] or after['rollbackQueued'] else 'Check complete', updated=time.time())
+            except Exception as error:
+                operation.update(stage='Failed', message=str(error), updated=time.time())
+                save(STATE / 'operation.json', operation)
+                raise
+            save(STATE / 'operation.json', operation)
+
+if __name__ == '__main__':
+    try: main()
+    except Exception as error:
+        print(json.dumps({'error': str(error)}), file=sys.stderr)
+        sys.exit(1)

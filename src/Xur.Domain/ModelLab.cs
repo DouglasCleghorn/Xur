@@ -1,0 +1,11 @@
+namespace Xur.Domain;
+public record LabMessage(string Role,string Content);
+public record LabRequest(string WorkloadId,string Prompt,int Requests=5,int Concurrency=1,int MaxTokens=256,double Temperature=0,bool Warmup=true);
+public record LabChatRequest(string WorkloadId,LabMessage[] Messages,int MaxTokens=512,double Temperature=0.7);
+public record LabTarget(Workload Workload,RuntimeInstance Instance);
+public record LabRunningWorkload(string Id,string Name,string Kind,string Engine,string Image,string[] Gpus,string State,string InstanceId,string Fingerprint);
+public record LabContext(DateTimeOffset At,string? Profile,string Bundle,LabRunningWorkload[] Workloads,GpuDevice[] Gpus);
+public record LabSample(DateTimeOffset At,GpuTelemetry[] Gpus,string? Error=null,LabRunningWorkload[]? Workloads=null);
+public record LabResponse(int Number,bool Warmup,DateTimeOffset Started,double DurationMs,double? FirstTokenMs,int? InputTokens,int? OutputTokens,string Text,string Reasoning,string? FinishReason,string? Error=null);
+public record LabRun(string Id,string State,DateTimeOffset Started,DateTimeOffset? Finished,LabRequest Settings,LabTarget Target,LabContext Context,LabContext? EndContext,LabSample[] Samples,LabResponse[] Responses,string? Error=null);
+public record LabSummary(string Id,string State,DateTimeOffset Started,string Model,int Completed,int Requested,double? MeanFirstTokenMs,double? OutputTokensPerSecond,Dictionary<string,double?> PeakVramMiB,string? Error);

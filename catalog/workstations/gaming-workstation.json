@@ -1,0 +1,14 @@
+{
+  "id": "gaming-workstation",
+  "name": "Gaming workstation",
+  "image": "host:plasma",
+  "command": [],
+  "port": 0,
+  "healthPath": "",
+  "vendor": "Display",
+  "gpuCount": 1,
+  "memoryMiB": 0,
+  "description": "Bazzite Plasma desktop with Steam and the host gaming stack. Uses the selected GPU and its connected displays, with local keyboard, mouse and audio.",
+  "kind": "Workstation",
+  "engine": "Plasma"
+}

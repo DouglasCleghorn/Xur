@@ -1,0 +1,55 @@
+# Approved source-only repository policy.
+# Generated build/release output and all private build/runtime material.
+/.build/
+/dist/
+/artifacts/
+/docs/evidence/
+**/bin/
+**/obj/
+**/node_modules/
+**/__pycache__/
+*.py[cod]
+**/.pytest_cache/
+**/.venv/
+**/venv/
+/TestResults/
+**/TestResults/
+**/playwright-report/
+**/test-results/
+
+# Editor/machine settings and local credentials.
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+*.private.*
+*.key
+*.pfx
+*.p12
+*.pem
+# Required public trust anchor; all other key/certificate exports stay local.
+!/os/bootc/application-update-key.pem
+
+# Accidental heavyweight output outside the intended build directories.
+*.iso
+*.qcow2
+*.vmdk
+*.vdi
+*.vhd
+*.vhdx
+*.raw
+*.img
+*.tar
+*.tar.gz
+*.tar.zst
+*.tgz
+*.core
+*.dmp
+# Do NOT ignore all JSON/PNG/XML: maintained recipes, app icons and protocols ship.
+# Keep generated logs, reports and screenshots inside .build/ instead.

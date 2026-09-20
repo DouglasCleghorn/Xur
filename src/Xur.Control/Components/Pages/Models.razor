@@ -1,0 +1,24 @@
+@page "/models"
+@inject Appliance Device
+<PageTitle>Models · Xur</PageTitle>
+<div class="page-heading"><h1>Models</h1><a class="button quiet" href="/model-lab">Benchmark &amp; test chat</a><form method="post" action="/models/scan"><AntiforgeryToken /><button disabled="@(status?.Scanning==true)">Search attached storage</button></form></div>
+@if(Device.Installer) { <p>Models are available after installation.</p> }
+else if(status==null) { <p role="alert">Model storage is unavailable.</p> }
+else
+{
+    <p class="secondary-text">Downloaded models stay on disk between reboots and profile changes.</p>
+    @if(status.Scanning) { <p role="status">Searching model folders…</p><script src="/page-poll.js" data-path="/api/page-state/models" data-version="@Canonical.Hash(status)" defer></script> }
+    <section class="panel"><div class="section-heading"><h2>@status.Models.Length model @(status.Models.Length==1?"location":"locations")</h2><label class="search-field"><span class="sr-only">Filter models</span><input type="search" id="model-filter" placeholder="Search models or paths" /></label></div>
+    @foreach(var model in status.Models)
+    {
+        <article class="model-library-row" data-model="@(model.Name+" "+model.Path)"><div><strong>@model.Name</strong><span class="secondary-text">@model.Format · @model.Source</span></div><span>@((model.Bytes/1073741824d).ToString("0.00")) GiB</span><code>@model.Path</code></article>
+    }
+    @if(status.Models.Length==0) { <p>No downloaded models found. Load a model in a <a href="/profiles">profile</a>, or search attached storage.</p> }
+    </section>
+    <details><summary>Scan details</summary><p>Mounted filesystems and unmounted supported data partitions are searched. Unmounted partitions are opened read-only. Encrypted or unsupported filesystems must be mounted first. Found models are listed without changing their files or automatically assigning them to a workload.</p>@foreach(var root in status.Searched) { <p><code>@root</code></p> }@foreach(var warning in status.Warnings) { <p>@warning</p> }</details>
+    <script src="/models.js" defer></script>
+}
+@code {
+    ModelScanStatus? status;
+    protected override async Task OnInitializedAsync(){if(!Device.Installer)try{status=await Device.Agent.GetFromJsonAsync<ModelScanStatus>("/models");}catch{}}
+}

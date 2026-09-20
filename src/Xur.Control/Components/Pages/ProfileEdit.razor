@@ -1,0 +1,95 @@
+@page "/profiles/edit"
+@inject ProfileManager Profiles
+@inject RecipeCatalog Catalog
+@inject Appliance Device
+<PageTitle>Edit profile · Xur</PageTitle>
+<div class="page-heading"><div><a class="back-link" href="/profiles">Profiles</a><h1>@(profile?.Name ?? "Edit profile")</h1></div></div>
+@if(Device.Installer) { <p>Profiles are available after installation.</p> }
+else if(state!=null && profile!=null)
+{
+    <form method="post" action="/profiles/save" id="profile-form">
+        <AntiforgeryToken />
+        <input type="hidden" name="revision" value="@profile.Revision" />
+        <input type="hidden" name="id" value="@profile.Id" />
+        <label class="profile-name">Profile name<input name="name" value="@profile.Name" required maxlength="80" autocomplete="off" /></label>
+        <div id="workload-rows">
+        @for(var i=0;i<rows.Length;i++)
+        {
+            var w=rows[i];var row=i;
+            <section class="panel workload-editor">
+                <input type="hidden" name="workloadId" value="@w?.Id" />
+                <div class="workload-choice">
+                <label class="catalog-picker">Workload type<select class="catalog-engine searchable" data-placeholder="Search workload types…">
+                    <option value="Workstation" selected="@(w?.Recipe.Engine is null or "Plasma")">Workstation</option>
+                    <option value="llama.cpp" selected="@(w?.Recipe.Engine=="llama.cpp")">llama.cpp · Unsloth models</option>
+                    <option value="vLLM" selected="@(w?.Recipe.Engine=="vLLM")">vLLM · Hugging Face models</option>
+                    <option value="vLLM-Omni" selected="@(w?.Recipe.Engine=="vLLM-Omni")">vLLM-Omni · Supported models</option>
+                    <option value="Podman" selected="@(w?.Recipe.Engine=="Podman")">Container</option>
+                </select></label>
+                <button type="button" class="secondary remove-workload" aria-label="Remove workload">Remove</button>
+                </div>
+                <div class="workload-choice recipe-choice" hidden="@(w?.Recipe.Kind is null or "Workstation")">
+                    <label><span class="recipe-label">Workload</span><select name="recipe" class="searchable" data-placeholder="Search workloads…">
+                        <option value="">Select workload</option>
+                        @foreach(var r in Catalog.Recipes.OrderBy(r=>r.Name))
+                        { <option value="@r.Id" data-engine="@r.Engine" data-kind="@r.Kind" data-gpus="@r.GpuCount" data-vendor="@r.Vendor" data-memory="@r.MemoryMiB" selected="@(r.Id==w?.Recipe.Id)">@r.Name</option> }
+                    </select></label>
+                </div>
+                <div class="station-identity-choice" hidden="@(w?.Recipe.Kind is not (null or "Workstation"))">
+                    <label>Workstation<select name="stationId" class="searchable" data-placeholder="Select workstation…">
+                        <option value="">New workstation</option>
+                        @foreach(var station in stations) { <option value="@station.Id" data-name="@station.Name" data-user="@(station.User==null?"legacy":station.User.Temporary?"temporary":station.User.Username)" selected="@(w?.Recipe.Kind=="Workstation" && w.Id==station.Id)">@station.Name · @station.Id</option> }
+                    </select></label>
+                    <label>Workstation name<input name="stationName" maxlength="80" value="@(w?.Recipe.Kind=="Workstation"?w.Name:"")" placeholder="My desktop" /></label>
+                    <small>Reuse a workstation to keep its Moonlight pairing across profiles and GPUs. Switching GPUs restarts the desktop. The name is shared by all profiles; choose New workstation to use a different user.</small>
+                </div>
+                <label class="station-user-choice" hidden="@(w?.Recipe.Kind is not (null or "Workstation"))">User<select name="stationUser" class="searchable" data-placeholder="Search users…">
+                    @if(w is {Recipe.Kind:"Workstation",User:null}) { <option value="legacy" selected>Existing workstation user</option> }
+                    <option value="temporary" selected="@(w==null || w.User?.Temporary==true)">Temporary user</option>
+                    <option value="add-user">Add user…</option>
+                    @foreach(var account in accounts) { <option value="@account.Username" selected="@(w?.User?.Username==account.Username)">@account.Name</option> }
+                </select></label>
+                <div class="model-options"></div><p class="catalog-error" role="alert" hidden></p>
+                <p class="container-library-link" hidden="@(w?.Recipe.Kind!="Container")"><a href="/containers">Prepare a container</a></p>
+                <div class="gpu-choices">
+                @for(var g=0;g<(w?.Recipe.GpuCount ?? 0);g++)
+                {
+                    var gpuIndex=g;
+                    <label>GPU @(g+1)<select name="gpus-@row" class="searchable" data-placeholder="Search GPUs…">
+                        <option value="">Select GPU</option>
+                        @foreach(var gpu in state.Runtime.Gpus)
+                        { <option value="@gpu.Pci" data-compute="@(gpu.Problems.Length==0 ? "true" : "false")" data-display="@(gpu.Cards is {Length:>0} ? "true" : "false")" data-vendor="@gpu.Vendor" data-memory="@gpu.MemoryMiB" selected="@(w!.Gpus.ElementAtOrDefault(gpuIndex)==gpu.Pci)">@gpu.Name · @(gpu.Displays is {Length:>0}?string.Join(", ",gpu.Displays):"No display detected.") · @gpu.Pci</option> }
+                    </select></label>
+                }
+                </div>
+                <p class="gpu-empty" hidden>No display adapters are available. <a href="/diagnostics">Open Diagnostics</a></p>
+            </section>
+        }
+        </div>
+        <template id="gpu-template"><label>GPU<select class="searchable" data-placeholder="Search GPUs…">
+            <option value="">Select GPU</option>
+            @foreach(var gpu in state.Runtime.Gpus)
+            { <option value="@gpu.Pci" data-compute="@(gpu.Problems.Length==0 ? "true" : "false")" data-display="@(gpu.Cards is {Length:>0} ? "true" : "false")" data-vendor="@gpu.Vendor" data-memory="@gpu.MemoryMiB">@gpu.Name · @(gpu.Displays is {Length:>0}?string.Join(", ",gpu.Displays):"No display detected.") · @gpu.Pci</option> }
+        </select></label></template>
+        <div class="actions action-bar"><button>Save profile</button><button type="button" class="secondary" id="add-workload">Add workload</button><a class="button quiet" href="/profiles">Cancel</a></div>
+    </form>
+    <dialog id="add-station-user" aria-labelledby="add-station-user-heading"><form id="add-station-user-form">
+        <h2 id="add-station-user-heading">Add user</h2><label>Name<input name="name" required maxlength="60" autocomplete="off" /></label>
+        <p class="error" role="alert" hidden></p><div class="actions"><button type="button" class="secondary" id="cancel-station-user">Cancel</button><button>Add user</button></div>
+    </form></dialog>
+    <script src="/profiles.js"></script>
+}
+else { <a href="/profiles">Profiles</a> }
+@code {
+    [SupplyParameterFromQuery(Name="id")] public string? Id {get;set;}
+    StationAccount[] accounts=[];StationDefinition[] stations=[];
+    ProfileState? state;Profile? profile;Workload?[] rows=[];
+    protected override async Task OnInitializedAsync()
+    {
+        if(Device.Installer)return;
+        stations=await Profiles.Stations();
+        accounts=await Device.Agent.GetFromJsonAsync<StationAccount[]>("/station-users") ?? [];
+        state=await Profiles.State();profile=state.Profiles.SingleOrDefault(p=>p.Id==Id);
+        rows=profile is {Workloads.Length:>0} ? profile.Workloads.Cast<Workload?>().ToArray() : [null];
+    }
+}

@@ -1,0 +1,24 @@
+@page "/login"
+@layout Xur.Control.Components.Layout.LoginLayout
+@inject Bootstrap Auth
+<PageTitle>Sign in · Xur</PageTitle>
+<h1>Sign in</h1>
+@if(!Auth.AccountConfigured) { <p>Use the access code shown on your machine.</p> }
+<section class="panel narrow">
+    @if(Error!=null) { <p role="alert">@(Error=="refresh"?"The sign-in form expired. Please sign in again.":Error=="limited"?"Too many attempts. Wait 30 seconds.":Auth.AccountConfigured?"Invalid username or password.":"Invalid or expired access code.")</p> }
+    <form method="post" action="/auth/login">
+        <AntiforgeryToken />
+        @if(Auth.AccountConfigured)
+        {
+            <label for="username">Username or email</label><input id="username" name="username" autocomplete="username" maxlength="254" autofocus required />
+            <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required />
+        }
+        else
+        {
+            <label for="code">Access code</label><input id="code" name="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" minlength="6" maxlength="7" placeholder="ABC-DEF" autofocus required />
+        }
+        <button type="submit">Sign in</button>
+    </form>
+</section>
+<script src="/login.js"></script>
+@code { [SupplyParameterFromQuery(Name="error")] public string? Error { get; set; } }

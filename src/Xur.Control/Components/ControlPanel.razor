@@ -1,0 +1,52 @@
+@inject Appliance Device
+@inject ProfileManager Profiles
+<div class="page-heading control-heading"><h1>Control panel</h1><div class="control-actions">
+    <form method="post" action="/updates/all"><AntiforgeryToken /><button disabled="@(Busy||updates==null||updates.Busy)">Update All</button></form>
+    <button class="secondary" type="button" id="home-reboot" disabled="@(Busy||updates==null||updates.Busy)">Reboot</button>
+</div></div>
+@if(osUpdates?.Pending!=null||osUpdates?.RollbackQueued==true) { <p class="reboot-banner" role="status">An update is ready. Reboot to finish applying it. <a href="/updates">Details</a></p> }
+@if(updates?.Busy==true) { <p role="status"><a href="/updates">Update All is running</a></p> }
+@if(updates==null) { <p class="secondary-text">Update status unavailable. <a href="/updates">Open Updates</a></p> }
+<section class="panel control-profile" aria-labelledby="home-profile-heading">
+    <div class="section-heading"><h2 id="home-profile-heading">Profile</h2><div class="actions">@if(state!=null&&(state.Active!=null||state.Runtime.Instances.Length>0)) { <form method="post" action="/profiles/unload"><AntiforgeryToken /><button class="quiet" disabled="@Busy">Preview unload</button></form> }<a href="/profiles">Manage profiles</a></div></div>
+    @if(state==null) { <p role="alert">Could not load profiles. <a href="/">Try again</a></p> }
+    else {
+        <p class="control-current"><span class="state-label @(state.Active!=null?"running":"")">@(state.Active!=null?"Loaded":state.Runtime.Instances.Length>0?"Partial":"Idle")</span><strong>@(state.Active?.Name??"No profile loaded")</strong><span class="secondary-text">@state.Runtime.Instances.Count(i=>i.State=="running") workloads running</span></p>
+        @if(state.Profiles.Length>0) {
+            <form class="control-profile-picker" method="post" action="/profiles/load"><AntiforgeryToken />
+                <fieldset class="profile-choices"><legend>Choose a profile</legend>
+                @foreach(var profile in state.Profiles.OrderBy(p=>p.Name)) {
+                    <label class="profile-choice"><input type="radio" name="id" value="@profile.Id" checked="@(profile.Id==(state.Active?.Id??state.Profiles.OrderBy(p=>p.Name).First().Id))" disabled="@Busy" required />
+                    <span><strong>@profile.Name</strong><span class="secondary-text">@profile.Workloads.Length @(profile.Workloads.Length==1?"workload":"workloads") · @profile.Workloads.SelectMany(w=>w.Gpus).Distinct().Count() @(profile.Workloads.SelectMany(w=>w.Gpus).Distinct().Count()==1?"GPU":"GPUs")</span>
+                    @foreach(var workload in profile.Workloads) {
+                        <span class="profile-workload"><span>@workload.Name</span><small>@workload.Recipe.Kind · @(workload.Recipe.Kind=="Workstation"?(workload.User?.Username??"Default user"):workload.Recipe.Name)</small></span>
+                    }
+                    @if(profile.Workloads.Length==0) { <small>No workloads configured</small> }
+                    </span></label>
+                }
+                </fieldset><button disabled="@Busy">Load profile</button>
+            </form>
+        } else { <form method="post" action="/profiles/create"><AntiforgeryToken /><button disabled="@Busy">Create profile</button></form> }
+        @if(state.Operation is {Stage:"Applying" or "Cancelling" or "Failed"} op) {
+            <div class="control-transition"><a href="/profiles">@op.Stage · @op.ProfileName</a><span>@op.Completed / @op.Total actions</span>
+            <progress max="@Math.Max(1,op.Total)" value="@op.Completed"></progress>
+            @if(op.Error!=null) { <p role="alert">@op.Error</p> }
+            @if(op.Stage is "Applying" or "Failed") { <form method="post" action="/profiles/cancel"><AntiforgeryToken /><input type="hidden" name="operationId" value="@op.Id" /><button class="secondary">Cancel change</button></form> }
+            </div>
+        }
+
+    }
+</section>
+<dialog id="home-reboot-dialog" aria-labelledby="home-reboot-heading"><h2 id="home-reboot-heading">Reboot Xur?</h2><p>Running workloads and connected workstations will be interrupted.</p><div class="actions"><button class="secondary" type="button" id="home-reboot-cancel" autofocus>Cancel</button><form method="post" action="/power/reboot"><AntiforgeryToken /><button>Reboot</button></form></div></dialog>
+<script src="/control-panel.js" defer></script>
+@code {
+    ProfileState? state;UpdateAllStatus? updates;OsUpdateStatus? osUpdates;
+    bool Busy=>state?.Operation?.Stage is "Applying" or "Cancelling" or "Failed";
+    protected override async Task OnInitializedAsync()
+    {
+        async Task ReadProfiles(){try{state=await Profiles.State();}catch{}}
+        async Task ReadUpdates(){try{updates=await Device.Agent.GetFromJsonAsync<UpdateAllStatus>("/update-all");}catch{}}
+        async Task ReadOs(){try{osUpdates=await Device.Agent.GetFromJsonAsync<OsUpdateStatus>("/updates");}catch{}}
+        await Task.WhenAll(ReadProfiles(),ReadUpdates(),ReadOs());
+    }
+}

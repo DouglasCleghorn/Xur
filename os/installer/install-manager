@@ -1,0 +1,59 @@
+#!/usr/bin/bash
+# Runs only in Anaconda's approved %post, against its mounted target root.
+set -euo pipefail
+target=${1:?Installed root required}
+test "$target" = /mnt/sysroot
+target=$(readlink -e "$target")
+test -d "$target/var"
+bundle=/usr/share/xur/app-bundle
+if test -f /run/xur/app/current/bundle.json; then bundle=$(readlink -e /run/xur/app/current); fi
+test -f "$bundle/bundle.json"
+release=$(python3 -c 'import json; print(json.load(open(__import__("sys").argv[1]))["id"])' "$bundle/bundle.json")
+[[ "$release" =~ ^[a-f0-9]{64}$ ]]
+destination="$target/var/lib/xur/app/releases/$release"
+mkdir -p "$destination" "$target/etc/systemd/system" "$target/etc/xur"
+cp -a "$bundle/." "$destination/"
+chmod -R go-w "$target/var/lib/xur/app"
+ln -s "releases/$release" "$target/var/lib/xur/app/current"
+for name in control agent gateway; do
+  sed "s|/usr/bin/xur-$name|/var/lib/xur/app/current/$name/Xur.${name^}|g; s|/usr/lib/xur/$name|/var/lib/xur/app/current/$name|g" \
+    "/usr/lib/systemd/system/xur-$name.service" > "$target/etc/systemd/system/xur-$name.service"
+done
+mkdir -p "$target/etc/systemd/system/xur-agent.service.d" "$target/etc/systemd/system/xur-control.service.d"
+for name in agent control; do
+  printf '[Service]\nEnvironment=XUR_CATALOG=/var/lib/xur/app/current/catalog\n' > "$target/etc/systemd/system/xur-$name.service.d/catalog.conf"
+done
+mkdir -p "$target/var/lib/xur/updater"
+install -m 700 "$bundle/host/app-update" "$target/var/lib/xur/updater/app-update"
+install -m 644 /usr/share/xur/application-update-key.pem "$target/etc/xur/application-update-key.pem"
+install -m 644 /usr/lib/systemd/system/xur-app-recovery.service "$target/etc/systemd/system/"
+systemctl --root="$target" enable xur-app-recovery.service
+install -m 644 /run/xur/installed-upstream.json "$target/etc/xur/upstream.json"
+if test -f "/run/xur/app/release-$release.json"; then
+  install -m 600 "/run/xur/app/release-$release.json" "$target/var/lib/xur/app/release-$release.json"
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sequence"])' "/run/xur/app/release-$release.json" > "$target/var/lib/xur/app/highest-sequence.json"
+fi
+install -m 644 /usr/share/xur/xur-os-update.service /usr/share/xur/xur-os-update.timer "$target/etc/systemd/system/"
+install -m 644 /usr/lib/systemd/system/xur-network.service "$target/etc/systemd/system/"
+sed -i 's|/usr/libexec/xur-network|/var/lib/xur/app/current/host/xur-network|' "$target/etc/systemd/system/xur-network.service"
+mkdir -p "$target/etc/systemd/system.conf.d" "$target/etc/systemd/journald.conf.d"
+cp /usr/lib/systemd/system.conf.d/50-xur-console.conf "$target/etc/systemd/system.conf.d/"
+cp /usr/lib/systemd/journald.conf.d/50-xur-console.conf "$target/etc/systemd/journald.conf.d/"
+# Keep the real Bazzite desktop installed, but do not launch a display manager.
+# Persistent local masks survive replacement of upstream /usr defaults.
+systemctl --root="$target" set-default multi-user.target
+systemctl --root="$target" --force mask display-manager.service plasmalogin.service sddm.service gdm.service \
+  autovt@.service getty@tty1.service getty@tty2.service getty@tty3.service serial-getty@ttyS0.service
+mkdir -p "$target/etc/systemd/system/bazzite-hardware-setup.service.d"
+printf '[Service]\nEnvironment=PATH=/var/lib/xur/app/current/host/hardware-hooks:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin\n' > "$target/etc/systemd/system/bazzite-hardware-setup.service.d/xur-reboot.conf"
+# One OS scheduler, with a root-owned persistent implementation independent of
+# the manager. This also prevents a desktop updater from bypassing its pause.
+systemctl --root="$target" mask uupd.timer bootc-fetch-apply-updates.timer
+systemctl --root="$target" enable xur-network.service xur-agent.service xur-control.service xur-gateway.service tailscaled.service xur-os-update.timer podman-restart.service
+# Labels are local administrator configuration and therefore survive OS updates.
+chroot "$target" semanage fcontext -a -t bin_t '/var/lib/xur/app/releases/[^/]+/(control|agent|gateway)(/.*)?'
+chroot "$target" semanage fcontext -a -t bin_t '/var/lib/xur/app/releases/[^/]+/host(/.*)?'
+chroot "$target" restorecon -RF /var/lib/xur /etc/systemd /etc/xur
+mkdir -p "$target/var/usrlocal/bin"
+ln -s /var/lib/xur/app/current/control/Xur.Control "$target/var/usrlocal/bin/xur"
+chroot "$target" firewall-offline-cmd --add-port=8080/tcp --add-port=8443/tcp

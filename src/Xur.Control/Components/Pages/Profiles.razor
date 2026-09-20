@@ -1,0 +1,95 @@
+@page "/profiles"
+@inject ProfileManager Manager
+@inject Appliance Device
+<PageTitle>Profiles · Xur</PageTitle>
+<div class="page-heading"><h1>Profiles</h1>
+@if(!Device.Installer && state!=null) { <form method="post" action="/profiles/create"><AntiforgeryToken /><button disabled="@Busy">Create profile</button></form> }
+</div>
+@if(Device.Installer) { <p>Profiles are available after installation.</p> }
+else if(state==null) { <p role="alert">Could not load profiles. <a href="/profiles">Try again</a></p> }
+else
+{
+    @if(!string.IsNullOrEmpty(Error)) { <p class="notice error" role="alert">@Error</p> }
+    <section class="loaded-strip" aria-label="Loaded profile">
+        <div><span class="state-label @(state.Active!=null?"running":"")">@(state.Active!=null?"Loaded":RunningCount>0?"Partial":"Idle")</span><strong>@(state.Active?.Name ?? (RunningCount>0?"No complete profile loaded":"No profile loaded"))</strong>
+            <span class="secondary-text">@RunningCount @(RunningCount==1?"workload":"workloads") running</span></div>
+        @if(state.Active!=null || state.Runtime.Instances.Length>0) { <form method="post" action="/profiles/unload"><AntiforgeryToken /><button class="secondary" disabled="@Busy">Unload profile</button></form> }
+    </section>
+    @if(state.Operation is { Stage:"Applying" or "Cancelling" or "Cancelled" or "Failed" } op)
+    {
+        <section class="operation-strip @(op.Stage=="Failed"?"error":"")" aria-live="polite">
+            <div><strong>@(op.Stage=="Cancelled"?"Cancelled":op.Stage=="Cancelling"?"Cancelling":op.Unload?"Unloading":"Loading") @op.ProfileName</strong><span>@op.Completed of @op.Total actions complete</span></div>
+            <progress max="@Math.Max(1,op.Total)" value="@op.Completed"></progress>
+            @if(op.Error!=null) { <p role="alert">@op.Error</p> }
+            @if(op.Stage=="Cancelling") { <p role="status">Waiting for @(op.Unload?"current actions":"the current action") to finish: @op.CurrentAction. No further actions will start.</p> }
+            @if(op.Stage=="Cancelled") { <p>Remaining actions cancelled. Completed changes were kept. Check running workloads before loading another profile.</p> }
+            @if(op.Stage is "Applying" or "Failed") {
+                <div class="actions">
+                    @if(op.Stage=="Failed") { <form method="post" action="/profiles/resume"><AntiforgeryToken /><button>Resume</button></form> }
+                    <form method="post" action="/profiles/cancel"><AntiforgeryToken /><input type="hidden" name="operationId" value="@op.Id" /><button class="secondary">Cancel change</button></form>
+                </div>
+            }
+            @if(op.CompletedActions is {Length:>0}) { <details><summary>Completed changes (@op.Completed)</summary><ul>@foreach(var action in op.CompletedActions) { <li>@action.Description</li> }</ul></details> }
+        </section>
+        @if(op.Stage is "Applying" or "Cancelling") { <script src="/profile-progress.js" data-operation="@op.Id" data-stage="@op.Stage" data-completed="@op.Completed" defer></script> }
+    }
+    <section class="profile-list" aria-labelledby="saved-profiles">
+        <div class="section-heading"><h2 id="saved-profiles">Saved profiles <span class="count">@state.Profiles.Length</span></h2><label class="search-field"><span class="sr-only">Search profiles</span><input type="search" id="profile-search" placeholder="Search profiles" /></label></div>
+        <div class="profile-column-labels" aria-hidden="true"><span>Profile</span><span>Workloads</span><span>Devices</span><span>Actions</span></div>
+        @foreach(var p in state.Profiles.OrderByDescending(p=>state.Active?.Id==p.Id).ThenBy(p=>long.TryParse(p.Id,out var key)?key:long.MaxValue).ThenBy(p=>p.Name))
+        {
+            var loaded=state.Active?.Id==p.Id;
+            <article class="profile-row @(loaded?"is-loaded":"")" data-profile="@p.Id" data-search="@(p.Name+" "+string.Join(" ",p.Workloads.Select(w=>w.Recipe.Name)))">
+                <div class="profile-identity"><a class="profile-name" href="/profiles/edit?id=@p.Id">@p.Name</a>
+                    @if(loaded) { <span class="state-label running">Loaded</span> }
+                    @if(loaded && state.Active!.Revision!=p.Revision) { <span class="state-label pending">Saved changes</span> }
+                </div>
+                <div class="profile-workloads">
+                    @if(p.Workloads.Length==0) { <span class="secondary-text">No workloads</span> }
+                    @foreach(var w in p.Workloads) { <div><span>@w.Recipe.Name</span><small>@(w.Recipe.Kind=="Workstation"?UserLabel(w):w.Recipe.Engine)</small></div> }
+                </div>
+                <div class="profile-devices">@foreach(var label in DeviceNames(p)) { <span>@label</span> }</div>
+                <div class="row-actions">
+                    @if(!IsCurrent(p)) { <form method="post" action="/profiles/load"><AntiforgeryToken /><input type="hidden" name="id" value="@p.Id" /><button class="secondary" disabled="@Busy">Load profile</button></form> }
+                    <form method="post" action="/profiles/preview"><AntiforgeryToken /><input type="hidden" name="id" value="@p.Id" /><button class="quiet" disabled="@Busy">Preview</button></form>
+                    <details class="action-menu"><summary class="button quiet" aria-label="More actions for @p.Name">More</summary><div class="action-menu-items">
+                        <a class="button quiet" href="/profiles/edit?id=@p.Id">Edit</a>
+                        <form method="post" action="/profiles/create"><AntiforgeryToken /><input type="hidden" name="copy" value="@p.Id" /><button class="quiet" disabled="@Busy">Duplicate</button></form>
+                        <button type="button" class="quiet danger-text" data-delete-id="@p.Id" data-delete-name="@p.Name" data-delete-revision="@p.Revision" disabled="@(loaded || Busy)">Delete profile</button>
+                        @if(loaded) { <p>Unload before deleting.</p> }
+                    </div></details>
+                </div>
+            </article>
+        }
+        @if(state.Profiles.Length==0) { <div class="empty-state"><h3>No profiles yet</h3><p>Create a profile, then choose its workstations and models.</p></div> }
+        <p id="profile-no-matches" hidden>No profiles match your search.</p>
+    </section>
+    <section class="running-list"><div class="section-heading"><h2>Running workloads <span class="count">@state.Runtime.Instances.Length</span></h2></div>
+        @foreach(var w in state.Runtime.Instances)
+        {
+            var definition=Definition(w.Id);
+            <article class="runtime-row"><div><strong>@WorkloadName(w.Id)</strong><span class="secondary-text">@(definition?.Recipe.Kind=="Workstation"?"Workstation":definition?.Recipe.Engine)</span></div>
+                <span class="state-label @(w.State=="running"?"running":"pending")">@w.State</span>
+                <details class="runtime-details"><summary>Details</summary><p>Process @w.Pid</p>@if(definition is {Recipe.Kind:not "Workstation"}) { @if(definition.Recipe.Kind=="Container" && definition.Recipe.Port>0) { <a href="@("/inference/"+definition.Route+"/")">Open service</a> } else if(definition.Recipe.Kind=="Model") { <code>/inference/@definition.Route/v1/</code> } }</details>
+                <a class="button quiet" href="/api/workloads/@w.Id/logs">Logs</a></article>
+        }
+        @if(state.Runtime.Instances.Length==0) { <p class="empty-state">Load a profile to start its workloads.</p> }
+    </section>
+    <dialog id="delete-profile-dialog" aria-labelledby="delete-profile-heading"><form method="post" action="/profiles/delete"><AntiforgeryToken /><input type="hidden" name="id" /><input type="hidden" name="revision" />
+        <h2 id="delete-profile-heading">Delete profile?</h2><p>The saved profile will be removed. Downloaded models and workstation files will stay.</p>
+        <div class="actions"><button type="button" class="secondary" id="cancel-profile-delete" autofocus>Cancel</button><button class="danger">Delete profile</button></div></form>
+    </dialog>
+    <script src="/profile-list.js" defer></script>
+}
+@code {
+    [SupplyParameterFromQuery] public string? Error {get;set;}
+    ProfileState? state;StationAccount[] accounts=[];
+    string UserLabel(Workload w)=>w.User?.Temporary==true?"Temporary user":w.User==null?"Existing workstation user":accounts.SingleOrDefault(a=>a.Username==w.User.Username && a.Uid==w.User.Uid)?.Name ?? w.User.Username;
+    int RunningCount=>state?.Runtime.Instances.Count(i=>i.State=="running") ?? 0;
+    bool IsCurrent(Profile p)=>state?.Active?.Id==p.Id && state.Active.Revision==p.Revision && state.Runtime.Instances.Length==p.Workloads.Length && p.Workloads.All(w=>state.Runtime.Instances.Any(i=>i.Id==w.Id && i.Fingerprint==w.Fingerprint && i.State=="running"));
+    bool Busy=>state?.Operation?.Stage is "Applying" or "Cancelling" or "Failed";
+    Workload? Definition(string id)=>state?.Active?.Workloads.FirstOrDefault(w=>w.Id==id) ?? state?.Profiles.SelectMany(p=>p.Workloads).FirstOrDefault(w=>w.Id==id);
+    string WorkloadName(string id)=>Definition(id)?.Recipe.Name ?? "Workload "+id;
+    string[] DeviceNames(Profile p)=>p.Workloads.SelectMany(w=>w.Gpus.Length==0?new[]{"CPU"}:w.Gpus.Select(id=>state!.Runtime.Gpus.SingleOrDefault(g=>g.Pci==id)?.Name ?? "GPU "+id)).Distinct().ToArray();
+    protected override async Task OnInitializedAsync() { if(!Device.Installer)try {state=await Manager.State();accounts=await Device.Agent.GetFromJsonAsync<StationAccount[]>("/station-users") ?? [];}catch{} }
+}

@@ -1,0 +1,16 @@
+[Unit]
+Description=Check for a signed installer application update
+ConditionKernelCommandLine=xur.installer=1
+Wants=network-online.target
+After=network-online.target xur-network.service
+Before=xur-gateway.service xur-agent.service xur-control.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/xur-installer-app prepare
+TimeoutStartSec=140
+RemainAfterExit=yes
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

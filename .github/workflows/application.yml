@@ -1,0 +1,25 @@
+name: Xur application
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  application:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: 10.0.401
+      - name: Build and test application
+        run: |
+          export XUR_DOTNET="$(command -v dotnet)"
+          python3 eng/build-app-bundle.py
+          dotnet run --project tests/Xur.Unit.Tests -c Release
+          python3 tests/Xur.Integration.Tests/bootstrap.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: xur-app-x86_64
+          path: |
+            dist/xur-app-x86_64.tar.gz
+            dist/xur-app-x86_64.tar.gz.sha256

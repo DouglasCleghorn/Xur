@@ -1,0 +1,95 @@
+@page "/network"
+@page "/settings"
+@inject Appliance Device
+@inject Bootstrap Auth
+<PageTitle>Settings · Xur</PageTitle>
+
+<h1>Settings</h1>
+@if(!Device.Installer && application!=null) {
+<section class="panel" id="development-updates"><h2>Local build testing</h2>
+<p>Public updates use GitHub Releases. Enable this only to test builds from your own update server. All builds still require Xur’s trusted signature; this does not allow unsigned builds or bypass rollback protection.</p>
+<form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="development" />
+<label class="inline-option"><input type="checkbox" name="development" value="true" checked="@application.Development" /> Allow local build testing</label><button disabled="@application.Busy">Save</button></form>
+@if(application.Development) {
+<form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="configure" />
+<label>Local update server<input name="server" value="@application.Server" placeholder="192.168.0.134:8088" maxlength="2048" required /></label><button disabled="@application.Busy">Save server</button></form>
+<p>Turning this off restores GitHub Releases and keeps your local server address for next time.</p>
+}
+</section>
+}
+<section class="panel"><h2>API access</h2><p>Give scripts and assistants their own expiring, revocable credentials.</p><a class="button secondary" href="/settings/api-keys">Manage API keys</a></section>
+@if(Auth.AccountConfigured) { <section class="panel"><h2>Account</h2><p>@Auth.Username</p><form method="post" action="/auth/logout"><AntiforgeryToken /><button class="secondary">Sign out</button></form></section> }
+<section class="panel"><h2>Hugging Face</h2>
+<p>@(hfConfigured ? "Access token saved." : "No access token saved.")</p>
+<form method="post" action="/settings/huggingface"><AntiforgeryToken />
+<label for="hf-token">HF_TOKEN</label><input id="hf-token" type="password" name="token" autocomplete="new-password" placeholder="hf_…" required maxlength="256" />
+<button>Save token</button>
+</form>
+@if(hfConfigured) { <form method="post" action="/settings/huggingface"><AntiforgeryToken /><input type="hidden" name="remove" value="true" /><button class="secondary">Remove token</button></form> }
+@if(HfSaved) { <p role="status">Hugging Face token setting saved.</p> }
+<p class="secondary-text">Used for model discovery and downloads, including gated models you have permission to access. Reload running model workloads to apply a changed token. The token is never displayed or included in config backups.</p>
+</section>
+<section class="panel"><h2>Timezone</h2>
+@if(timezone!=null) {
+    <form method="post" action="/settings/timezone"><AntiforgeryToken />
+        <div class="actions"><label class="inline-option"><input type="checkbox" id="timezone-automatic" name="automatic" value="true" checked="@timezone.Automatic" /> Automatic timezone</label><button id="timezone-refresh" type="submit" class="secondary" formaction="/settings/timezone/refresh" disabled="@(!timezone.Automatic)">Refresh</button></div>
+        <p class="secondary-text">Automatic uses this server’s public IP via ipwho.is at boot. VPNs can affect the detected location. Current zone: @timezone.Current.</p>
+        @if(timezone.Error!=null) { <p role="status">@timezone.Error</p> }
+        <label for="timezone">Manual timezone</label>
+        <input id="timezone" name="zone" list="timezones" value="@timezone.Current" autocomplete="off" required="@(!timezone.Automatic)" disabled="@timezone.Automatic" />
+        <datalist id="timezones">@foreach(var zone in timezone.Zones) { <option value="@zone"></option> }</datalist>
+        <button>Save timezone</button>
+    </form>
+    <script src="/timezone-settings.js" defer></script>
+    <p class="secondary-text">Workstations and containers use this setting. Unload and reload running workloads to apply it everywhere.</p>
+} else { <p role="alert">Could not read the timezone. <a href="/settings">Refresh</a></p> }
+@if(TimezoneSaved) { <p role="status">Timezone saved.</p> }
+@if(!string.IsNullOrEmpty(Error)) { <p role="alert">@Error</p> }
+</section>
+<section class="panel"><h2>Time synchronization</h2>
+@if(ntp!=null) {
+    <p>NTP: <strong>@(ntp.Active?"Running":"Stopped")</strong> · @(ntp.Synchronized?"Clock synchronized":"Not synchronized yet")</p>
+    <form method="post" action="/settings/ntp"><AntiforgeryToken />
+        <label class="inline-option"><input type="checkbox" name="enabled" value="true" checked="@ntp.Enabled" /> Enable automatic time synchronization</label>
+        <label for="ntp-servers">Preferred NTP servers</label><textarea id="ntp-servers" name="servers" rows="3" placeholder="time.cloudflare.com">@string.Join("\n",ntp.Servers)</textarea>
+        <p class="secondary-text">Default: time.cloudflare.com. Enter hostnames or IP addresses, one per line. OS and DHCP time sources remain fallbacks. Leave blank to use those defaults.</p>
+        <button>Save NTP settings</button>
+    </form>
+    @if(NtpSaved) { <p role="status">NTP settings saved. Synchronization may take a few minutes.</p> }
+} else { <p role="alert">Could not read NTP settings. <a href="/settings">Refresh</a></p> }
+</section>
+<section class="panel"><h2>Configuration backup</h2><p>Download profiles, workload definitions, device assignments and system preferences. Keep this file private: workload definitions may contain environment secrets. Passwords, API keys, Tailscale identity, model data and user files are excluded.</p><a class="button secondary" href="/settings/backup" download>Download config backup</a><p class="secondary-text">Configuration export for recovery and reference; automatic restore is not available yet.</p></section>
+<section class="panel"><h2>IP addresses</h2>
+@foreach (var adapter in Device.Network())
+{
+    <article class="network-adapter" data-interface="@adapter.Name">
+        <h3>@adapter.Name <span class="badge">@adapter.State</span></h3>
+        <p>@adapter.Kind @(adapter.Kind == "Loopback" ? "· Local to this machine" : "")</p>
+        @if (adapter.Addresses.Length == 0) { <p>No addresses assigned.</p> }
+        else
+        {
+            <ul class="ip-addresses">
+            @foreach (var address in adapter.Addresses)
+            { <li><code>@address</code> <span class="badge">@(address.Contains(':') ? "IPv6" : "IPv4")</span></li> }
+            </ul>
+        }
+    </article>
+}
+<a class="button secondary" href="/settings">Refresh addresses</a>
+</section>
+<section class="panel"><h2>Web manager</h2><p>Open an address reachable from your browser on HTTPS port @(Device.Port+363). Link-local IPv6 addresses require the correct interface scope.</p>
+@foreach (var url in Device.Urls()) { <p><a href="@url">@url</a></p> }
+</section>
+
+<section class="panel"><h2>HTTPS</h2><p>This machine creates its own persistent certificate; your browser will ask you to trust it.</p>
+@foreach(var url in Device.Urls()) { var secure=new UriBuilder(url){Scheme="https",Port=Device.Port+363}; <p><a href="@secure.Uri">@secure.Uri</a></p> }
+</section>
+
+@code {
+    ApplicationUpdateStatus? application;TimezoneStatus? timezone;NtpStatus? ntp;bool hfConfigured;
+    [SupplyParameterFromQuery] public bool HfSaved {get;set;}
+    [SupplyParameterFromQuery] public bool NtpSaved {get;set;}
+    [SupplyParameterFromQuery] public bool TimezoneSaved {get;set;}
+    [SupplyParameterFromQuery] public string? Error {get;set;}
+    protected override async Task OnInitializedAsync() {if(!Device.Installer)try{application=await Device.Agent.GetFromJsonAsync<ApplicationUpdateStatus>("/application-updates");}catch{}try{hfConfigured=(await Device.Agent.GetFromJsonAsync<System.Text.Json.JsonElement>("/huggingface")).GetProperty("configured").GetBoolean();}catch{}try{timezone=await Device.Agent.GetFromJsonAsync<TimezoneStatus>("/timezone");}catch{}try{ntp=await Device.Agent.GetFromJsonAsync<NtpStatus>("/ntp");}catch{}}
+}

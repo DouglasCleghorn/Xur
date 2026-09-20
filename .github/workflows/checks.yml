@@ -1,0 +1,23 @@
+name: Source checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: 10.0.401
+      - run: |
+          dotnet run --project tests/Xur.Unit.Tests -c Release
+          dotnet build src/Xur.Gateway -c Release
+          XUR_DOTNET="$(command -v dotnet)" dotnet run --project tests/Xur.Profile.Tests -c Release
+          python3 tests/Xur.Integration.Tests/application-update.py
+          python3 tests/Xur.Integration.Tests/online-installer.py
+          python3 tests/Xur.Integration.Tests/github-release.py
+          python3 tests/Xur.Integration.Tests/source-manifest.py

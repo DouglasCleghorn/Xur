@@ -1,0 +1,1 @@
+(()=>{document.querySelector('#model-filter')?.addEventListener('input',e=>{const q=e.target.value.toLowerCase();for(const row of document.querySelectorAll('[data-model]'))row.hidden=!row.dataset.model.toLowerCase().includes(q);});})();

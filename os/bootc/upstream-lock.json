@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "architecture": "amd64",
+  "channel": "ghcr.io/ublue-os/bazzite-nvidia-open:stable",
+  "image": "ghcr.io/ublue-os/bazzite-nvidia-open@sha256:7b4e7217bc846a0b15301448eb7149226f932d65ea372614e01d72cf7043dbc1",
+  "version": "44.20260908",
+  "kernel": "7.2.3-ogc3.1.fc44.x86_64",
+  "sourceRevision": "8e5aa39cb5ed6a5c438efdcb2508835f7af6482b",
+  "resolvedAt": "2026-09-12",
+  "policy": "Install the verified upstream image unchanged; follow its signed stable channel after installation."
+}

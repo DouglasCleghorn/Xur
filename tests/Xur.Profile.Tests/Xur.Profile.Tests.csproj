@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk.Web"><ItemGroup><ProjectReference Include="../../src/Xur.Agent/Xur.Agent.csproj" /><ProjectReference Include="../../src/Xur.Control/Xur.Control.csproj" /><ProjectReference Include="../../src/Xur.Gateway/Xur.Gateway.csproj" /></ItemGroup></Project>

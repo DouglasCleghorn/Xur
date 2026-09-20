@@ -1,0 +1,71 @@
+#!/usr/bin/python3
+"""Sequential OS/application updates, independent of the manager's lifetime."""
+import fcntl,json,os,pathlib,subprocess,sys,time,uuid
+STATE=pathlib.Path('/var/lib/xur/update-all')
+HOST=pathlib.Path('/var/lib/xur/app/current/host')
+
+def read():
+    path=STATE/'operation.json'
+    return json.loads(path.read_text()) if path.exists() else None
+
+def save(value):
+    STATE.mkdir(parents=True,exist_ok=True,mode=0o700)
+    temp=STATE/'operation.tmp'
+    with temp.open('w') as f:
+        json.dump(value,f);f.flush();os.fsync(f.fileno())
+    temp.replace(STATE/'operation.json')
+
+def status():
+    operation=read();busy=False
+    if (STATE/'lock').exists():
+        with (STATE/'lock').open() as lock:
+            try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            except BlockingIOError:busy=True
+    if operation and operation['stage']=='Running' and not busy:
+        operation={**operation,'stage':'Interrupted','message':'Update All was interrupted. Review Updates before trying again.'}
+    return dict(busy=busy,operation=operation)
+
+def call(tool,action):
+    result=subprocess.run(['/usr/bin/python3',str(HOST/tool),action],capture_output=True,text=True,timeout=7500 if tool=='os-update' else 3700)
+    if result.returncode:raise RuntimeError('Operation failed; see its log on the Updates page.')
+    return json.loads(result.stdout) if action=='status' else None
+
+def execute(invoke=call,write=save):
+    operation=dict(id=uuid.uuid4().hex,stage='Running',message='Checking updates',results=[],updated=time.time())
+    def progress(message):operation.update(message=message,updated=time.time());write(operation)
+    progress('Updating operating system')
+    for name,tool in [('Operating system','os-update'),('Xur','app-update')]:
+        try:
+            progress('Checking '+name)
+            state=invoke(tool,'status')
+            if state['busy']:raise RuntimeError('Another update is already running. Try again after it finishes.')
+            if tool=='os-update' and (state.get('pending') or state.get('rollbackQueued')):
+                message='An OS deployment is already queued. Reboot to finish.';outcome='Skipped'
+            elif tool=='app-update' and not state.get('server'):
+                message='Set an update server on the Updates page.';outcome='Skipped'
+            else:
+                invoke(tool,'check');state=invoke(tool,'status')
+                key='digest' if tool=='os-update' else 'id'
+                if state.get('available') and state['available'][key]!=state['current'][key]:
+                    progress('Updating '+name);invoke(tool,'stage' if tool=='os-update' else 'update')
+                    state=invoke(tool,'status')
+                    message='Reboot to finish.' if state.get('pending') else 'Updated.';outcome='Complete'
+                else:message='Up to date.';outcome='Complete'
+            operation['results'].append(dict(name=name,stage=outcome,message=message))
+        except Exception as error:
+            operation['results'].append(dict(name=name,stage='Failed',message=str(error) if isinstance(error,RuntimeError) else 'Update failed; see system logs.'))
+        progress(name+' finished')
+    operation['stage']='Failed' if any(r['stage']=='Failed' for r in operation['results']) else 'Complete'
+    progress('Finished with errors.' if operation['stage']=='Failed' else 'Update checks finished.')
+    return operation
+
+def main():
+    os.umask(0o077)
+    if len(sys.argv)!=2 or sys.argv[1] not in ('status','run'):raise RuntimeError('Unknown action')
+    if sys.argv[1]=='status':print(json.dumps(status()));return
+    if os.geteuid()!=0 or not pathlib.Path('/var/lib/xur/installed').exists():raise RuntimeError('Installed system required')
+    STATE.mkdir(parents=True,exist_ok=True,mode=0o700)
+    with (STATE/'lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        execute()
+if __name__=='__main__':main()

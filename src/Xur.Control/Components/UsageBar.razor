@@ -1,0 +1,13 @@
+<div class="control-usage" data-usage="@Key">
+    <div><a href="@Link">@Label</a><span data-usage-text>@Text</span></div>
+    <meter min="0" max="@Math.Max(1,Total??0)" value="@Math.Clamp(Used??0,0,Math.Max(1,Total??0))" hidden="@(!Known)" aria-label="@Label">@Text</meter>
+</div>
+@code {
+    [Parameter] public string Key {get;set;}="";
+    [Parameter] public string Label {get;set;}="";
+    [Parameter] public string Link {get;set;}="";
+    [Parameter] public double? Used {get;set;}
+    [Parameter] public double? Total {get;set;}
+    bool Known=>Used.HasValue&&Total>0;
+    string Text=>Known?$"{Used/1073741824d:0.0} / {Total/1073741824d:0.0} GiB":"Not reported";
+}

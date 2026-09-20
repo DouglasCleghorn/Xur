@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "resolvedAt": "2026-09-12",
+  "architecture": "x86_64",
+  "dotnetSdk": {
+    "version": "10.0.401",
+    "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-linux-x64.tar.gz",
+    "sha512": "51c8b999af9e8dd9998c9edc5944e19a90788862068acd38694e098889054ce8c23d4f0c5cccfa16bf187d044562359e5ee69a9f8ad0bbe913ba90311fbce25b"
+  },
+  "systemCommandLine": {
+    "version": "2.0.12",
+    "status": "Pinned in NuGet packages.lock.json; published CLI executed"
+  },
+  "builderCloudImage": {
+    "purpose": "Disposable build VM only; not the installed Xur host base",
+    "url": "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2",
+    "sha256": "28680fe5b371a5a82ebf43a31926e086a168e59949d03969c5093e7071f90b7f",
+    "checksumUrl": "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-44-1.7-x86_64-CHECKSUM",
+    "signerFingerprint": "36F612DCF27F7D1A48A835E4DBFCF71C6D9F90A6",
+    "publicKeySource": "https://fedoraproject.org/fedora.gpg"
+  },
+  "imageBuilderSource": {
+    "version": "82.0.0",
+    "commit": "cd68256864a5776580326004eb8d77b7f7a11543",
+    "url": "https://github.com/osbuild/image-builder/releases/download/v82.0.0/image-builder-82.0.0.tar.gz",
+    "sha256": "8797c600346ed9350377a6b59c86d26a045d048b2fb82bd2145c2b60cf9b99bc",
+    "status": "Archive SHA-256 verified; compiled with vendored dependencies in Fedora 44; version and build CLI executed"
+  },
+  "installedHostBase": {
+    "reference": "ghcr.io/ublue-os/bazzite-nvidia-open@sha256:7b4e7217bc846a0b15301448eb7149226f932d65ea372614e01d72cf7043dbc1",
+    "channel": "ghcr.io/ublue-os/bazzite-nvidia-open:stable",
+    "kernel": "7.2.3-ogc3.1.fc44.x86_64",
+    "bootc": "1.16.10",
+    "nvidia": "610.57.04-1.fc44",
+    "nvidiaContainerToolkit": "1.20.0-1",
+    "source": "Unmodified upstream Bazzite KDE Desktop image"
+  },
+  "installerImage": {
+    "definition": "os/installer/Containerfile",
+    "manifestDigest": "See artifact build manifest; live installer only, no embedded OS payload"
+  },
+  "tailscale": {
+    "version": "1.102.4",
+    "sha256": "50748df1045e60b5b695f19f4c56b0da36c019948b440fb456b6584a50f0d8b9",
+    "url": "https://pkgs.tailscale.com/stable/tailscale_1.102.4_amd64.tgz"
+  },
+  "spectreConsole": {
+    "version": "0.57.2",
+    "purpose": "Console layout and panels; System.CommandLine remains the command parser"
+  },
+  "yamlDotNet": {
+    "version": "18.1.0",
+    "purpose": "Safe bounded bootstrap answer parsing"
+  },
+  "jwt": "8.22.0",
+  "sqlite": "10.0.12",
+  "llamaCpp": {
+    "version": "b10920",
+    "commit": "eafe15a5e3d87dd68ae33acf6a7cbd9415a0ac5e",
+    "amd64Image": "ghcr.io/ggml-org/llama.cpp@sha256:e33f80e54fc3f403118ab92b24f21dc1a3125ffd0c7725532028eca8128b548d"
+  },
+  "liveInstallerBase": {
+    "reference": "quay.io/fedora/fedora-bootc@sha256:2c38c5f71a43993e07577629ef8e1695420ed38143482340215abdcea85a31fd",
+    "kernel": "7.2.4-200.fc44.x86_64",
+    "bootc": "1.16.10"
+  }
+}

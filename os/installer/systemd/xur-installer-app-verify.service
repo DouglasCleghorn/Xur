@@ -1,0 +1,15 @@
+[Unit]
+Description=Verify installer app or restore the bundled version
+ConditionKernelCommandLine=xur.installer=1
+Wants=xur-control.service
+After=xur-control.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/xur-installer-app verify
+TimeoutStartSec=4min
+RemainAfterExit=yes
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

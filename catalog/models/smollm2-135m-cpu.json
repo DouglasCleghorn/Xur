@@ -1,0 +1,35 @@
+{
+  "id": "smollm2-135m-cpu",
+  "name": "SmolLM2 135M \u2014 CPU chat",
+  "image": "ghcr.io/ggml-org/llama.cpp@sha256:e33f80e54fc3f403118ab92b24f21dc1a3125ffd0c7725532028eca8128b548d",
+  "command": [
+    "-m",
+    "/model.gguf",
+    "--host",
+    "0.0.0.0",
+    "--port",
+    "8080",
+    "--ctx-size",
+    "2048",
+    "--parallel",
+    "2",
+    "--threads",
+    "2",
+    "--alias",
+    "smollm2"
+  ],
+  "port": 8080,
+  "healthPath": "/health",
+  "vendor": "CPU",
+  "gpuCount": 0,
+  "memoryMiB": 0,
+  "description": "Small CPU language model for lightweight chat. Downloads 145 MB on first start. Apache 2.0.",
+  "model": {
+    "url": "https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/09816acd5d99df7be770d85ea30822623dab342c/SmolLM2-135M-Instruct-Q8_0.gguf",
+    "sha256": "5a1395716f7913741cc51d98581b9b1228d80987a9f7d3664106742eb06bba83",
+    "bytes": 144811360,
+    "license": "Apache-2.0",
+    "upstream": "bartowski/SmolLM2-135M-Instruct-GGUF",
+    "revision": "09816acd5d99df7be770d85ea30822623dab342c"
+  }
+}

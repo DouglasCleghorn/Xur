@@ -1,0 +1,16 @@
+[Unit]
+Description=Xur privileged typed operations (Unix socket only)
+After=local-fs.target xur-network.service
+Requires=xur-network.service
+
+[Service]
+ExecStart=/usr/bin/xur-agent
+WorkingDirectory=/usr/lib/xur/agent
+Restart=on-failure
+RestartSec=3
+UMask=0077
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

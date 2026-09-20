@@ -1,0 +1,6 @@
+@page "/monitoring"
+@inject Appliance Device
+<PageTitle>Monitoring · Xur</PageTitle>
+<h1>Monitoring</h1>
+@if(Device.Installer) { <p>Monitoring is available after installation.</p> }
+else { <ResourceSummary /><RuntimeDashboard /> }

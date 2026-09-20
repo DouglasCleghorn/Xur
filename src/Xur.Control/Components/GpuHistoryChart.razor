@@ -1,0 +1,5 @@
+<figure class="gpu-history" data-series="@Metric"><figcaption><span>@Title</span><span class="chart-scale"></span></figcaption>
+    <svg viewBox="0 0 400 100" preserveAspectRatio="none" role="img" aria-label="@Title history"><path class="chart-grid" d="M0 25H400 M0 65H400 M0 99H400" /><path class="chart-line" /><circle class="chart-dot" r="3" hidden /></svg>
+    <span class="chart-empty">Waiting for readings</span><div class="chart-axis"><span class="chart-start">15 min ago</span><span>Now</span></div><output class="chart-value" aria-live="off"></output>
+</figure>
+@code { [Parameter] public string Metric {get;set;}="";[Parameter] public string Title {get;set;}=""; }

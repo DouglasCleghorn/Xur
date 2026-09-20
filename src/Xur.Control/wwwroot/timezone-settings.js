@@ -1,0 +1,1 @@
+(()=>{const auto=document.querySelector('#timezone-automatic'),manual=document.querySelector('#timezone');if(!auto||!manual)return;const refresh=document.querySelector('#timezone-refresh'),savedAutomatic=auto.checked;auto.addEventListener('change',()=>{manual.disabled=auto.checked;manual.required=!auto.checked;if(refresh)refresh.disabled=!auto.checked||!savedAutomatic;});})();

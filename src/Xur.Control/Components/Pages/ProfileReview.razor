@@ -1,0 +1,32 @@
+@page "/profiles/review"
+@inject ProfileManager Profiles
+@inject Appliance Device
+<PageTitle>@(plan?.Unload==true?"Unload profile":"Load profile") · Xur</PageTitle>
+<div class="page-heading"><div><a class="back-link" href="/profiles">Profiles</a><h1>@(plan?.Unload==true?"Unload profile":"Load profile")</h1></div></div>
+@if(plan==null) { <p>Choose a profile to review.</p><a class="button secondary" href="/profiles">Back to profiles</a> }
+else
+{
+    <section class="review-summary"><h2>@plan.Target.Name</h2><p>@(plan.Unload?"Running workloads will stop after active requests finish. This profile stays saved.":"Review which workloads will keep running, start, or stop.")</p></section>
+    <section class="transition-list" aria-label="Workload changes">
+        @foreach(var step in plan.Steps)
+        {
+            <article class="transition-row"><span class="state-label @(step.Kind=="Keep"?"running":step.Kind is "Stop" or "Drain"?"pending":"")">@step.Kind</span><div><strong>@WorkloadName(step.WorkloadId)</strong><p>@step.Description</p></div></article>
+        }
+    </section>
+    @foreach(var w in plan.Target.Workloads.Where(w=>w.Recipe.Files!=null || w.Recipe.Hub!=null))
+    {
+        var upstream=w.Recipe.Hub?.Repository ?? w.Recipe.Files![0].Asset.Upstream;
+        var license=w.Recipe.Hub?.License ?? w.Recipe.Files![0].Asset.License;
+        <p>@w.Recipe.Name <a href="@("https://huggingface.co/"+upstream)" target="_blank" rel="noopener">@license</a></p>
+    }
+    @if(plan.Target.Workloads.Any(w=>w.Recipe.Files!=null || w.Recipe.Hub!=null)) { <p>Loading downloads the selected models under their linked licenses.</p> }
+    <form method="post" action="/profiles/apply"><AntiforgeryToken /><input type="hidden" name="id" value="@plan.Id" /><input type="hidden" name="digest" value="@plan.Digest" />
+        <div class="actions action-bar"><button>@(plan.Unload?"Unload profile":"Load profile")</button><a class="button secondary" href="/profiles">Cancel</a></div>
+    </form>
+}
+@code {
+    [SupplyParameterFromQuery]public string? Id {get;set;}
+    ProfilePlan? plan;ProfileState? state;
+    string WorkloadName(string id)=>plan?.Target.Workloads.FirstOrDefault(w=>w.Id==id)?.Recipe.Name ?? state?.Active?.Workloads.FirstOrDefault(w=>w.Id==id)?.Recipe.Name ?? (id.Length==0 ? "Update routes" : "Workload "+id);
+    protected override async Task OnInitializedAsync() {if(!Device.Installer && Id!=null){plan=await Profiles.Plan(Id);state=await Profiles.State();}}
+}

@@ -1,0 +1,16 @@
+[Unit]
+Description=Tailscale node agent
+After=network-pre.target
+Wants=network-pre.target
+
+[Service]
+ExecStart=/usr/sbin/tailscaled --state=/var/lib/tailscale/tailscaled.state --socket=/run/tailscale/tailscaled.sock --port=41641 --no-logs-no-support
+RuntimeDirectory=tailscale
+StateDirectory=tailscale
+StateDirectoryMode=0700
+Restart=on-failure
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target

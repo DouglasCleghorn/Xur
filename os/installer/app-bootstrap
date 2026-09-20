@@ -1,0 +1,52 @@
+#!/usr/bin/python3
+"""Best-effort, signed live-app refresh before any disk operation is accepted."""
+import hashlib,importlib.machinery,importlib.util,json,os,pathlib,shutil,signal,sys,tempfile
+ROOT=pathlib.Path('/run/xur/app')
+BUNDLED=pathlib.Path('/usr/share/xur/app-bundle')
+READY=pathlib.Path('/run/xur/installer-app-ready')
+def select(path):
+    ROOT.mkdir(parents=True,exist_ok=True)
+    link=ROOT/'next';link.unlink(missing_ok=True);link.symlink_to(path);link.replace(ROOT/'current')
+def updater():
+    loader=importlib.machinery.SourceFileLoader('xur_updater',str(BUNDLED/'host/app-update'))
+    spec=importlib.util.spec_from_loader(loader.name,loader);u=importlib.util.module_from_spec(spec);loader.exec_module(u)
+    u.ROOT=ROOT;u.CONFIG=pathlib.Path('/run/xur/application-updates.json');u.KEY=pathlib.Path('/usr/share/xur/application-update-key.pem')
+    return u
+def prepare():
+    select(BUNDLED);READY.unlink(missing_ok=True)
+    if 'xur.app-update=off' in pathlib.Path('/proc/cmdline').read_text().split():return
+    u=updater()
+    u.atomic(ROOT/'highest-sequence.json',u.read(BUNDLED/'bundle.json').get('buildSequence',0))
+    def expired(*args):raise TimeoutError('Installer refresh deadline exceeded')
+    signal.signal(signal.SIGALRM,expired);signal.alarm(120)
+    try:
+        with tempfile.TemporaryDirectory(prefix='download-',dir=ROOT) as directory:
+            stage=pathlib.Path(directory);entry=u.check(stage)
+            if entry['id']==u.read(BUNDLED/'bundle.json')['id']:return
+            # This contract covers the live paths, approval API and installer hooks.
+            # Older signed releases without it must not replace an installer app.
+            archive=stage/'bundle.tar.gz';u.fetch((stage/'source').read_text()+'/'+entry['file'],archive,entry['bytes'])
+            if archive.stat().st_size!=entry['bytes'] or hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()!=entry['sha256']:raise ValueError('Download hash mismatch')
+            u.unpack(archive,stage/'bundle',entry)
+            if 'online-installer-v1' not in u.read(stage/'bundle/host/application-features.json',[]):raise ValueError('Release does not support this installer')
+            releases=ROOT/'releases';releases.mkdir(exist_ok=True);target=releases/entry['id']
+            if target.exists():shutil.rmtree(target)
+            (stage/'bundle').rename(target)
+            u.call(['restorecon','-RF',str(target)],30)
+            u.atomic(ROOT/('release-'+entry['id']+'.json'),entry)
+            select(target)
+            print('Using signed Xur release '+entry['version'],flush=True)
+    except Exception as error:
+        select(BUNDLED);print('Keeping bundled Xur: '+str(error),flush=True)
+    finally:signal.alarm(0)
+def verify():
+    u=updater();identity=u.read(ROOT/'current/bundle.json')['id']
+    if not u.healthy(identity,45):
+        if pathlib.Path('/run/xur/approved.ks').exists():raise RuntimeError('Installation already approved; refusing app replacement')
+        u.call(['systemctl','stop',*u.SERVICES],60);select(BUNDLED)
+        u.call(['systemctl','start','xur-gateway','xur-agent','xur-control'],60)
+        if not u.healthy(u.read(BUNDLED/'bundle.json')['id'],45):raise RuntimeError('Bundled installer app health check failed')
+    READY.touch(mode=0o600)
+if __name__=='__main__':
+    os.umask(0o077)
+    {'prepare':prepare,'verify':verify}[sys.argv[1]]()

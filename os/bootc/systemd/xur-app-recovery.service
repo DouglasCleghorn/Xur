@@ -1,0 +1,12 @@
+[Unit]
+Description=Recover interrupted Xur application update
+After=xur-control.service
+ConditionPathExists=/var/lib/xur/app/maintenance
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /var/lib/xur/updater/app-update recover
+TimeoutStartSec=5min
+
+[Install]
+WantedBy=multi-user.target

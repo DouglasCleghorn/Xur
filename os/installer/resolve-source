@@ -1,0 +1,16 @@
+#!/usr/bin/python3
+"""Pin the upstream channel before Anaconda starts touching the approved disk."""
+import json,pathlib,re,subprocess
+CHANNEL='ghcr.io/ublue-os/bazzite-nvidia-open:stable'
+def resolve(kickstart,run=subprocess.check_output):
+    digest=run(['skopeo','inspect','--override-arch','amd64','--format','{{.Digest}}','docker://'+CHANNEL],text=True,timeout=90).strip()
+    if not re.fullmatch(r'sha256:[a-f0-9]{64}',digest):raise ValueError('Invalid upstream image digest')
+    source='ghcr.io/ublue-os/bazzite-nvidia-open@'+digest
+    old='bootc --source-imgref registry:'+CHANNEL+' --target-imgref '+CHANNEL
+    if kickstart.count(old)!=1:raise ValueError('Unexpected installer image source')
+    return kickstart.replace(old,'bootc --source-imgref registry:'+source+' --target-imgref '+CHANNEL),source
+if __name__=='__main__':
+    root=pathlib.Path('/run/xur');approved=root/'approved.ks'
+    text,source=resolve(approved.read_text())
+    (root/'online.ks').write_text(text)
+    (root/'installed-upstream.json').write_text(json.dumps({'channel':CHANNEL,'image':source}))

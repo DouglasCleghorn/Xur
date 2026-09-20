@@ -1,0 +1,27 @@
+name: Xur installer ISO
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: xur-installer-build
+  cancel-in-progress: false
+jobs:
+  installer:
+    # The Fedora ISO toolchain runs in an isolated builder.
+    # Bazzite is downloaded during installation, not embedded in this ISO.
+    runs-on: [self-hosted, Linux, X64, xur-iso]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Build and exercise the ISO
+        run: |
+          ./eng/build-iso.sh
+          python3 tests/Xur.Media.Tests/check-installer-suite.py dist/xur-installer-x86_64.iso --prefix "ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --profiles
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: xur-installer-x86_64
+          path: |
+            dist/xur-installer-x86_64.iso
+            dist/xur-installer-x86_64.iso.sha256
+            dist/xur-installer-x86_64.embedded.json

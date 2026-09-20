@@ -1,0 +1,8 @@
+#!/usr/bin/bash
+set -eEu
+test -f /run/xur/approved.ks
+test -f /run/xur/install-operation.json
+trap 'touch /run/xur/install-failed' ERR
+/usr/libexec/xur-resolve-install-source
+/usr/bin/anaconda --kickstart=/run/xur/online.ks --cmdline
+touch /run/xur/install-complete

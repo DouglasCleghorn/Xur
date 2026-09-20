@@ -1,0 +1,21 @@
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@inject IHttpContextAccessor ContextAccessor
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base href="/" />
+    @if(ContextAccessor.HttpContext is {} context) { <meta name="xur-csrf" content="@Antiforgery.GetAndStoreTokens(context).RequestToken" /> }
+    <script src="/app-fetch.js"></script>
+    <meta name="theme-color" content="#15191e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Xur" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/xur.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/xur-180.png" />
+    <link rel="stylesheet" href="/setup.css" />
+    <HeadOutlet />
+</head>
+<body><Routes /><script src="/install-app.js" defer></script></body>
+</html>

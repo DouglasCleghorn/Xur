@@ -1,0 +1,7 @@
+label: XUR_SETUP_A
+grub2:
+  timeout: 5
+  entries:
+    - name: "Install Xur"
+      linux: "/images/pxeboot/vmlinuz inst.stage2=hd:LABEL=XUR_SETUP_A inst.text console=tty1 systemd.unit=multi-user.target xur.installer=1 rd.live.ram=0 rd.lvm=0 rd.md=0 rd.luks=0 rd.dm=0"
+      initrd: "/images/pxeboot/initrd.img"
