@@ -5,7 +5,7 @@ for automation; plaintext POST requests are rejected.
 
 The JSON API uses the same reusable six-character setup token as the browser.
 On private test networks, put this token-only answer file at the root of a
-separate configuration disk as `xur.yaml`:
+separate configuration disk as `xur.yaml` or `xur.yml`:
 
 ```yaml
 schemaVersion: 1
@@ -19,9 +19,11 @@ on reboot. Signed API sessions survive installation and reboot until their eight
 to the installed system.
 
 The scanner checks all eligible storage read-only. Multiple answers are
-ambiguous; none is selected. The supported token-only file enables explicit
-browser/API disk review, while its parent disk remains protected. Unknown
-provisioning fields are not treated as installation approval.
+ambiguous; none is selected. The answer enables explicit browser/API disk
+review while its parent disk remains protected. It can also supply
+[static networking](../usage/answer-file.md); the bootstrap token is optional
+when networking is specified. Unknown provisioning fields are rejected, and
+no answer field authorizes disk erasure.
 
 1. `POST /api/bootstrap` with `Content-Type: application/json` and
    `{"token":"A7K2M9"}`. A successful response contains `accessToken`,

@@ -100,7 +100,7 @@ Check(frame.Contains('╭') && frame.Contains('╰'),"Spectre.Console renders th
 Check(frame.Contains("6 Updates") && frame.Contains("7 Power") && !frame.Contains('\n'),"Long output cannot scroll the fixed menu off screen");
 Check(LocalConsole.Frame("Status",longOutput,80,25,1)!=frame,"Console content supports bounded pagination");
 var highlighted=LocalConsole.Frame("Status","Access code: ABC-DEF",80,25,selectedOption:2);
-Check(highlighted.Contains("\x1b[7m") && System.Text.RegularExpressions.Regex.IsMatch(highlighted,@"\x1b\[7m[^\x1b]*> 3 IP addresses[^\x1b]*\x1b\[0m"),"Entire selected row is highlighted");
+Check(highlighted.Contains("\x1b[7m") && System.Text.RegularExpressions.Regex.IsMatch(highlighted,@"\x1b\[7m[^\x1b]*> 3 Network settings[^\x1b]*\x1b\[0m"),"Entire selected row is highlighted");
 var terminalRows=System.Text.RegularExpressions.Regex.Split(highlighted,@"\x1b\[\d+;1H").Skip(1).Select(LocalConsole.Clean).ToArray();
 Check(terminalRows.Length==25 && terminalRows.All(row=>row.Length==80 && row.StartsWith("    ") && row.EndsWith("    ")) && terminalRows.Take(2).Concat(terminalRows.TakeLast(2)).All(row=>string.IsNullOrWhiteSpace(row)),"Console content leaves five-percent margins on all four edges");
 Check(LocalConsole.Clean("safe\x1b[2J\x1b[Htext")=="safetext","Log control sequences cannot erase the console window");
@@ -122,6 +122,8 @@ updateState=updateState with {Pending=null,Previous=null};updateBlocked=false;
 try{await updater.Start("rollback");}catch(InvalidOperationException){updateBlocked=true;}
 Check(updateBlocked,"Rollback requires an observed previous deployment");
 await ConsoleMaintenanceTests.Run(Check);
+await NetworkSettingsTests.Run(Check);
+await NetworkEndpointTests.Run(Check);
 var desktopRecipe=new Recipe("gaming-workstation","Gaming workstation","host:plasma",[],0,"","Display",1,0,"Desktop",Kind:"Workstation",Engine:"Plasma");
 var displayGpu=new GpuDevice("0000:01:00.0","NVIDIA","Display GPU","nvidia","GPU-test",24576,["/dev/dri/renderD128"],["Compute runtime unavailable"],["/dev/dri/card0"],["card0-HDMI-A-1"]);
 var desktopWorkload=new Workload("41","Desktop",desktopRecipe,[displayGpu.Pci],"workload-41");

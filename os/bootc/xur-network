@@ -3,10 +3,32 @@ set -eu
 while IFS=: read -r device kind; do
     test "$kind" = ethernet || continue
     nmcli device set "$device" managed yes
-    connection="xur-dhcp-$device"
-    if ! nmcli connection show "$connection" >/dev/null 2>&1; then
-        nmcli connection add type ethernet ifname "$device" con-name "$connection" \
-          connection.autoconnect yes ipv4.method auto ipv6.method auto
+    active=$(nmcli -g GENERAL.CON-UUID device show "$device")
+    if [[ "$active" =~ ^[a-fA-F0-9-]{36}$ ]]; then continue; fi
+    # Use saved autoconnect profiles only. `device connect` can also choose an
+    # unconfirmed profile with autoconnect=no, which must never win at boot.
+    available=$(nmcli --escape no -g CONNECTIONS.AVAILABLE-CONNECTIONS device show "$device")
+    selected=""; best_priority=-1000; best_time=-1
+    while [[ "$available" =~ ([a-fA-F0-9]{8}-[a-fA-F0-9-]{27}) ]]; do
+        uuid=${BASH_REMATCH[1]}; available=${available#*"$uuid"}
+        enabled=$(nmcli -g connection.autoconnect connection show uuid "$uuid") || continue
+        test "$enabled" = yes || continue
+        priority=$(nmcli -g connection.autoconnect-priority connection show uuid "$uuid")
+        timestamp=$(nmcli -g connection.timestamp connection show uuid "$uuid")
+        [[ "$priority" =~ ^-?[0-9]+$ ]] || continue
+        [[ "$timestamp" =~ ^[0-9]+$ ]] || timestamp=0
+        if test -z "$selected" || (( priority > best_priority || priority == best_priority && timestamp > best_time )); then
+            selected=$uuid; best_priority=$priority; best_time=$timestamp
+        fi
+    done
+    if test -n "$selected"; then
+        nmcli --wait 0 connection up uuid "$selected" ifname "$device" || true
+    else
+        connection="xur-dhcp-$device"
+        if ! nmcli connection show "$connection" >/dev/null 2>&1; then
+            nmcli connection add type ethernet ifname "$device" con-name "$connection" \
+                connection.autoconnect yes connection.autoconnect-priority -999 ipv4.method auto ipv6.method auto
+        fi
+        nmcli --wait 0 connection up "$connection" || true
     fi
-    nmcli --wait 0 connection up "$connection" || true
 done < <(nmcli -t -f DEVICE,TYPE device status)

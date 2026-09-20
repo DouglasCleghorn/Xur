@@ -8,12 +8,13 @@ public record ConsoleOption(char Key,string Label,bool Enabled=true)
 {
     public string Display => Label+(Enabled ? "" : " (unavailable)");
 }
-public record ConsoleScreen(string Id,string Title,string Body,ConsoleOption[] Options);
+public record ConsoleScreen(string Id,string Title,string Body,ConsoleOption[] Options,string? InputValue=null);
 
 // Shared by the physical/serial console and the interactive `xur` command.
 public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bool local=false)
 {
     readonly SemaphoreSlim gate=new(1,1);
+    readonly ConsoleNetwork network=new(client,local);
     string view="updates",notice="",power="",returnView="power";
     ApplicationUpdateStatus? application;
     OsUpdateStatus? os;
@@ -27,6 +28,7 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
     {
         get
         {
+            if(view=="network")return network.Screen;
             var options=new List<ConsoleOption>();string title,body;
             switch(view)
             {
@@ -94,13 +96,15 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
         await gate.WaitAsync();try
         {
             view=target;Closed=false;notice="";
+            if(view=="network"){await network.Open();return;}
             await ReadStatus();
         }finally{gate.Release();}
     }
     public async Task Refresh()
     {
-        await gate.WaitAsync();try{await ReadStatus();}finally{gate.Release();}
+        await gate.WaitAsync();try{if(view=="network")await network.Refresh();else await ReadStatus();}finally{gate.Release();}
     }
+    public async Task Submit(string text){await gate.WaitAsync();try{if(view=="network")network.Submit(text);}finally{gate.Release();}}
     async Task ReadStatus()
     {
         if(installer)return;
@@ -122,6 +126,7 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
         await gate.WaitAsync();try
         {
             if(Closed)return;
+            if(view=="network"){await network.Select(key);Closed=network.Closed;return;}
             var option=Screen.Options.FirstOrDefault(o=>o.Key==key);
             if(option==null)return;
             if(!option.Enabled){notice="Action unavailable. Refresh status or wait for the current update to finish.";return;}

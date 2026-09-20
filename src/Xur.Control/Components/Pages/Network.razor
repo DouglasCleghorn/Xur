@@ -48,6 +48,7 @@
 </section>
 <section class="panel"><h2>Configuration backup</h2><p>Download profiles, workload definitions, device assignments and system preferences. Keep this file private: workload definitions may contain environment secrets. Passwords, API keys, Tailscale identity, model data and user files are excluded.</p><a class="button secondary" href="/settings/backup" download>Download config backup</a><p class="secondary-text">Configuration export for recovery and reference; automatic restore is not available yet.</p></section>
 <section class="panel"><h2>IP addresses</h2>
+<p><a class="button secondary" href="/settings/network">Manage automatic and static IPs</a></p>
 @foreach (var adapter in Device.Network())
 {
     <article class="network-adapter" data-interface="@adapter.Name">

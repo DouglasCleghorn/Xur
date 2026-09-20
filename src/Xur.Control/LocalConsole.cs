@@ -21,15 +21,28 @@ public static class LocalConsole
     static int page;
     static int selection;
     static ConsoleScreen? maintenance;
+    static string textBuffer="";static bool replaceText;
+    public static bool EditingText {get{lock(Sync)return view=="maintenance" && maintenance?.InputValue!=null;}}
+    public static string TextValue {get{lock(Sync)return textBuffer;}}
+    public static void EditText(char character)
+    {
+        lock(Sync)
+        {
+            if(!EditingText)return;
+            if(character is '\b' or '\x7f'){textBuffer=replaceText?"":textBuffer.Length>0?textBuffer[..^1]:"";replaceText=false;}
+            else if(character is >= ' ' and <= '~' && textBuffer.Length<1024){textBuffer=(replaceText?"":textBuffer)+character;replaceText=false;}
+            body=Clean(maintenance!.Body)+"\n> "+textBuffer;Render();
+        }
+    }
     public static string[] RootOptions(bool installer=false) => installer
-        ? ["Status and login", "Tailscale QR", "IP addresses", "Hardware", "Logs", "Power"]
-        : ["Status and login", "Tailscale QR", "IP addresses", "Hardware", "Logs", "Updates", "Power"];
+        ? ["Status and login", "Tailscale QR", "Network settings", "Hardware", "Logs", "Power"]
+        : ["Status and login", "Tailscale QR", "Network settings", "Hardware", "Logs", "Updates", "Power"];
     static string[] Options => RootOptions(appliance?.Installer==true);
     static string[] CurrentOptions => view=="maintenance" ? maintenance!.Options.Select(o=>o.Display).ToArray() : Options;
     public static bool ViewingMaintenance { get {lock(Sync)return view=="maintenance";} }
     static bool Plain => Environment.GetEnvironmentVariable("XUR_CONSOLE") == "stdio";
     public static string Menu(bool installer=false) => "\n"+string.Join('\n',RootOptions(installer).Select((label,i)=>$"{i+1}. {label}"))+"\n0. Exit\nSelection: ";
-    public static char RootKey(int index,bool installer=false) => (installer ? "12345w" : "12345uw")[index];
+    public static char RootKey(int index,bool installer=false) => (installer ? "12j45w" : "12j45uw")[index];
 
     public static async Task Start(Appliance app, Bootstrap auth)
     {
@@ -121,14 +134,14 @@ public static class LocalConsole
         lock(Sync)
         {
             if(refreshOnly && (view!="maintenance" || maintenance?.Id!=screen.Id))return;
-            if(view!="maintenance" || maintenance?.Id!=screen.Id){selection=0;page=0;}
+            if(view!="maintenance" || maintenance?.Id!=screen.Id){selection=0;page=0;textBuffer=screen.InputValue??"";replaceText=true;}
             else if(maintenance!=null)
             {
                 var key=maintenance.Options[Math.Min(selection,maintenance.Options.Length-1)].Key;
                 var index=Array.FindIndex(screen.Options,o=>o.Key==key);
                 selection=index<0?0:index;
             }
-            maintenance=screen;view="maintenance";title=screen.Title;body=screen.Body;serialLogs=false;Render();
+            maintenance=screen;view="maintenance";title=screen.Title;body=Clean(screen.Body)+(screen.InputValue!=null?"\n> "+textBuffer:"");serialLogs=false;Render();
         }
     }
     public static char? SelectLine(string line)
@@ -320,6 +333,7 @@ public sealed class ConsoleKeyReader
 {
     string escape="";
     public bool AwaitingEscape => escape=="\x1b";
+    public bool InEscapeSequence => escape.Length>0;
     public ConsoleKeyAction FlushEscape()
     {
         if(!AwaitingEscape)return ConsoleKeyAction.None;

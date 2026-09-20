@@ -1,5 +1,5 @@
 [Unit]
-Description=Request DHCP on each usable wired adapter
+Description=Activate saved wired network profiles or request DHCP
 After=NetworkManager.service
 Requires=NetworkManager.service
 

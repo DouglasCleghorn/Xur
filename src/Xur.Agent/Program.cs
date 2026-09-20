@@ -39,6 +39,11 @@ app.MapGet("/power/status",async()=>Results.Json(await serverPower.Status()));
 var hfCredentials=new HuggingFaceCredentials(stateDir);
 app.MapGet("/huggingface",()=>new {configured=hfCredentials.Configured});
 app.MapPost("/huggingface",IResult(HuggingFaceTokenRequest request)=>{try{hfCredentials.Save(request.Token);return Results.Ok(new{configured=hfCredentials.Configured});}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});
+var networkSettings=new NetworkSettings(run);
+app.MapGet("/network/settings",async Task<IResult>()=>{try{return Results.Json(await networkSettings.Read());}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}});
+app.MapPost("/network/settings",async Task<IResult>(NetworkConfiguration request)=>{if(installer && (storage.Scan.State=="Starting" || storage.Scan.State=="AnswerFound" && !storage.NetworkReady))return Results.Conflict(new{error="Wait for answer-file discovery and networking to finish."});try{return Results.Accepted(value:await networkSettings.Apply(request));}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});
+foreach(var action in new[]{"keep","revert"})
+    app.MapPost("/network/"+action,async Task<IResult>(NetworkChangeRequest request)=>{try{return Results.Json(await networkSettings.Finish(request.Id,action=="keep"));}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}});
 var ntpSettings=new NtpSettings();
 app.MapGet("/ntp",async Task<IResult>()=> {try{return Results.Json(await ntpSettings.Read());}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}});
 app.MapPost("/ntp",async Task<IResult>(NtpRequest request)=> {try{return Results.Json(await ntpSettings.Set(request));}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});
@@ -103,6 +108,7 @@ app.MapPost("/approve", async (Approval approval) => {
             return Results.Conflict(new { error = "Plan is absent, changed or expired; review again" });
         if(Directory.Exists("/run/xur/app") && !File.Exists("/run/xur/installer-app-ready"))
             return Results.Conflict(new {error="Installer app health check is still running. Retry shortly."});
+        if((await networkSettings.Read()).Pending?.Stage is "Applying" or "Confirm")return Results.Conflict(new{error="Keep or revert the network change before approving installation."});
         var template = File.ReadAllText("/usr/share/xur/install-template.ks");
         if (template.Contains("clearpart") || template.Contains("ignoredisk") || template.Contains("part /"))
             return Results.Conflict(new { error = "Unsafe installer template" });
@@ -252,7 +258,22 @@ app.MapPost("/power/{action}", async (string action) => {
 await app.StartAsync();
 _=Task.Run(()=>displayConsoles.Run(app.Lifetime.ApplicationStopping));
 File.SetUnixFileMode(socket, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-if (installer) await storage.DiscoverAnswers();
+if (installer)
+{
+    await storage.DiscoverAnswers();
+    if(storage.Answer is {Network.Length:>0} answer)
+    {
+        try
+        {
+            var devices=await networkSettings.Devices();
+            var targets=answer.Network.Select(n=>NetworkSettings.Resolve(n,devices).Interface).ToArray();
+            if(targets.Distinct().Count()!=targets.Length)throw new InvalidOperationException("The answer selects one network adapter more than once.");
+            foreach(var configuration in answer.Network)await networkSettings.Apply(configuration,answer:true);
+            storage.NetworkConfigured();
+        }
+        catch(Exception e){storage.AnswerFailed("Answer networking failed: "+Redaction.Logs(e.Message));}
+    }
+}
 _ = Task.Run(async () => {
     while (!app.Lifetime.ApplicationStopping.IsCancellationRequested)
     {

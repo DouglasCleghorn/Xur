@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Xur.Domain;
-using YamlDotNet.RepresentationModel;
 
 namespace Xur.Agent;
 
@@ -10,19 +9,15 @@ public sealed class Storage
     volatile ScanResult scan = new("Starting", [], [], [], []);
     public ScanResult Scan => scan;
     public string? BootstrapToken { get; private set; }
-    public bool CanPlan => Scan.State == "NoAnswer" || Scan.State == "AnswerFound" && BootstrapToken != null;
-    public static string? ReadBootstrapToken(string yaml)
+    public AnswerConfiguration? Answer { get; private set; }
+    public bool NetworkReady {get;private set;}=true;
+    public void NetworkConfigured()=>NetworkReady=true;
+    public bool CanPlan => NetworkReady && ( Scan.State == "NoAnswer" || Scan.State == "AnswerFound" && (BootstrapToken != null || Answer?.Network.Length>0));
+    public static FileInfo[] AnswerFiles(string directory)=>new[]{"xur.yaml","xur.yml"}.Select(name=>new FileInfo(Path.Combine(directory,name))).Where(f=>f.Exists || f.LinkTarget!=null).ToArray();
+    public static string? ReadBootstrapToken(string yaml)=>AnswerConfiguration.Parse(yaml).BootstrapToken;
+    public void AnswerFailed(string message)
     {
-        var stream = new YamlStream(); stream.Load(new StringReader(yaml));
-        if(stream.Documents.Count != 1 || stream.Documents[0].RootNode is not YamlMappingNode root)
-            throw new FormatException();
-        if(!root.Children.TryGetValue(new YamlScalarNode("bootstrapToken"),out var value)) return null;
-        if(root.Children.Keys.Any(k => k is not YamlScalarNode s || s.Value is not ("bootstrapToken" or "schemaVersion")))
-            throw new FormatException();
-        if(root.Children.TryGetValue(new YamlScalarNode("schemaVersion"),out var version) && version.ToString() != "1")
-            throw new FormatException();
-        if(value is not YamlScalarNode token || token.Value is not { } text)throw new FormatException();
-        return BootstrapCode.Parse(text);
+        scan=scan with {State="Incomplete",Errors=[..scan.Errors,message]};
     }
     static string S(JsonElement x, string key) => x.TryGetProperty(key, out var v) && v.ValueKind != JsonValueKind.Null ? v.ToString().Trim() : "";
     static bool Volatile(JsonElement x) => System.Text.RegularExpressions.Regex.IsMatch(S(x,"path"),@"^/dev/(zram|ram)\d+$");
@@ -104,7 +99,7 @@ public sealed class Storage
     public async Task DiscoverAnswers()
     {
         var answers = new List<string>(); var errors = new List<string>();
-        var tokens = new List<string>();
+        var configurations = new List<AnswerConfiguration>();
         var readOnlyDevices = new List<string>(); var mounts = new List<ScanMount>();
         try
         {
@@ -158,25 +153,19 @@ public sealed class Storage
                     var result = await Processes.Run("mount", ["-t", fs == "ntfs" ? "ntfs3" : fs, "-o", options, loop, mount]);
                     if (result.ExitCode != 0) { var reason=Redaction.Logs(result.Output); errors.Add($"{path}: read-only mount failed: {reason[..Math.Min(reason.Length,512)]}"); continue; }
                     mounted=true;
-                    var file = new FileInfo(Path.Combine(mount, "xur.yaml"));
-                    if (file.Exists)
+                    var answerFiles=AnswerFiles(mount);
+                    foreach(var file in answerFiles)
                     {
-                        if (file.LinkTarget != null) errors.Add($"{path}: xur.yaml must not be a symlink");
-                        else
-                        {
-                            answers.Add(path);
-                            var kind=await Processes.Run("stat",["-c","%F","--",file.FullName]);
-                            if(kind.ExitCode!=0 || kind.Output.Trim()!="regular file" || file.Length>32768)
-                                errors.Add($"{path}: answer must be a regular file of at most 32 KiB");
-                            else try
-                            {
-                                var token=ReadBootstrapToken(await File.ReadAllTextAsync(file.FullName));
-                                if(token!=null)tokens.Add(token);
-                            }
-                            catch { errors.Add($"{path}: unsupported or invalid bootstrap answer; installation locked"); }
-                        }
+                        answers.Add(path);
+                        if(file.LinkTarget!=null){errors.Add($"{path}: answer file must not be a symlink");continue;}
+                        var kind=await Processes.Run("stat",["-c","%F","--",file.FullName]);
+                        if(kind.ExitCode!=0 || kind.Output.Trim()!="regular file" || file.Length>32768)
+                            errors.Add($"{path}: answer must be a regular file of at most 32 KiB");
+                        else try{configurations.Add(AnswerConfiguration.Parse(await File.ReadAllTextAsync(file.FullName)));}
+                        catch{errors.Add($"{path}: unsupported or invalid answer; installation locked");}
                     }
-                    mounts.Add(new(path,fs,options,true,file.Exists && file.LinkTarget == null));
+                    mounts.Add(new(path,fs,options,true,answerFiles.Any(f=>f.Exists && f.LinkTarget==null)));
+
                 }
                 finally
                 {
@@ -188,7 +177,9 @@ public sealed class Storage
         catch { errors.Add("Storage discovery failed; installer remains locked"); }
         var completedScan = new ScanResult(answers.Count > 1 ? "Ambiguous" : errors.Count > 0 ? "Incomplete" : answers.Count == 1 ? "AnswerFound" : "NoAnswer",
             answers.ToArray(), errors.ToArray(), readOnlyDevices.Order().ToArray(), mounts.ToArray());
-        BootstrapToken=completedScan.State=="AnswerFound" && tokens.Count==1 ? tokens[0] : null;
+        Answer=completedScan.State=="AnswerFound" && configurations.Count==1 ? configurations[0] : null;
+        BootstrapToken=Answer?.BootstrapToken;
+        NetworkReady=Answer?.Network.Length is null or 0;
         scan=completedScan;
     }
     public async Task RestoreReadOnlyStates()

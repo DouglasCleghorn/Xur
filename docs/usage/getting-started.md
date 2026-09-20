@@ -94,3 +94,6 @@ changes; it is not a backup of models, games or home directories.
 For custom builds, enable **Settings → Local build testing** and configure the
 local repository. Signed GitHub releases remain the normal distribution path.
 See [application updates](application-updates.md) and [OS updates](updates.md).
+
+For static addresses or a bootstrap code supplied on USB, see
+[answer YAML and network settings](answer-file.md). Disk approval remains required.

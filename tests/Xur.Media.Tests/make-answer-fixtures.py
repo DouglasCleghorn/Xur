@@ -5,7 +5,7 @@ receipts=[]
 for name in ('answer-one','answer-two'):
     disk=root/(name+'.raw');fs=root/(name+'.ext4');files=root/(name+'-files');files.mkdir(exist_ok=True)
     if disk.exists():raise SystemExit('Fixture exists; refusing to overwrite')
-    (files/'xur.yaml').write_text('version: 1\n# Discovery fixture; never authorizes installation.\n')
+    (files/'xur.yaml').write_text('schemaVersion: 1\n# Discovery fixture; never authorizes installation.\n')
     with fs.open('wb') as f:f.truncate(64*1024**2)
     subprocess.run(['mkfs.ext4','-q','-F','-d',str(files),str(fs)],check=True)
     with disk.open('wb') as f:f.truncate(128*1024**2)

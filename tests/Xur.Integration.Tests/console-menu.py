@@ -12,6 +12,8 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
     os_status={'current':deployment,'available':deployment|{'version':'2','digest':'new'},'previous':None,'pending':None,'rollbackQueued':False,'automatic':True,'busy':False,'operation':None,'logs':''}
     app_status={'server':'https://updates.invalid','current':{'id':'old','version':'1'},'available':{'id':'new','version':'2'},'previous':None,'busy':False,'channel':'nightly'}
     all_status={'busy':False,'operation':None}
+    network_status={'devices':[{'interface':'eno1','macAddress':'02:00:00:00:00:10','state':'connected','addresses':['192.0.2.1/24'],'connection':'fixture','ipv4':{'method':'auto'},'ipv6':{'method':'auto'},'editable':True}],'pending':None}
+    network_payload=None
     installer=False
     polling=False;poll_reads=0;refreshed=threading.Event()
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -23,11 +25,20 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
                 if poll_reads>=2:
                     all_status['operation']={'id':'poll','stage':'Complete','message':'Background refresh observed','updated':0,'results':[]}
                     refreshed.set()
-            body={'/local/status':{'installer':installer},'/local/updates':os_status,'/local/application-updates':app_status,'/local/update-all':all_status}.get(self.path)
+            body={'/local/network/settings':network_status,'/local/status':{'installer':installer},'/local/updates':os_status,'/local/application-updates':app_status,'/local/update-all':all_status}.get(self.path)
             self.reply(200 if body is not None else 404,body or {})
         def do_POST(self):
-            self.rfile.read(int(self.headers.get('Content-Length',0)))
+            global network_payload
+            data=self.rfile.read(int(self.headers.get('Content-Length',0)))
+            if self.headers.get('Transfer-Encoding')=='chunked':
+                while size:=int(self.rfile.readline().split(b';')[0],16):
+                    data+=self.rfile.read(size);self.rfile.read(2)
+                self.rfile.readline()
             posts.append(self.path)
+            if self.path=='/local/network/settings':
+                network_payload=json.loads(data)
+                network_status['pending']={'id':'network-fixture','interface':'eno1','candidate':'candidate','previous':'previous','checkpoint':'checkpoint','expires':'2099-01-01T00:00:00Z','stage':'Confirm','message':'Keep settings','addresses':['192.0.2.20/24']}
+            if self.path=='/local/network/keep':network_status['pending']['stage']='Kept'
             if self.path=='/local/application-updates/update':
                 self.reply(409,{'error':'Signature verification failed.'});return
             if self.path=='/local/updates/disable':os_status['automatic']=False
@@ -66,8 +77,14 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
         finally:
             if process.poll() is None:process.kill();process.communicate()
         polling=False
+        posts.clear()
+        output=run('3\n1\n1\n2\n192.0.2.20/24\n0\n3\n1\n0\n0\n')
+        assert posts==['/local/network/settings','/local/network/keep'],posts
+        assert network_payload['interface']=='eno1' and network_payload['macAddress']=='02:00:00:00:00:10'
+        assert network_payload['ipv4']['addresses']==['192.0.2.20/24'] and network_payload['ipv6']['method']=='auto'
+        assert 'Keep settings' in output
         installer=True;posts.clear()
         output=run('6\n1\n0\n0\n0\n')
         assert '6. Power' in output and 'Updates' not in output and 'Confirm reboot' in output and not posts
     finally:server.shutdown();server.server_close()
-print(json.dumps({'suite':'ConsoleMenu','realCli':True,'updateAll':True,'powerConfirmationAndCancellation':True,'failureFeedback':True,'backgroundRefreshWhileReadingInput':True,'installerMode':True}))
+print(json.dumps({'suite':'ConsoleMenu','realCli':True,'updateAll':True,'powerConfirmationAndCancellation':True,'failureFeedback':True,'backgroundRefreshWhileReadingInput':True,'installerMode':True,'staticNetworkTextEntryAndKeep':True}))

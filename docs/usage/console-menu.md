@@ -1,6 +1,6 @@
 # Console menu
 
-The installed console offers **Status and login**, **Tailscale QR**, **IP addresses**,
+The installed console offers **Status and login**, **Tailscale QR**, **Network settings**,
 **Hardware**, **Logs**, **Updates**, and **Power**. The installer omits Updates.
 The physical/serial console and the interactive `xur` command share the update
 and power screens.
@@ -48,3 +48,6 @@ The power commands above execute directly; confirmation belongs to the
 interactive menus. Update All's local HTTP routes are `GET /local/update-all`
 and `POST /local/update-all/start`, available only through the root-private
 control socket. Update routes reject installer mode.
+
+**Network settings** edits wired IPv4/IPv6 addresses, gateway and DNS, with a
+two-minute keep/revert window. See [networking and answer YAML](answer-file.md).

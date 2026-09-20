@@ -1,0 +1,65 @@
+@page "/settings/network"
+@inject Appliance Device
+<PageTitle>Network settings · Xur</PageTitle>
+<h1>Network settings</h1>
+<p><a href="/settings">Back to Settings</a></p>
+<p>Configure wired adapters with automatic or static IPv4 and IPv6 addresses. Saved settings survive reboot and installation.</p>
+@if(Error!=null) { <p role="alert">@Error</p> }
+@if(state==null) { <p role="alert">Could not read network settings. <a href="/settings/network">Refresh</a></p> }
+else
+{
+    @if(state.Pending is {} pending)
+    {
+        <section class="panel" id="network-change" data-id="@pending.Id" data-stage="@pending.Stage">
+            <h2>@pending.Interface · @pending.Stage</h2><p role="status">@pending.Message</p>
+            @if(pending.Stage is "Applying" or "Confirm")
+            {
+                <p>Keep the change by <time datetime="@pending.Expires.ToString("O")">@pending.Expires.ToString("HH:mm:ss 'UTC'")</time>. Otherwise the previous connection returns automatically.</p>
+                <p>The browser may disconnect. Open the new address, sign in if needed, and choose Keep settings. The local console can also keep or revert the change.</p>
+                @foreach(var address in pending.Addresses)
+                {
+                    var ip=address.Split('/')[0];var host=ip.Contains(':')?"["+ip+"]":ip;var url=$"https://{host}:{Device.Port+363}/settings/network";
+                    <p><a href="@url">@url</a></p>
+                }
+                <div class="actions">
+                    <form method="post" action="/settings/network/keep"><AntiforgeryToken /><input type="hidden" name="id" value="@pending.Id" /><button disabled="@(pending.Stage!="Confirm")">Keep settings</button></form>
+                    <form method="post" action="/settings/network/revert"><AntiforgeryToken /><input type="hidden" name="id" value="@pending.Id" /><button class="secondary" disabled="@(pending.Stage!="Confirm")">Revert</button></form>
+                </div>
+            }
+        </section>
+    }
+    @if(state.Devices.Length==0) { <p>No wired adapters are available.</p> }
+    @foreach(var adapter in state.Devices)
+    {
+        <section class="panel">
+            <h2>@adapter.Interface</h2><p><code>@adapter.MacAddress</code> · @adapter.State</p>
+            <p>@string.Join(", ",adapter.Addresses)</p>
+            @if(!adapter.Editable) { <p>This adapter belongs to a bridge or bond, or has a duplicate MAC address. Configure that network through its existing management tools.</p> }
+            else
+            {
+                <form method="post" action="/settings/network/apply" class="network-settings-form">
+                    <AntiforgeryToken /><input type="hidden" name="interface" value="@adapter.Interface" /><input type="hidden" name="macAddress" value="@adapter.MacAddress" />
+                    @foreach(var (prefix,ip) in new[]{("ipv4",adapter.Ipv4),("ipv6",adapter.Ipv6)})
+                    {
+                        var id=adapter.Interface+"-"+prefix;
+                        <fieldset class="network-family"><legend>@prefix.ToUpperInvariant()</legend>
+                            <label for="@(id+"-method")">Address assignment</label>
+                            <select id="@(id+"-method")" name="@(prefix+".method")"><option value="auto" selected="@(ip.Method=="auto")">Automatic</option><option value="manual" selected="@(ip.Method=="manual")">Static</option><option value="disabled" selected="@(ip.Method=="disabled")">Disabled</option></select>
+                            <label for="@(id+"-addresses")">Addresses with prefix length</label><textarea id="@(id+"-addresses")" name="@(prefix+".addresses")" rows="2" data-static placeholder="@(prefix=="ipv4"?"192.0.2.10/24":"2001:db8:1::10/64")">@string.Join("\n",ip.Addresses??[])</textarea>
+                            <label for="@(id+"-gateway")">Gateway (optional)</label><input id="@(id+"-gateway")" name="@(prefix+".gateway")" value="@ip.Gateway" data-static />
+                            <label for="@(id+"-dns")">DNS servers (optional, one per line)</label><textarea id="@(id+"-dns")" name="@(prefix+".dns")" rows="2" data-dns>@string.Join("\n",ip.Dns??[])</textarea>
+                        </fieldset>
+                    }
+                    <p>Changing the connected adapter can interrupt access. You have two minutes to keep the new settings.</p>
+                    <button disabled="@(state.Pending?.Stage is "Applying" or "Confirm")">Apply network settings</button>
+                </form>
+            }
+        </section>
+    }
+}
+<script src="/network-settings.js" defer></script>
+@code {
+    NetworkSettingsStatus? state;
+    [SupplyParameterFromQuery]public string? Error {get;set;}
+    protected override async Task OnInitializedAsync(){try{state=await Device.Agent.GetFromJsonAsync<NetworkSettingsStatus>("/network/settings");}catch{}}
+}

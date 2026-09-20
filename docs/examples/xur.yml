@@ -1,0 +1,17 @@
+# Example only: replace the MAC, addresses, gateway, DNS and bootstrap code.
+# The 192.0.2.0/24 network is reserved for documentation.
+# This file never approves erasing or installing a disk.
+schemaVersion: 1
+bootstrapToken: A7K-2M9
+network:
+  interfaces:
+    - macAddress: "02:00:00:00:00:10"
+      ipv4:
+        method: manual
+        addresses:
+          - 192.0.2.10/24
+        gateway: 192.0.2.1
+        dns:
+          - 192.0.2.53
+      ipv6:
+        method: auto

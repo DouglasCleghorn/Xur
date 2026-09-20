@@ -8,7 +8,9 @@ Choose a whole disk of at least 64 GiB for the Bazzite host and OS deployments.
 
 1. Boot the ISO using UEFI. For Rufus, choose **GPT**, **UEFI (non CSM)**,
    **FAT32**, and **ISO Image mode (file copy)**. Raw/DD hybrid writing also works.
-   Ethernet adapters request DHCP automatically. See [USB media details](rufus.md).
+   Ethernet adapters use saved profiles or request DHCP automatically. To supply
+   static networking before setup, use an [answer YAML file](answer-file.md).
+   See [USB media details](rufus.md).
 2. Open the HTTPS console URL on port **8443** (accept the machine’s self-signed certificate) and enter the access code shown as `ABC-DEF`. The form adds the hyphen as you type.
 3. Create your manager username and password. The console token is then disabled
    and hidden; use the password for future logins.

@@ -28,7 +28,7 @@ async Task Root()
         var choice=Console.ReadLine()?.Trim();if(choice is null or "0")return;
         if(!int.TryParse(choice,out var selected) || selected<1 || selected>LocalConsole.RootOptions(installer).Length)continue;
         var key=LocalConsole.RootKey(selected-1,installer);
-        if(key is 'u' or 'w'){await InteractiveMaintenance(menu,key=='u'?"updates":"power");continue;}
+        if(key is 'u' or 'w' or 'j'){await InteractiveMaintenance(menu,key=='u'?"updates":key=='j'?"network":"power");continue;}
         var action=key switch { '1'=>"status", '2'=>"qr", '3'=>"network", '4'=>"hardware", '5'=>"logs", _=>"" };
         if(action.Length>0)await RunCommand(action,false);
         if(key=='1')await RunCommand("login",false);
@@ -44,10 +44,11 @@ async Task InteractiveMaintenance(ConsoleMaintenance menu,string view)
     {
         var screen=menu.Screen;
         var frame="\n"+screen.Title+"\n"+screen.Body+"\n"+string.Join('\n',screen.Options.Select((o,i)=>$"{i+1}. {o.Display}"))+"\n0. Back\nSelection: ";
-        if(frame!=lastFrame){Console.Write(frame);lastFrame=frame;}
+        if(frame!=lastFrame){Console.Write(frame);if(screen.InputValue!=null)Console.Write("Current: "+screen.InputValue+"\nNew value (blank clears; /cancel goes back): ");lastFrame=frame;}
         read??=Task.Run(Console.ReadLine);
-        if(await Task.WhenAny(read,Task.Delay(5000))!=read){await menu.Refresh();continue;}
+        if(await Task.WhenAny(read,Task.Delay(5000))!=read){if(screen.InputValue==null)await menu.Refresh();continue;}
         var choice=(await read)?.Trim();read=null;lastFrame="";if(choice==null)return;
+        if(screen.InputValue!=null){if(choice=="/cancel")await menu.Select('0');else await menu.Submit(choice);continue;}
         if(choice=="0"){await menu.Select('0');continue;}
         if(int.TryParse(choice,out var selected) && selected>=1 && selected<=screen.Options.Length)
             await menu.Select(screen.Options[selected-1].Key);
@@ -372,6 +373,7 @@ async Task StartHost()
     app.MapPost("/local/{action}",async(string action)=>{ if(action is not ("reboot" or "poweroff")) return Results.BadRequest(); return Results.StatusCode((int)(await appliance.Agent.PostAsync("/power/"+action,null)).StatusCode); });
     app.MapProfiles(appliance,profileManager,catalog);
     app.MapUpdates(appliance);
+    app.MapNetworkSettings(appliance);
     var gatewayData=LocalClient.Create(Path.Combine(appliance.RunDirectory,"gateway.sock"));gatewayData.Timeout=Timeout.InfiniteTimeSpan;
     app.MapModelLab(appliance,profileManager,gatewayData,gatewayClient,maintenance);
     app.Map("/inference/{**path}",async(HttpContext c,string? path)=> {
@@ -403,17 +405,24 @@ async Task StartHost()
         {
             char? key;
             if(Environment.GetEnvironmentVariable("XUR_CONSOLE")=="stdio")
-            { var line=await input.ReadLineAsync(); if(line==null)break;key=LocalConsole.SelectLine(line); }
+            { var line=await input.ReadLineAsync(); if(line==null)break;if(LocalConsole.EditingText){if(line=="/cancel")await consoleMenu.Select('0');else await consoleMenu.Submit(line);LocalConsole.OpenMaintenance(consoleMenu.Screen);continue;}key=LocalConsole.SelectLine(line); }
             else
             {
                 read??=input.ReadAsync(buffer,0,1);
-                ConsoleKeyAction action;
+                ConsoleKeyAction action;char? typed=null;
                 // Keep the pending read alive while distinguishing Esc from arrow-key sequences.
                 if(keys.AwaitingEscape && await Task.WhenAny(read,Task.Delay(100))!=read)
                     action=keys.FlushEscape();
                 else {
                     if(await read==0)break;
-                    read=null;action=keys.Read(buffer[0]);
+                    read=null;var escaped=keys.InEscapeSequence || buffer[0]=='\x1b';action=keys.Read(buffer[0]);if(!escaped)typed=buffer[0];
+                }
+                if(LocalConsole.EditingText)
+                {
+                    if(action==ConsoleKeyAction.Enter){await consoleMenu.Submit(LocalConsole.TextValue);LocalConsole.OpenMaintenance(consoleMenu.Screen);}
+                    else if(action==ConsoleKeyAction.Back && typed==null){await consoleMenu.Select('0');LocalConsole.OpenMaintenance(consoleMenu.Screen);}
+                    else if(typed.HasValue)LocalConsole.EditText(typed.Value);
+                    continue;
                 }
                 if(action==ConsoleKeyAction.None)continue;
                 key=LocalConsole.Navigate(action);
@@ -431,11 +440,10 @@ async Task StartHost()
                 switch(key.Value)
                 {
                     case '0': case '1': LocalConsole.Status(appliance,auth);break;
-                    case '3': LocalConsole.OpenNetwork();break;
                     case '2': appliance.StartQr();break;
                     case '4': LocalConsole.Show("Hardware",await appliance.Agent.GetStringAsync("/hardware"));break;
-                    case 'u': case 'w':
-                        await consoleMenu.Open(key=='u'?"updates":"power");LocalConsole.OpenMaintenance(consoleMenu.Screen);break;
+                    case 'u': case 'w': case 'j':
+                        await consoleMenu.Open(key=='u'?"updates":key=='j'?"network":"power");LocalConsole.OpenMaintenance(consoleMenu.Screen);break;
                     case '5':
                         LocalConsole.UpdateLogs(await appliance.Agent.GetStringAsync("/console-logs")); LocalConsole.OpenLogs();
                         if(physical)await Processes.Run("chvt",["2"]);

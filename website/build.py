@@ -9,6 +9,7 @@ PAGES={
  'guides/getting-started':('Get started','Install Xur and create your first GPU workload profile.','getting-started.html'),
  'guides/workstations':('Workstations and Moonlight','Keep a desktop identity across profiles and stream it with Moonlight.','workstations.html'),
  'guides/models':('Local models and endpoints','Choose model workloads, connect clients and keep benchmark results.','models.html'),
+ 'guides/network-and-answers':('Network settings and answer YAML','Configure static IP addresses and provide a bootstrap answer file while retaining explicit disk approval.','network-and-answers.html'),
  'guides/updates':('Updates and recovery','Choose a release channel and understand application updates, OS staging and rollback.','updates.html'),
  '404':('Page not found','Find a Xur guide or return to the project home page.','404.html')}
 def build():
@@ -19,6 +20,8 @@ def build():
   shutil.copy2(app/'icons'/name,OUT/'assets'/name)
  for name in ['IBMPlexSans.ttf','OFL.txt']:shutil.copy2(app/'fonts'/name,OUT/'assets'/name)
  for name in ['xur-header.png','workstations-and-llm.png','speech-and-llm.png']:shutil.copy2(ROOT/'docs/assets'/name,OUT/'assets'/name)
+ (OUT/'examples').mkdir()
+ shutil.copy2(ROOT/'docs/examples/xur.yml',OUT/'examples/xur.yml')
  template=(SITE/'template.html').read_text()
  for path,(title,description,file) in PAGES.items():
   page=template.replace('{{title}}',html.escape(title)).replace('{{description}}',html.escape(description)).replace('{{url}}','https://xur.app/'+(path+'/' if path and path!='404' else '')).replace('{{content}}',(SITE/'pages'/file).read_text())

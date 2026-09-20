@@ -36,6 +36,14 @@ fi
 install -m 644 /usr/share/xur/xur-os-update.service /usr/share/xur/xur-os-update.timer "$target/etc/systemd/system/"
 install -m 644 /usr/lib/systemd/system/xur-network.service "$target/etc/systemd/system/"
 sed -i 's|/usr/libexec/xur-network|/var/lib/xur/app/current/host/xur-network|' "$target/etc/systemd/system/xur-network.service"
+# Copy saved NetworkManager profiles, including MAC-bound static connections.
+# Unconfirmed candidates have autoconnect=no and cannot replace a saved profile at boot.
+mkdir -p "$target/etc/NetworkManager/system-connections"
+if test -d /etc/NetworkManager/system-connections; then
+  cp -a /etc/NetworkManager/system-connections/. "$target/etc/NetworkManager/system-connections/"
+  find "$target/etc/NetworkManager/system-connections" -type f -exec chmod 600 {} +
+fi
+chroot "$target" restorecon -RF /etc/NetworkManager
 mkdir -p "$target/etc/systemd/system.conf.d" "$target/etc/systemd/journald.conf.d"
 cp /usr/lib/systemd/system.conf.d/50-xur-console.conf "$target/etc/systemd/system.conf.d/"
 cp /usr/lib/systemd/journald.conf.d/50-xur-console.conf "$target/etc/systemd/journald.conf.d/"
