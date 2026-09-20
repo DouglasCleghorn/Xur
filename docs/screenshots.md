@@ -28,6 +28,15 @@ artwork, not UI screenshots.
 
 ## Change log
 
+- 2026-09-20: Reviewed the user-supplied Workstations screenshot in T3 attachment
+  `9fbd0a96-cc1e-4308-9589-a0c4bd9ec049-f266a2e9-91c6-4c56-a84e-7c34f7aa033b.png`
+  as the redesign baseline; contains account names and device details, kept private.
+  Captured the working-tree redesign at 1440, 390 and 320 px in
+  `.build/evidence/workstation-design/` (overview, expanded settings/pairing and
+  interim previews). Synthetic fixture data and documentation-only network
+  addresses; development evidence only, not published. Recheck on changes to
+  workstation layout, creation, pairing or profile actions.
+
 - 2026-09-20: Registered the three README artworks and existing private test
   capture families. Reviewed the supplied README images for private information.
   No live UI screenshots were added to the repository.

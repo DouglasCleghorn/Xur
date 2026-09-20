@@ -26,13 +26,14 @@ static class ControlPanelRender
         agent.MapGet("/updates",()=>new OsUpdateStatus(null,new("new","digest","image",false),null,null,false,true,false,null,""));
         agent.MapGet("/application-updates",()=>new ApplicationUpdateStatus("http://192.0.2.10:8088",new("current","1"),null,null,null,false,true));
         agent.MapGet("/station-devices",()=>new StationDeviceInventory([new("usb:"+new string('a',64),"Desk hub","Serial","/usb/hub",true,false,[],[],Serial:"hub-serial"),new("usb:"+new string('b',64),"Keyboard","Port","/usb/keyboard",false,false,[],[]),new("usb:"+new string('c',64),"Second hub","Serial","/usb/hub2",true,false,[],[],Serial:"hub-serial")],[],[]));
-        agent.MapGet("/workstations",()=>Array.Empty<StationStreamStatus>());
+        StationStreamStatus[] streams=[];
+        agent.MapGet("/workstations",()=>streams);
         agent.MapGet("/station-allocations",()=>Array.Empty<StationDeviceAllocation>());
         agent.MapGet("/station-users",()=>new[]{new StationAccount("doug",1000,"Doug","/var/home/doug")});
         agent.MapGet("/update-all",()=>new UpdateAllStatus(false,null));
         var stationRecipe=new Recipe("gaming-workstation","Desktop","host:plasma",[],0,"","Display",1,0,"",Kind:"Workstation",Engine:"Plasma");
         Directory.CreateDirectory(root+"/catalog");File.WriteAllText(root+"/catalog/desktop.json",System.Text.Json.JsonSerializer.Serialize(stationRecipe));
-        using var store=new ProfileStore(root+"/state");var manager=new ProfileManager(store,new Observer(),new Gateway());
+        using var store=new ProfileStore(root+"/state");var observer=new Observer();var manager=new ProfileManager(store,observer,new Gateway());
         store.Save(new Profile("1","AI and gaming",1,[new("w1","Gaming",stationRecipe,[gpu.Pci],"desktop")]));store.Save(new Profile("2","Speech services",1,[]));
         try
         {
@@ -45,8 +46,23 @@ static class ControlPanelRender
                 // Static rendering has no HTTP request from which to generate antiforgery tokens.
                 // Supply a fixture token for browser tests; production renders AntiforgeryToken normally.
                 if(page=="profile-edit") html=html.Replace("<div id=\"workload-rows\"", "<input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"fixture-only\"><div id=\"workload-rows\"");
-                await File.WriteAllTextAsync(Path.Combine(output,page+".html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><link rel=stylesheet href='/setup.css'></head><body>"+html+"</body></html>");
+                await File.WriteAllTextAsync(Path.Combine(output,page+".html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/workstations.css'></head><body>"+html+"</body></html>");
             }
+            // Exercise the actual workstation renderer with running, shared, stopped and unassigned desktops.
+            var gaming=new Workload("w1","Gaming workstation",stationRecipe,[gpu.Pci],"desktop",new("doug",1000,false));
+            var studio=new Workload("w2","Studio desktop",stationRecipe,[gpu.Pci],"desktop",new("doug",1000,false));
+            var guest=new Workload("w3","Guest desktop",stationRecipe,[gpu.Pci],"desktop",new("",0,true));
+            store.Put("station","w1",new StationDefinition(gaming.Id,gaming.Name,gaming.User));
+            store.Save(new Profile("1","AI and gaming",2,[gaming]));
+            store.Save(new Profile("3","Gaming only",1,[gaming]));
+            store.Save(new Profile("4","Studio",1,[studio]));
+            store.Save(new Profile("5","Guest",1,[guest]));
+            store.Save(new Profile("6","Studio and models",1,[studio]));
+            store.Put("station","w4",new StationDefinition("w4","Spare desktop",new("",0,true)));
+            observer.Snapshot=new RuntimeObservation("generation",[gpu with {ShortId="GPU 3"}],[new RuntimeInstance(gaming.Id,gaming.Fingerprint,"instance",1,"boot","", "running",gaming.Gpus)]);
+            streams=[new("w1","Ready",true)];
+            var workstations=await renderer.Dispatcher.InvokeAsync(async()=> (await renderer.RenderComponentAsync<Xur.Control.Components.Pages.Workstations>()).ToHtmlString());
+            await File.WriteAllTextAsync(Path.Combine(output,"workstations-populated.html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/workstations.css'></head><body><main>"+workstations+"</main></body></html>");
         }
         finally{await agent.StopAsync();Environment.SetEnvironmentVariable("XUR_RUN",previous);Environment.SetEnvironmentVariable("XUR_MODE",mode);}
         store.Dispose();Directory.Delete(root,true);
@@ -55,7 +71,8 @@ static class ControlPanelRender
     sealed class Navigation:NavigationManager {public Navigation(){Initialize("http://home.test/","http://home.test/");} protected override void NavigateToCore(string uri,bool forceLoad){} }
     sealed class Observer:IWorkloadRuntime
     {
-        public Task<RuntimeObservation> Observe()=>Task.FromResult(new RuntimeObservation("generation",[],[]));
+        public RuntimeObservation Snapshot=new("generation",[],[]);
+        public Task<RuntimeObservation> Observe()=>Task.FromResult(Snapshot);
         public Task<RuntimeInstance> Start(Workload w)=>throw new NotSupportedException();
         public Task Stop(RuntimeStop r)=>throw new NotSupportedException();
     }

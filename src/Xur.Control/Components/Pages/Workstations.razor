@@ -3,7 +3,9 @@
 @inject ProfileManager Manager
 @inject IHttpContextAccessor Context
 <PageTitle>Workstations · Xur</PageTitle>
-<div class="page-heading"><h1>Workstations</h1><a class="button secondary" href="/profiles">Profiles</a></div>
+<HeadContent><link rel="stylesheet" href="/workstations.css" /></HeadContent>
+<div class="workstations-page">
+<div class="page-heading"><div><h1>Workstations</h1><p class="secondary-text">Your desktops, devices and streaming connections.</p></div><a class="button secondary" href="/profiles">Profiles</a></div>
 @if(Saved) { <p class="notice" role="status">Workstation saved.</p> }
 @if(DisplaySaved) { <p class="notice" role="status">Virtual display resolution applied.</p> }
 @if(Error!=null) { <p class="notice error" role="alert">@Error</p> }
@@ -11,45 +13,86 @@
 else if(stations==null) { <p role="alert">Could not read workstations. <a href="/workstations">Try again</a></p> }
 else
 {
-    <section class="panel" aria-labelledby="station-library-title">
-        <div class="section-heading"><h2 id="station-library-title">Manage workstations</h2></div>
-        <p class="secondary-text">Names and Moonlight pairing are shared across profiles. GPU and USB assignments belong to each profile. Deleting a workstation keeps its user files.</p>
-        @foreach(var definition in definitions) {
-            var references=stations.FirstOrDefault(s=>s.Workload.Id==definition.Id);
-            <article class="station-library-row">
-                <div><strong>@definition.Name</strong><small>@(definition.User?.Temporary==true?"Temporary user":definition.User?.Username??"Existing workstation user") · @definition.Id</small>
-                    @if(references!=null) { @foreach(var profile in references.Profiles) { <a href="/profiles/edit?id=@profile.Id">@profile.Name</a> } }
-                    else { <small>Not in a profile yet</small> }
-                </div>
-                <details><summary>Edit</summary><form method="post" action="/workstations/manage"><AntiforgeryToken /><input type="hidden" name="action" value="rename" /><input type="hidden" name="id" value="@definition.Id" /><label>Name<input name="name" maxlength="80" value="@definition.Name" required /></label><button class="secondary" disabled="@busy">Save name</button></form><p class="secondary-text">To use a different user, create a new workstation.</p></details>
-                <form method="post" action="/workstations/manage"><AntiforgeryToken /><input type="hidden" name="action" value="delete" /><input type="hidden" name="id" value="@definition.Id" /><button class="quiet danger-text" disabled="@(busy||references!=null)" title="@(references!=null?"Remove this workstation from its profiles and unload it first":"Deletes the workstation entry; user files are kept")">Delete</button></form>
-            </article>
-        }
-        <details><summary>New workstation</summary><form class="actions" method="post" action="/workstations/manage"><AntiforgeryToken /><input type="hidden" name="action" value="create" /><label>Name<input name="name" required maxlength="80" placeholder="My desktop" /></label><label>User<select name="user"><option value="temporary">Temporary user</option>@foreach(var account in users) { <option value="@account.Key">@account.Value</option> }</select></label><button disabled="@busy">Create workstation</button></form><p class="secondary-text">Choose this workstation in a profile to assign its GPU and devices.</p></details>
-        <details><summary>Add user</summary><form class="station-add-user actions"><AntiforgeryToken /><label>Name<input name="name" required maxlength="60" /></label><button class="secondary" disabled="@busy">Add user</button><p role="status"></p></form></details>
-    </section>
-    @if(stations.Length==0) { <p>Add a workstation to a <a href="/profiles">profile</a> to get started.</p> }
-    <div class="workstation-grid">
-    @foreach(var station in stations)
+    <details class="station-create">
+        <summary class="button secondary">New workstation</summary>
+        <div class="station-create-body">
+            <h2>Create a workstation</h2>
+            <form class="station-create-form" method="post" action="/workstations/manage">
+                <AntiforgeryToken /><input type="hidden" name="action" value="create" />
+                <label>Name<input name="name" required maxlength="80" placeholder="My desktop" /></label>
+                <label>User<select name="user"><option value="temporary">Temporary user</option>@foreach(var account in users) { <option value="@account.Key">@account.Value</option> }</select></label>
+                <button disabled="@busy">Create workstation</button>
+            </form>
+            <p class="secondary-text">After creating a workstation, add it to a profile to assign its GPU and devices.</p>
+            <details class="station-user-create"><summary>Add a user</summary><form class="station-add-user station-inline-form"><AntiforgeryToken /><label>Name<input name="name" required maxlength="60" /></label><button class="secondary" disabled="@busy">Add user</button><p role="status"></p></form></details>
+        </div>
+    </details>
+    @if(!Entries.Any()) { <div class="empty-state"><h2>No workstations yet</h2><p>Create a workstation, then add it to a <a href="/profiles">profile</a> to get started.</p></div> }
+    <div class="workstation-list">
+    @foreach(var entry in Entries)
     {
-        var w=station.Workload;
-        <section class="panel station-card" data-station="@w.Id">
-            <div class="section-heading"><h2>@w.Name</h2><span class="state-label @(station.State=="running"?"running":"")">@station.State</span></div>
-            <dl class="station-facts"><dt>User</dt><dd>@(w.User?.Temporary==true?"Temporary user":UserLabel(w))</dd><dt>GPU</dt><dd>@(station.Gpu?.DisplayName??"GPU unavailable") <small>@string.Join(", ",w.Gpus)</small></dd><dt>Display</dt><dd>@(station.Gpu?.Displays is {Length:>0}?string.Join(", ",station.Gpu.Displays):"No display detected.")</dd><dt>Streaming</dt><dd>@(station.Stream?.State??"Stopped") @if(station.Stream?.Headless==true) { <span class="secondary-text">· Virtual display</span> }</dd></dl>
-            @if(allocations.GetValueOrDefault(w.Id) is {} allocation)
+        var station=entry.Station;
+        var w=station?.Workload;
+        var running=station?.State=="running";
+        <section class="station-card @(running?"station-running":"")" data-station="@entry.Id" aria-labelledby="station-title-@entry.Id">
+            <header class="station-header">
+                <div class="station-identity"><h2 id="station-title-@entry.Id">@entry.Name</h2><span class="state-label @(running?"running":"")">@(running?"Running":station?.State??"Not configured")</span></div>
+                <div class="station-actions">
+                    @if(station!=null && w!=null)
+                    {
+                        @if(!running && station.Profiles.Length>0)
+                        {
+                            <form method="post" action="/profiles/load" class="station-load"><AntiforgeryToken />
+                                @if(station.Profiles.Length>1) { <label><span class="sr-only">Profile for @entry.Name</span><select name="id">@foreach(var profile in station.Profiles) { <option value="@profile.Id">@profile.Name</option> }</select></label> }
+                                else { <input type="hidden" name="id" value="@station.Profiles[0].Id" /> }
+                                <button class="secondary" disabled="@busy">Load profile</button>
+                            </form>
+                        }
+                        @if(running && station.Stream?.State!="Ready") { <form method="post" action="/workstations/stream"><AntiforgeryToken /><input type="hidden" name="id" value="@w.Id" /><button disabled="@busy">Start streaming</button></form> }
+                        <a class="button quiet" href="@("/files?user="+Uri.EscapeDataString(w.User is {Temporary:false}?w.User.Username:(w.User?.Temporary==true?"xurtmp":"xurws")+Canonical.Hash(w.Id)[..12]))">Browse files</a>
+                    }
+                    else { <a class="button secondary" href="/profiles">Add to a profile</a> }
+                </div>
+            </header>
+            @if(station!=null && w!=null)
             {
-                <p class="secondary-text">@(allocation.Primary?"Primary workstation · ":"")@allocation.Usb.Length USB devices · @allocation.Audio.Length audio interfaces</p>
-                @foreach(var problem in allocation.Problems) { <p role="alert">@problem</p> }
+                <dl class="station-overview">
+                    <div><dt>User</dt><dd>@(w.User?.Temporary==true?"Temporary user":UserLabel(w))</dd></div>
+                    <div><dt>GPU</dt><dd>@(station.Gpu?.DisplayName??"GPU unavailable")</dd></div>
+                    <div><dt>Display</dt><dd>@(station.Stream?.Headless==true?"Virtual display":station.Gpu?.Displays is {Length:>0}?string.Join(", ",station.Gpu.Displays):"No display connected")</dd></div>
+                    <div><dt>@(station.Profiles.Length==1?"Profile":"Profiles")</dt><dd class="station-profile-links">@foreach(var profile in station.Profiles) { <a href="/profiles/edit?id=@profile.Id">@profile.Name</a> }</dd></div>
+                </dl>
+                @if(allocations.GetValueOrDefault(w.Id) is {} allocation) { @foreach(var problem in allocation.Problems) { <p class="notice error" role="alert">@problem</p> } }
+                @if(station.Stream?.Error!=null) { <p class="notice error" role="alert">@station.Stream.Error</p> }
             }
-            @if(station.Stream?.Error!=null) { <p role="alert">@station.Stream.Error</p> }
-            <div class="actions"><form method="post" action="/profiles/load" class="actions"><AntiforgeryToken />
-                @if(station.Profiles.Length>1) { <label>Profile<select name="id">@foreach(var profile in station.Profiles) { <option value="@profile.Id">@profile.Name</option> }</select></label> }
-                else { <input type="hidden" name="id" value="@station.Profiles[0].Id" /> }
-                <button class="secondary" disabled="@(busy||station.State=="running")">Load profile</button></form>
-                @if(station.State=="running" && station.Stream?.State!="Ready") { <form method="post" action="/workstations/stream"><AntiforgeryToken /><input type="hidden" name="id" value="@w.Id" /><button>Start streaming</button></form> }
-                <a class="button quiet" href="/api/workloads/@w.Id/logs">Logs</a>
-                <a class="button quiet" href="@("/files?user="+Uri.EscapeDataString(w.User is {Temporary:false}?w.User.Username:(w.User?.Temporary==true?"xurtmp":"xurws")+Canonical.Hash(w.Id)[..12]))">Browse files</a>
-                @if(station.State=="running") { <a class="button quiet" href="/api/workstations/@w.Id/graphics" target="_blank" rel="noopener">Graphics report</a> }</div>
+            else { <p class="station-unassigned secondary-text">@DefinitionUser(entry.Definition). Add this workstation to a profile to choose its GPU and devices.</p> }
+            <div class="station-tools">
+                @if(station!=null && w!=null && running)
+                {
+            <details class="station-connect station-disclosure"><summary>Connect with Moonlight</summary>
+                <ol><li><a href="https://moonlight-stream.org/" target="_blank" rel="noopener noreferrer">Install Moonlight</a> on your client.</li><li>In Moonlight, add <code class="station-address">@StationLauncher.Address(host,station.Stream?.Port??47989)</code> <button type="button" class="quiet copy-station-address">Copy address</button>.</li><li>Select this computer in Moonlight. Enter its PIN below to pair, then choose <strong>Desktop</strong>.</li></ol>
+                <p>Streaming encryption is required on every connection. For access outside your LAN, connect both devices through <a href="/tailscale">Tailscale</a> and use Xur's tailnet address.</p>
+                @if(secure)
+                {
+                    <form class="station-pair" data-station="@w.Id"><AntiforgeryToken /><label>Client<select name="pairingId" required><option value="">Refresh to find a pairing request</option></select></label><div class="pair-fields"><label>PIN<input name="pin" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" required /></label><label>Client name<input name="name" maxlength="80" value="Moonlight" required /></label></div><div class="actions"><button type="button" class="secondary refresh-pairings">Refresh clients</button><button disabled="@(station.Stream?.State!="Ready")">Pair client</button></div><p role="status"></p></form>
+                }
+                else { <p><a href="@https">Open the encrypted manager</a> to pair a client. On your LAN, the browser will ask you to trust this machine's certificate. Tailscale HTTPS also works.</p> }
+                <details><summary>Launch shortcuts</summary><p>After pairing, download a shortcut for your client. Moonlight must already be installed.</p><div class="actions"><a class="button secondary" href="/api/workstations/@w.Id/launcher?platform=windows">Windows shortcut</a><a class="button secondary" href="/api/workstations/@w.Id/launcher?platform=linux">Linux shortcut</a><a class="button secondary" href="/api/workstations/@w.Id/launcher?platform=macos">macOS shortcut</a></div></details>
+            </details>
+
+                }
+                <details class="station-settings station-disclosure"><summary>Settings</summary>
+                    <div class="station-settings-body">
+                        @if(entry.Definition!=null)
+                        {
+                            <form method="post" action="/workstations/manage" class="station-inline-form"><AntiforgeryToken /><input type="hidden" name="action" value="rename" /><input type="hidden" name="id" value="@entry.Id" /><label>Workstation name<input name="name" maxlength="80" value="@entry.Name" required /></label><button class="secondary" disabled="@busy">Save name</button></form>
+                            <p class="secondary-text">Names and Moonlight pairing are shared across profiles. Create a new workstation to use a different user.</p>
+                        }
+                        @if(station!=null && w!=null)
+                        {
+                            <dl class="station-facts"><dt>Workstation ID</dt><dd>@w.Id</dd><dt>GPU address</dt><dd>@string.Join(", ",w.Gpus)</dd><dt>Streaming</dt><dd>@(station.Stream?.State??"Stopped")</dd>
+                            @if(allocations.GetValueOrDefault(w.Id) is {} devices) { <dt>Devices</dt><dd>@devices.Usb.Length USB devices, @devices.Audio.Length audio interfaces@(devices.Primary?" (primary workstation)":"")</dd> }</dl>
+                            <div class="actions"><a class="button secondary" href="/api/workloads/@w.Id/logs">Logs</a>@if(running) { <a class="button secondary" href="/api/workstations/@w.Id/graphics" target="_blank" rel="noopener">Graphics report</a> }</div>
             @if(station.Stream?.Headless==true)
             {
                 <details><summary>Streaming resolution</summary>
@@ -66,22 +109,22 @@ else
                     }
                 </details>
             }
-            <details><summary>Game troubleshooting</summary><p>If a Steam game exits or shows a blank screen, set its Launch Options to <code>PROTON_LOG=1 %command%</code>, reproduce once, then remove that option. The log is <code>steam-&lt;appid&gt;.log</code> in this workstation user's home. Review it before sharing.</p><p>The Graphics report checks Vulkan, OpenGL and installed graphics packages using this workstation's device access. On NVIDIA it also runs a short encoder test and includes GPU mapping and active encoder sessions.</p></details>
-            <details class="station-connect"><summary>Connect with Moonlight</summary>
-                <ol><li><a href="https://moonlight-stream.org/" target="_blank" rel="noopener noreferrer">Install Moonlight</a> on your client.</li><li>Load this workstation's profile. In Moonlight, add <code class="station-address">@StationLauncher.Address(host,station.Stream?.Port??47989)</code> <button type="button" class="quiet copy-station-address">Copy address</button>.</li><li>Select this computer in Moonlight. Enter its PIN below to pair, then choose <strong>Desktop</strong>.</li></ol>
-                <p>Streaming encryption is required on every connection. For access outside your LAN, connect both devices through <a href="/tailscale">Tailscale</a> and use Xur's tailnet address.</p>
-                @if(secure)
-                {
-                    <form class="station-pair" data-station="@w.Id"><AntiforgeryToken /><label>Client<select name="pairingId" required><option value="">Refresh to find a pairing request</option></select></label><div class="pair-fields"><label>PIN<input name="pin" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" required /></label><label>Client name<input name="name" maxlength="80" value="Moonlight" required /></label></div><div class="actions"><button type="button" class="secondary refresh-pairings">Refresh clients</button><button disabled="@(station.Stream?.State!="Ready")">Pair client</button></div><p role="status"></p></form>
-                }
-                else { <p><a href="@https">Open the encrypted manager</a> to pair a client. On your LAN, the browser will ask you to trust this machine's certificate. Tailscale HTTPS also works.</p> }
-                <details><summary>Launch shortcuts</summary><p>After pairing, download a shortcut for your client. Moonlight must already be installed.</p><div class="actions"><a class="button secondary" href="/api/workstations/@w.Id/launcher?platform=windows">Windows shortcut</a><a class="button secondary" href="/api/workstations/@w.Id/launcher?platform=linux">Linux shortcut</a><a class="button secondary" href="/api/workstations/@w.Id/launcher?platform=macos">macOS shortcut</a></div></details>
-            </details>
+
+                        }
+                        @if(entry.Definition!=null)
+                        {
+                            <div class="station-delete"><form method="post" action="/workstations/manage"><AntiforgeryToken /><input type="hidden" name="action" value="delete" /><input type="hidden" name="id" value="@entry.Id" /><button class="secondary danger-text" disabled="@(busy||station!=null)">Delete workstation</button></form><p class="secondary-text">@(station!=null?"Remove this workstation from its profiles and unload it before deleting. User files are kept.":"User files are kept when you delete a workstation.")</p></div>
+                        }
+                    </div>
+                </details>
+            </div>
         </section>
     }
     </div>
+    <div class="station-help"><details><summary>Game troubleshooting</summary><p>If a Steam game exits or shows a blank screen, set its Launch Options to <code>PROTON_LOG=1 %command%</code>, reproduce once, then remove that option. The log is <code>steam-&lt;appid&gt;.log</code> in this workstation user's home. Review it before sharing.</p><p>The Graphics report checks Vulkan, OpenGL and installed graphics packages using this workstation's device access. On NVIDIA it also runs a short encoder test and includes GPU mapping and active encoder sessions.</p></details></div>
     <script src="/workstations.js" defer></script>
 }
+</div>
 @code {
     [SupplyParameterFromQuery] public bool Saved {get;set;}
     StationDefinition[] definitions=[];
@@ -90,6 +133,10 @@ else
     Dictionary<string,string> users=[];
     Dictionary<string,StationDeviceAllocation> allocations=[];
     string UserLabel(Workload w){var username=w.User?.Username??"xurws"+Canonical.Hash(w.Id)[..12];return users.GetValueOrDefault(username,username);}
+    IEnumerable<(string Id,string Name,WorkstationView? Station,StationDefinition? Definition)> Entries =>
+        (stations??[]).Select(s=>(s.Workload.Id,s.Workload.Name,(WorkstationView?)s,definitions.FirstOrDefault(d=>d.Id==s.Workload.Id)))
+        .Concat(definitions.Where(d=>!(stations??[]).Any(s=>s.Workload.Id==d.Id)).Select(d=>(d.Id,d.Name,(WorkstationView?)null,(StationDefinition?)d)));
+    string DefinitionUser(StationDefinition? definition) => definition?.User?.Temporary==true?"Temporary user":users.GetValueOrDefault(definition?.User?.Username??"",definition?.User?.Username??"Existing workstation user");
     WorkstationView[]? stations;bool busy,secure;string host="",https="";
     protected override async Task OnInitializedAsync()
     {

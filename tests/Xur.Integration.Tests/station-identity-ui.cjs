@@ -38,8 +38,9 @@ const fs=require('fs'),assert=require('assert/strict');
    await page.screenshot({path:'.build/fast/control-panel/station-identity-'+width+'.png',fullPage:true});
   }
   await page.goto('https://stations.test/workstations');
-  await page.getByRole('heading',{name:'Manage workstations'}).waitFor();
-  assert(await page.getByRole('button',{name:'Delete',exact:true}).isDisabled(),'Referenced workstation cannot be deleted');
+  await page.getByRole('heading',{name:'Workstations',exact:true}).waitFor();
+  await page.locator('.station-settings>summary').click();
+  assert(await page.getByRole('button',{name:'Delete workstation',exact:true}).isDisabled(),'Referenced workstation cannot be deleted');
   await page.getByText('New workstation',{exact:true}).click();await page.getByRole('button',{name:'Create workstation',exact:true}).waitFor();
   assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),'Workstation management overflow');
   assert.deepEqual(errors,[]);console.log(JSON.stringify({suite:'StationIdentityUi',result:'Passed',reuseAndCreate:true,desktopAndMobile:true}));
