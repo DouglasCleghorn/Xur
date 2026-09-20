@@ -7,7 +7,7 @@ permissions:
   contents: read
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   build:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release'
@@ -59,6 +59,13 @@ jobs:
           path: |
             dist/xur-app-x86_64.tar.gz
             dist/build.json
+      - name: Keep failed-check diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: failed-checks-${{ github.sha }}
+          retention-days: 7
+          path: .build/fast/
   publish:
     needs: build
     runs-on: ubuntu-24.04

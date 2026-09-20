@@ -154,6 +154,9 @@ build and commit, then use **Review deployments** for `nightly` or `stable`.
 The signing key is an environment secret and is unavailable to build/test jobs.
 Never approve a candidate you have not reviewed. A superseded branch build is
 rejected before publication; approve the newest successful candidate instead.
+A new push supersedes the previous workflow on that branch, including a candidate
+waiting for approval, so an unattended approval cannot block subsequent builds.
+Failed checks retain diagnostic artifacts for seven days.
 
 Nightly uses a small `nightly` release pointer to an immutable per-build release.
 Stable uses GitHub's latest non-prerelease. Signed metadata binds each release to
