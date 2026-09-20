@@ -17,6 +17,7 @@ if(args is ["--workload-settings-smoke"]) { await WorkloadSettingsSmoke.Run();re
 if(args is ["--station-units-smoke"]) { await StationUnitsTests.Smoke();return; }
 if(args is ["--cancellation-render",var cancelOutput]) { await CancellationRender.Run(cancelOutput);return; }
 if(args is ["--control-panel-render",var homeOutput]) { await ControlPanelRender.Run(homeOutput);return; }
+if(args is ["--website-render",var websiteOutput]) { await ControlPanelRender.Run(websiteOutput, documentation:true);return; }
 var results = new List<string>();
 void Check(bool value,string name) { if(!value) throw new Exception(name); results.Add(name); }
 await StationIdentityTests.Run(Check);
@@ -38,6 +39,7 @@ await ModelLabApiTests.Run(Check);
 ApiKeyTests.Run(Check);
 await StationDeviceAccessTests.Run(Check);
 await EngineStartupTests.Run(Check);
+await FishEngineTests.Run(Check);
 await EngineRestartPolicyTests.Run(Check);
 await ParallelStopGateTests.Run(Check);
 await StationNetworkPolicyTests.Run(Check);

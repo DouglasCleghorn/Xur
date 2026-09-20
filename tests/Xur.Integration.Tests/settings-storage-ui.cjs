@@ -10,8 +10,11 @@ const fs=require('fs'),assert=require('assert/strict');
   const asset=/\.(css|js|ttf|svg)$/.test(u.pathname);return r.fulfill({body:fs.readFileSync(asset?'src/Xur.Control/wwwroot'+u.pathname:'.build/fast/control-panel'+u.pathname+'.html'),contentType:u.pathname.endsWith('.js')?'application/javascript':u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.ttf')?'font/ttf':u.pathname.endsWith('.svg')?'image/svg+xml':'text/html'});
  });
  for(const width of [1440,390]){
-  await page.setViewportSize({width,height:900});await page.goto('https://settings.test/settings');assert.equal(await page.locator('main>section').last().getAttribute('id'),'development-updates');assert.equal(await page.getByRole('heading',{name:'Web access',exact:true}).count(),1);assert.equal(await page.getByRole('heading',{name:'HTTPS',exact:true}).count(),0);
-  assert(await page.getByLabel('Allow local build testing').isChecked());assert.equal(await page.locator('#development-updates [name=server]').inputValue(),'http://192.0.2.10:8088');
+  await page.setViewportSize({width,height:900});await page.goto('https://settings.test/settings');assert.equal(await page.locator('main>section').last().getAttribute('id'),'update-channel');assert.equal(await page.getByRole('heading',{name:'Web access',exact:true}).count(),1);assert.equal(await page.getByRole('heading',{name:'HTTPS',exact:true}).count(),0);
+  assert.equal(await page.locator('#release-channel').inputValue(),'local');assert.equal(await page.locator('#local-update-server').inputValue(),'http://192.0.2.10:8088');
+  const key=await page.locator('#local-update-key').inputValue();assert(key.includes('BEGIN PUBLIC KEY'));
+  await page.locator('#release-channel').selectOption('stable');assert(await page.locator('#local-update-fields').isHidden());assert(await page.locator('#local-update-key').isDisabled());
+  await page.locator('#release-channel').selectOption('local');assert(await page.locator('#local-update-fields').isVisible());assert.equal(await page.locator('#local-update-key').inputValue(),key);assert(await page.locator('#local-update-key').evaluate(e=>e.required));
   assert.equal(await page.locator('#hf-token').inputValue(),'');assert.equal(await page.locator('#hf-token').getAttribute('type'),'password');
   assert(await page.locator('#timezone-automatic').isChecked());assert(await page.locator('#timezone').isDisabled());
   assert(await page.locator('#timezone-refresh').isEnabled());

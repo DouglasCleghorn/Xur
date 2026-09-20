@@ -4,6 +4,7 @@ import hashlib,importlib.machinery,importlib.util,json,os,pathlib,shutil,signal,
 ROOT=pathlib.Path('/run/xur/app')
 BUNDLED=pathlib.Path('/usr/share/xur/app-bundle')
 READY=pathlib.Path('/run/xur/installer-app-ready')
+CHANNEL=pathlib.Path('/usr/share/xur/installer-channel')
 def select(path):
     ROOT.mkdir(parents=True,exist_ok=True)
     link=ROOT/'next';link.unlink(missing_ok=True);link.symlink_to(path);link.replace(ROOT/'current')
@@ -11,12 +12,15 @@ def updater():
     loader=importlib.machinery.SourceFileLoader('xur_updater',str(BUNDLED/'host/app-update'))
     spec=importlib.util.spec_from_loader(loader.name,loader);u=importlib.util.module_from_spec(spec);loader.exec_module(u)
     u.ROOT=ROOT;u.CONFIG=pathlib.Path('/run/xur/application-updates.json');u.KEY=pathlib.Path('/usr/share/xur/application-update-key.pem')
+    selected=CHANNEL.read_text().strip() if CHANNEL.exists() else 'stable'
+    u.select_channel(selected)
     return u
 def prepare():
     select(BUNDLED);READY.unlink(missing_ok=True)
     if 'xur.app-update=off' in pathlib.Path('/proc/cmdline').read_text().split():return
     u=updater()
     u.atomic(ROOT/'highest-sequence.json',u.read(BUNDLED/'bundle.json').get('buildSequence',0))
+    u.atomic(ROOT/'channel-sequences.json',{u.channel():u.read(BUNDLED/'bundle.json').get('buildSequence',0)})
     def expired(*args):raise TimeoutError('Installer refresh deadline exceeded')
     signal.signal(signal.SIGALRM,expired);signal.alarm(120)
     try:

@@ -25,9 +25,7 @@ selected, healthy app bundle into the installed host.
 
 Use `xur.app-update=off` on the kernel command line when testing a locally built
 ISO. This only skips the boot-time app download; it does not disable any signature
-checks or make OS installation offline. Installed systems expose **Settings →
-Local build testing** for signed local application updates. GitHub release assets
-are published by `eng/publish-github.py` after a separate package/test step.
+checks or make OS installation offline. Installed systems expose **Settings → Update channel → Local build testing** for signed local application updates. GitHub release assets are published by the approved release workflow.
 
 The source implementation is covered by digest-pinning, manifest, signed-update,
 network-failure and unhealthy-app fallback tests. Actual online Anaconda

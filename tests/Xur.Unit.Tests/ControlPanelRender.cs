@@ -9,7 +9,7 @@ using Xur.Control;
 using Xur.Domain;
 static class ControlPanelRender
 {
-    public static async Task Run(string output)
+    public static async Task Run(string output, bool documentation = false)
     {
         var root=Path.Combine(Path.GetTempPath(),"xur-home-"+Guid.NewGuid());Directory.CreateDirectory(root);Directory.CreateDirectory(output);
         var previous=Environment.GetEnvironmentVariable("XUR_RUN");var mode=Environment.GetEnvironmentVariable("XUR_MODE");
@@ -25,7 +25,7 @@ static class ControlPanelRender
         agent.MapGet("/ntp",()=>new NtpStatus(true,true,true,["time.cloudflare.com"],""));
         agent.MapGet("/storage/trim",()=>new TrimStatus(false,"ActiveState=active","Result=success",[new("ssd","/etc","/dev/nvme0n1p2[/ostree/deploy/default/deploy/"+new string('a',64)+".0/etc]","ext4",1000,400,500,true,true,false),new("readonly","/boot","/dev/nvme1n1p1","ext4",1000,400,500,true,false,true)],[]));
         agent.MapGet("/updates",()=>new OsUpdateStatus(null,new("new","digest","image",false),null,null,false,true,false,null,""));
-        agent.MapGet("/application-updates",()=>new ApplicationUpdateStatus("http://192.0.2.10:8088",new("current","1"),null,null,null,false,true));
+        agent.MapGet("/application-updates",()=>new ApplicationUpdateStatus("http://192.0.2.10:8088",new("current","1"),null,null,null,false,true,"local","-----BEGIN PUBLIC KEY-----\nfixture\n-----END PUBLIC KEY-----","http://192.0.2.10:8088"));
         agent.MapGet("/station-devices",()=>new StationDeviceInventory([new("usb:"+new string('a',64),"Desk hub","Serial","/usb/hub",true,false,[],[],Serial:"hub-serial"),new("usb:"+new string('b',64),"Keyboard","Port","/usb/keyboard",false,false,[],[]),new("usb:"+new string('c',64),"Second hub","Serial","/usb/hub2",true,false,[],[],Serial:"hub-serial")],[],[]));
         StationStreamStatus[] streams=[];
         agent.MapGet("/workstations",()=>streams);
@@ -36,6 +36,12 @@ static class ControlPanelRender
         Directory.CreateDirectory(root+"/catalog");File.WriteAllText(root+"/catalog/desktop.json",System.Text.Json.JsonSerializer.Serialize(stationRecipe));
         using var store=new ProfileStore(root+"/state");var observer=new Observer();var manager=new ProfileManager(store,observer,new Gateway());
         store.Save(new Profile("1","AI and gaming",1,[new("w1","Gaming",stationRecipe,[gpu.Pci],"desktop")]));store.Save(new Profile("2","Speech services",1,[]));
+        if(documentation)
+        {
+            observer.Snapshot=new RuntimeObservation("example",[gpu with {ShortId="GPU 1",Cards=["/dev/dri/card0"]}],[]);
+            store.Save(new Profile("1","Gaming desk",2,[new("w1","Gaming",stationRecipe,[gpu.Pci],"desktop")]));
+            store.Save(new Profile("2","Studio desk",2,[new("doc-studio","Studio",stationRecipe,[gpu.Pci],"desktop")]));
+        }
         try
         {
             await agent.StartAsync();var services=new ServiceCollection();services.AddLogging();var context=new DefaultHttpContext();context.Request.Scheme="https";context.Request.Host=new HostString("stations.test");services.AddSingleton<IHttpContextAccessor>(new HttpContextAccessor{HttpContext=context});services.AddSingleton(new Appliance());services.AddSingleton(manager);services.AddSingleton(new RecipeCatalog(root+"/catalog"));services.AddSingleton(new Bootstrap(directory:root));services.AddSingleton<NavigationManager>(new Navigation());

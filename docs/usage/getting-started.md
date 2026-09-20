@@ -91,7 +91,7 @@ application rollback selects the previous app bundle. Neither rolls back your
 personal files. Download a configuration backup from **Settings** before major
 changes; it is not a backup of models, games or home directories.
 
-For custom builds, enable **Settings → Local build testing** and configure the
+For custom builds, enable **Settings → Update channel → Local build testing** and configure the
 local repository. Signed GitHub releases remain the normal distribution path.
 See [application updates](application-updates.md) and [OS updates](updates.md).
 

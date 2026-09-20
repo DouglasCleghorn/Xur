@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import pathlib,shutil,hashlib,json,time
+import pathlib,shutil,hashlib,json,time,os
 repo=pathlib.Path(__file__).resolve().parents[1];context=repo/'.build/context'
 for name in ('rootfs','installer-rootfs'):
     target=context/name
@@ -30,6 +30,9 @@ copy(context/'catalog',bundle/'catalog')
 copy(repo/'.build/console-runtime',bundle/'agent/console')
 copy(repo/'.build/virtual-display-runtime',bundle/'agent/virtual-display')
 copy(repo/'.build/streaming-runtime',bundle/'agent/streaming')
+for name in ('LICENSE','docs/licensing.md'):
+    copy(repo/name,base/'usr/share/licenses/xur'/pathlib.Path(name).name)
+    copy(repo/name,bundle/pathlib.Path(name).name)
 copy(repo/'os/bootc/application-update-key.pem',base/'usr/share/xur/application-update-key.pem')
 copy(repo/'os/bootc/application-update-key.pem',bundle/'host/application-update-key.pem')
 copy(repo/'os/bootc/application-features.json',bundle/'host/application-features.json')
@@ -40,6 +43,10 @@ files={str(p.relative_to(bundle)):hashlib.sha256(p.read_bytes()).hexdigest() for
 bundle_id=hashlib.sha256(json.dumps(files,sort_keys=True).encode()).hexdigest()
 (bundle/'bundle.json').write_text(json.dumps({'schema':1,'hostAbi':1,'buildSequence':int(time.time()),'version':bundle_id[:12],'id':bundle_id,'files':files},indent=2)+'\n')
 live=context/'installer-rootfs'
+installer_channel=os.environ.get('XUR_INSTALLER_CHANNEL','stable')
+if installer_channel not in ('nightly','stable'):raise ValueError('Invalid installer update channel')
+(live/'usr/share/xur').mkdir(parents=True,exist_ok=True)
+(live/'usr/share/xur/installer-channel').write_text(installer_channel+'\n')
 for source,target in [('app-bootstrap','usr/libexec/xur-installer-app'),('live-app','usr/libexec/xur-live-app'),('resolve-source','usr/libexec/xur-resolve-install-source'),('systemd','usr/lib/systemd/system'),('iso.yaml','usr/lib/image-builder/bootc/iso.yaml'),
                       ('install-template.ks','usr/share/xur/install-template.ks'),('run-install','usr/libexec/xur-run-install'),('install-manager','usr/libexec/xur-install-manager')]:
     copy(repo/'os/installer'/source,live/target)

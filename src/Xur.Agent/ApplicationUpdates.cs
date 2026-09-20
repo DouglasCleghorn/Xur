@@ -19,9 +19,11 @@ public sealed class ApplicationUpdates
             var state=await Processes.Run("systemctl",["is-active","--quiet","xur-app-update.service"],5);
             if(state.ExitCode==0)throw new InvalidOperationException("An application update is already running.");
             if(request.Action=="channel") {
-                if(request.Channel is not ("nightly" or "stable"))throw new InvalidOperationException("Choose nightly or stable.");
-                var saved=await Processes.Run(Program,["channel",request.Channel],10);
-                if(saved.ExitCode!=0)throw new InvalidOperationException("Could not save the update channel.");return;
+                if(request.Channel is not ("nightly" or "stable" or "local"))throw new InvalidOperationException("Choose nightly, stable or local build testing.");
+                if(request.Channel=="local" && (string.IsNullOrWhiteSpace(request.Server) || request.Server.Length>2048 || string.IsNullOrWhiteSpace(request.PublicKey) || request.PublicKey.Length>4096 || request.PublicKey.Contains("PRIVATE KEY",StringComparison.Ordinal)))
+                    throw new InvalidOperationException("Enter a local server and its Ed25519 public key in PEM format. Never enter a private key.");
+                var saved=await Processes.Run(Program,request.Channel=="local"?["channel","local",request.Server!,request.PublicKey!]:["channel",request.Channel],10);
+                if(saved.ExitCode!=0)throw new InvalidOperationException("Could not save the update channel. For local testing, enter a valid server address and an Ed25519 public key in PEM format.");return;
             }
             if(request.Action=="development") {
                 var saved=await Processes.Run(Program,["development",request.Development?"true":"false"],10);

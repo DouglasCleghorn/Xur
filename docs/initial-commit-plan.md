@@ -1,6 +1,6 @@
 # Initial GitHub commit preparation
 
-Status: layout and ignore policy approved; source-only initial commit and push authorized. The staged manifest is audited against the packaging manifest before committing. Generated evidence stays in `.build/evidence/`. No license has been selected; this repository does not grant a software license until one is added. GitHub release publication remains an explicit separate command.
+Status: layout and ignore policy approved; source-only initial commit and push authorized. The staged manifest is audited against the packaging manifest before committing. Generated evidence stays in `.build/evidence/`. Xur is MIT licensed; the root LICENSE covers original project work and third-party notices remain intact. GitHub release publication remains an explicit separate command.
 
 ## Current size estimate
 
@@ -13,7 +13,7 @@ Keep the working application layout. Separating production components from build
 ```text
 Xur/
 ├── README.md                         overview, quick start and documentation links
-├── LICENSE                           choose the project's license before publishing
+├── LICENSE                           MIT license for original Xur work
 ├── .gitignore                        reviewed exclusions
 ├── .github/workflows/                CI and release workflows
 ├── global.json                       pinned .NET SDK
@@ -47,7 +47,7 @@ Xur/
 └── dist/                             ignored: distributable archives, ISO images and release manifests
 ```
 
-The `docs/` subdivisions are now applied, with README and intra-document links updated. Do not move application source or change project references. A root project license has not been selected; existing third-party licenses must remain intact regardless of that choice.
+The `docs/` subdivisions are now applied, with README and intra-document links updated. Do not move application source or change project references. The root MIT license is selected; existing third-party licenses remain intact.
 
 ## What belongs in the first commit
 
@@ -79,7 +79,7 @@ The `docs/` subdivisions are now applied, with README and intra-document links u
 - Inspect `git status --short --untracked-files=all` and the exact staged file list; stage explicit source directories, not the entire working directory blindly.
 - Scan the staged content and the source archive for credentials/private keys and inspect unusually large/binary files. Keep test placeholders distinct from real machine captures.
 - Review hardcoded hostnames, usernames, network addresses, local absolute paths and stale release claims in docs/scripts. Replace machine-specific operational history with reproducible instructions.
-- Confirm license choice and bundled dependency license notices; choose whether GitHub release publishing should be enabled immediately or remain manual.
+- Review bundled dependency license notices; choose whether GitHub release publishing should be enabled immediately or remain manual.
 - Run the fast checks from the clean checkout and inspect the archive manifest. Initial commit and GitHub push remain separate actions after this review.
 ```
 # Review aids once the plan is applied; these commands do not commit or push:

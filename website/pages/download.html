@@ -1,0 +1,25 @@
+<article class="wrap download-page">
+<p class="eyebrow">Free and open source · x86-64</p><h1>Download Xur.</h1>
+<p class="lead">Start with the online installer. Put it on a USB drive, boot your GPU host, and finish setup from a browser. Bazzite downloads during installation, so keep the host connected to the Internet.</p>
+<section class="download-panel" aria-labelledby="installer-heading" data-installer>
+<h2 id="installer-heading">Online installer ISO</h2>
+<p id="download-status" role="status" aria-live="polite" aria-atomic="true">Installer downloads are hosted on GitHub. Enable JavaScript to check release availability here.</p>
+<p id="download-meta" class="download-meta"></p>
+<div class="actions"><a id="download-iso" class="button" hidden>Download ISO</a><button id="download-retry" type="button" class="button secondary" hidden>Check again</button><a id="download-release" href="https://github.com/DouglasCleghorn/Xur/releases">Browse releases</a></div>
+<p id="download-parts" hidden>This release has a split ISO. Download all numbered parts from its release page and <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/development/installer-releases.md#download-and-verify">assemble and verify them</a> before opening the ISO in Rufus. An individual part is not bootable.</p>
+<noscript><p>JavaScript is off. Open <a href="https://github.com/DouglasCleghorn/Xur/releases">GitHub Releases</a> and download <code>xur-installer-x86_64.iso</code> from the newest release that includes installer media.</p></noscript>
+</section>
+<p>“Download now” checks published releases and requests the newest available installer download. A nightly release is a development build and will be labeled as such. Opening this page directly lets you read first and download when ready.</p>
+<h2>Make a USB installer with Rufus</h2>
+<p>You need a Windows computer, <a href="https://rufus.ie/en/">Rufus from rufus.ie</a>, and a USB drive large enough for the ISO. Use a drive of at least 16 GB; check the download size above.</p>
+<p class="notice"><strong>The USB drive will be erased.</strong> Copy off anything you need and double-check which drive Rufus selects. Installing Xur later also erases the host disk you choose.</p>
+<ol class="install-steps">
+<li><strong>Download the ISO and open Rufus.</strong><p>Rufus runs without installation. Wait for the ISO download to finish; do not select an app update archive or an ISO part.</p></li>
+<li><strong>Select your USB drive.</strong><p>Under <strong>Device</strong>, pick the USB drive. Under <strong>Boot selection</strong>, choose <strong>Disk or ISO image</strong>, click <strong>SELECT</strong>, and open <code>xur-installer-x86_64.iso</code>.</p></li>
+<li><strong>Choose UEFI settings.</strong><p>Use <strong>GPT</strong>, <strong>UEFI (non CSM)</strong>, and <strong>FAT32</strong>. Click <strong>START</strong>. If asked, choose <strong>ISO Image mode</strong>. Confirm erasing the USB drive and wait for <strong>READY</strong>.</p></li>
+<li><strong>Boot the host from USB.</strong><p>Safely eject the USB drive, connect it to your x86-64 GPU host, and select its UEFI entry in the boot menu. Keep Internet access available; wired Ethernet is the simplest setup.</p></li>
+<li><strong>Finish in your browser.</strong><p>Open the HTTPS address shown on the host console, enter its setup code and create an account. Select the target disk (at least 64 GiB), install, then reboot. Follow the <a href="/guides/getting-started/">getting-started guide</a> for your first profile.</p></li>
+</ol>
+<details><summary>Verify the download or use another operating system</summary><p>Each installer release includes checksums and a signed descriptor. See the <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/development/installer-releases.md#download-and-verify">verification and split-ISO instructions</a>. Linux and macOS users can use a raw-image USB writer; see the <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/usage/rufus.md">USB media guide</a>. Read the release notes for known limitations and tested hardware.</p></details>
+</article>
+<script src="/assets/download.js" defer></script>

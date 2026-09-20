@@ -21,6 +21,7 @@ with tempfile.TemporaryDirectory() as directory:
  class Updater:
   SERVICES=['xur-control','xur-agent','xur-gateway']
   def atomic(self,path,data):path.write_text(json.dumps(data))
+  def channel(self):return 'stable'
   def check(self,stage):raise OSError('Network unavailable')
   def read(self,path,default=None):return json.loads(path.read_text()) if path.exists() else default
   def healthy(self,identity,seconds):return identity=='bundled'

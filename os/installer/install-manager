@@ -29,6 +29,13 @@ install -m 644 /usr/share/xur/application-update-key.pem "$target/etc/xur/applic
 install -m 644 /usr/lib/systemd/system/xur-app-recovery.service "$target/etc/systemd/system/"
 systemctl --root="$target" enable xur-app-recovery.service
 install -m 644 /run/xur/installed-upstream.json "$target/etc/xur/upstream.json"
+python3 - "$target" <<'PYCHANNEL'
+import json,pathlib,sys
+source=pathlib.Path('/usr/share/xur/installer-channel')
+channel=source.read_text().strip() if source.exists() else 'stable'
+assert channel in ('stable','nightly')
+(pathlib.Path(sys.argv[1])/'etc/xur/application-updates.json').write_text(json.dumps({'channel':channel,'development':False})+'\n')
+PYCHANNEL
 if test -f "/run/xur/app/release-$release.json"; then
   install -m 600 "/run/xur/app/release-$release.json" "$target/var/lib/xur/app/release-$release.json"
   python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sequence"])' "/run/xur/app/release-$release.json" > "$target/var/lib/xur/app/highest-sequence.json"

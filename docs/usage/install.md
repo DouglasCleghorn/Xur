@@ -102,7 +102,7 @@ provide the same status and check operation for automation.
 ## Xur application updates
 
 Open **Updates → Xur application**. Public GitHub Releases are selected by default.
-Local build testing can be enabled separately in Settings.
+Local build testing is an option in Settings → Update channel; enter the local server and its signing public key.
 Choose **Check for updates**, then **Update Xur**. Future app changes can be
 installed this way without another ISO or OS installation.
 
@@ -111,3 +111,9 @@ session. Active requests drain before the manager restarts; model containers
 and workstations remain running. **Roll back Xur** restores the previous app.
 The terminal menu has **Updates → Xur application**. Details and authenticated API
 examples are in `docs/usage/application-updates.md` in the source archive.
+
+## Release download verification
+
+GitHub releases include a signed installer descriptor and checksums. ISOs larger
+than the per-file upload limit are split into numbered parts; assemble and verify
+them before writing a USB drive. See [download and verification instructions](../development/installer-releases.md#download-and-verify).

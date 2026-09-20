@@ -26,23 +26,51 @@ def current():
 def busy():
     try:return call(['systemctl','show','-p','ActiveState','--value','xur-app-update.service'],5).decode().strip() in ('active','activating','deactivating')
     except (subprocess.SubprocessError,OSError):return False
-def channel():return read(CONFIG,{}).get('channel','stable')
-def select_channel(value):
-    if value not in ('nightly','stable'):raise ValueError('Choose nightly or stable')
-    atomic(CONFIG,{**read(CONFIG,{}),'channel':value,'development':False})
+def channel():
+    config=read(CONFIG,{})
+    return 'local' if config.get('development') is True else config.get('channel','stable')
+def public_key(value):
+    # Accept one public Ed25519 SPKI PEM, never private keys or arbitrary PEM blocks.
+    if not isinstance(value,str) or len(value)>4096 or not re.fullmatch(r'-----BEGIN PUBLIC KEY-----\s+[A-Za-z0-9+/=\s]+-----END PUBLIC KEY-----\s*',value.strip()):
+        raise ValueError('Enter an Ed25519 signing public key in PEM format, not a private key')
+    try:
+        result=subprocess.run(['openssl','pkey','-pubin','-outform','DER'],input=value.encode(),stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True,timeout=5).stdout
+    except (subprocess.SubprocessError,OSError):raise ValueError('Invalid signing public key') from None
+    # RFC 8410 Ed25519 SubjectPublicKeyInfo: fixed algorithm OID and 32-byte key.
+    if len(result)!=44 or result[:12]!=bytes.fromhex('302a300506032b6570032100'):
+        raise ValueError('The signing public key must use Ed25519')
+    import base64
+    return '-----BEGIN PUBLIC KEY-----\n'+base64.b64encode(result).decode()+'\n-----END PUBLIC KEY-----\n'
+def select_channel(value,server=None,signing_key=None):
+    if value not in ('nightly','stable','local'):raise ValueError('Choose nightly, stable or local build testing')
+    config=read(CONFIG,{})
+    if value=='local':
+        config.update(server=normalized(server or ''),publicKey=public_key(signing_key or ''))
+    atomic(CONFIG,{**config,'channel':value if value!='local' else config.get('channel','stable'),'development':value=='local'})
     (ROOT/'available.json').unlink(missing_ok=True)
 def source():
     config=read(CONFIG,{})
-    return config.get('server','') if config.get('development') is True else NIGHTLY if channel()=='nightly' else PUBLIC
+    return config.get('server','') if channel()=='local' else NIGHTLY if channel()=='nightly' else PUBLIC
 def configure(server):
     config=read(CONFIG,{})
-    if config.get('development') is not True:raise ValueError('Enable local build testing in Settings first')
+    if channel()!='local':raise ValueError('Enable local build testing in Settings first')
     atomic(CONFIG,{**config,'server':normalized(server)})
+    (ROOT/'available.json').unlink(missing_ok=True)
 def development(enabled):
+    # Legacy clients keep their existing official-key local repository behavior.
     atomic(CONFIG,{**read(CONFIG,{}),'development':enabled})
     (ROOT/'available.json').unlink(missing_ok=True)
-def status():return {'server':source(),'development':read(CONFIG,{}).get('development') is True,'channel':channel(),'current':current(),'previous':read(ROOT/'previous.json'),'available':read(ROOT/'available.json'),'operation':read(STATE),'busy':busy()}
+def trust_key():
+    config=read(CONFIG,{})
+    return public_key(config['publicKey']) if channel()=='local' and config.get('publicKey') else KEY.read_text()
+def sequence_scope():
+    if channel()!='local':return channel()
+    return 'local:'+hashlib.sha256((source()+'\n'+public_key(trust_key())).encode()).hexdigest()
+def status():
+    config=read(CONFIG,{})
+    return {'server':source(),'localServer':config.get('server',''),'publicKey':config.get('publicKey',KEY.read_text() if channel()=='local' else ''),'development':channel()=='local','channel':channel(),'current':current(),'previous':read(ROOT/'previous.json'),'available':read(ROOT/'available.json'),'operation':read(STATE),'busy':busy()}
 def normalized(value):
+    if len(value)>2048 or not value.strip():raise ValueError('Enter the update server IP or domain')
     value=value.strip()
     if '://' not in value:value='http://'+value
     u=urllib.parse.urlsplit(value)
@@ -89,14 +117,15 @@ def check(stage):
     identity=(stage/'latest').read_text().strip()
     if not re.fullmatch('[a-f0-9]{64}',identity):raise ValueError('Invalid release identity')
     fetch(server+'/'+identity+'.json',stage/'release.json',65536);fetch(server+'/'+identity+'.json.sig',stage/'release.sig',128)
-    call(['openssl','pkeyutl','-verify','-pubin','-inkey',str(KEY),'-rawin','-in',str(stage/'release.json'),'-sigfile',str(stage/'release.sig')])
+    verification_key=stage/'verification-key.pem';verification_key.write_text(trust_key())
+    call(['openssl','pkeyutl','-verify','-pubin','-inkey',str(verification_key),'-rawin','-in',str(stage/'release.json'),'-sigfile',str(stage/'release.sig')])
     entry=read(stage/'release.json')
     if entry.get('schema')!=1 or entry.get('hostAbi')!=1 or entry.get('dataSchema')!=1 or entry.get('id')!=identity or entry.get('file')!=identity+'.tar.gz':raise ValueError('Release is incompatible with this installation')
     if not isinstance(entry.get('bytes'),int) or not 0<entry['bytes']<=2*1024**3 or not re.fullmatch('[a-f0-9]{64}',entry.get('sha256','')):raise ValueError('Invalid release metadata')
     if read(CONFIG,{}).get('development') is not True and entry.get('channel','stable')!=channel():raise ValueError('Signed release does not match the selected channel')
-    key='development' if read(CONFIG,{}).get('development') is True else channel()
+    key=sequence_scope()
     floor=read(ROOT/'channel-sequences.json',{}).get(key,0)
-    if 'channel' not in entry:floor=max(floor,read(ROOT/'highest-sequence.json',0))
+    if 'channel' not in entry and channel()!='local':floor=max(floor,read(ROOT/'highest-sequence.json',0))
     if entry.get('sequence',0)<floor:raise ValueError('Repository offered an older release in this channel; use Roll back for the previous installation')
     atomic(ROOT/'available.json',entry);return entry
 
@@ -167,9 +196,14 @@ def compatible(entry):
         try:required=required or uses_users(read(receipt))
         except FileNotFoundError:pass
     if required:raise ValueError('This version cannot manage the workstation users used by your profiles. Select a version with workstation user support.')
-def activate(entry):
+def remember_sequence(entry,scope):
+    if scope is None:return # Explicit rollback must not attribute an old release to a new source.
+    sequences=read(ROOT/'channel-sequences.json',{})
+    sequences[scope]=max(sequences.get(scope,0),entry.get('sequence',0));atomic(ROOT/'channel-sequences.json',sequences)
+    if not scope.startswith('local:'):atomic(ROOT/'highest-sequence.json',max(read(ROOT/'highest-sequence.json',0),entry.get('sequence',0)))
+def activate(entry,scope=None):
     old=current()
-    if old['id']==entry['id']:atomic(ROOT/('release-'+entry['id']+'.json'),entry);progress('Complete','This version is already installed');return
+    if old['id']==entry['id']:remember_sequence(entry,scope);atomic(ROOT/('release-'+entry['id']+'.json'),entry);progress('Complete','This version is already installed');return
     compatible(entry)
     progress('Draining','Waiting for active requests and profile changes to finish')
     atomic(BLOCK,{'operation':OP})
@@ -187,9 +221,7 @@ def activate(entry):
         if not healthy(entry['id']):raise ValueError('New application health checks failed')
         atomic(ROOT/('release-'+entry['id']+'.json'),entry)
         atomic(ROOT/'previous.json',old)
-        atomic(ROOT/'highest-sequence.json',max(read(ROOT/'highest-sequence.json',0),entry.get('sequence',0)))
-        sequences=read(ROOT/'channel-sequences.json',{});key=entry.get('channel','stable')
-        sequences[key]=max(sequences.get(key,0),entry.get('sequence',0));atomic(ROOT/'channel-sequences.json',sequences)
+        remember_sequence(entry,scope)
         TX.unlink();BLOCK.unlink(missing_ok=True);progress('Complete','Application updated')
     except Exception:
         if TX.exists():recover()
@@ -204,7 +236,7 @@ if __name__=='__main__':
         except BlockingIOError:raise SystemExit('An application update is already running')
         try:
             if action=='configure':configure(sys.argv[2])
-            elif action=='channel':select_channel(sys.argv[2])
+            elif action=='channel':select_channel(sys.argv[2],sys.argv[3] if len(sys.argv)>3 else None,sys.argv[4] if len(sys.argv)>4 else None)
             elif action=='development':
                 if sys.argv[2] not in ('true','false'):raise ValueError('Invalid development setting')
                 development(sys.argv[2]=='true')
@@ -230,7 +262,7 @@ if __name__=='__main__':
                             # Validate an existing release too; never activate stale tampered files.
                             for name,digest in read(stage/'bundle/bundle.json')['files'].items():
                                 if hashlib.file_digest((release/name).open('rb'),'sha256').hexdigest()!=digest:raise ValueError('Installed release changed')
-                        call(['restorecon','-RF',str(release)],120);activate(entry)
+                        call(['restorecon','-RF',str(release)],120);activate(entry,sequence_scope())
             else:raise ValueError('Unknown update action')
         except Exception as e:
             if read(STATE,{}).get('stage')!='RolledBack':progress('Failed',str(e) if isinstance(e,ValueError) else 'Update failed; inspect the system journal')

@@ -1,10 +1,11 @@
 FROM mirror.gcr.io/vllm/vllm-omni@sha256:4780186f168af96634917208596675439fa71cb5ed3440a30e8c21ca1defc451
 USER root
-# Retain the base engine's Torch/CUDA/numpy versions. Fail on conflicting
-# dependencies instead of allowing pip to replace the serving stack.
-RUN python3 -m pip freeze --exclude-editable > /tmp/engine-constraints.txt
-RUN python3 -m pip install --no-deps 'https://files.pythonhosted.org/packages/2a/e9/3d641f8ae5176808c8be9c3713deb663edece717a587a3eb7f10fed3cdd6/fish_speech-0.1.0-py3-none-any.whl#sha256=1ea6123c7b9a441bc48f296439ae0e987621b780f9314ff3eb5ad072ebe9e7ac'
-# Install the codec's dependencies only, avoiding Fish's training/UI extras.
-RUN python3 -m pip install --constraint /tmp/engine-constraints.txt --report /opt/xur-fish-install.json 'descript-audio-codec==1.0.0' 'descript-audiotools==0.7.2' 'hydra-core==1.3.7' \
- && python3 -c 'from vllm_omni.model_executor.models.fish_speech.dac_utils import build_dac_codec; build_dac_codec()' \
+# Preserve the upstream serving stack, including its intentionally selected
+# Torch/CUDA/NCCL/protobuf versions. Audiotools' legacy protobuf<3.20 metadata
+# is for training; it must not downgrade Omni's protobuf for codec inference.
+RUN python3 -c 'import importlib.metadata as m,json; json.dump({d.metadata["Name"]:m.version(d.metadata["Name"]) for d in m.distributions()},open("/opt/xur-fish-base.json","w"))'
+COPY requirements.lock /opt/xur-fish-requirements.lock
+RUN python3 -m pip install --no-cache-dir --no-deps --no-build-isolation --require-hashes --report /opt/xur-fish-install.json -r /opt/xur-fish-requirements.lock \
+ && python3 -c 'import importlib.metadata as m,json; before=json.load(open("/opt/xur-fish-base.json")); changed=[n for n,v in before.items() if m.version(n)!=v]; assert not changed, changed' \
+ && OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python3 -c 'from vllm_omni.model_executor.models.fish_speech.dac_utils import build_dac_codec; build_dac_codec()' \
  && python3 -m pip freeze --all > /opt/xur-fish-packages.txt

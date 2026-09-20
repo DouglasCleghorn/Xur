@@ -14,8 +14,23 @@ usernames, file paths, account names, or model prompts in public screenshots.
 | `docs/assets/workstations-and-llm.png` | README example profiles; website home/model guide | User-supplied diagram, unchanged | 2026-09-20; illustrative allocation, not a benchmark | Workstation/profile changes |
 | `docs/assets/speech-and-llm.png` | README example profiles; website home/model guide | User-supplied diagram, unchanged | 2026-09-20; illustrative allocation, not a compatibility guarantee | Model/engine catalog changes |
 
-No live-server screenshots are currently published. The diagrams above are
-artwork, not UI screenshots.
+No live-server screenshots are published. The diagrams above are artwork.
+The following app screenshots are produced by `node eng/capture-website.cjs`
+using the actual Razor renderer and synthetic test fixtures. No real host is
+contacted. Dates refer to the reviewed working tree based on `f2d1d7c`; they do
+not imply a released app version.
+
+| Image | Used in | Capture / privacy review | Next review |
+| --- | --- | --- | --- |
+| `docs/assets/control-panel.jpg` | Website home; getting-started guide | 2026-09-20; synthetic Gaming/Studio profiles, no personal data, 1200×800 | Home/profile picker changes |
+| `docs/assets/workstations.jpg` | Website home; workstation guide | 2026-09-20; synthetic desktops and GPU, user replaced with `example-user`, connection details collapsed, 1200×800 | Workstation management/layout changes |
+| `docs/assets/profile-editor.jpg` | Getting-started guide | 2026-09-20; synthetic GPU and workstation, no account details, 1200×800 | Profile editor or USB assignment changes |
+| `docs/assets/model-lab.jpg` | Models guide | 2026-09-20; synthetic target, blank prompt, no responses or benchmark results, 1200×800 | Model lab controls changes |
+| `docs/assets/update-channel.jpg` | Updates guide | 2026-09-20; cropped to update-channel panel, Nightly selected, local server/key fields hidden; no network/account details, 944×327 | Update settings changes |
+
+All five JPEGs were visually reviewed and have no EXIF or location metadata.
+Guide captions identify their example data. Full-resolution images are linked for
+readability; key actions are also described in text.
 
 ## Development captures
 
@@ -28,6 +43,11 @@ artwork, not UI screenshots.
 
 ## Change log
 
+- 2026-09-20: Added the five reviewed synthetic app screenshots above to the dark
+  website and guides. Captured responsive site previews under `.build/website/`
+  and recorded automated accessibility results there. No live application or
+  user-supplied screenshot was published.
+
 - 2026-09-20: Reviewed the user-supplied Workstations screenshot in T3 attachment
   `9fbd0a96-cc1e-4308-9589-a0c4bd9ec049-f266a2e9-91c6-4c56-a84e-7c34f7aa033b.png`
   as the redesign baseline; contains account names and device details, kept private.
@@ -36,6 +56,21 @@ artwork, not UI screenshots.
   interim previews). Synthetic fixture data and documentation-only network
   addresses; development evidence only, not published. Recheck on changes to
   workstation layout, creation, pairing or profile actions.
+
+- 2026-09-20: Regenerated private website captures for the MIT footer/home text
+  and Settings captures for source/license links. The Cloudflare setup screenshot
+  was used as a private reference only and was not copied into the repository.
+  Also reviewed the Cloudflare application chooser attachment
+  `c3be30b2-3576-48ae-a8ef-0cf8d96e4c12-3a1fa4f9-f8a3-4200-bf82-b573dc3743d0.png`
+  to locate its “Continue to Pages” link. No credentials are visible; kept in
+  private T3 attachments, not published. Recheck these directions when Cloudflare
+  changes its setup interface.
+
+- 2026-09-20: Regenerated private Settings regression captures at 1440 and 390 px
+  for the combined update-channel selector and contributor public-key fields.
+  Synthetic update server/key fixtures. The network panel includes development
+  host addresses, so these captures remain private and must be sanitized before
+  publication. No credentials or live screenshots were published.
 
 - 2026-09-20: Registered the three README artworks and existing private test
   capture families. Reviewed the supplied README images for private information.

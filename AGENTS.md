@@ -28,3 +28,10 @@ Track every screenshot used or published in `docs/screenshots.md`, including its
 location, purpose, capture version/date and privacy review. Regenerated private
 test screenshots can share a documented capture-family entry. Before each
 release, review images affected by UI changes and update or retire stale images.
+
+## Licensing
+
+Original Xur code and documentation are MIT licensed under the root `LICENSE`.
+Preserve third-party copyright and license notices. Do not relabel dependencies,
+OS packages or model weights as MIT. Keep Xur’s license and `docs/licensing.md`
+in shipped bundles, and the font’s OFL notice in the website output.

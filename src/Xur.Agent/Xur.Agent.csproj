@@ -7,4 +7,6 @@
     <Content Include="../../tools/Xur.Streaming/upstream-lock.json" Link="streaming-lock.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../os/containers/99-xur-docker-hub.conf" LogicalName="Xur.RegistryMirror" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../../os/engines/fish/Containerfile" LogicalName="Xur.Fish.Containerfile" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../../os/engines/fish/requirements.lock" LogicalName="Xur.Fish.requirements.lock" /></ItemGroup>
 </Project>

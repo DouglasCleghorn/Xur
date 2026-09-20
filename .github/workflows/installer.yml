@@ -1,27 +1,66 @@
-name: Xur installer ISO
+name: Build installer candidate
 on:
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      channel:
+        required: true
+        type: string
 permissions:
   contents: read
-concurrency:
-  group: xur-installer-build
-  cancel-in-progress: false
 jobs:
   installer:
-    # The Fedora ISO toolchain runs in an isolated builder.
-    # Bazzite is downloaded during installation, not embedded in this ISO.
-    runs-on: [self-hosted, Linux, X64, xur-iso]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release'
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: write
+    env:
+      XUR_BUILDER_CPUS: '4'
+      XUR_BUILDER_MEMORY: '8192'
+      XUR_INSTALLER_CHANNEL: ${{ inputs.channel }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Build and exercise the ISO
+      - name: Prepare disposable hosted runner
         run: |
+          export XUR_BUILD_ROOT="$RUNNER_TEMP/xur-iso-build"
+          export XUR_BUILD_CACHE="$RUNNER_TEMP/xur-iso-cache"
+          echo "XUR_BUILD_ROOT=$XUR_BUILD_ROOT" >> "$GITHUB_ENV"
+          echo "XUR_BUILD_CACHE=$XUR_BUILD_CACHE" >> "$GITHUB_ENV"
+          bash eng/ci-iso-prepare.sh
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          dotnet-version: 10.0.401
+      - name: Build and inspect online installer
+        run: |
+          export XUR_DOTNET="$(command -v dotnet)"
           ./eng/build-iso.sh
-          python3 tests/Xur.Media.Tests/check-installer-suite.py dist/xur-installer-x86_64.iso --prefix "ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --profiles
+          python3 eng/ci-installer.py candidate --commit "$GITHUB_SHA" --channel "$XUR_INSTALLER_CHANNEL"
+      - name: Prune superseded installer candidates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 eng/ci-artifacts.py "$XUR_INSTALLER_CHANNEL" --kind installer
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: xur-installer-x86_64
+          name: installer-candidate-${{ inputs.channel }}-${{ github.sha }}
+          compression-level: 0
+          retention-days: 7
           path: |
             dist/xur-installer-x86_64.iso
-            dist/xur-installer-x86_64.iso.sha256
             dist/xur-installer-x86_64.embedded.json
+            dist/installer-build.json
+      - name: Stop disposable builder
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json,os,pathlib,socket
+          path=pathlib.Path(os.environ['XUR_BUILD_ROOT'])/'vm/qmp.sock'
+          if path.exists():
+              with socket.socket(socket.AF_UNIX) as client:
+                  client.settimeout(10);client.connect(str(path));stream=client.makefile('rwb');stream.readline()
+                  for command in ['qmp_capabilities','quit']:
+                      stream.write((json.dumps({'execute':command})+'\n').encode());stream.flush()
+                      while True:
+                          result=json.loads(stream.readline())
+                          if 'return' in result or 'error' in result:break
+          PY

@@ -14,7 +14,7 @@ archive.parent.mkdir(parents=True,exist_ok=True)
 if not archive.exists():
  with urllib.request.urlopen(lock['url']) as response,archive.open('wb') as f:shutil.copyfileobj(response,f)
 assert digest(archive)==lock['sha256'],'kmscon source checksum mismatch'
-vm=pathlib.Path.home()/'.local/share/xur-build/vm'
+vm=pathlib.Path(os.environ.get('XUR_BUILD_ROOT',pathlib.Path.home()/'.local/share/xur-build'))/'vm'
 options=['-o','BatchMode=yes','-o','UserKnownHostsFile='+str(vm/'known_hosts'),'-i',str(vm/'builder_ed25519')]
 ssh=['ssh',*options,'-p','22220','builder@127.0.0.1'];scp=['scp','-q',*options,'-P','22220']
 key=hashlib.sha256(json.dumps(inputs,sort_keys=True).encode()).hexdigest()[:16];remote='xur-console-'+key

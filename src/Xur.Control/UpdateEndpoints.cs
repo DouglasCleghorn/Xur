@@ -27,14 +27,14 @@ public static class UpdateEndpoints
         {
             if(device.Installer)return Results.Conflict();
             var r=await device.Agent.PostAsJsonAsync("/application-updates",request);
-            return browser && r.IsSuccessStatusCode ? Results.Redirect(request.Action=="channel"?"/settings#update-channel":request.Action is "configure" or "development"?"/settings#development-updates":"/updates") : Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);
+            return browser && r.IsSuccessStatusCode ? Results.Redirect(request.Action=="channel"?"/settings#update-channel":request.Action is "configure" or "development"?"/settings#update-channel":"/updates") : Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);
         }
         app.MapGet("/api/application-updates",ApplicationStatus);
         app.MapPost("/api/application-updates",(ApplicationUpdateRequest r)=>ApplicationAct(r));
         app.MapGet("/local/application-updates",ApplicationStatus);
         app.MapPost("/local/application-updates/{action}",(string action)=>ApplicationAct(new(action)));
         app.MapPost("/application-updates/action",(Func<HttpContext,Task<IResult>>)(async c=> {
-            var f=await c.Request.ReadFormAsync();return await ApplicationAct(new(f["action"].ToString(),f["server"].ToString(),f["development"]=="true",f["channel"].ToString()),true);
+            var f=await c.Request.ReadFormAsync();return await ApplicationAct(new(f["action"].ToString(),f["server"].ToString(),f["development"]=="true",f["channel"].ToString(),f["publicKey"].ToString()),true);
         }));
         app.MapGet("/api/update-all",async Task<IResult>()=> {
             if(device.Installer)return Results.Conflict();

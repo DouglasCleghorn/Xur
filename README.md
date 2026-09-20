@@ -1,5 +1,7 @@
 ![Xur — image-based OS for GPU workload profiles](docs/assets/xur-header.png)
 
+Xur is [MIT-licensed open source](LICENSE).
+
 Xur turns a GPU-equipped PC into a server you manage from a browser. Save profiles
 that allocate GPUs to gaming desktops, language models, speech services, and
 containers, then switch between those profiles from a single control panel.
@@ -97,7 +99,7 @@ bash eng/test-fast.sh
 
 The second command signs and publishes to the **local development update
 repository**; it does not publish a GitHub release. Choose a new version for each
-build. Enable **Settings → Local build testing** on a test server to use it.
+build. Enable **Settings → Update channel → Local build testing** on a test server to use it.
 GitHub publication is a [separate explicit step](docs/usage/application-updates.md).
 
 Build artifacts live in `dist/`; private runtime state, VM disks, logs and test
@@ -108,3 +110,9 @@ The public project site and short guides live in [`website/`](website/README.md)
 ready for Cloudflare Pages at **xur.app**. Release candidates build on every push
 to `main` (Nightly) or `release` (Stable) and require maintainer approval in GitHub
 before publication. See [release channels](docs/usage/application-updates.md).
+
+## License
+
+Xur is available under the [MIT License](LICENSE). Third-party software, fonts,
+container images and model weights retain their own licenses; see
+[licensing and notices](docs/licensing.md).

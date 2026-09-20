@@ -7,19 +7,24 @@ GitHub's HTTPS release/CDN redirects and pins the resolved release tag before
 fetching its descriptor, signature and bundle. A new release appearing during a
 download cannot mix files from different releases.
 
-For local development, open **Settings → Local build testing**, enable the
-option, and save your development computer's address (for example
-`192.0.2.10:8088`). Local servers support HTTP or verified HTTPS, including
-bracketed IPv6. HTTP defaults to port 8088. Redirects are rejected. Turning the
-option off restores GitHub Releases while retaining the local address for next
-time. The old arbitrary-server setting alone no longer enables local updates.
+**Settings → Update channel** offers Stable, Nightly and Local build testing.
+For local testing, enter your development computer’s server address (for example
+`192.0.2.10:8088`) and paste its **Ed25519 public key in PEM format**. Obtain the
+key from the contributor through a trusted channel; trusting it permits their
+builds to run privileged code. Never paste or share the private key.
 
-Both sources require the same trusted Ed25519 signature, archive/file hashes,
-compatibility checks and anti-rollback sequence. There is no unsigned-build or
-TLS-verification bypass. A local release newer than the current public release
-will stay installed until a newer public release exists, or you explicitly roll
-back to the retained previous installation. Settings survive app/OS updates in
-`/etc/xur/application-updates.json`.
+Local servers support HTTP or verified HTTPS, including bracketed IPv6. The
+default port is 8088; redirects are rejected. Switching to Stable or Nightly
+restores the official Xur signing key and retains the local server/key for next
+time. Saving a channel does not install an update.
+
+All sources require signature, archive/file hash and compatibility checks.
+There is no unsigned-build or TLS-verification bypass. Replay protection is
+separate for each public channel and each local server/public-key pair, so a
+contributor build cannot raise the official release sequence floor. Settings
+survive app/OS updates in `/etc/xur/application-updates.json`; the local key never
+replaces `/etc/xur/application-update-key.pem`. Existing local configurations
+continue using the official key until an explicit custom key is saved.
 
 The terminal menu also offers **Updates → Xur application**. CLI equivalents:
 
@@ -35,8 +40,8 @@ Authenticated automation uses `GET /api/application-updates` and
 `POST /api/bootstrap`. The request bodies are:
 
 ```json
-{"action":"development","development":true}
-{"action":"configure","server":"192.0.2.10:8088"}
+{"action":"channel","channel":"local","server":"192.0.2.10:8088","publicKey":"-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"}
+{"action":"channel","channel":"stable"}
 {"action":"check"}
 {"action":"update"}
 {"action":"rollback"}
@@ -111,14 +116,25 @@ The repository verifies the published bundle and creates a versioned archive,
 a signed descriptor, and an atomic `latest` pointer. Publishing and building
 share a context lock. The signing key is private at
 `~/.local/share/xur-updates/signing-key.pem` (directory 0700, file 0600); **back it up**.
-Set `XUR_UPDATE_SIGNING_KEY` to use another private key path. The matching public key is included in the ISO and installed under `/etc/xur`.
-Clients can change the server address, but only packages signed by that key
-are accepted. Replacing the repository key requires explicitly replacing the
-client trust anchor; serving a new public key over HTTP does not grant trust.
+`XUR_UPDATE_SIGNING_KEY` selects an official maintainer key and must match the
+tracked trust anchor. Contributors use **`XUR_LOCAL_SIGNING_KEY`** instead:
 
-For a different build owner, generate an Ed25519 key and deliberately replace
-`os/bootc/application-update-key.pem` before building their initial ISO.
-Private keys never belong in source archives, ISOs, logs or the served directory.
+```bash
+export XUR_LOCAL_SIGNING_KEY="$PWD/.build/private/contributor-signing-key.pem"
+python3 eng/update-repository.py keys
+bash eng/test-fast.sh
+./eng/package-update.sh --build-only --version 2026.09.20.1
+./eng/update-server.sh start
+cat .build/update-repository/application-update-key.pem
+```
+
+The `keys` command generates an Ed25519 key if the selected path does not exist,
+with mode 0600, and exports only its public half. Paste that public PEM into
+**Settings → Update channel → Local build testing**, together with the server
+address. The tracked official key and installer trust anchor remain unchanged.
+Custom keys are rejected by official Stable/Nightly publication. The public key
+is served for convenience, but fetching it from the update server alone does not
+establish trust. Keep private keys outside source and the served directory.
 
 # Testing
 
@@ -144,8 +160,8 @@ and `xur updates …` commands remain available.
 
 Every push to `main` builds a Nightly candidate; every push to `release` builds a
 Stable candidate. Nightly describes the development channel, not a daily timer.
-The release workflow runs fast checks, packages a candidate, and retains it for
-seven days. It then waits for DouglasCleghorn to approve the matching GitHub
+The release workflow runs fast checks, builds and inspects an online installer,
+packages candidates, and retains them for seven days. It then waits for DouglasCleghorn to approve the matching GitHub
 Environment before signing or publishing. Admin bypass is disabled. The owner
 can approve their own commits because this project currently has one maintainer.
 
@@ -165,7 +181,7 @@ Stable uses GitHub's latest non-prerelease. Signed metadata binds each release t
 its channel. Downloads resolve the pointer before fetching metadata and payload,
 so a concurrent publication cannot mix release assets.
 
-**Settings → Update channel** selects Nightly or Stable. Switching channels does
+**Settings → Update channel** selects Nightly, Stable or Local build testing. Switching channels does
 not install immediately; check for updates and apply the selected release.
 Moving from a newer Nightly to an older Stable is allowed if its data/features
 remain compatible. Replay protection applies separately within each channel.
@@ -177,12 +193,12 @@ has not published a release yet, the check fails without changing the running ap
 `eng/package-update.sh --build-only --version VERSION` retains the existing local
 build route without VM tests. Run `bash eng/test-fast.sh` separately. The package
 records that VM validation was skipped rather than claiming a VM pass. Enable
-**Settings → Local build testing** at the bottom of Settings and configure the
-local repository. Signatures and compatibility checks remain required. Turn off
-local testing to return to the selected public channel.
+**Settings → Update channel → Local build testing** at the bottom of Settings
+and configure the local repository and public key. Signatures and compatibility
+checks remain required. Select Stable or Nightly to return to official builds.
 
 The older `eng/publish-github.py` is a manual maintainer recovery path, outside the
 CI approval flow. Use it only after explicit publication authorization. Normal
 public updates use the gated workflow. Both paths publish source archives and
-signed app bundles, not private build state or signing keys. ISO media remains a
-separate build and validation process.
+signed app bundles, not private build state or signing keys. The gated CI workflow
+also attaches installer media; see [installer releases](../development/installer-releases.md).

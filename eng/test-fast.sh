@@ -32,6 +32,7 @@ node tests/Xur.Integration.Tests/cancellation-ui.cjs > .build/fast/cancellation-
 python3 tests/Xur.Integration.Tests/application-update.py > .build/fast/application-updates.json
 python3 tests/Xur.Integration.Tests/online-installer.py > .build/fast/online-installer.json
 python3 tests/Xur.Integration.Tests/github-release.py > .build/fast/github-release.json
+python3 tests/Xur.Integration.Tests/installer-release.py > .build/fast/installer-release.json
 python3 tests/Xur.Integration.Tests/terminal.py > .build/fast/terminal.json
 python3 tests/Xur.Integration.Tests/console-menu.py > .build/fast/console-menu.json
 python3 tests/Xur.Integration.Tests/network-startup.py > .build/fast/network-startup.json

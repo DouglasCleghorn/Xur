@@ -18,7 +18,9 @@ def publish(channel,version,commit):
  source=public/'xur-source.tar.gz';run('git','archive','--format=tar.gz','--output='+str(source),commit)
  tag=('nightly-' if channel=='nightly' else 'v')+version
  files=[public/'latest',public/(identity+'.json'),public/(identity+'.json.sig'),public/(identity+'.tar.gz'),source,artifact/'build.json']
- run('gh','release','create',tag,'--repo',REPO,'--target',commit,'--draft','--title','Xur '+channel+' '+version,'--notes','Approved '+channel+' build from '+commit+'. Signed application bundle; no OS image. Automated checks passed; physical GPU validation is separate.',*map(str,files))
+ installer_spec=importlib.util.spec_from_file_location('installer',ROOT/'eng/ci-installer.py');installer=importlib.util.module_from_spec(installer_spec);installer_spec.loader.exec_module(installer)
+ files+=installer.assets(ROOT/'.build/ci-installer',public/'installer',commit,channel,pathlib.Path(os.environ['XUR_UPDATE_SIGNING_KEY']))
+ run('gh','release','create',tag,'--repo',REPO,'--target',commit,'--draft','--title','Xur '+channel+' '+version,'--notes','Approved '+channel+' build from '+commit+'. Signed application bundle and inspected online installer. Bazzite downloads during installation. Automated app checks passed; installer boot/install and physical GPU validation are separate.',*map(str,files))
  run('gh','release','edit',tag,'--repo',REPO,'--draft=false','--prerelease='+str(channel=='nightly').lower(),'--latest='+str(channel=='stable').lower())
  if channel=='nightly':
   # The small channel pointer refers to an immutable per-commit release. In-flight

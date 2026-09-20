@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Build the virtual monitor helper in the existing disposable Fedora builder."""
-import hashlib,json,pathlib,subprocess,shutil
+import hashlib,json,os,pathlib,subprocess,shutil
 repo=pathlib.Path(__file__).resolve().parents[1];source=repo/'tools/Xur.VirtualDisplay';output=repo/'.build/virtual-display-runtime'
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 inputs={p.name:sha(p) for p in sorted(source.iterdir()) if p.is_file()}
@@ -9,7 +9,7 @@ if receipt.exists():
  r=json.loads(receipt.read_text())
  if r['inputs']==inputs and (output/'xur-virtual-output').exists() and sha(output/'xur-virtual-output')==r['binary']:
   print('Virtual monitor: verified build cache');raise SystemExit
-vm=pathlib.Path.home()/'.local/share/xur-build/vm';options=['-o','BatchMode=yes','-o','UserKnownHostsFile='+str(vm/'known_hosts'),'-i',str(vm/'builder_ed25519')]
+vm=pathlib.Path(os.environ.get('XUR_BUILD_ROOT',pathlib.Path.home()/'.local/share/xur-build'))/'vm';options=['-o','BatchMode=yes','-o','UserKnownHostsFile='+str(vm/'known_hosts'),'-i',str(vm/'builder_ed25519')]
 ssh=['ssh',*options,'-p','22220','builder@127.0.0.1'];scp=['scp','-q',*options,'-P','22220']
 remote='xur-virtual-display-'+hashlib.sha256(json.dumps(inputs,sort_keys=True).encode()).hexdigest()[:16]
 subprocess.run([*ssh,'mkdir -p '+remote],check=True)

@@ -34,7 +34,7 @@ jobs:
         run: |
           python3 eng/ci-native.py
           mkdir -p .build/browser .build/downloads
-          npm install --prefix .build/browser playwright@1.58.2
+          npm install --prefix .build/browser playwright@1.58.2 axe-core@4.13.0
           .build/browser/node_modules/.bin/playwright install --with-deps chromium
           python3 - <<'PY'
           import hashlib,json,pathlib,urllib.request
@@ -49,6 +49,8 @@ jobs:
           bash eng/test-fast.sh
           python3 website/build.py
           node tests/Xur.Integration.Tests/website-ui.cjs
+          node tests/Xur.Integration.Tests/website-download.cjs
+          node tests/Xur.Integration.Tests/website-accessibility.cjs
           python3 eng/build-app-bundle.py --from-published
           python3 - <<'PY'
           import hashlib,json,os,pathlib
@@ -75,10 +77,18 @@ jobs:
           name: failed-checks-${{ github.sha }}
           retention-days: 7
           path: .build/fast/
-  publish:
+  installer:
     needs: build
+    uses: ./.github/workflows/installer.yml
+    permissions:
+      contents: read
+      actions: write
+    with:
+      channel: ${{ needs.build.outputs.channel }}
+  publish:
+    needs: [build, installer]
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment:
       name: ${{ needs.build.outputs.channel }}
     permissions:
@@ -90,7 +100,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
-        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-candidate-$RELEASE_CHANNEL-$GITHUB_SHA" --dir .build/ci-artifact
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-candidate-$RELEASE_CHANNEL-$GITHUB_SHA" --dir .build/ci-artifact
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "installer-candidate-$RELEASE_CHANNEL-$GITHUB_SHA" --dir .build/ci-installer
       - name: Sign and publish approved build
         env:
           GH_TOKEN: ${{ github.token }}
@@ -109,4 +121,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
-        run: python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --published
+        run: |
+          python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --published
+          python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --kind installer --published

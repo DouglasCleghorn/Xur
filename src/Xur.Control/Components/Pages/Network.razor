@@ -5,6 +5,7 @@
 <PageTitle>Settings · Xur</PageTitle>
 
 <h1>Settings</h1>
+<p class="secondary-text">Xur is MIT-licensed open source. <a href="https://github.com/DouglasCleghorn/Xur">Source code</a> · <a href="https://github.com/DouglasCleghorn/Xur/blob/main/LICENSE">MIT license</a> · <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/licensing.md">Third-party notices</a></p>
 <section class="panel"><h2>API access</h2><p>Give scripts and assistants their own revocable credentials with optional expiration.</p><a class="button secondary" href="/settings/api-keys">Manage API keys</a></section>
 @if(Auth.AccountConfigured) { <section class="panel"><h2>Account</h2><p>@Auth.Username</p><form method="post" action="/auth/logout"><AntiforgeryToken /><button class="secondary">Sign out</button></form></section> }
 <section class="panel"><h2>Hugging Face</h2>
@@ -74,19 +75,18 @@
 
 @if(!Device.Installer && application!=null) {
 <section class="panel" id="update-channel"><h2>Update channel</h2>
-<form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="channel" /><label>Channel<select name="channel"><option value="stable" selected="@(application.Channel=="stable")">Stable</option><option value="nightly" selected="@(application.Channel=="nightly")">Nightly</option></select></label><button disabled="@application.Busy">Save channel</button></form>
-<p>Nightly builds come from each main-branch commit after approval. Stable builds come from the release branch. Switching channels changes the source; check Updates to install its latest approved build. Switching to stable may install an older version. Compatibility checks still protect your configuration.</p>
-@if(application.Development) { <p>Local build testing currently overrides this channel. Saving a channel turns local testing off.</p> }
-</section>
-<section class="panel" id="development-updates"><h2>Local build testing</h2>
-<p>Public updates use GitHub Releases. Enable this only to test builds from your own update server. All builds still require Xur’s trusted signature; this does not allow unsigned builds or bypass rollback protection.</p>
-<form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="development" />
-<label class="inline-option"><input type="checkbox" name="development" value="true" checked="@application.Development" /> Allow local build testing</label><button disabled="@application.Busy">Save</button></form>
-@if(application.Development) {
-<form method="post" action="/application-updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="configure" />
-<label>Local update server<input name="server" value="@application.Server" placeholder="192.0.2.10:8088" maxlength="2048" required /></label><button disabled="@application.Busy">Save server</button></form>
-<p>Turning this off restores GitHub Releases and keeps your local server address for next time.</p>
-}
+<form method="post" action="/application-updates/action" id="update-channel-form"><AntiforgeryToken /><input type="hidden" name="action" value="channel" />
+<label for="release-channel">Channel</label><select id="release-channel" name="channel"><option value="stable" selected="@(!application.Development && application.Channel=="stable")">Stable</option><option value="nightly" selected="@(!application.Development && application.Channel=="nightly")">Nightly</option><option value="local" selected="@application.Development">Local build testing</option></select>
+<fieldset id="local-update-fields">
+<legend>Local build testing</legend>
+<label for="local-update-server">Update server</label><input id="local-update-server" name="server" value="@(application.LocalServer ?? (application.Development?application.Server:""))" placeholder="192.0.2.10:8088" maxlength="2048" />
+<label for="local-update-key">Signing public key (Ed25519 PEM)</label><textarea id="local-update-key" name="publicKey" rows="4" maxlength="4096" spellcheck="false" placeholder="-----BEGIN PUBLIC KEY-----">@application.PublicKey</textarea>
+<p>Paste the contributor’s public key from a trusted source. Builds signed by this key can run privileged code on this computer. Never paste a private key. HTTP or verified HTTPS servers are supported.</p>
+</fieldset>
+<button disabled="@application.Busy">Save channel</button></form>
+<script src="/update-channel.js" defer></script>
+<p>Nightly builds come from each main-branch commit after approval. Stable builds come from the release branch. Saving changes the source; install its latest build from Updates. Switching to Stable may install an older compatible version.</p>
+<p class="secondary-text">The local server and public key are kept when switching channels. Stable and Nightly always use Xur’s official signing key. All channels verify signatures, file hashes and compatibility.</p>
 </section>
 }
 

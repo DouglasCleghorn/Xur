@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """Package source/evidence and promote an already tested, signed staging bundle."""
-import argparse,hashlib,json,pathlib,re,shutil,subprocess,tarfile
+import argparse,hashlib,json,os,pathlib,re,shutil,subprocess,tarfile
 repo=pathlib.Path(__file__).resolve().parents[1]
 p=argparse.ArgumentParser();p.add_argument('--version',required=True);p.add_argument('--skip-vm-checks',action='store_true',help='Explicit build-only release; record skipped validation');a=p.parse_args();assert re.fullmatch(r'[0-9.]+',a.version)
 stage=repo/'.build/update-staging';public=repo/'.build/update-repository';identity=(stage/'latest').read_text().strip();assert re.fullmatch('[a-f0-9]{64}',identity)
 entry=json.loads((stage/(identity+'.json')).read_text());assert entry['version']==a.version and entry['id']==identity and entry['file']==identity+'.tar.gz'
-subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(repo/'os/bootc/application-update-key.pem'),'-rawin','-in',str(stage/(identity+'.json')),'-sigfile',str(stage/(identity+'.json.sig'))],check=True,stdout=subprocess.DEVNULL)
+trusted=repo/'os/bootc/application-update-key.pem'
+if custom:=os.environ.get('XUR_LOCAL_SIGNING_KEY'):
+ assert entry.get('channel')=='development','Custom keys cannot publish official releases'
+ expected=subprocess.check_output(['openssl','pkey','-in',custom,'-pubout'])
+ trusted=stage/'application-update-key.pem'
+ assert trusted.read_bytes()==expected,'Staged key differs from the selected contributor key'
+subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(trusted),'-rawin','-in',str(stage/(identity+'.json')),'-sigfile',str(stage/(identity+'.json.sig'))],check=True,stdout=subprocess.DEVNULL)
 def sha(path):
  with path.open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
 assert sha(stage/entry['file'])==entry['sha256']
@@ -44,7 +50,7 @@ manifest={'schema':1,'version':a.version,'application':entry,'sourceSha256':sha(
 (out/'SHA256SUMS').write_text(''.join(sha(f)+'  '+f.name+'\n' for f in [source,out/'manifest.json']))
 # Publish the exact staged archive and signature, preserving validation provenance.
 public.mkdir(parents=True,exist_ok=True)
-for name in [entry['file'],identity+'.json',identity+'.json.sig']:
+for name in [entry['file'],identity+'.json',identity+'.json.sig','application-update-key.pem']:
  temporary=public/(name+'.tmp');shutil.copyfile(stage/name,temporary);temporary.replace(public/name)
 latest=public/'latest.tmp';latest.write_text(identity);latest.replace(public/'latest')
 print(json.dumps({'result':'Published','version':a.version,'bundle':identity,'source':str(source),'privateArtifactScan':'Passed'}))

@@ -5,17 +5,27 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 PUBLIC=ROOT/'.build/update-repository'
 KEY=pathlib.Path(os.environ.get('XUR_UPDATE_SIGNING_KEY',pathlib.Path.home()/'.local/share/xur-updates/signing-key.pem'))
 PUB=ROOT/'os/bootc/application-update-key.pem'
-def keys():
-    KEY.parent.mkdir(parents=True,exist_ok=True);KEY.parent.chmod(0o700)
-    if not KEY.exists():
-        subprocess.run(['openssl','genpkey','-algorithm','ED25519','-out',str(KEY)],check=True);KEY.chmod(0o600)
-    public=subprocess.check_output(['openssl','pkey','-in',str(KEY),'-pubout'])
-    if PUB.exists() and PUB.read_bytes()!=public:raise RuntimeError('Signing key differs from the trusted ISO key')
-    PUB.write_bytes(public)
+def keys(local=True):
+    custom=os.environ.get('XUR_LOCAL_SIGNING_KEY')
+    if custom and not local:raise ValueError('Custom signing keys are only allowed for local development releases')
+    key=pathlib.Path(custom) if custom else KEY
+    key.parent.mkdir(parents=True,exist_ok=True)
+    if not key.exists():
+        with key.open('xb') as stream:
+            os.chmod(key,0o600)
+            subprocess.run(['openssl','genpkey','-algorithm','ED25519'],stdout=stream,check=True)
+    public=subprocess.check_output(['openssl','pkey','-in',str(key),'-pubout'])
+    der=subprocess.check_output(['openssl','pkey','-in',str(key),'-pubout','-outform','DER'])
+    if len(der)!=44 or der[:12]!=bytes.fromhex('302a300506032b6570032100'):raise ValueError('Signing key must use Ed25519')
+    if not custom and (not PUB.exists() or PUB.read_bytes()!=public):raise RuntimeError('Signing key differs from the trusted ISO key; use XUR_LOCAL_SIGNING_KEY for contributor builds')
+    PUBLIC.mkdir(parents=True,exist_ok=True)
+    # Export only the public half; never rewrite the official source/ISO trust anchor.
+    (PUBLIC/'application-update-key.pem').write_bytes(public)
+    return key,public
 def publish(version,channel="development"):
     if channel not in ("development","nightly","stable"):raise ValueError("Invalid release channel")
     context_lock=(ROOT/".build/context.lock").open("w");fcntl.flock(context_lock,fcntl.LOCK_SH)
-    keys();PUBLIC.mkdir(parents=True,exist_ok=True)
+    key,public=keys(local=channel=='development')
     bundle=ROOT/'.build/context/rootfs/usr/share/xur/app-bundle'
     meta=json.loads((bundle/'bundle.json').read_text())
     for name,digest in meta['files'].items():assert hashlib.file_digest((bundle/name).open('rb'),'sha256').hexdigest()==digest,name
@@ -25,9 +35,9 @@ def publish(version,channel="development"):
     entry={'schema':1,'hostAbi':1,'dataSchema':1,'id':meta['id'],'version':version,'channel':channel,'sequence':int(time.time()),'file':archive.name,'bytes':archive.stat().st_size,'sha256':hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()}
     # Versioned descriptors avoid a manifest/signature race during publication.
     descriptor=PUBLIC/(meta['id']+'.json');descriptor.write_text(json.dumps(entry,sort_keys=True)+'\n')
-    subprocess.run(['openssl','pkeyutl','-sign','-inkey',str(KEY),'-rawin','-in',str(descriptor),'-out',str(descriptor)+'.sig'],check=True)
+    subprocess.run(['openssl','pkeyutl','-sign','-inkey',str(key),'-rawin','-in',str(descriptor),'-out',str(descriptor)+'.sig'],check=True)
     tmp=PUBLIC/'latest.tmp';tmp.write_text(meta['id']);tmp.replace(PUBLIC/'latest')
-    (PUBLIC/'application-update-key.pem').write_bytes(PUB.read_bytes())
+    (PUBLIC/'application-update-key.pem').write_bytes(public)
     print(json.dumps(entry))
 class Handler(http.server.SimpleHTTPRequestHandler):
     def list_directory(self,path):self.send_error(404);return None

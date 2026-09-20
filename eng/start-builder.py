@@ -80,7 +80,7 @@ if not variables.exists():
     shutil.copyfile(qemu / "share/OVMF/OVMF_VARS_4M.fd", variables)
 run(qemu / "bin/qemu-system-x86_64",
     "-name", "xur-disposable-builder", "-machine", "q35,accel=kvm",
-    "-cpu", "host", "-smp", "8", "-m", "16384", "-nodefaults",
+    "-cpu", "host", "-smp", os.environ.get("XUR_BUILDER_CPUS", "8"), "-m", os.environ.get("XUR_BUILDER_MEMORY", "16384"), "-nodefaults",
     "-L", qemu / "share/qemu", "-display", "none",
     "-drive", f"if=pflash,format=raw,readonly=on,file={qemu}/share/OVMF/OVMF_CODE_4M.fd",
     "-drive", f"if=pflash,format=raw,file={variables}",
