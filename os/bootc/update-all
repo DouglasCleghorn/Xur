@@ -47,8 +47,11 @@ def execute(invoke=call,write=save):
                 invoke(tool,'check');state=invoke(tool,'status')
                 key='digest' if tool=='os-update' else 'id'
                 if state.get('available') and state['available'][key]!=state['current'][key]:
+                    expected=state['available'][key]
                     progress('Updating '+name);invoke(tool,'stage' if tool=='os-update' else 'update')
                     state=invoke(tool,'status')
+                    if tool=='os-update' and not state.get('pending') and state['current'][key]!=expected:
+                        raise RuntimeError('The OS update did not stage a deployment. Review the operating system update log.')
                     message='Reboot to finish.' if state.get('pending') else 'Updated.';outcome='Complete'
                 else:message='Up to date.';outcome='Complete'
             operation['results'].append(dict(name=name,stage=outcome,message=message))

@@ -26,6 +26,7 @@ public static class ProfileEndpoints
         app.MapPost("/storage/refresh",async()=>await Safe(async()=>{using var r=await appliance.Agent.PostAsJsonAsync("/storage-usage/refresh",new{});r.EnsureSuccessStatusCode();return Results.Redirect("/storage");}));
         app.MapGet("/api/tool-updates",()=>Safe(()=>Relay("/tool-updates")));
         app.MapGet("/api/workstations/identities",()=>Safe(async()=>Results.Json(await manager.Stations())));
+        app.MapGet("/api/station-allocations",()=>Safe(()=>Relay("/station-allocations")));
         app.MapGet("/api/station-devices",()=>Safe(()=>Relay("/station-devices")));
         app.MapGet("/api/station-users",()=>Safe(()=>Relay("/station-users")));
         app.MapPost("/api/station-users",(StationUserCreate request)=>Safe(()=>Relay("/station-users",JsonContent.Create(request))));
@@ -69,7 +70,7 @@ public static class ProfileEndpoints
                     else if(chosen=="legacy" && existing?.Workloads.SingleOrDefault(w=>w.Id==ids[i]) is {Recipe.Kind:"Workstation",User:null}){}
                     else {var account=accounts.SingleOrDefault(a=>a.Username==chosen) ?? throw new InvalidOperationException("Select a workstation user.");user=new(account.Username,account.Uid);}
                 }
-                selections.Add(new(ids[i],recipes[i] ?? "",f["gpus-"+i].ToArray().Select(s=>s!).ToArray(),user,stationIds.ElementAtOrDefault(i),stationNames.ElementAtOrDefault(i)));
+                selections.Add(new(ids[i],recipes[i] ?? "",f["gpus-"+i].ToArray().Select(s=>s!).ToArray(),user,stationIds.ElementAtOrDefault(i),stationNames.ElementAtOrDefault(i),catalog.Recipes.SingleOrDefault(r=>r.Id==recipes[i])?.Kind=="Workstation"?new StationDevices(f["primary-"+i]=="true",f["usb-"+i].Select(s=>s!).ToArray()):null));
             }
             if(!long.TryParse(f["revision"],out var revision))throw new InvalidOperationException("Reload the profile form.");
             await manager.SaveSelection(f["id"].ToString(),revision,selections.ToArray(),f.ContainsKey("name")?f["name"].ToString():null);return Results.Redirect("/profiles");

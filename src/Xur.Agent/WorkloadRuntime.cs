@@ -8,6 +8,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     ParallelStopGate? stopGate;
     ParallelStopGate Stops=>LazyInitializer.EnsureInitialized(ref stopGate,()=>new ParallelStopGate(gate));
     readonly StationRuntime station=new(consoles);
+    readonly SemaphoreSlim receipts=new(1,1);
     static readonly JsonSerializerOptions json=new(JsonSerializerDefaults.Web);
     static string Name(string id)=>"xur-workload-"+id;
     string ReceiptPath(string id)=>Path.Combine(directory,id+".json");
@@ -32,6 +33,11 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         if((await station.Inspect(w))?.State!="running")throw new InvalidOperationException("Load the workstation before checking graphics.");
         var gpu=(await GpuInventory.Observe()).SingleOrDefault(g=>w.Gpus.Contains(g.Pci))??throw new InvalidOperationException("The assigned GPU is unavailable.");
         return await StationGraphics.Collect(w,gpu);
+    }
+    public async Task Prepare(Workload[] workloads)
+    {
+        ProfilePolicy.Validate(new("runtime","Runtime",1,workloads),await ObserveUnlocked());
+        await StationSeats.SetIntent(workloads.Where(w=>w.Recipe.Kind=="Workstation").ToArray());
     }
     public Task<RuntimeObservation> Observe()=>ObserveUnlocked();
     async Task<RuntimeInstance?> Inspect(Workload w)
@@ -62,7 +68,9 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     public Task<RuntimeInstance> Start(Workload w)=>Start(w,false);
     async Task<RuntimeInstance> Start(Workload w,bool restoring)
     {
-        await gate.WaitAsync();try
+        await using var operation=await Stops.Enter();
+        await using var allocation=await Stops.Resources(new[]{"workload:"+w.Id}.Concat(w.Gpus.Select(p=>"gpu:"+p)).Concat(w.Recipe.Kind=="Workstation"?new[]{"user:"+StationAccounts.Username(w)}:[]));
+        try
         {
             if(restoring)
             {
@@ -74,7 +82,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             Directory.CreateDirectory(directory);
             var observed=await ObserveUnlocked();ProfilePolicy.Validate(new("runtime","Runtime",1,[w]),observed);
             foreach(var pci in w.Gpus)if(observed.Instances.Any(i=>i.Id!=w.Id && i.Gpus.Contains(pci)))throw new InvalidOperationException($"GPU {pci} is still allocated.");
-            if(w.Recipe.Kind=="Workstation" && Definitions().Any(d=>d.Id!=w.Id && d.Recipe.Kind=="Workstation"))throw new InvalidOperationException("The local workstation is already allocated.");
+            if(w.Recipe.Kind=="Workstation" && Definitions().Any(d=>d.Id!=w.Id && d.Recipe.Kind=="Workstation" && StationAccounts.Username(d)==StationAccounts.Username(w)))throw new InvalidOperationException("Each running workstation needs a different user.");
+            await receipts.WaitAsync();try {
             var saved=Definitions().SingleOrDefault(d=>d.Id==w.Id);
             if(saved!=null && saved.Fingerprint!=w.Fingerprint)throw new InvalidOperationException("Stop the previous workload before changing it.");
             if(saved==null)
@@ -83,6 +92,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 using(var f=new FileStream(ReceiptPath(w.Id)+".tmp",FileMode.Create,FileAccess.Write)) {JsonSerializer.Serialize(f,w);f.Flush(true);}
                 File.Move(ReceiptPath(w.Id)+".tmp",ReceiptPath(w.Id));
             }
+            }finally{receipts.Release();}
             var instance=await Inspect(w);
             if(w.Recipe.Kind=="Workstation")
             {
@@ -111,8 +121,9 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             if(instance==null)
             {
                 var selected=observed.Gpus.Where(g=>w.Gpus.Contains(g.Pci)).ToArray();await GpuInventory.VerifyReleased(selected);
-                var model=await DownloadModel(w.Recipe.Model);
-                var modelFiles=await DownloadFiles(w.Recipe.Files);
+                string? model,modelFiles;
+                await using(var cache=await Stops.Resources((w.Recipe.Model is {} asset?new[]{asset.Sha256}:[]).Concat((w.Recipe.Files??[]).Select(f=>f.Asset.Sha256)).Select(hash=>"model:"+hash)))
+                {model=await DownloadModel(w.Recipe.Model);modelFiles=await DownloadFiles(w.Recipe.Files);}
                 var pull=await Processes.Run("podman",w.Recipe.Kind=="Container"?["image","exists",w.Recipe.Image]:["pull","--arch=amd64",w.Recipe.Image],900);
                 if(pull.ExitCode!=0)throw Failure("Engine image download failed",pull);
                 if(w.Recipe.Engine=="vLLM-Omni"&&w.Recipe.Hub?.Repository=="fishaudio/s2-pro")
@@ -198,7 +209,6 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             {Directory.CreateDirectory(directory);await File.WriteAllTextAsync(Path.Combine(directory,w.Id+".error.log"),Redaction.Logs(error.Message));}
             throw;
         }
-        finally{gate.Release();}
     }
     static InvalidOperationException Failure(string stage,ProcessResult result)=>new(stage+": "+Redaction.Logs(result.Output.Length>8192 ? result.Output[^8192..] : result.Output).Trim());
     public async Task Stop(RuntimeStop request)
@@ -208,7 +218,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
 
         {
             var saved=Definitions().SingleOrDefault(w=>w.Id==request.Id);if(saved==null)return;
-            await using var allocation=await Stops.Resources(new[]{"workload:"+request.Id}.Concat(saved.Gpus.Select(p=>"gpu:"+p)).Concat(saved.Recipe.Kind=="Workstation"?new[]{"station"}:Array.Empty<string>()));
+            await using var allocation=await Stops.Resources(new[]{"workload:"+request.Id}.Concat(saved.Gpus.Select(p=>"gpu:"+p)).Concat(saved.Recipe.Kind=="Workstation"?new[]{"user:"+StationAccounts.Username(saved)}:Array.Empty<string>()));
             // A concurrent retry may have removed the receipt while this call waited.
             saved=Definitions().SingleOrDefault(w=>w.Id==request.Id);if(saved==null)return;
             var instance=await Inspect(saved);
@@ -301,16 +311,19 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     }
     public async Task RestoreStations()
     {
-        foreach(var w in Definitions().Where(w=>w.Recipe.Kind=="Workstation"))
+        using var slots=new SemaphoreSlim(4,4);
+        await Task.WhenAll(Definitions().Where(w=>w.Recipe.Kind=="Workstation").Select(async w=>
         {
             var marker=Path.Combine(directory,w.Id+".station-active");
-            if(!File.Exists(marker) || await File.ReadAllTextAsync(marker)!=w.Fingerprint)continue;
+            if(!File.Exists(marker) || await File.ReadAllTextAsync(marker)!=w.Fingerprint)return;
+            await slots.WaitAsync();try {
             // Resolve PCI identities again on every boot; never persist card indices.
             for(var attempt=0;attempt<12;attempt++)
             {
                 if(!File.Exists(marker))break;
-                try{await Start(w,true);break;}catch(Exception){if(attempt==11)break;await Task.Delay(5000);}
+                try{await Start(w,true);break;}catch(Exception e){if(attempt==11){Console.Error.WriteLine("Workstation restoration failed for "+w.Id+": "+Redaction.Logs(e.Message));break;}await Task.Delay(5000);}
             }
-        }
+            }finally{slots.Release();}
+        }));
     }
 }

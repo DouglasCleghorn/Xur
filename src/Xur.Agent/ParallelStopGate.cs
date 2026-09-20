@@ -1,8 +1,9 @@
 using System.Collections.Concurrent;
 namespace Xur.Agent;
 
-// Several stops share the runtime's mutation gate, excluding starts and
-// streaming restarts until all of their identity/release checks have finished.
+// Independent starts/stops share the runtime mutation gate. Resource locks
+// serialize GPU/user/workload handoffs; exclusive streaming/display operations
+// wait until these identity and release checks have finished.
 public sealed class ParallelStopGate(SemaphoreSlim exclusive)
 {
     readonly SemaphoreSlim membership=new(1,1);

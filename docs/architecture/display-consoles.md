@@ -6,8 +6,9 @@ Plasma. Other cards retain their console. Stopping the workstation waits for
 its complete teardown before restoring the console.
 
 This follows the current whole-GPU workstation assignment: all connected outputs
-on a selected card belong to that desktop. Separate desktops per connector and
-multiple simultaneous workstations remain separate work.
+on a selected card belong to that desktop. Separate desktops per connector remain future work.
+Multiple simultaneous workstations use separate GPUs and seats; see
+[multiple workstations](multiple-workstations.md).
 
 The agent manages a small kmscon child per unassigned display adapter. It uses
 DRM 2D software rendering, without an idle desktop or 3D compositor. Outputs on

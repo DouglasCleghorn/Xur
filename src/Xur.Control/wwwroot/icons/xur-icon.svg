@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Xur icon">
+  <rect x="32" y="32" width="960" height="960" rx="216" fill="#15181d"/>
+  <rect x="58" y="58" width="908" height="908" rx="190" fill="none" stroke="#20252d" stroke-width="10"/>
+  <path fill="#99c5ff" d="M230 224H358L512 438L666 224H794L590 510L804 800H668L512 582L356 800H220L434 510Z"/>
+  <path fill="#15181d" d="M512 438L584 510L512 582L440 510Z"/>
+  <path fill="#20252d" d="M512 466L556 510L512 554L468 510Z"/>
+  <circle cx="760" cy="236" r="62" fill="#15181d"/>
+  <circle cx="760" cy="236" r="48" fill="#6ed7b8"/>
+</svg>

@@ -14,5 +14,6 @@ time the workstation starts. Different users require separate identities.
 
 Deleting a profile retains its named workstation identity and pairing data, so it
 can be selected again later. Temporary-user identities retain pairing, but their
-disposable desktop data still follows the temporary-account lifecycle. This change
-does not remove the existing one-active-local-workstation limit.
+disposable desktop data still follows the temporary-account lifecycle. Multiple named workstations can run together with distinct GPUs and users. See
+[multiple workstations](../architecture/multiple-workstations.md) for assignment
+rules and the remaining physical validation.

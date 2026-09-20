@@ -46,6 +46,10 @@ so they cannot bypass Xur's pause or trigger competing update operations. The
 installed update script invokes upstream bootc, enforces signatures, serializes
 operations with a file lock, and retains a durable receipt. The manager observes
 actual bootc state after interruption instead of assuming a command succeeded.
+Staging first ensures the fixed channel has signature enforcement, then runs
+`bootc upgrade` if switching to that same channel did not stage a deployment.
+An available update with no staged deployment is reported as a failure, including
+through Update All.
 
 The OS update includes upstream kernel, NVIDIA driver and desktop components.
 It does not update the selected Xur application bundle or pinned engine/model

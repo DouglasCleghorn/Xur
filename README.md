@@ -1,27 +1,105 @@
-# Xur
+![Xur — image-based OS for GPU workload profiles](docs/assets/xur-header.png)
 
-Xur is an x86-64, image-based operating system with web-based installation and
-system management and workload profiles.
+Xur turns a GPU-equipped PC into a server you manage from a browser. Save profiles
+that allocate GPUs to gaming desktops, language models, speech services, and
+containers, then switch between those profiles from a single control panel.
 
-- [Install Xur](docs/usage/install.md)
-- [Build the ISO](docs/development/build.md): `./eng/build-iso.sh`
-- [Rufus ISO/File Copy mode](docs/usage/rufus.md)
-- [Bazzite host and desktop startup](docs/architecture/bazzite-host.md)
-- [OS updates](docs/usage/updates.md)
-- [Signed updates and local build testing](docs/usage/application-updates.md): `./eng/publish-update.sh --version VERSION`
-- [Profiles and model endpoints](docs/usage/profiles.md)
-- [Storage usage](docs/usage/storage.md)
-- [GPU monitoring](docs/usage/gpu-monitoring.md)
-- [Model catalogs and gaming workstation](docs/usage/model-catalog.md)
-- [API initialization](docs/architecture/api-initialization.md)
-- [Implementation status](docs/development/rebuild-status.md)
-- [Remaining work and persistent USB assignment](docs/development/remaining-work.md)
+Xur uses the upstream Bazzite KDE NVIDIA-open operating system, with a separate,
+signed application bundle for its web interface and workload manager.
 
-Build output is in `dist/`. Private VM disks, sessions and console output are
-kept under `.build/` and excluded from release archives.
+**Status: preview development.** Single-workstation gaming and Moonlight streaming
+have been exercised on RTX 3090 hardware. Multiple workstations and USB/hub
+assignment are implemented; physical isolation and reboot acceptance testing are
+still in progress. See [implementation status](docs/development/rebuild-status.md)
+and [multiseat validation](docs/architecture/multiple-workstations.md).
 
-Management changes: [username/password setup](docs/architecture/manager-account.md), [custom containers](docs/usage/container-workloads.md), [app update 2026.09.15.1](docs/releases/app-update-2026.09.15.1.md).
+[Getting started](docs/usage/getting-started.md) ·
+[Releases](https://github.com/DouglasCleghorn/Xur/releases) ·
+[Build from source](docs/development/build.md) ·
+[Report an issue](https://github.com/DouglasCleghorn/Xur/issues)
 
-Security and source preparation: [request security and exceptions](docs/architecture/request-security.md), [registry policy](docs/development/container-registry.md), [initial commit preparation](docs/initial-commit-plan.md).
+## What you can do
 
-Public application releases use [GitHub Releases](https://github.com/DouglasCleghorn/Xur/releases). The [online installer](docs/architecture/online-installer.md) downloads Bazzite from its upstream stable channel. [Named workstations](docs/usage/workstation-identities.md) keep Moonlight pairing when profiles change GPU allocation.
+- **Switch workload profiles.** Independent workloads load and unload in parallel.
+  A failed workload does not discard successful siblings; resume retries unfinished
+  work, and cancel stops queued work.
+- **Run local or streamed desktops.** Assign a GPU and user to each workstation.
+  Sunshine streams to Moonlight with required encryption. Named workstations keep
+  pairing across profile changes, including GPU reassignment.
+- **Assign peripherals.** Choose USB devices or a hub and its supported input/audio
+  descendants. Unique serial numbers follow port moves; devices without reliable
+  serials use their physical connection. A primary workstation receives unassigned
+  input and built-in audio.
+- **Serve and test models.** Browse downloaded models, scan attached storage, copy
+  active LLM endpoint URLs, test chat, and retain benchmark results with workload
+  and sampled VRAM context. Model data persists between reboots.
+- **Manage the host.** Monitor GPUs, NVLink, storage and network usage; browse files;
+  configure time, HF credentials, API keys, and backups; apply app and OS updates.
+
+## Example profiles
+
+A four-GPU machine can allocate one GPU to each desktop and the remaining pair
+to a language model:
+
+![Example: two workstations and a two-GPU language model on a four-RTX-3090 host](docs/assets/workstations-and-llm.png)
+
+Another profile can allocate those GPUs to speech and language workloads:
+
+![Example: speech synthesis, speech recognition and a two-GPU language model](docs/assets/speech-and-llm.png)
+
+These diagrams illustrate allocation ideas. Exact model, quantization, engine and
+GPU compatibility must be checked for the selected recipe. They are not benchmark
+results. GPU allocations are exclusive; NVLink does not make separate cards one
+shared memory pool for every application.
+
+## Quick start
+
+1. **Prepare the host.** Use an x86-64 UEFI machine and a target disk of at least
+   64 GiB. Internet access is required by the online installer. Build the ISO using
+   the [build guide](docs/development/build.md), or use installer media when offered
+   with a release.
+2. **Boot and connect.** Boot the ISO, then open the HTTPS address on port **8443**
+   shown by the local console. Accept the host's self-signed certificate and enter
+   the displayed setup code. Create your manager account.
+3. **Install.** Select the target disk and confirm installation. **The selected disk
+   is erased.** The installer downloads Bazzite and attempts a signed Xur refresh
+   when online. Reboot when installation finishes.
+4. **Create a profile.** Open **Profiles**, add a workstation or model workload,
+   select its GPUs, and save. Use the expanded profile picker on **Home** to load it.
+   The first model start downloads its pinned engine and model files.
+5. **Use it.** Open **Workstations** for Moonlight pairing and launch instructions,
+   **LLM endpoints** for client URLs, or **Model lab** for test chat and benchmarks.
+
+Follow the [complete guide](docs/usage/getting-started.md) for persistent desktop
+users, headless streaming, USB assignment, API authentication, and updates.
+
+## Documentation
+
+| Task | Guide |
+| --- | --- |
+| Install and write USB media | [Installation](docs/usage/install.md), [Rufus](docs/usage/rufus.md) |
+| Workstation identity and Moonlight | [Named workstations](docs/usage/workstation-identities.md), [workstations and models](docs/usage/workstations-and-models.md) |
+| Profiles and inference APIs | [Profiles](docs/usage/profiles.md), [API keys](docs/usage/api-keys.md) |
+| Model selection | [Model catalog](docs/usage/model-catalog.md) |
+| Storage and GPUs | [Storage](docs/usage/storage.md), [GPU monitoring](docs/usage/gpu-monitoring.md) |
+| Updates and local builds | [OS updates](docs/usage/updates.md), [application updates](docs/usage/application-updates.md) |
+| Security boundaries | [Request security](docs/architecture/request-security.md), [multiple workstations](docs/architecture/multiple-workstations.md) |
+
+## Development
+
+See the [build prerequisites](docs/development/build.md) before building media.
+For an existing development environment:
+
+```bash
+bash eng/test-fast.sh
+./eng/package-update.sh --build-only --version 0.1.0
+```
+
+The second command signs and publishes to the **local development update
+repository**; it does not publish a GitHub release. Choose a new version for each
+build. Enable **Settings → Local build testing** on a test server to use it.
+GitHub publication is a [separate explicit step](docs/usage/application-updates.md).
+
+Build artifacts live in `dist/`; private runtime state, VM disks, logs and test
+captures live under `.build/`. Neither belongs in Git. Docker Hub images must use
+Google's mirror as described in [repository rules](AGENTS.md).

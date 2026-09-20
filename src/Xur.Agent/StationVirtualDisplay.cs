@@ -4,7 +4,9 @@ namespace Xur.Agent;
 public static class StationVirtualDisplay
 {
     public static string Unit(string id)=>"xur-virtual-output-"+id+".service";
-    static string Install()
+    static readonly object installation=new();
+    static string Install() {lock(installation){return InstallLocked();}}
+    static string InstallLocked()
     {
         var path="/var/lib/xur-virtual-display/"+ApplicationIdentity.Id;
         Directory.CreateDirectory(path);File.SetUnixFileMode("/var/lib/xur-virtual-display",(UnixFileMode)493);File.SetUnixFileMode(path,(UnixFileMode)493);

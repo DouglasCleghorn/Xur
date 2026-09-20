@@ -10,7 +10,7 @@ const fs=require('fs'),assert=require('assert/strict');
   if(u.pathname==='/api/storage/explore')return r.fulfill({json:{scanning:false,data:{bytes:300000000,visited:100,partial:false,errors:0,entries:[{name:'models',kind:'folder',bytes:290000000,partial:false},{name:'<script>bad</script>',kind:'link',bytes:0,partial:false}]}}});
   if(u.pathname==='/api/files/roots')return r.fulfill({json:[{username:'station',name:'Gaming workstation'}]});
   if(u.pathname==='/api/files/list')return r.fulfill({json:{ok:true,entries:u.searchParams.get('path')?[{name:'steam-123.log',kind:'file',bytes:128,modified:1700000000}]:[{name:'.local',kind:'folder',modified:1700000000},{name:'steam-123.log',kind:'file',bytes:128,modified:1700000000},{name:'<script>alert(1)</script>',kind:'link',modified:1700000000}],truncated:false}});
-  const asset=/\.(css|js|ttf)$/.test(u.pathname);return r.fulfill({body:fs.readFileSync(asset?'src/Xur.Control/wwwroot'+u.pathname:'.build/fast/control-panel/files.html'),contentType:u.pathname.endsWith('.js')?'application/javascript':u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.ttf')?'font/ttf':'text/html'});
+  const asset=/\.(css|js|ttf|svg)$/.test(u.pathname);return r.fulfill({body:fs.readFileSync(asset?'src/Xur.Control/wwwroot'+u.pathname:'.build/fast/control-panel/files.html'),contentType:u.pathname.endsWith('.js')?'application/javascript':u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.ttf')?'font/ttf':u.pathname.endsWith('.svg')?'image/svg+xml':'text/html'});
  });
  for(const width of [1440,390]){
   await page.setViewportSize({width,height:900});await page.goto('http://files.test/files');

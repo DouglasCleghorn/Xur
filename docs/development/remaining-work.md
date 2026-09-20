@@ -2,10 +2,10 @@
 
 This is an archived planning snapshot, not the current implementation checklist.
 Later work added multiple workstation runtime support, model benchmarking, engine
-version display, HF credentials and tested Tailscale/Moonlight access. USB identity
-and allocation policy code exists, but the full peripheral assignment interface and
-host integration still need completion. Separate outputs on one GPU and shared-GPU
-AI scheduling remain future work.
+version display, HF credentials and tested Tailscale/Moonlight access. USB selection, native multi-seat integration and parallel profile loading are now
+implemented in source. Their physical acceptance checks remain outstanding; see
+[multiple workstations](../architecture/multiple-workstations.md). Separate
+outputs on one GPU and shared-GPU AI scheduling remain future work.
 
 For the current identity/update design and its remaining hardware validation, see
 [workstation identities](../usage/workstation-identities.md) and
@@ -16,10 +16,6 @@ from behavior implemented but not yet exercised on the four-3090 machine.
 
 ## Still to implement
 
-- Multiple simultaneous native workstations. The planner and agent currently
-  enforce one station; the runtime uses one Plasma login configuration.
-- Persistent USB hub/port/device selection and per-station input/audio routing.
-  The current station permits all local input, ALSA and hidraw devices.
 - Independent desktops on different outputs of one GPU. A whole selected card
   and its connected outputs currently belong to one desktop.
 - The complete reference AI set: Qwen INT8 W8A16 with BF16 MTP on the NVLink pair,
@@ -79,7 +75,8 @@ station is stopped. A temporary user's deletion must not delete the desk mapping
 
 Systemd supplies persistent seat attachment through
 [loginctl attach](https://github.com/systemd/systemd/blob/main/man/loginctl.xml).
-Xur still needs the selection UI, stable matching and runtime enforcement above.
+The implemented selection UI and runtime are described in the multi-workstation
+architecture document linked above; physical acceptance is still outstanding.
 
 ## Added in application update 2026.09.15.3
 

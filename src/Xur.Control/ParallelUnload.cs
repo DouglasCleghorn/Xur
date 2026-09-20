@@ -58,7 +58,7 @@ public sealed partial class ProfileManager
                 case "Stop":
                     var old=initial.Source.Instances.Single(i=>i.Id==step.WorkloadId);
                     await runtime.Stop(new(old.Id,old.InstanceId,old.Pid,old.BootId));break;
-                case "Publish":await gateway.Publish([]);break;
+                case "Publish":await runtime.Prepare([]);await gateway.Publish([]);break;
                 default:throw new InvalidOperationException("Unexpected unload action.");
             }
         }

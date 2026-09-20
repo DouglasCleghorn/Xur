@@ -67,7 +67,7 @@ app.MapGet("/console-logs",async()=> {
     var result=await Processes.Run("journalctl",["--boot","--no-pager","-n","100"],10);
     return Results.Text(Redaction.Logs(result.Output));
 });
-app.MapGet("/diagnostics/display",async()=>{var report=await DisplayDiagnostics.Collect();report["displayConsoleError"]=displayConsoles.Error;
+app.MapGet("/diagnostics/display",async()=>{var report=await DisplayDiagnostics.Collect();report["displayConsoleError"]=displayConsoles.Error;report["stationAllocations"]=JsonSerializer.SerializeToNode(StationSeats.Status(),new JsonSerializerOptions(JsonSerializerDefaults.Web));
     var gpus=await GpuInventory.Observe();var owners=new Dictionary<string,object>();
     foreach(var gpu in gpus)try{owners[gpu.Pci]=await GpuOwnership.Observe(gpu);}catch(Exception e){owners[gpu.Pci]=new{error=e.Message};}
     report["owners"]=JsonSerializer.SerializeToNode(owners,new JsonSerializerOptions(JsonSerializerDefaults.Web));
@@ -146,6 +146,7 @@ app.MapGet("/workstations/{id}/pairings",async Task<IResult>(string id)=>{try{re
 app.MapPost("/workstations/{id}/pair",async Task<IResult>(string id,StationPairRequest request)=>{if(installer)return Results.Conflict();try{await workloads.Pair(id,request);return Results.Ok();}catch(Exception e) when(e is InvalidOperationException or HttpRequestException or IOException or JsonException or TaskCanceledException){return Results.Conflict(new{error=e is InvalidOperationException?e.Message:"Pairing service is unavailable."});}});
 app.MapPost("/workstations/{id}/stream",async Task<IResult>(string id)=>{if(installer)return Results.Conflict();try{await workloads.StartStreaming(id);return Results.Ok();}catch(Exception e) when(e is InvalidOperationException or IOException){return Results.Conflict(new{error=e.Message});}});
 app.MapPost("/workstations/{id}/stream/restart",async Task<IResult>(string id)=>{if(installer)return Results.Conflict();try{await workloads.StartStreaming(id,restart:true);return Results.Ok();}catch(Exception e) when(e is InvalidOperationException or IOException){return Results.Conflict(new{error=e.Message});}});
+app.MapGet("/station-allocations",()=>Results.Json(StationSeats.Status()));
 app.MapGet("/station-devices",async Task<IResult>()=>installer?Results.Conflict():Results.Json(StationDeviceInventoryReader.Read(await GpuInventory.Observe())));
 StationFiles.Map(app,installer);
 var stationAccounts=new StationAccounts();
@@ -154,7 +155,7 @@ app.MapPost("/station-users",async Task<IResult>(StationUserCreate request)=>{
     if(installer)return Results.Conflict();
     try{return Results.Json(await stationAccounts.Create(request.Name));}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
 });
-if(!installer)_=Task.Run(workloads.RestoreStations);
+if(!installer){_=Task.Run(workloads.RestoreStations);_=Task.Run(()=>StationSeats.Watch(app.Lifetime.ApplicationStopping));}
 async Task<IResult> CatalogCall(Func<Task<object>> action)
 {
     if(installer)return Results.Conflict();
@@ -166,6 +167,7 @@ app.MapGet("/catalog/options",(string model,string? engine)=>CatalogCall(async()
 app.MapPost("/catalog/resolve",(ModelSelection selection)=>CatalogCall(async()=>await modelCatalog.Resolve(selection)));
 app.MapGet("/workloads",async()=>Results.Json(await workloads.Observe()));
 app.MapGet("/workloads/{id}/logs",async(string id)=>Results.Text(await workloads.Logs(id)));
+app.MapPost("/workloads/prepare",async (Workload[] request)=>{if(installer)return Results.Conflict();try{await workloads.Prepare(request);return Results.Ok();}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}});
 app.MapPost("/workloads/start",async(RuntimeStart request)=> {
     if(installer)return Results.Conflict();
     try {return Results.Json(await workloads.Start(request.Workload));}catch(InvalidOperationException e){return Results.Conflict(new {error=e.Message});}

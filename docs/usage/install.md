@@ -45,7 +45,8 @@ in the navigation after installation.
 
 ## Installed system
 
-The dashboard shows CPU, memory, storage and uptime, plus running workloads.
+Home provides update/reboot actions and a profile picker. Monitoring shows CPU,
+memory, storage, network usage and running workloads.
 Xur-managed workload/station services can be started, stopped and restarted;
 core system services are shown separately. Installation controls are removed.
 Settings lists all non-loopback IPv4 and IPv6 addresses.
@@ -72,9 +73,11 @@ selectors have defaults. First start downloads the pinned model and engine.
 Workstations offer existing users, adding a user, or a temporary user. Named
 users retain their home and Steam logins. Prepare container images or Dockerfiles
 on **Containers**; persistent volumes also appear on **Storage**.
-One local workstation is supported; it uses the selected display GPU and local
-input/audio devices. See `docs/usage/model-catalog.md` and `docs/usage/profiles.md` in the
-source archive for the runtime boundaries and API examples.
+Multiple workstations use distinct GPUs and Unix users. Assign USB devices or
+hubs and choose one primary workstation for otherwise unassigned input and built-in
+audio. Physical multiseat acceptance is still in progress; see
+[multiple workstations](../architecture/multiple-workstations.md),
+[model catalog](model-catalog.md), and [profiles](profiles.md).
 
 The console keeps a five-percent margin for TV overscan. Use Up/Down and Enter
 to select the highlighted menu row. The Tailscale QR screen has a highlighted

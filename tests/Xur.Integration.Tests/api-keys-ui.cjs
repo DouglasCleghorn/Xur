@@ -10,6 +10,7 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
   const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('http://keys.test/**',async r=>{
    const u=new URL(r.request().url());const json=data=>r.fulfill({contentType:'application/json',body:JSON.stringify(data)});
+   if(u.pathname.startsWith('/icons/'))return r.fulfill({path:path.resolve('src/Xur.Control/wwwroot'+u.pathname)});
    if(u.pathname==='/setup.css'||u.pathname==='/api-keys.js')return r.fulfill({path:path.resolve('src/Xur.Control/wwwroot'+u.pathname)});
    if(r.request().method()==='POST'){
     assert.equal(r.request().headers().requestverificationtoken,'fixture-token');posts.push(u.pathname);

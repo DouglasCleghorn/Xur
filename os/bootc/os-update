@@ -36,6 +36,19 @@ def snapshot(raw):
                 available=entry({'image': current.get('cachedUpdate')}),
                 rollbackQueued=raw.get('spec', {}).get('bootOrder') == 'rollback')
 
+def stage(log):
+    # Persist signature enforcement, including installations imported from an
+    # offline image. Switching to an identical spec can return without pulling.
+    subprocess.run(['bootc', 'switch', '--enforce-container-sigpolicy', CHANNEL], stdout=log, stderr=log, check=True, timeout=7200)
+    if not snapshot(boot_status())['pending']:
+        subprocess.run(['bootc', 'upgrade'], stdout=log, stderr=log, check=True, timeout=7200)
+
+def verify_stage(after):
+    if after['pending'] and after['pending']['image'] != CHANNEL:
+        raise RuntimeError('Unexpected staged image')
+    if not after['pending'] and after['available'] and after['available']['digest'] != after['current']['digest']:
+        raise RuntimeError('An OS update is available but no deployment was staged. Review the update log and retry.')
+
 def observe():
     result = snapshot(boot_status())
     result['automatic'] = read(STATE / 'settings.json', {'automatic': True})['automatic']
@@ -80,15 +93,14 @@ def main():
                 if action in ('check', 'auto'):
                     subprocess.run(['bootc', 'upgrade', '--check'], stdout=log, stderr=log, check=True, timeout=600)
                 if action in ('stage', 'auto'):
-                    # The channel is fixed locally; browsers cannot supply image references.
-                    # Signature enforcement is explicit even on the first post-install update.
-                    subprocess.run(['bootc', 'switch', '--enforce-container-sigpolicy', CHANNEL], stdout=log, stderr=log, check=True, timeout=7200)
+                    stage(log)
                 if action == 'rollback':
                     subprocess.run(['bootc', 'rollback'], stdout=log, stderr=log, check=True, timeout=300)
                 after = snapshot(boot_status())
                 if action == 'rollback' and not after['rollbackQueued']: raise RuntimeError('Boot order did not change')
                 if after['pending'] and after['pending']['image'] != CHANNEL: raise RuntimeError('Unexpected staged image')
-                operation.update(stage='Complete', message='Reboot to finish' if after['pending'] or after['rollbackQueued'] else 'Check complete', updated=time.time())
+                if action in ('stage', 'auto'): verify_stage(after)
+                operation.update(stage='Complete', message='Reboot to finish' if after['pending'] or after['rollbackQueued'] else 'Already up to date' if action in ('stage', 'auto') else 'Check complete', updated=time.time())
             except Exception as error:
                 operation.update(stage='Failed', message=str(error), updated=time.time())
                 save(STATE / 'operation.json', operation)

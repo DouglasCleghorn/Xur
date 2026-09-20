@@ -25,6 +25,7 @@ const assert=require('assert/strict');
   const code=(await local('control.sock','/local/login')).body.match(/Access code: ([0-9A-Z-]+)/)[1];
   const manifest=await request.get(tls+'/manifest.webmanifest');assert(manifest.ok());const app=await manifest.json();assert.equal(app.display,'standalone');assert.equal(app.icons.length,2);
   for(const icon of app.icons)assert((await request.get(tls+icon.src)).ok());
+  for(const iconPath of ['/icons/xur-icon.svg','/icons/xur-icon-32.png','/icons/xur-icon-180.png'])assert((await request.get(tls+iconPath)).ok(),'Brand assets must load before login');
   const qrPage=await context.newPage();await qrPage.goto(tls+'/login#code='+encodeURIComponent(code));assert.equal(await qrPage.locator('#code').inputValue(),code);assert.equal(new URL(qrPage.url()).hash,'');assert.equal(await qrPage.locator('link[rel=manifest]').count(),1);await qrPage.close();
   const phone=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:390,height:844},isMobile:true,hasTouch:true,userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'});
   const mobile=await phone.newPage();await mobile.goto(tls+'/login');await mobile.getByRole('button',{name:'How to add',exact:true}).click();await mobile.getByText('Tap Share → Add to Home Screen → Add.').waitFor();await mobile.getByRole('button',{name:'Dismiss home screen suggestion'}).click();await mobile.reload();assert.equal(await mobile.locator('.install-suggestion').count(),0);await phone.close();

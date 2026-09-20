@@ -88,7 +88,7 @@ public sealed class ApiKeys
         if(scope is not ("diagnostics" or "testing"))return false;
         if(method is "GET" or "HEAD")
         {
-            if(path is "/api/power/status" or "/api/status" or "/api/system" or "/api/gpus" or "/api/gpu-power" or "/api/models" or "/api/network-usage" or "/api/workstations" or "/api/profiles" or "/api/recipes" or "/api/logs" or "/api/diagnostics/display" or "/api/disks" or "/api/storage/usage" or "/api/tool-updates" or "/api/application-updates" or "/api/updates" or "/api/ntp" or "/api/timezone" or "/api/model-lab/targets" or "/api/benchmarks")return true;
+            if(path is "/api/power/status" or "/api/status" or "/api/system" or "/api/gpus" or "/api/gpu-power" or "/api/models" or "/api/network-usage" or "/api/workstations" or "/api/station-devices" or "/api/station-allocations" or "/api/profiles" or "/api/recipes" or "/api/logs" or "/api/diagnostics/display" or "/api/disks" or "/api/storage/usage" or "/api/tool-updates" or "/api/application-updates" or "/api/updates" or "/api/ntp" or "/api/timezone" or "/api/model-lab/targets" or "/api/benchmarks")return true;
             if(Regex.IsMatch(path,@"\A/api/(workloads/[^/]+/logs|workstations/[^/]+/(graphics|display)|benchmarks/[^/]+(/export)?)\z"))return true;
         }
         return scope=="testing" && ((method=="POST" && (path is "/api/model-lab/chat" or "/api/benchmarks" || Regex.IsMatch(path,@"\A/api/benchmarks/[^/]+/cancel\z")))

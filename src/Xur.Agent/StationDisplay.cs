@@ -5,7 +5,9 @@ namespace Xur.Agent;
 public static class StationDisplay
 {
     public static string ScriptPath=>"/var/lib/xur-virtual-display/"+ApplicationIdentity.Id+"/display.py";
-    public static void Install()
+    static readonly object installation=new();
+    public static void Install() {lock(installation){InstallLocked();}}
+    static void InstallLocked()
     {
         var directory=Path.GetDirectoryName(ScriptPath)!;
         Directory.CreateDirectory(directory);

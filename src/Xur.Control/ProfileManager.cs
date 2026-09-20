@@ -87,7 +87,7 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
                 // An explicit new identity must not borrow another station's pairing.
                 if(recipe.Kind=="Workstation" && selection.StationId!=null)old=null;
                 if(recipe.Kind=="Workstation" && user==null && station==null && (old==null || old.Recipe.Kind!="Workstation" || old.User!=null))throw new InvalidOperationException("Select a workstation user.");
-                var candidate=new Workload("",recipe.Name,recipe,selection.Gpus,"",user);
+                var candidate=new Workload("",recipe.Name,recipe,selection.Gpus,"",user,recipe.Kind=="Workstation"?selection.Devices:null);
                 // Selecting the same runtime in another profile keeps its exact
                 // identity/allocation/route, rather than creating a second model.
                 if(recipe.Kind!="Workstation" || selection.StationId==null)old??=known.FirstOrDefault(w=>w.Fingerprint==candidate.Fingerprint && !used.Contains(w.Id));
@@ -105,6 +105,18 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
             ProfilePolicy.Validate(next,await runtime.Observe());await ValidateUsers(next);store.Save(next,definitions.ToArray());return next;
         }finally{gate.Release();}
     }
+    bool PeripheralHandoff(Profile target,RuntimeObservation observed)
+    {
+        var known=store.List<Profile>("profile").Concat(store.List<Profile>("revision")).SelectMany(p=>p.Workloads).ToArray();
+        var previous=observed.Instances.Select(i=>known.FirstOrDefault(w=>w.Id==i.Id&&(w.Fingerprint==i.Fingerprint||"legacy-seat:"+w.Fingerprint==i.Fingerprint))).Where(w=>w?.Recipe.Kind=="Workstation").Cast<Workload>().ToArray();
+        static string Signature(IEnumerable<Workload> workloads)
+        {
+            var stations=workloads.Where(w=>w.Recipe.Kind=="Workstation").OrderBy(w=>w.Id).ToArray();
+            var primary=stations.SingleOrDefault(w=>w.Devices?.Primary==true)?.Id??(stations.Length==1?stations[0].Id:null);
+            return Canonical.Hash(new{Primary=primary,Claims=stations.Where(w=>w.Devices?.Usb is {Length:>0}).Select(w=>new{w.Id,Usb=w.Devices!.Usb!.Order().ToArray()}).ToArray()});
+        }
+        return previous.Length>0&&Signature(previous)!=Signature(target.Workloads);
+    }
     public async Task<ProfilePlan> Preview(string id)
     {
         await gate.WaitAsync();try
@@ -112,7 +124,7 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
             Idle();var target=store.Get<Profile>("profile",id) ?? throw new InvalidOperationException("Profile not found.");
             target=StationNames(SaveRepairs(target));
             var observed=await runtime.Observe();ProfilePolicy.Validate(target,observed);await ValidateUsers(target);
-            var plan=new ProfilePlan(Guid.NewGuid().ToString("N"),"",observed.Generation,Epoch,target,ProfilePolicy.Steps(target,observed),DateTimeOffset.UtcNow.AddMinutes(5));
+            var plan=new ProfilePlan(Guid.NewGuid().ToString("N"),"",observed.Generation,Epoch,target,ProfilePolicy.Steps(target,observed,PeripheralHandoff(target,observed)),DateTimeOffset.UtcNow.AddMinutes(5));
             plan=plan with {Digest=Canonical.Hash(plan)};store.Put("plan",plan.Id,plan);return plan;
         } finally {gate.Release();}
     }
@@ -189,70 +201,14 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
         await gate.WaitAsync();bool unload;
         try{unload=store.Get<Journal>("journal","current")!.Plan.Unload;}finally{gate.Release();}
         if(unload){await RunUnload();return;}
-        // The lock protects DB access, never the potentially long engine startup/drain.
-        while(true)
-        {
-            Journal j;
-            await gate.WaitAsync();try
-            {
-                j=store.Get<Journal>("journal","current")!;
-                if(j.Stage=="Cancelled")return;
-                // Once the final route publication has completed, the whole
-                // transition is complete even if Cancel raced its acknowledgement.
-                if(j.Completed==j.Plan.Steps.Length)
-                {store.Commit(j.Plan.Unload?null:j.Plan.Target,j with {Stage="Complete",Updated=DateTimeOffset.UtcNow});return;}
-                if(j.Stage=="Cancelling") {store.Cancel(j with {Stage="Cancelled",Updated=DateTimeOffset.UtcNow});return;}
-                // Claim one action under the same lock used by Cancel. Once
-                // claimed, it finishes; cancellation prevents the next claim.
-            }finally{gate.Release();}
-            try
-            {
-                var step=j.Plan.Steps[j.Completed];
-                switch(step.Kind)
-                {
-                    case "Keep":
-                        var previous=j.Source.Instances.Single(i=>i.Id==step.WorkloadId);
-                        if(!(await runtime.Observe()).Instances.Any(i=>i.Id==previous.Id && i.InstanceId==previous.InstanceId && i.Pid==previous.Pid && i.BootId==previous.BootId && i.State=="running"))
-                            throw new InvalidOperationException("An unchanged workload stopped outside this operation. Restore it before resuming.");
-                        break;
-                    case "Drain":await gateway.Drain(step.WorkloadId);break;
-                    case "Stop":
-                        var old=j.Source.Instances.Single(i=>i.Id==step.WorkloadId);await runtime.Stop(new(old.Id,old.InstanceId,old.Pid,old.BootId));break;
-                    case "Start":
-                        if(Canonical.Hash((await runtime.Observe()).Gpus)!=Canonical.Hash(j.Source.Gpus))throw new InvalidOperationException("GPU inventory changed during the operation.");
-                        await runtime.Start(j.Plan.Target.Workloads.Single(w=>w.Id==step.WorkloadId));break;
-                    case "Publish":
-                        var observed=await runtime.Observe();
-                        foreach(var kept in j.Plan.Steps.Where(s=>s.Kind=="Keep"))
-                        {
-                            var original=j.Source.Instances.Single(i=>i.Id==kept.WorkloadId);
-                            if(!observed.Instances.Any(i=>i.Id==original.Id && i.InstanceId==original.InstanceId && i.Pid==original.Pid && i.BootId==original.BootId && i.State=="running"))
-                                throw new InvalidOperationException("An unchanged workload changed outside this operation.");
-                        }
-                        var routes=j.Plan.Target.Workloads.Where(w=>w.Recipe.Kind!="Workstation" && w.Recipe.Port>0).Select(w=> {
-                            var i=observed.Instances.SingleOrDefault(i=>i.Id==w.Id && i.Fingerprint==w.Fingerprint && i.State=="running") ?? throw new InvalidOperationException($"{w.Name} is no longer running.");
-                            return new BackendRoute(w.Route,w.Id,i.Endpoint);
-                        }).ToArray();await gateway.Publish(routes);break;
-                    default:throw new InvalidOperationException("Unknown journal action.");
-                }
-                await gate.WaitAsync();try {var latest=store.Get<Journal>("journal","current")!;store.Put("journal","current",latest with {Completed=j.Completed+1,Updated=DateTimeOffset.UtcNow});}finally{gate.Release();}
-            }
-            catch(Exception e)
-            {
-                await gate.WaitAsync();try
-                {
-                    var latest=store.Get<Journal>("journal","current")!;
-                    var failed=latest with {Stage=latest.Stage=="Cancelling"?"Cancelled":"Failed",Error=Redaction.Logs(e is InvalidOperationException ? e.Message : "Runtime operation failed. Check the workload logs."),Updated=DateTimeOffset.UtcNow};
-                    if(failed.Stage=="Cancelled")store.Cancel(failed);else store.Put("journal","current",failed);
-                }finally{gate.Release();}return;
-            }
-        }
+        await RunLoad();
     }
 }
-public record WorkloadSelection(string? Id,string Recipe,string[] Gpus,StationUser? User=null,string? StationId=null,string? StationName=null);
+public record WorkloadSelection(string? Id,string Recipe,string[] Gpus,StationUser? User=null,string? StationId=null,string? StationName=null,StationDevices? Devices=null);
 
 public sealed class AgentWorkloadRuntime(HttpClient client):IWorkloadRuntime
 {
+    public async Task Prepare(Workload[] workloads)=>await Ensure(await client.PostAsJsonAsync("/workloads/prepare",workloads));
     public async Task<RuntimeObservation> Observe()=>await client.GetFromJsonAsync<RuntimeObservation>("/workloads") ?? throw new IOException();
     public async Task<RuntimeInstance> Start(Workload w)
     {var r=await client.PostAsJsonAsync("/workloads/start",new RuntimeStart(w));await Ensure(r);return (await r.Content.ReadFromJsonAsync<RuntimeInstance>())!;}

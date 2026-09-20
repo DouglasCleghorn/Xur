@@ -29,6 +29,7 @@ public record Transition(string Id,string ProfileName,string Stage,int Completed
 public record ProfileState(Profile[] Profiles,Profile? Active,RuntimeObservation Runtime,Transition? Operation);
 public interface IWorkloadRuntime
 {
+    Task Prepare(Workload[] workloads)=>Task.CompletedTask;
     Task<RuntimeObservation> Observe();
     Task<RuntimeInstance> Start(Workload workload);
     Task Stop(RuntimeStop request);
@@ -48,12 +49,7 @@ public static class ProfilePolicy
         if(!EntityIdentifier(profile.Id) || string.IsNullOrWhiteSpace(profile.Name) || profile.Name.Length>80 || profile.Workloads.Length>32)
             throw new InvalidOperationException("Use a profile name and at most 32 workloads.");
         StationDevicePolicy.Validate(profile.Workloads);
-        // Assignment planning is available for development, but enforcement is
-        // not yet wired through logind, hotplug and virtual streaming input.
-        // Never accept intent that this runtime would silently ignore.
-        if(profile.Workloads.Any(w=>w.Devices!=null))throw new InvalidOperationException("Workstation device assignments are not enabled yet.");
         var ids=new HashSet<string>();var routes=new HashSet<string>();var allocations=new HashSet<string>();
-        if(profile.Workloads.Count(w=>w.Recipe.Kind=="Workstation")>1)throw new InvalidOperationException("One local workstation can run at a time.");
         foreach(var w in profile.Workloads)
         {
             if(!EntityIdentifier(w.Id) || !ids.Add(w.Id) || !Identifier(w.Route) || !routes.Add(w.Route) || string.IsNullOrWhiteSpace(w.Name) || w.Name.Length>80)
@@ -104,13 +100,13 @@ public static class ProfilePolicy
             throw new InvalidOperationException("Invalid model files.");
         if(r.Hub is {} hub && (!Regex.IsMatch(hub.Repository,@"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$") || !Regex.IsMatch(hub.Revision,@"^[0-9a-f]{40}$")))throw new InvalidOperationException("Pin a model repository revision.");
     }
-    public static TransitionStep[] Steps(Profile target,RuntimeObservation observed)
+    public static TransitionStep[] Steps(Profile target,RuntimeObservation observed,bool restartStations=false)
     {
         var steps=new List<TransitionStep>();
         foreach(var old in observed.Instances.OrderBy(i=>i.Id,StringComparer.Ordinal))
         {
             var desired=target.Workloads.SingleOrDefault(w=>w.Id==old.Id);
-            if(desired!=null && desired.Fingerprint==old.Fingerprint && old.State=="running")
+            if(desired!=null && desired.Fingerprint==old.Fingerprint && old.State=="running" && !(restartStations&&desired.Recipe.Kind=="Workstation"))
                 steps.Add(new("Keep",old.Id,"Keep the running instance and active requests"));
             else
             {
@@ -119,7 +115,7 @@ public static class ProfilePolicy
             }
         }
         foreach(var w in target.Workloads.OrderBy(w=>w.Id,StringComparer.Ordinal))
-            if(!observed.Instances.Any(i=>i.Id==w.Id && i.Fingerprint==w.Fingerprint && i.State=="running"))
+            if(restartStations&&w.Recipe.Kind=="Workstation" || !observed.Instances.Any(i=>i.Id==w.Id && i.Fingerprint==w.Fingerprint && i.State=="running"))
                 steps.Add(new("Start",w.Id,"Start and pass the health check"));
         steps.Add(new("Publish","","Publish routes atomically"));
         return steps.ToArray();

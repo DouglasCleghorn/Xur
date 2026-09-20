@@ -29,9 +29,10 @@ settings. A small CPU recipe remains bundled for smoke tests. See
 `docs/usage/profiles.md` and the matching release acceptance file for executed checks.
 
 The upstream Bazzite NVIDIA driver and container toolkit are included. Reference
-multi-GPU model deployments and multiple independent workstations remain
-unfinished. One native Plasma workstation now starts and stops through the
-agent with a selected DRM GPU and dedicated user. Its VM test renders a Vulkan
+multi-GPU model deployments still need hardware validation. Multiple native
+workstations and peripheral assignments are now implemented in source; see
+`docs/architecture/multiple-workstations.md`. Each uses a selected DRM GPU,
+dedicated user and logind seat. Its VM test renders a Vulkan
 window alongside a continuing CPU model and exercises reboot restoration.
 Physical HDMI audio and per-station USB routing are not established by that
 software-rendering test. The current profile implementation

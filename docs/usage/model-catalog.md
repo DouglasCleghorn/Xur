@@ -39,22 +39,17 @@ recipe-specific Qwen MTP/Fish/ASR deployments are not implemented by this change
 The VM evidence covers real downloaded GGUF inference. It does not establish
 execution of the GPU-only engines on the offline example machine.
 
-Gaming workstation starts the installed Bazzite Plasma desktop through its real
-display manager. KWin is constrained to the selected DRM card. A dedicated Unix
-user and device-limited user slice own the desktop and applications. The first
-session opens a desktop without automatic welcome dialogs or Steam startup;
-Steam and other installed applications remain in the launcher. Its home persists
-across profile changes. When removed from the running profile, the display
-manager and all processes belonging to that station user are terminated. The
-terminal manager returns on VT3. Successful active stations return after reboot.
+Gaming workstation starts the installed Bazzite Plasma desktop in its own PAM
+session, Unix user and logind seat. KWin uses the selected DRM card. Persistent
+users retain their home and Steam data; temporary users have separate disposable
+homes. Successful workstations return after reboot.
 
-This implementation supports one native local station, using the selected GPU’s
-connected displays and the machine’s local keyboard, mouse and audio. Separate
-USB/audio assignments, multiple independent stations, and independent sessions
-per video output are not implemented. The VM test runs Plasma and an animated
-Vulkan window through XWayland using software rendering, and verifies that
-starting/stopping the station preserves the continuing model PID. Physical GPU
-rendering, HDMI audio and input isolation require physical execution evidence.
+Profiles support simultaneous workstations on distinct GPUs and users. USB
+selection supports devices and hubs; display audio follows the GPU, USB audio
+follows its assignment, and built-in audio belongs to the primary workstation.
+See [multiple workstations](../architecture/multiple-workstations.md) for exact
+matching behavior and outstanding physical acceptance tests. Separate desktops
+on outputs of a single GPU remain unsupported.
 
 Authenticated catalog APIs:
 

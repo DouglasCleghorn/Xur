@@ -2,8 +2,11 @@
 
 Workstations lists every saved workstation, including stopped desktops and GPUs
 without a connected screen. Disconnected cards say **No display detected**.
-The ASPEED onboard adapter has a readable name. Profiles still allow one active
-native workstation at a time; persistent users retain their home and Steam data.
+The ASPEED onboard adapter has a readable name. Profiles can run several workstations on distinct GPUs and Unix users. Persistent
+users retain their home and Steam data. In the profile editor, expand **USB devices,
+hubs and audio** to assign peripherals and choose a primary workstation. See
+[multiple workstations](../architecture/multiple-workstations.md) for matching
+rules, supported devices and validation limits.
 
 Load the profile, install Moonlight on the client, and add this machine's address.
 Select the computer in Moonlight, then open Connect with Moonlight on the
@@ -22,12 +25,11 @@ restricted permissions. Streaming opens only its required firewall ports while
 running. Stopping the workstation stops Sunshine before terminating the desktop.
 
 The desktop and encoder use the selected GPU's permitted device nodes. With no
-connected monitor, Plasma uses KWin's virtual display backend at 1920×1080. That
+connected monitor, Plasma uses a managed virtual output on KWin's DRM backend. That
 backend needs a render device and a working OpenGL compositor for capture. A
 basic display-only VM adapter can display and stream a connected virtual screen,
 but may not support headless capture. Capture failure is shown explicitly.
-Multi-seat, independent outputs of one card, and per-desk USB routing remain
-separate work; see `remaining-work.md`.
+Independent desktops on separate outputs of one GPU remain future work.
 
 The Models page inventories managed downloads on startup and provides an explicit
 Search attached storage action. GGUF downloads are stored in `/var/lib/xur/models`;

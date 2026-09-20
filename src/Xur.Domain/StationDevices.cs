@@ -4,7 +4,7 @@ namespace Xur.Domain;
 public record StationDevices(bool Primary=false,string[]? Usb=null);
 public record UsbPeripheral(string Id,string Name,string Identity,string Path,bool Hub,bool RootHub,
     string[] Ancestors,string[] Nodes,bool Storage=false);
-public record StationPeripheral(string Node,string Kind,string? UsbId=null,string? Gpu=null);
+public record StationPeripheral(string Node,string Kind,string? UsbId=null,string? Gpu=null,string? Station=null);
 public record StationDeviceInventory(UsbPeripheral[] Usb,StationPeripheral[] Devices,string[] Errors);
 public record StationDeviceAllocation(string WorkloadId,bool Primary,string[] Usb,string[] Nodes,string[] Audio,string[] Problems);
 
@@ -62,7 +62,8 @@ public static class StationDevicePolicy
             foreach(var device in inventory.Devices)
             {
                 string? owner=null;
-                if(device.UsbId!=null)
+                if(device.Station!=null)owner=stations.SingleOrDefault(w=>w.Id==device.Station)?.Id;
+                else if(device.UsbId!=null)
                 {
                     var matches=inventory.Usb.Where(d=>d.Id==device.UsbId).ToArray();
                     if(matches.Length!=1)continue; // Duplicate serials never fall back to primary.

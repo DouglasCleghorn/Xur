@@ -7,8 +7,8 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
  try{
   const page=await browser.newPage();await page.route('http://updates.test/**',route=>{
    const url=new URL(route.request().url());
-   const file=url.pathname==='/setup.css'?'src/Xur.Control/wwwroot/setup.css':url.pathname.startsWith('/fonts/')?'src/Xur.Control/wwwroot'+url.pathname:path.join(out,'updates.html');
-   return route.fulfill({body:fs.readFileSync(file),contentType:url.pathname.endsWith('.css')?'text/css':url.pathname.endsWith('.ttf')?'font/ttf':'text/html'});
+   const file=url.pathname==='/setup.css'?'src/Xur.Control/wwwroot/setup.css':(url.pathname.startsWith('/fonts/')||url.pathname.startsWith('/icons/'))?'src/Xur.Control/wwwroot'+url.pathname:path.join(out,'updates.html');
+   return route.fulfill({body:fs.readFileSync(file),contentType:url.pathname.endsWith('.css')?'text/css':url.pathname.endsWith('.ttf')?'font/ttf':url.pathname.endsWith('.svg')?'image/svg+xml':'text/html'});
   });
   await page.goto('http://updates.test/');
   assert.equal(await page.locator('.tool-update-row').count(),13);

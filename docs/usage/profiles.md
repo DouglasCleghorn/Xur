@@ -104,10 +104,17 @@ antiforgery token.
 - `POST /api/profiles/cancel`: cancel a failed change and allow a new preview.
 - `GET /api/workloads/{id}/logs`: engine logs.
 
-The OpenAI-compatible base URL for a workload with route `chat` is
-`http://<machine>:8080/inference/chat/v1`. Use the bearer token as the client API
-key. Both ordinary and streamed responses pass through the stable gateway. For
-the bundled recipe the model alias is `smollm2`.
+Open **LLM endpoints** to see ready language models and copy their client URLs.
+Only running llama.cpp/vLLM workloads with a published gateway route are listed,
+including successful workloads in a partially loaded profile. The page refreshes
+every 15 seconds while visible.
+
+For a workload with route `chat`, the OpenAI-compatible base URL is
+`https://<machine>:8443/inference/chat/v1`, or
+`https://<tailscale-name>/inference/chat/v1` through Tailscale Serve. Create a
+Testing API key in Settings and use it as the client API key. Read `/v1/models`
+under that workload’s route for the served model IDs. Ordinary and streamed
+responses pass through the stable gateway.
 
 # Verification
 
@@ -131,8 +138,9 @@ the upstream driver integration. The native workstation uses KWin’s selected D
 slice with device restrictions. Teardown terminates that user’s compositor,
 applications and audio services, then checks release. The VM exercises a real
 Plasma desktop and animated Vulkan/XWayland window alongside a continuing CPU
-model, including restart after reboot. Physical HDMI/audio/USB routing, multiple
-independent seats and the reference four-3090 deployments still need work.
+model, including restart after reboot. Multi-seat and USB/audio routing are now implemented in source; physical
+acceptance and the reference four-3090 deployment remain to be verified. See
+[multiple workstations](../architecture/multiple-workstations.md).
 
 Upstream implementation references:
 [Podman run](https://docs.podman.io/en/latest/markdown/podman-run.1.html),
@@ -161,3 +169,18 @@ The authenticated API is `POST /api/profiles/cancel` with JSON
 `{"id":"<current operation ID>"}`; the browser form also binds that ID. An old tab
 cannot cancel a newer profile change. Cancelled operations cannot be resumed;
 load a profile again to generate a fresh plan.
+
+
+## Parallel loading and peripheral assignment
+
+Independent workloads start in parallel (up to four pipelines). A failed start
+is reported individually while successful siblings keep running and serving.
+**Resume** retries unfinished work. **Cancel change** stops queued actions;
+starts/stops already in flight finish at their safe boundary.
+
+Each simultaneous workstation needs a distinct GPU and user. Open **USB devices,
+hubs and audio** in its profile row to select devices/hubs or make it primary.
+Unique serials follow port moves; devices without serials stay bound to a port.
+The primary receives unassigned input and built-in audio. USB and display audio
+follow their assigned devices. Assignment changes may restart other desktops to
+release open device handles; Preview lists those stops before loading.

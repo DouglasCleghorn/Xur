@@ -20,6 +20,7 @@ if(args is ["--control-panel-render",var homeOutput]) { await ControlPanelRender
 var results = new List<string>();
 void Check(bool value,string name) { if(!value) throw new Exception(name); results.Add(name); }
 await StationIdentityTests.Run(Check);
+await ParallelLoadTests.Run(Check);
 HuggingFaceTests.Run(Check);
 AccountTests.Run(Check);
 WorkstationUpdateTests.Run(Check);

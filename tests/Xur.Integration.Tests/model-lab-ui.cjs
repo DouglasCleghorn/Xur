@@ -15,6 +15,7 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
  try{const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('http://lab.test/**',async r=>{
   const u=new URL(r.request().url()),method=r.request().method();const json=v=>r.fulfill({body:JSON.stringify(v),contentType:'application/json'});
+  if(u.pathname.startsWith('/icons/'))return r.fulfill({path:path.resolve('src/Xur.Control/wwwroot'+u.pathname)});
   if(method==='POST'){
    assert.equal(r.request().headers().requestverificationtoken,'fixture-token');mutations.push({path:u.pathname,body:r.request().postDataJSON()});
    if(u.pathname==='/api/benchmarks'){run.state='Running';return json(run);}

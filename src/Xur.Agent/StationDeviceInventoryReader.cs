@@ -45,7 +45,15 @@ public static class StationDeviceInventoryReader
                 // assign unrelated chipset/built-in audio by vendor alone.
                 if(pci!=null)gpu=gpus.SingleOrDefault(g=>g.Pci[..^1]==pci[..^1])?.Pci;
             }
-            devices.Add(new(node,kind,peripheral?.Id,gpu));
+            string? station=null;
+            if(peripheral==null && kind is "Input" or "Hidraw") {
+                for(var parent=new DirectoryInfo(real);parent!=null && parent.FullName.StartsWith(sysRoot+"/devices/");parent=parent.Parent) {
+                    var physical=ReadFile(parent.FullName+"/phys");
+                    if(physical.StartsWith("xur/seat-xur-")){station=physical;break;}
+                }
+            }
+            // The seat token is mapped to a workload only by the reconciler.
+            devices.Add(new(node,kind,peripheral?.Id,gpu,station));
         }
         usb=usb.Select(d=>d with{Nodes=devices.Where(p=>p.UsbId==d.Id).Select(p=>p.Node).Distinct().Order().ToArray()}).ToList();
         return new(usb.OrderBy(d=>d.Name,StringComparer.Ordinal).ThenBy(d=>d.Path,StringComparer.Ordinal).ToArray(),devices.ToArray(),errors.Distinct().ToArray());

@@ -2,11 +2,10 @@ using System.Text.Json;
 using Xur.Domain;
 namespace Xur.Agent;
 
-// One native local seat. The upstream desktop stays installed but dormant until
-// a profile owns it; its dedicated Unix user owns every desktop child process.
+// Each workstation has its own logind seat and Unix user. User-manager children
+// inherit the selected GPU and peripheral boundary.
 public sealed class StationRuntime(DisplayConsoles? consoles=null)
 {
-    const string Config="/etc/plasmalogin.conf.d/90-xur-workstation.conf";
     static string Unit(Workload w)=>"xur-station-"+w.Id+".service";
     readonly StationAccounts accounts=new();
     static string User(Workload w)=>StationAccounts.Username(w);
@@ -24,12 +23,13 @@ public sealed class StationRuntime(DisplayConsoles? consoles=null)
         if(fields.GetValueOrDefault("LoadState")=="not-found")return null;
         int.TryParse(fields.GetValueOrDefault("MainPID"),out var pid);
         var invocation=fields.GetValueOrDefault("InvocationID","");if(invocation.Length==0)return null;
-        return new(w.Id,w.Fingerprint,invocation,pid,File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim(),"",fields.GetValueOrDefault("ActiveState")=="active"?"running":"exited",w.Gpus);
+        return new(w.Id,StationSeats.Registered(w.Id)?w.Fingerprint:"legacy-seat:"+w.Fingerprint,invocation,pid,File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim(),"",fields.GetValueOrDefault("ActiveState")=="active"?"running":"exited",w.Gpus);
     }
     public async Task<RuntimeInstance> Start(Workload w,GpuDevice gpu)
     {
-        if(!File.Exists("/usr/bin/plasmalogin") || !File.Exists("/usr/bin/startplasma-wayland"))throw new InvalidOperationException("The installed OS does not contain the Plasma workstation runtime.");
+        if(!File.Exists("/usr/bin/startplasma-wayland"))throw new InvalidOperationException("The installed OS does not contain the Plasma workstation runtime.");
         var existing=await Inspect(w);
+        if(existing?.State=="running"&&!StationSeats.Registered(w.Id))throw new InvalidOperationException("Reload the profile to move this existing desktop to its dedicated workstation seat.");
         var headless=gpu.Displays is not {Length:>0};
         var user=User(w);var home="/var/home/"+user;
         if(existing?.State!="running")
@@ -46,33 +46,20 @@ public sealed class StationRuntime(DisplayConsoles? consoles=null)
             new StationNetworkPolicy().Apply(w.Id,user);
             var uid=await Run("id",["-u",user]);
             await new StationDeviceAccess().GrantAccess(w.Id,int.Parse(uid),gpu);
-            // All user-manager scopes inherit this boundary, including Steam,
-            // games, PipeWire and apps launched by Plasma through systemd.
-            var policy="/run/systemd/system/user-"+uid+".slice.d";Directory.CreateDirectory(policy);
-            var devices=(gpu.Cards??[]).Concat(gpu.Nodes).ToList();
-            if(gpu.Vendor=="NVIDIA")
-            {
-                devices.AddRange(await NvidiaDevice.WorkstationNodes(gpu));
-            }
-            await Run("modprobe",["uinput"]);
-            await Run("udevadm",["settle","--timeout=10"]);
-            if(!File.Exists("/dev/uinput"))throw new InvalidOperationException("Workstation input device /dev/uinput was not created.");
-            await File.WriteAllTextAsync(policy+"/50-xur.conf","[Slice]\nDevicePolicy=closed\n"+string.Join('\n',devices.Select(d=>"DeviceAllow="+d+" rw"))+"\nDeviceAllow=/dev/uinput rw\nDeviceAllow=char-input rw\nDeviceAllow=char-alsa rw\nDeviceAllow=char-hidraw rw\nDeviceAllow=/dev/tty rw\nDeviceAllow=char-tty rw\n");
+            await StationSeats.Register(w,gpu,int.Parse(uid));
+            var allocation=StationSeats.Status().Single(a=>a.WorkloadId==w.Id);
+            if(allocation.Problems.Any(p=>!p.Contains("disconnected")))throw new InvalidOperationException(string.Join(" ",allocation.Problems));
             // Write user configuration as that user, so symlinks in their home
             // cannot turn a profile change into privileged file writes.
-            await Run("runuser",["-u",user,"--","/bin/bash","-c",UserConfiguration,"xur",home,gpu.Cards![0],headless?"headless":"local",string.Join("\n",StationGraphics.LaunchEnvironment(gpu))]);
+            await Run("runuser",["-u",user,"--","/bin/bash","-c",UserConfiguration,"xur",home,gpu.Cards![0],headless?"headless":"local",string.Join("\n",StationGraphics.LaunchEnvironment(gpu)),StationSeats.Seat(w.Id)]);
             await StationPower.Apply(user,headless);
             await Run("restorecon",["-RF",home]);
             // Register the current bundle's helper before KWin starts reading
             // desktop permissions, including the first load after an update.
             if(headless)await StationVirtualDisplay.Prepare(user);
-            Directory.CreateDirectory(Path.GetDirectoryName(Config)!);
-            await File.WriteAllTextAsync(Config,"[Autologin]\nUser="+user+"\nSession=plasma.desktop\nRelogin=false\n");
             await Run("systemctl",["daemon-reload"]);
             await Processes.Run("systemctl",["reset-failed",Unit(w)],10);
-            // Headless desktops need the same active logind/DRM input session
-            // as local desktops. KWin --virtual omits the libinput backend.
-            await Run("systemd-run",["--unit="+Unit(w),"--collect","--property=Type=exec","--property=KillMode=control-group","--property=TimeoutStopSec=30","--setenv=LANG=C.UTF-8","--setenv="+TimezoneSettings.StationEnvironment,"--setenv=KWIN_DRM_DEVICES="+gpu.Cards![0],"/usr/bin/plasmalogin"]);
+            await Run("systemd-run",SessionArguments(w,gpu,int.Parse(uid),home));
         }
         if(existing?.State=="running")await StationPower.Apply(user,headless);
         for(var n=0;n<90;n++)
@@ -99,7 +86,7 @@ public sealed class StationRuntime(DisplayConsoles? consoles=null)
         await StationStreaming.Stop(w.Id);
         await StationVirtualDisplay.Stop(w.Id);
         await Processes.Run("systemctl",["stop",Unit(w)],45);
-        if((await Processes.Run("id",["-u",user],10)).ExitCode!=0){new StationNetworkPolicy().Remove(w.Id);return;}
+        if((await Processes.Run("id",["-u",user],10)).ExitCode!=0){new StationNetworkPolicy().Remove(w.Id);await StationSeats.Remove(w.Id);return;}
         await Processes.Run("loginctl",["terminate-user",user],30);
         await Processes.Run("pkill",["-KILL","-u",user],10);
         for(var n=0;n<30;n++)
@@ -109,15 +96,28 @@ public sealed class StationRuntime(DisplayConsoles? consoles=null)
             await Task.Delay(500);
         }
         new StationNetworkPolicy().Remove(w.Id);
-        if(File.Exists(Config) && (await File.ReadAllTextAsync(Config)).Contains("User="+user+"\n"))File.Delete(Config);
+        await StationSeats.Remove(w.Id);
+        const string legacy="/etc/plasmalogin.conf.d/90-xur-workstation.conf";
+        if(File.Exists(legacy)&&File.ReadAllText(legacy).Contains("User="+user+"\n"))File.Delete(legacy);
         var uid=await Run("id",["-u",user]);
         File.Delete("/run/systemd/system/user-"+uid+".slice.d/50-xur.conf");
+        // set-property persists its live cgroup updates in this higher-priority
+        // runtime directory. Remove only the two properties managed by Xur.
+        foreach(var property in new[]{"DeviceAllow","DevicePolicy"})
+            File.Delete("/run/systemd/system.control/user-"+uid+".slice.d/50-"+property+".conf");
         await Processes.Run("systemctl",["daemon-reload"],10);
-        await Run("runuser",["-u",user,"--","/bin/bash","-c","rm -f -- \"$HOME/.config/systemd/user/plasma-kwin_wayland.service.d/90-xur-headless.conf\""]);
+        await Run("runuser",["-u",user,"--","/bin/bash","-c","rm -f -- \"$HOME/.config/systemd/user/plasma-kwin_wayland.service.d/90-xur-headless.conf\" \"$HOME/.config/environment.d/90-xur-gpu.conf\""]);
         await new StationDeviceAccess().Revoke(w.Id);
         await accounts.RemoveTemporary(w);
-        await Processes.Run("chvt",["3"],10);
+
     }
+    public static string[] SessionArguments(Workload w,GpuDevice gpu,int uid,string home)=>[
+        "--unit="+Unit(w),"--collect","--property=Type=exec","--property=User="+User(w),
+        "--property=PAMName=login","--property=Slice=user-"+uid+".slice","--property=KillMode=control-group","--property=TimeoutStopSec=30",
+        "--setenv=LANG=C.UTF-8","--setenv="+TimezoneSettings.StationEnvironment,"--setenv=HOME="+home,
+        "--setenv=XDG_SEAT="+StationSeats.Seat(w.Id),"--setenv=XDG_SESSION_TYPE=wayland","--setenv=XDG_SESSION_CLASS=user",
+        "--setenv=XDG_CURRENT_DESKTOP=KDE","--setenv=QT_QPA_PLATFORM=wayland","--setenv=XDG_RUNTIME_DIR=/run/user/"+uid,
+        "--setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"+uid+"/bus","--setenv=KWIN_DRM_DEVICES="+gpu.Cards![0],"/usr/bin/startplasma-wayland"];
     internal const string UserConfiguration="""
         set -eu
         umask 077
@@ -133,7 +133,7 @@ public sealed class StationRuntime(DisplayConsoles? consoles=null)
         else
           rm -f "$1/.config/systemd/user/plasma-kwin_wayland.service.d/90-xur-headless.conf"
         fi
-        printf 'TZ=:/etc/localtime\nKWIN_DRM_DEVICES=%s\n' "$2" > "$1/.config/environment.d/90-xur-gpu.conf"
+        printf 'TZ=:/etc/localtime\nKWIN_DRM_DEVICES=%s\nXDG_SEAT=%s\n' "$2" "$5" > "$1/.config/environment.d/90-xur-gpu.conf"
         printf '%s\n' "$4" >> "$1/.config/environment.d/90-xur-gpu.conf"
         printf '[Daemon]\nAutolock=false\nLockOnResume=false\n' > "$1/.config/kscreenlockerrc"
         """;

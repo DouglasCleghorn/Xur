@@ -132,6 +132,8 @@ def compatible(entry):
         for recipe in (ROOT.parent/'catalog-selected').glob('*.json'):
             if read(recipe,{}).get('kind')=='Container':
                 raise ValueError('This version cannot manage your containers. Select a version with container workload support.')
+    if 'multiseat-v1' not in features and (ROOT.parent/'station-seats.json').exists():
+        raise ValueError('This version cannot manage workstation seats and USB assignments. Select a version with multiseat support.')
     if 'station-users-v1' in features:return
     def uses_users(value):
         if isinstance(value,list):return any(uses_users(v) for v in value)

@@ -18,6 +18,15 @@ static class StationDeviceTests
         check(plan[0].Nodes.SequenceEqual(new[]{"/dev/input/event0","/dev/snd/controlC0"}),"Primary receives unassigned input and built-in audio only");
         check(plan[1].Nodes.SequenceEqual(new[]{"/dev/input/event5","/dev/snd/controlC1","/dev/snd/controlC2"}),"Hub follows input/audio children and selected GPU owns display audio");
         check(!plan.Any(p=>p.Nodes.Contains("/dev/sda")),"Hub assignment never grants raw storage access");
+        var remote=inventory with{Devices=[..inventory.Devices,new("/dev/input/event40","Input",Station:"2"),new("/dev/hidraw7","Hidraw",Station:"unassigned")]};
+        var remotePlan=StationDevicePolicy.Plan([primary,secondary],remote);
+        check(remotePlan[1].Nodes.Contains("/dev/input/event40")&&!remotePlan[0].Nodes.Contains("/dev/input/event40")&&!remotePlan.Any(a=>a.Nodes.Contains("/dev/hidraw7")),"Moonlight virtual input belongs only to its station; unknown stream identities never fall back to primary");
+        var rules=StationSeats.RulesText([primary,secondary],[],remote,remotePlan,node=>"/devices/test/"+Path.GetFileName(node));
+        check(rules.Contains("ATTRS{phys}==\""+StationSeats.Physical("2"))&&rules.Contains("DEVPATH==\"/devices/test/event5\", ENV{ID_SEAT}:=\""+StationSeats.Seat("2")),"Physical USB and virtual Moonlight input use the same dedicated logind seat");
+        check(rules.Contains("seat-xur-unassigned")&&StationSeats.Seat("1")!=StationSeats.Seat("2"),"Unclaimed input waits for reconciliation instead of entering another desktop");
+        var card=new GpuDevice("0000:41:00.0","NVIDIA","GPU","nvidia","",24576,["/dev/dri/renderD130"],[],["/dev/dri/card3"]);
+        var launch=StationRuntime.SessionArguments(secondary,card,1002,"/var/home/user2");
+        check(launch.Contains("--property=PAMName=login")&&launch.Contains("--property=Slice=user-1002.slice")&&launch.Contains("--setenv=XDG_SEAT="+StationSeats.Seat("2"))&&launch.Contains("--setenv=KWIN_DRM_DEVICES=/dev/dri/card3")&&launch[^1]=="/usr/bin/startplasma-wayland","Each desktop starts as its own PAM user, logind seat and assigned GPU without a shared display manager");
         var moved=inventory with{Usb=[hub with{Path="/usb/elsewhere"},keyboard with{Path="/usb/elsewhere/keyboard",Ancestors=["/usb/elsewhere"]},headset with{Path="/usb/elsewhere/headset",Ancestors=["/usb/elsewhere"]}]};
         check(StationDevicePolicy.Plan([primary,secondary],moved)[1].Nodes.SequenceEqual(plan[1].Nodes),"Serial hub survives changing USB ports with its attached devices");
         var conflict=StationDevicePolicy.Plan([primary with{Devices=new(true,[keyboard.Id])},secondary],inventory);
@@ -65,10 +74,12 @@ static class StationDeviceTests
             Link(sys+"/class/input/event7",keyboard+"/9-2.3:1.0/input/input4/event7");Write(dev+"/input/event7");
             Link(sys+"/class/sound/controlC3",sys+"/devices/pci0000:00/0000:00:01.1/0000:01:00.1/sound/card3/controlC3");Write(dev+"/snd/controlC3");
             var gpu=new GpuDevice("0000:01:00.0","NVIDIA","RTX","nvidia","",1,[],[]);
+            var virtualInput=sys+"/devices/virtual/input/input20";Write(virtualInput+"/phys",StationSeats.Physical("2")+"/input0");Link(sys+"/class/input/event40",virtualInput+"/event40");Write(dev+"/input/event40");
             var observed=StationDeviceInventoryReader.Read([gpu],sys,dev);
             check(observed.Usb.Length==2&&observed.Usb.Single(d=>!d.Hub).Ancestors.SequenceEqual([hub]),"USB discovery follows real sysfs parent topology");
-            check(observed.Devices.Single(d=>d.Kind=="Input").UsbId==observed.Usb.Single(d=>!d.Hub).Id,"Input node maps to its physical USB device through symlinks");
+            check(observed.Devices.Single(d=>d.Node.EndsWith("event7")).UsbId==observed.Usb.Single(d=>!d.Hub).Id,"Input node maps to its physical USB device through symlinks");
             check(observed.Devices.Single(d=>d.Kind=="Audio").Gpu==gpu.Pci,"HDMI audio sibling function maps to the correct PCI GPU through upstream bridges");
+            check(observed.Devices.Single(d=>d.Node.EndsWith("event40")).Station==StationSeats.Physical("2")+"/input0","Virtual input inventory follows the physical seat tag through sysfs parents");
             check(observed.Errors.Length==0,"Read-only device inventory completes without runtime tools");
         }finally{Directory.Delete(root,true);}
     }

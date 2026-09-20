@@ -6,9 +6,9 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage();await page.route('http://cancel.test/**',route=>{
-   const url=new URL(route.request().url());const file=url.pathname==='/setup.css'?'src/Xur.Control/wwwroot/setup.css':url.pathname.startsWith('/fonts/')?'src/Xur.Control/wwwroot'+url.pathname:path.join(out,path.basename(url.pathname));
+   const url=new URL(route.request().url());const file=url.pathname==='/setup.css'?'src/Xur.Control/wwwroot/setup.css':(url.pathname.startsWith('/fonts/')||url.pathname.startsWith('/icons/'))?'src/Xur.Control/wwwroot'+url.pathname:path.join(out,path.basename(url.pathname));
    if(!fs.existsSync(file))return route.fulfill({status:404,body:''});
-   return route.fulfill({body:fs.readFileSync(file),contentType:url.pathname.endsWith('.css')?'text/css':url.pathname.endsWith('.ttf')?'font/ttf':'text/html'});
+   return route.fulfill({body:fs.readFileSync(file),contentType:url.pathname.endsWith('.css')?'text/css':url.pathname.endsWith('.ttf')?'font/ttf':url.pathname.endsWith('.svg')?'image/svg+xml':'text/html'});
   });
   for(const stage of ['Applying','Cancelling','Cancelled']){
    await page.goto('http://cancel.test/'+stage+'.html');

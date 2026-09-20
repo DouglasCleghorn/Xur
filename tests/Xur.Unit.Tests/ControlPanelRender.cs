@@ -24,6 +24,7 @@ static class ControlPanelRender
         agent.MapGet("/storage/trim",()=>new TrimStatus(false,"ActiveState=active","Result=success",[new("ssd","/var","/dev/nvme0n1p2","ext4",1000,400,500,true,true,false),new("readonly","/boot","/dev/nvme1n1p1","ext4",1000,400,500,true,false,true)],[]));
         agent.MapGet("/updates",()=>new OsUpdateStatus(null,new("new","digest","image",false),null,null,false,true,false,null,""));
         agent.MapGet("/application-updates",()=>new ApplicationUpdateStatus("http://192.0.2.10:8088",new("current","1"),null,null,null,false,true));
+        agent.MapGet("/station-devices",()=>new StationDeviceInventory([new("usb:"+new string('a',64),"Desk hub","Serial","/usb/hub",true,false,[],[]),new("usb:"+new string('b',64),"Keyboard","Port","/usb/keyboard",false,false,[],[])],[],[]));
         agent.MapGet("/station-users",()=>new[]{new StationAccount("doug",1000,"Doug","/var/home/doug")});
         agent.MapGet("/update-all",()=>new UpdateAllStatus(false,null));
         var stationRecipe=new Recipe("gaming-workstation","Desktop","host:plasma",[],0,"","Display",1,0,"",Kind:"Workstation",Engine:"Plasma");
@@ -34,9 +35,9 @@ static class ControlPanelRender
         {
             await agent.StartAsync();var services=new ServiceCollection();services.AddLogging();services.AddSingleton(new Appliance());services.AddSingleton(manager);services.AddSingleton(new RecipeCatalog(root+"/catalog"));services.AddSingleton(new Bootstrap(directory:root));services.AddSingleton<NavigationManager>(new Navigation());
             await using var provider=services.BuildServiceProvider();await using var renderer=new HtmlRenderer(provider,provider.GetRequiredService<ILoggerFactory>());
-            foreach(var page in new[]{"home","monitoring","files","model-lab","api-keys","settings","storage","profile-edit"})
+            foreach(var page in new[]{"home","endpoints","monitoring","files","model-lab","api-keys","settings","storage","profile-edit"})
             {
-                RenderFragment body=b=>{b.OpenComponent(0,page=="profile-edit"?typeof(ProfileEditor):page=="settings"?typeof(Xur.Control.Components.Pages.Network):page=="storage"?typeof(Xur.Control.Components.Pages.StorageUsagePage):page=="api-keys"?typeof(Xur.Control.Components.Pages.ApiKeysPage):page=="model-lab"?typeof(Xur.Control.Components.Pages.ModelLab):page=="home"?typeof(Xur.Control.Components.Pages.Home):page=="files"?typeof(Xur.Control.Components.Pages.Files):typeof(Xur.Control.Components.Pages.Monitoring));b.CloseComponent();};
+                RenderFragment body=b=>{b.OpenComponent(0,page=="endpoints"?typeof(Xur.Control.Components.Pages.Endpoints):page=="profile-edit"?typeof(ProfileEditor):page=="settings"?typeof(Xur.Control.Components.Pages.Network):page=="storage"?typeof(Xur.Control.Components.Pages.StorageUsagePage):page=="api-keys"?typeof(Xur.Control.Components.Pages.ApiKeysPage):page=="model-lab"?typeof(Xur.Control.Components.Pages.ModelLab):page=="home"?typeof(Xur.Control.Components.Pages.Home):page=="files"?typeof(Xur.Control.Components.Pages.Files):typeof(Xur.Control.Components.Pages.Monitoring));b.CloseComponent();};
                 var html=await renderer.Dispatcher.InvokeAsync(async()=> (await renderer.RenderComponentAsync<Xur.Control.Components.Layout.MainLayout>(ParameterView.FromDictionary(new Dictionary<string,object?>{{"Body",body}}))).ToHtmlString());
                 // Static rendering has no HTTP request from which to generate antiforgery tokens.
                 // Supply a fixture token for browser tests; production renders AntiforgeryToken normally.

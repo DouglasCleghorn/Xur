@@ -9,7 +9,10 @@ public static class StationStreaming
 {
     const string Root="/var/lib/xur-streaming";
     public static string Runtime=>"/var/lib/xur-streaming-runtime/"+ApplicationIdentity.Id;
+    static readonly object installation=new();
     static void InstallRuntime()
+    {lock(installation)InstallRuntimeLocked();}
+    static void InstallRuntimeLocked()
     {
         if(Directory.Exists(Runtime))return;
         var source=Path.Combine(AppContext.BaseDirectory,"streaming");
@@ -83,15 +86,8 @@ public static class StationStreaming
         await File.WriteAllTextAsync(path+"/apps.json",Applications(gpu.Displays is not {Length:>0},StationDisplay.ScriptPath));
         foreach(var file in new[]{"sunshine.conf","apps.json","cert.pem"})File.SetUnixFileMode(path+"/"+file,(UnixFileMode)420);
         await Run("modprobe",["uinput"]);
-        // Preserve the device's existing policy before granting this station access.
-        var inputPolicy=Root+"/uinput-policy.json";
-        if(!File.Exists(inputPolicy))
-        {
-            var observed=await Processes.Run("stat",["--format=%u:%g:%a","/dev/uinput"],5);
-            if(observed.ExitCode!=0||!Regex.IsMatch(observed.Output.Trim(),@"^\d+:\d+:[0-7]{3,4}$"))throw new InvalidOperationException("Could not observe input device permissions.");
-            await File.WriteAllTextAsync(inputPolicy,JsonSerializer.Serialize(observed.Output.Trim()));File.SetUnixFileMode(inputPolicy,(UnixFileMode)384);
-        }
-        await Run("chown",["root:"+gid,"/dev/uinput"]);await Run("chmod",["0660","/dev/uinput"]);
+        await Run("modprobe",["uhid"]);
+        await new StationDeviceAccess(root:"/var/lib/xur/stream-input-access").GrantNodes(w.Id,number,["/dev/uinput","/dev/uhid"]);
         await Processes.Run("systemctl",["reset-failed",Unit(w.Id)],5);
         var environment=await Processes.Run("runuser",["-u",user,"--","env","XDG_RUNTIME_DIR=/run/user/"+uid,"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"+uid+"/bus","systemctl","--user","show-environment"],10);
         var wayland=environment.Output.Split('\n').FirstOrDefault(l=>l.StartsWith("WAYLAND_DISPLAY="))?[16..]??"wayland-0";
@@ -100,8 +96,8 @@ public static class StationStreaming
         // Check actual opens inside the same user/device boundary as Sunshine.
         // An ACL alone does not prove that cgroups or SELinux permit the device.
         var probeUnit="xur-stream-access-"+Guid.NewGuid().ToString("N");
-        await Run("systemd-run",["--quiet","--wait","--collect","--unit="+probeUnit,"--property=User="+user,"--property=Slice=user-"+uid+".slice","--property=RuntimeMaxSec=10","/usr/bin/python3","-c","import os,sys; [os.close(os.open(p, os.O_RDWR | os.O_CLOEXEC)) for p in sys.argv[1:]]",..StationDeviceAccess.Nodes(gpu),"/dev/uinput"]);
-        if(!running)await Run("systemd-run",["--unit="+Unit(w.Id),"--collect","--property=Type=exec","--property=User="+user,"--property=Slice=user-"+uid+".slice","--property=KillMode=control-group","--property=UMask=0077","--property=WorkingDirectory="+Runtime,..RecoveryPolicy(),"--property=PartOf=xur-station-"+w.Id+".service","--setenv=HOME=/var/home/"+user,"--setenv=XDG_RUNTIME_DIR=/run/user/"+uid,"--setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"+uid+"/bus","--setenv=WAYLAND_DISPLAY="+wayland,"--setenv=QT_QPA_PLATFORM=offscreen","--setenv="+TimezoneSettings.StationEnvironment,..encoderEnvironment,Runtime+"/usr/bin/sunshine",path+"/sunshine.conf"]);
+        await Run("systemd-run",["--quiet","--wait","--collect","--unit="+probeUnit,"--property=User="+user,"--property=DevicePolicy=closed","--property=NoNewPrivileges=true",..await StreamDeviceArguments(gpu),"--property=RuntimeMaxSec=10","/usr/bin/python3","-c","import os,sys; [os.close(os.open(p, os.O_RDWR | os.O_CLOEXEC)) for p in sys.argv[1:]]",..StationDeviceAccess.Nodes(gpu),"/dev/uinput"]);
+        if(!running)await Run("systemd-run",["--unit="+Unit(w.Id),"--collect","--property=Type=exec","--property=User="+user,"--property=DevicePolicy=closed","--property=NoNewPrivileges=true",..await StreamDeviceArguments(gpu),"--property=KillMode=control-group","--property=UMask=0077","--property=WorkingDirectory="+Runtime,..RecoveryPolicy(),"--property=PartOf=xur-station-"+w.Id+".service","--setenv=HOME=/var/home/"+user,"--setenv=XDG_RUNTIME_DIR=/run/user/"+uid,"--setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"+uid+"/bus","--setenv=WAYLAND_DISPLAY="+wayland,"--setenv=QT_QPA_PLATFORM=offscreen","--setenv="+TimezoneSettings.StationEnvironment,..encoderEnvironment,"--setenv=LD_PRELOAD="+Runtime+"/usr/lib/libxur-seat-input.so","--setenv=XUR_INPUT_PHYS="+StationSeats.Physical(w.Id),"--setenv=XDG_SEAT="+StationSeats.Seat(w.Id),Runtime+"/usr/bin/sunshine",path+"/sunshine.conf"]);
         async Task FailStart(string message)
         {
             await File.WriteAllTextAsync(path+"/startup-error",message);
@@ -128,6 +124,9 @@ public static class StationStreaming
         }
         await FailStart("Sunshine did not become ready. Open workstation logs for the capture or encoder error.");
     }
+    static async Task<string[]> StreamDeviceArguments(GpuDevice gpu)=>StationDeviceAccess.Nodes(gpu)
+        .Concat(gpu.Vendor=="NVIDIA"?await NvidiaDevice.WorkstationNodes(gpu):[]).Concat(new[]{"/dev/uinput","/dev/uhid"}).Distinct()
+        .Select(n=>"--property=DeviceAllow="+n+" rw").ToArray();
     static async Task<(bool Ready,string? Error)> CaptureHealth(string id)
     {
         var unit=await Processes.Run("systemctl",["show",Unit(id),"--property=InvocationID,Result"],5);
@@ -181,16 +180,10 @@ public static class StationStreaming
     }
     public static async Task Stop(string id)
     {
-        await Processes.Run("systemctl",["stop",Unit(id)],20);
+        await new StationUnits().Retire(Unit(id),stopActive:true);
         await Firewall(id,false);
         File.Delete(Folder(id)+"/startup-error");
-        var inputPolicy=Root+"/uinput-policy.json";
-        if(File.Exists("/dev/uinput")&&File.Exists(inputPolicy))
-        {
-            var original=JsonSerializer.Deserialize<string>(File.ReadAllText(inputPolicy))!;
-            if(!Regex.IsMatch(original,@"^\d+:\d+:[0-7]{3,4}$"))throw new InvalidOperationException("Invalid saved input device permissions.");
-            var parts=original.Split(':');await Run("chown",[parts[0]+":"+parts[1],"/dev/uinput"]);await Run("chmod",[parts[2],"/dev/uinput"]);File.Delete(inputPolicy);
-        }
+        await new StationDeviceAccess(root:"/var/lib/xur/stream-input-access").Revoke(id);
     }
     public static async Task<StationStreamStatus> Status(Workload w)
     {

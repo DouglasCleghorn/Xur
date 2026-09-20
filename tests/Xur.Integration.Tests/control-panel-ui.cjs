@@ -9,12 +9,13 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
  await page.route('http://home.test/**',r=>{
   const u=new URL(r.request().url());if(r.request().method()==='POST'){mutations++;return r.fulfill({body:'accepted'});}
   if(u.pathname.startsWith('/api/'))return r.fulfill({status:503,body:'unavailable'});
-  const asset=/\.(css|js|ttf)$/.test(u.pathname),file=asset?'src/Xur.Control/wwwroot'+u.pathname:path.join(out,u.pathname==='/monitoring'?'monitoring.html':'home.html');
-  return r.fulfill({body:fs.readFileSync(file),contentType:u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.js')?'application/javascript':u.pathname.endsWith('.ttf')?'font/ttf':'text/html'});
+  const asset=/\.(css|js|ttf|svg)$/.test(u.pathname),file=asset?'src/Xur.Control/wwwroot'+u.pathname:path.join(out,u.pathname==='/monitoring'?'monitoring.html':'home.html');
+  return r.fulfill({body:fs.readFileSync(file),contentType:u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.js')?'application/javascript':u.pathname.endsWith('.ttf')?'font/ttf':u.pathname.endsWith('.svg')?'image/svg+xml':'text/html'});
  });
  for(const [label,width,height] of [['desktop',1440,1000],['mobile',390,844]]){
   await page.setViewportSize({width,height});await page.goto('http://home.test/');
   await page.getByRole('heading',{name:'Control panel',exact:true}).waitFor();
+  assert(await page.locator('.brand img').evaluate(img=>img.complete&&img.naturalWidth>0),'Brand icon must load');
   assert.equal(await page.locator('#network-panels').count(),0);
   assert.equal(await page.locator('.control-resources').count(),0);
   await page.getByText('An update is ready.',{exact:false}).waitFor();

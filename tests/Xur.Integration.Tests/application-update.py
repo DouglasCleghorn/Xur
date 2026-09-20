@@ -62,7 +62,13 @@ with tempfile.TemporaryDirectory() as t:
  else:raise AssertionError('Container catalog could roll back to incompatible version')
  (target/'application-features.json').write_text('["station-users-v1","manager-account-v1","container-workloads-v1"]');u.compatible(entry)
 
-print(json.dumps({'suite':'ApplicationUpdateBoundaries','result':'Passed','serverAddressValidation':True,'archiveTraversalLinksDevicesRejected':True,'invalidSignatureRejected':True,'workstationUserRollbackCompatibility':True,'incompatibleActivationDoesNotMutate':True,'managerAccountCompatibility':True,'containerCompatibility':True}))
+ (state/'station-seats.json').write_text('[]')
+ try:u.compatible(entry)
+ except ValueError as error:assert 'multiseat' in str(error)
+ else:raise AssertionError('Seat-managed installation could roll back to shared input runtime')
+ (target/'application-features.json').write_text('["station-users-v1","manager-account-v1","container-workloads-v1","multiseat-v1"]');u.compatible(entry)
+
+print(json.dumps({'suite':'ApplicationUpdateBoundaries' ,'result':'Passed','serverAddressValidation':True,'archiveTraversalLinksDevicesRejected':True,'invalidSignatureRejected':True,'workstationUserRollbackCompatibility':True,'incompatibleActivationDoesNotMutate':True,'managerAccountCompatibility':True,'containerCompatibility':True}))
 
 # Development opt-in never bypasses the production signing key or rollback guard.
 with tempfile.TemporaryDirectory() as t:

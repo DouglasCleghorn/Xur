@@ -27,7 +27,7 @@ public sealed partial class ProfileManager
         // Replan from real instances: failed old containers must stop before a
         // corrected launch, while unrelated running workloads remain Keep.
         var plan=new ProfilePlan(Guid.NewGuid().ToString("N"),"",observed.Generation,Epoch,repaired,
-            ProfilePolicy.Steps(repaired,observed),DateTimeOffset.UtcNow.AddMinutes(5));
+            ProfilePolicy.Steps(repaired,observed,PeripheralHandoff(repaired,observed)),DateTimeOffset.UtcNow.AddMinutes(5));
         plan=plan with {Digest=Canonical.Hash(plan)};
         var next=new Journal(plan,observed,0,"Applying",null,DateTimeOffset.UtcNow);
         store.SaveRepairedTransition(repaired,next);return next;

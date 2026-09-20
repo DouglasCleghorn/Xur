@@ -18,6 +18,11 @@ else
         <section class="panel station-card" data-station="@w.Id">
             <div class="section-heading"><h2>@w.Name</h2><span class="state-label @(station.State=="running"?"running":"")">@station.State</span></div>
             <dl class="station-facts"><dt>User</dt><dd>@(w.User?.Temporary==true?"Temporary user":UserLabel(w))</dd><dt>GPU</dt><dd>@(station.Gpu?.Name??"GPU unavailable") <small>@string.Join(", ",w.Gpus)</small></dd><dt>Display</dt><dd>@(station.Gpu?.Displays is {Length:>0}?string.Join(", ",station.Gpu.Displays):"No display detected.")</dd><dt>Streaming</dt><dd>@(station.Stream?.State??"Stopped") @if(station.Stream?.Headless==true) { <span class="secondary-text">· Virtual display</span> }</dd></dl>
+            @if(allocations.GetValueOrDefault(w.Id) is {} allocation)
+            {
+                <p class="secondary-text">@(allocation.Primary?"Primary workstation · ":"")@allocation.Usb.Length USB devices · @allocation.Audio.Length audio interfaces</p>
+                @foreach(var problem in allocation.Problems) { <p role="alert">@problem</p> }
+            }
             @if(station.Stream?.Error!=null) { <p role="alert">@station.Stream.Error</p> }
             <div class="actions"><form method="post" action="/profiles/load" class="actions"><AntiforgeryToken />
                 @if(station.Profiles.Length>1) { <label>Profile<select name="id">@foreach(var profile in station.Profiles) { <option value="@profile.Id">@profile.Name</option> }</select></label> }
@@ -63,6 +68,7 @@ else
     [SupplyParameterFromQuery] public bool DisplaySaved {get;set;}
     [SupplyParameterFromQuery] public string? Error {get;set;}
     Dictionary<string,string> users=[];
+    Dictionary<string,StationDeviceAllocation> allocations=[];
     string UserLabel(Workload w){var username=w.User?.Username??"xurws"+Canonical.Hash(w.Id)[..12];return users.GetValueOrDefault(username,username);}
     WorkstationView[]? stations;bool busy,secure;string host="",https="";
     protected override async Task OnInitializedAsync()
@@ -70,6 +76,7 @@ else
         if(Device.Installer)return;
         var request=Context.HttpContext!.Request;host=request.Host.Host;secure=request.IsHttps||Context.HttpContext.Features.Get<EndpointIdentity>()?.Kind=="serve";
         https="https://"+(host.Contains(':')?"["+host+"]":host)+":"+(Device.Port+363)+"/workstations";
+        try{allocations=(await Device.Agent.GetFromJsonAsync<StationDeviceAllocation[]>("/station-allocations")??[]).ToDictionary(a=>a.WorkloadId);}catch{}
         try{users=(await Device.Agent.GetFromJsonAsync<StationAccount[]>("/station-users")??[]).ToDictionary(u=>u.Username,u=>u.Name);var state=await Manager.State();busy=state.Operation?.Stage is "Applying" or "Cancelling" or "Failed";stations=WorkstationView.Build(state,await Device.Agent.GetFromJsonAsync<StationStreamStatus[]>("/workstations")??[]);}catch{}
     }
 }

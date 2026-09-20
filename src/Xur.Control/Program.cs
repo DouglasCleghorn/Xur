@@ -127,7 +127,7 @@ async Task StartHost()
         ctx.Items["setupSession"]=setupSession;
         if (authorized) ctx.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name,auth.Username ?? "xur")],"bootstrap"));
         var path = ctx.Request.Path.Value ?? "/";
-        bool publicPath=ctx.GetEndpoint()?.Metadata.GetMetadata<PublicStaticAsset>()!=null || path is "/login" or "/auth/login" or "/api/bootstrap" or "/api/auth/login" or "/health" or "/api/status" or "/setup.css" or "/login.js" or "/fonts/IBMPlexSans.ttf" or "/manifest.webmanifest" or "/install-app.js" or "/sw.js" or "/icons/xur.svg" or "/icons/xur-180.png" or "/icons/xur-192.png" or "/icons/xur-512.png";
+        bool publicPath=ctx.GetEndpoint()?.Metadata.GetMetadata<PublicStaticAsset>()!=null || path is "/login" or "/auth/login" or "/api/bootstrap" or "/api/auth/login" or "/health" or "/api/status" or "/setup.css" or "/login.js" or "/fonts/IBMPlexSans.ttf" or "/manifest.webmanifest" or "/install-app.js" or "/sw.js" or "/icons/xur-icon.svg" or "/icons/xur-icon-180.png" or "/icons/xur-icon-192.png" or "/icons/xur-icon-512.png";
         bool setupPath=path is "/setup-account" or "/auth/setup" or "/api/auth/setup" or "/account-setup.js";
         if(setupSession!=null && path=="/login") { ctx.Response.Redirect("/setup-account");return; }
         if(!authorized && !publicPath && !(setupSession!=null && setupPath))

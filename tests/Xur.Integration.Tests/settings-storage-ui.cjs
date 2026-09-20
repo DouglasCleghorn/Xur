@@ -7,7 +7,7 @@ const fs=require('fs'),assert=require('assert/strict');
  await page.route('https://settings.test/**',r=>{
   const u=new URL(r.request().url());if(r.request().method()==='POST'){mutations++;return r.fulfill({body:'accepted'});}
   if(u.pathname.startsWith('/api/'))return r.fulfill({status:503,body:'unavailable'});
-  const asset=/\.(css|js|ttf)$/.test(u.pathname);return r.fulfill({body:fs.readFileSync(asset?'src/Xur.Control/wwwroot'+u.pathname:'.build/fast/control-panel'+u.pathname+'.html'),contentType:u.pathname.endsWith('.js')?'application/javascript':u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.ttf')?'font/ttf':'text/html'});
+  const asset=/\.(css|js|ttf|svg)$/.test(u.pathname);return r.fulfill({body:fs.readFileSync(asset?'src/Xur.Control/wwwroot'+u.pathname:'.build/fast/control-panel'+u.pathname+'.html'),contentType:u.pathname.endsWith('.js')?'application/javascript':u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.ttf')?'font/ttf':u.pathname.endsWith('.svg')?'image/svg+xml':'text/html'});
  });
  for(const width of [1440,390]){
   await page.setViewportSize({width,height:900});await page.goto('https://settings.test/settings');

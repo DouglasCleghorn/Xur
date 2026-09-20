@@ -49,6 +49,20 @@ else if(state!=null && profile!=null)
                     <option value="add-user">Add user…</option>
                     @foreach(var account in accounts) { <option value="@account.Username" selected="@(w?.User?.Username==account.Username)">@account.Name</option> }
                 </select></label>
+                <details class="station-devices" hidden="@(w?.Recipe.Kind is not (null or "Workstation"))">
+                    <summary>USB devices, hubs and audio</summary>
+                    <label class="inline-option"><input type="checkbox" class="station-primary" name="primary-@row" value="true" checked="@(w?.Devices?.Primary==true)" /> Primary workstation</label>
+                    <p class="secondary-text">The primary receives unassigned input and built-in audio. Display audio follows its GPU; USB audio follows its device or hub. Each desktop needs a different user.</p>
+                    @if(peripherals.Errors.Length>0) { <p role="alert">Device inventory is incomplete. Saved assignments are retained.</p> }
+                    @foreach(var peripheral in peripherals.Usb.Where(d=>!d.RootHub)) {
+                        <label class="usb-choice"><input type="checkbox" class="station-usb" name="usb-@row" value="@peripheral.Id" checked="@(w?.Devices?.Usb?.Contains(peripheral.Id)==true)" />
+                        <span>@peripheral.Name @(peripheral.Hub?"· Hub and connected devices":"")<small>@(peripheral.Identity=="Serial"?"Follows its serial number between ports":"Tied to this port; reconnect here after reboot") @(peripheral.Storage?"· Storage access is not assigned":"")</small></span></label>
+                    }
+                    @foreach(var missing in (w?.Devices?.Usb??[]).Where(id=>!peripherals.Usb.Any(d=>d.Id==id))) {
+                        <label class="usb-choice"><input type="checkbox" class="station-usb" name="usb-@row" value="@missing" checked /><span>Disconnected saved device<small>@missing</small></span></label>
+                    }
+                    <p class="secondary-text">A hub assigns its input, controllers and audio. USB 2 and USB 3 branches may appear separately. Missing devices stay reserved. Changing assignments can restart other desktops to release their devices.</p>
+                </details>
                 <div class="model-options"></div><p class="catalog-error" role="alert" hidden></p>
                 <p class="container-library-link" hidden="@(w?.Recipe.Kind!="Container")"><a href="/containers">Prepare a container</a></p>
                 <div class="gpu-choices">
@@ -82,11 +96,13 @@ else if(state!=null && profile!=null)
 else { <a href="/profiles">Profiles</a> }
 @code {
     [SupplyParameterFromQuery(Name="id")] public string? Id {get;set;}
+    StationDeviceInventory peripherals=new([],[],[]);
     StationAccount[] accounts=[];StationDefinition[] stations=[];
     ProfileState? state;Profile? profile;Workload?[] rows=[];
     protected override async Task OnInitializedAsync()
     {
         if(Device.Installer)return;
+        try{peripherals=await Device.Agent.GetFromJsonAsync<StationDeviceInventory>("/station-devices")??peripherals;}catch{peripherals=new([],[],["Inventory unavailable"]);}
         stations=await Profiles.Stations();
         accounts=await Device.Agent.GetFromJsonAsync<StationAccount[]>("/station-users") ?? [];
         state=await Profiles.State();profile=state.Profiles.SingleOrDefault(p=>p.Id==Id);

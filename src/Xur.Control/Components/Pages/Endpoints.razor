@@ -1,0 +1,20 @@
+@page "/endpoints"
+@inject Appliance Device
+<PageTitle>LLM endpoints · Xur</PageTitle>
+<div class="page-heading"><div><h1>LLM endpoints</h1><p class="secondary-text">Connect clients to your active language models.</p></div><a class="button quiet" href="/model-lab#chat">Test chat</a></div>
+@if(Device.Installer) { <p>Model endpoints are available after installation.</p> }
+else
+{
+    <section class="panel">
+        <h2>Connect a client</h2>
+        <p>Use the OpenAI-compatible base URL below. Create a <a href="/settings/api-keys">Testing API key</a> and use it as the client’s API key, or send it in an <code>Authorization: Bearer YOUR_API_KEY</code> header.</p>
+        <p>Open the model-list URL to find the exact model ID for your client. URLs use the address you opened Xur with; use your Tailscale address for remote clients.</p>
+    </section>
+    <div id="llm-endpoints">
+        <div class="section-heading"><h2>Ready models</h2><button type="button" id="endpoints-refresh" class="secondary">Refresh</button></div>
+        <p id="endpoints-status" role="status">Loading endpoints…</p>
+        <div id="endpoints-list"></div>
+        <noscript>Enable JavaScript to load active endpoints.</noscript>
+    </div>
+    <script src="/endpoints.js" defer></script>
+}

@@ -2,14 +2,16 @@
 import copy,runpy,tempfile,pathlib,json
 module=runpy.run_path('os/bootc/update-all',run_name='test_update_all')
 execute=module['execute']
-def scenario(fail_os=False,pending=False,server=True,current=False):
- calls=[];receipts=[]
+def scenario(fail_os=False,pending=False,server=True,current=False,no_stage=False):
+ calls=[];receipts=[];staged=False
  def invoke(tool,action):
+  nonlocal staged
   calls.append((tool,action))
+  if tool=='os-update' and action=='stage' and not no_stage:staged=True
   if tool=='os-update' and fail_os:raise RuntimeError('Offline')
   if action=='status':
    key='digest' if tool=='os-update' else 'id'
-   return dict(busy=False,pending={} if not pending else {'version':'next'},server='server' if server else '',current={key:'old'},available={key:'old' if current else 'new'})
+   return dict(busy=False,pending={'version':'next'} if pending or staged else None,server='server' if server else '',current={key:'old'},available={key:'old' if current else 'new'})
  result=execute(invoke,lambda x:receipts.append(copy.deepcopy(x)))
  return calls,result,receipts
 calls,result,receipts=scenario()
@@ -30,3 +32,7 @@ with tempfile.TemporaryDirectory() as root:
  (pathlib.Path(root)/'operation.json').write_text(json.dumps(receipts[0]))
  assert status()['operation']['stage']=='Interrupted'
 print(json.dumps(dict(suite='UpdateAll',result='Passed',osBeforeApplication=True,failureIsolation=True,noReboot=True,skipQueuedOrUnconfigured=True,noOpWhenCurrent=True,durableInterruption=True)))
+
+calls,result,_=scenario(no_stage=True)
+assert result['stage']=='Failed' and result['results'][0]['stage']=='Failed'
+assert ('app-update','update') in calls
