@@ -95,3 +95,9 @@ capture date, privacy review, and the features whose next changes require a refr
   and mount fixtures. Reviewed for privacy: only sample paths and file names;
   no credentials or real user contents. Covers AG Grid, search, paths and menus.
   Regenerate when the Files page, grid theme or action menu changes.
+
+- 2026-09-20: Reviewed private T3 attachment
+  `45ce27e6-42b7-4cb8-9b41-a4af9e7d7128-3b3cbcc3-39b5-4395-9e22-ff60d3abf7ae.png`
+  as the browser error redesign baseline (HTTP 409 and excessive navigation).
+  No credentials or personal data visible; kept private, not published. The
+  supplied capture predates the working-tree error message and recovery changes.

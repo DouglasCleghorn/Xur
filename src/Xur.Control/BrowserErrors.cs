@@ -1,4 +1,5 @@
 using System.Text.Encodings.Web;
+using System.Text.Json;
 namespace Xur.Control;
 
 public static class BrowserErrors
@@ -22,23 +23,51 @@ public static class BrowserErrors
                 }
                 if(context.Response.StatusCode>=400 && !context.Response.HasStarted) {
                     var code=context.Response.StatusCode;
-                    var message=code switch {
-                        400=>"This form expired or contains invalid information. Open the page again, review the form and retry.",
-                        401=>"Your session has expired. Sign in again to continue.",
-                        403=>"This request was rejected for your security. Open Xur directly, refresh the page and try again.",
-                        404=>"This page could not be found. Use the links below to continue.",
-                        405=>"This address accepts a form submission. Open its page below to use the action.",
-                        409=>"The action could not be completed. Check the current profile change and refresh before retrying.",
-                        503=>"Xur is temporarily unavailable or an update is in progress. Wait a moment, then open the page again.",
-                        _=>"The action could not be completed. Check Diagnostics, then open the page again to retry."
+                    var (title,message)=code switch {
+                        400=>("Review your request", "The form expired or contains invalid information. Return to the page, review your entries and try again."),
+                        401=>("Sign in to continue", "Your session has expired. Sign in again, then retry the action."),
+                        403=>("Request blocked", "Xur could not verify this request. Open the page again and retry the action."),
+                        404=>("Page not found", "This page may have moved or no longer exists."),
+                        405=>("Open the page first", "This address handles a form submission. Return to the page to use the action."),
+                        409=>("Action needs your attention", "This action is unavailable in the current state. Return to the page to review its status before trying again."),
+                        429=>("Too many attempts", "Wait a moment before trying again."),
+                        503=>("Xur is temporarily unavailable", "An update or restart may be in progress. Wait a moment, then open the page again."),
+                        >=500=>("Something went wrong", "Xur could not complete the request. Open Diagnostics to check for a service problem before trying again."),
+                        _=>("Request could not complete", "Return to the page to review its status before trying again.")
                     };
+                    // Preserve deliberate validation messages, never raw server errors or HTML.
+                    if(code is 400 or 409 && buffer.Length is >0 and <=65536 &&
+                        context.Response.ContentType?.Split(';')[0].Trim().Equals("application/json",StringComparison.OrdinalIgnoreCase)==true)
+                    {
+                        using var payload=new MemoryStream();
+                        await buffer.DrainBufferAsync(payload,context.RequestAborted);payload.Position=0;
+                        try {
+                            using var json=await JsonDocument.ParseAsync(payload,cancellationToken:context.RequestAborted);
+                            if(json.RootElement.ValueKind==JsonValueKind.Object && json.RootElement.TryGetProperty("error",out var error) &&
+                                error.ValueKind==JsonValueKind.String && error.GetString() is {Length:>0 and <=4096} detail && !string.IsNullOrWhiteSpace(detail))
+                                message=detail;
+                        }catch(JsonException) { }
+                    }
+                    var (href,label)=Recovery(context.Request.Path,code);
                     context.Response.Body=original;context.Response.ContentLength=null;context.Response.ContentType="text/html; charset=utf-8";context.Response.Headers.CacheControl="no-store";
                     context.Response.Headers["X-Content-Type-Options"]="nosniff";
                     context.Response.Headers.ContentSecurityPolicy="default-src 'none'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'";
-                    await context.Response.WriteAsync("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Request could not complete · Xur</title><link rel=\"stylesheet\" href=\"/setup.css\"></head><body><main><h1>Request could not complete</h1><p role=\"alert\">"+HtmlEncoder.Default.Encode(message)+"</p><p class=\"secondary-text\">HTTP "+code+"</p><div class=\"actions\"><a class=\"button\" href=\"/\">Home</a><a class=\"button secondary\" href=\"/profiles\">Profiles</a><a class=\"button secondary\" href=\"/workstations\">Workstations</a><a class=\"button secondary\" href=\"/storage\">Storage</a><a class=\"button secondary\" href=\"/settings\">Settings</a><a class=\"button quiet\" href=\"/diagnostics\">Diagnostics</a><a class=\"button quiet\" href=\"/login\">Sign in</a></div></main></body></html>");return;
+                    await context.Response.WriteAsync($"""
+                        <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{HtmlEncoder.Default.Encode(title)} · Xur</title><link rel="stylesheet" href="/setup.css"></head><body><main class="browser-error"><h1>{HtmlEncoder.Default.Encode(title)}</h1><p role="alert">{HtmlEncoder.Default.Encode(message)}</p><div class="actions"><a class="button" href="{href}">{label}</a></div><details class="browser-error-details"><summary>Technical details</summary><p class="secondary-text">HTTP {code}</p></details></main></body></html>
+                        """);return;
                 }
                 await buffer.DrainBufferAsync(original,context.RequestAborted);
             }finally{context.Response.Body=original;}
         });
+    }
+
+    private static (string Href,string Label) Recovery(PathString path,int code)
+    {
+        if(code==401)return ("/login","Sign in");
+        if(code>=500 && code!=503)return ("/diagnostics","Open Diagnostics");
+        // Fixed GET destinations avoid resubmitting failed forms or trusting a referrer.
+        foreach(var section in new[]{"profiles","workstations","storage","settings","network","updates","files","models","containers","gpus","endpoints","monitoring","tailscale"})
+            if(path.StartsWithSegments("/"+section))return ("/"+section,"Return to "+char.ToUpperInvariant(section[0])+section[1..]);
+        return ("/","Return home");
     }
 }
