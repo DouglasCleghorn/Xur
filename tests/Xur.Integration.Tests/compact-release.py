@@ -45,8 +45,12 @@ with tempfile.TemporaryDirectory() as directory:
    (installer/'installer-build.json').write_text(json.dumps({'schema':1,'commit':commit,'channel':channel,'iso':{'file':iso.name,'bytes':iso.stat().st_size,'sha256':hashlib.file_digest(iso.open('rb'),'sha256').hexdigest()},'inspectionSha256':hashlib.file_digest(report.open('rb'),'sha256').hexdigest()}))
    release.publish(channel,'1.0',commit)
    assert len(releases[prefix+'1.0'])==6
+   metadata=json.loads(releases[prefix+'1.0']['xur-update.json'])['release']['installer']
+   assert metadata['iso']['file']==f'xur-{channel}-1.0-x86_64.iso'
+   assert metadata['parts'][0]['file']==metadata['iso']['file']
+   assert metadata['iso']['file'] in releases[prefix+'1.0']
    frozen=dict(aliases[channel]);release.publish(channel,'1.1',commit)
-   assert set(releases[prefix+'1.1'])=={'xur-installer-x86_64.iso','xur-update-x86_64.tar.gz','xur-update.json'}
+   assert set(releases[prefix+'1.1'])=={f'xur-{channel}-1.1-x86_64.iso','xur-update-x86_64.tar.gz','xur-update.json'}
    assert aliases[channel]['migration']==frozen['migration']==prefix+'1.0\n'
    assert aliases[channel]['current']==prefix+'1.1\n'
    if channel=='nightly':assert aliases[channel]['latest']==frozen['latest']==prefix+'1.0\n'

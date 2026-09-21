@@ -25,19 +25,20 @@ def publish(channel,version,commit):
  else:channel_assets=json.loads(result.stdout)['assets']
  transition=not any(a['name']=='migration' for a in channel_assets)
  installer_spec=importlib.util.spec_from_file_location('installer',ROOT/'eng/ci-installer.py');installer=importlib.util.module_from_spec(installer_spec);installer_spec.loader.exec_module(installer)
- installer.assets(ROOT/'.build/ci-installer',public/'installer',commit,channel,pathlib.Path(os.environ['XUR_UPDATE_SIGNING_KEY']))
+ installer.assets(ROOT/'.build/ci-installer',public/'installer',commit,channel,pathlib.Path(os.environ['XUR_UPDATE_SIGNING_KEY']),version=version)
  installer_metadata=json.loads((public/'installer/installer.json').read_text())
- if len(installer_metadata['parts'])!=1 or installer_metadata['parts'][0]['file']!=installer.ISO:raise ValueError('Installer exceeds the single-ISO release limit; shrink it before publishing')
+ if len(installer_metadata['parts'])!=1 or installer_metadata['parts'][0]['file']!=installer_metadata['iso']['file']:raise ValueError('Installer exceeds the single-ISO release limit; shrink it before publishing')
  entry=json.loads((public/(identity+'.json')).read_text())
  descriptor=module.compact(public,entry,pathlib.Path(os.environ['XUR_UPDATE_SIGNING_KEY']),installer_metadata,entry['file'] if transition else 'xur-update-x86_64.tar.gz')
  named_descriptor=public/'xur-update.json';shutil.copyfile(descriptor,named_descriptor)
  named_archive=public/entry['file'] if transition else public/'xur-update-x86_64.tar.gz'
  if not transition:shutil.copyfile(public/entry['file'],named_archive)
- files=[public/'installer'/installer.ISO,named_archive,named_descriptor]
+ iso_name=installer_metadata['iso']['file']
+ files=[public/'installer'/iso_name,named_archive,named_descriptor]
  if transition:files += [public/'latest',public/(identity+'.json'),public/(identity+'.json.sig')]
  iso=installer_metadata['iso']
  notes=public/'release-notes.md'
- notes.write_text(f"[**Download Xur installer ISO**](https://github.com/{REPO}/releases/download/{tag}/{installer.ISO}) · {iso['bytes']/1024**3:.2f} GiB\n\n"
+ notes.write_text(f"[**Download Xur installer ISO**](https://github.com/{REPO}/releases/download/{tag}/{iso_name}) · {iso['bytes']/1024**3:.2f} GiB\n\n"
   "[USB installation guide](https://xur.app/download/) · Bazzite downloads during installation.\n\n"
   +("This is the one-time updater transition for this channel. The extra legacy files allow older installations to upgrade automatically. Future releases contain only the ISO, app archive and signed JSON descriptor.\n\n" if transition else "The app archive and JSON descriptor are for the built-in updater; choose the ISO for installation.\n\n")
   +f"<details><summary>Verification and build details</summary>\n\nISO SHA-256: `{iso['sha256']}`\n\nThe JSON descriptor includes its signature, authenticated ISO size/hash and inspection receipt. See [verification instructions](https://github.com/{REPO}/blob/main/docs/development/installer-releases.md#download-and-verify).\n\nCommit: `{commit}`. Automated app checks and installer contents inspection passed. Boot/install and physical GPU tests were not run for this build.\n\n</details>\n")

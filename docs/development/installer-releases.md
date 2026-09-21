@@ -18,7 +18,7 @@ A push to `main` (Nightly) or `release` (Stable) runs **Build and approve releas
    `current` pointer and remove the Actions candidates. No source tarball is
    uploaded; GitHub provides source archives for each tag.
 
-Normal versioned releases have **three assets**: `xur-installer-x86_64.iso`,
+Normal versioned releases have **three assets**: `xur-<channel>-<version>-x86_64.iso`,
 `xur-update-x86_64.tar.gz`, and `xur-update.json`. The first compact-format release on each channel also has
 the legacy descriptor, detached signature and pointer (reusing the app archive). Those transition releases must remain available. Legacy
 Nightly `nightly/latest` and GitHub's Stable **Latest** designation stay fixed on
@@ -78,8 +78,10 @@ incomplete installer. See [runner limits](https://docs.github.com/en/actions/ref
 
 ## Download and verify
 
-Download `xur-installer-x86_64.iso` from the release's prominent download link or
+Download `xur-stable-<version>-x86_64.iso` or `xur-nightly-<version>-x86_64.iso`
+from the release's prominent download link or
 [xur.app/download](https://xur.app/download/). The release notes include its SHA-256.
+The examples below use the local name `xur-installer-x86_64.iso`; substitute your downloaded filename.
 On Windows use `Get-FileHash xur-installer-x86_64.iso -Algorithm SHA256`; on Linux
 use `sha256sum xur-installer-x86_64.iso`.
 

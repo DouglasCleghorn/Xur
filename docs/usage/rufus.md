@@ -1,6 +1,7 @@
 # Rufus ISO/File Copy mode
 
-Select `xur-installer-x86_64.iso` in Rufus, choose **GPT**, **UEFI (non CSM)**,
+Select the downloaded `xur-stable-<version>-x86_64.iso` or
+`xur-nightly-<version>-x86_64.iso` in Rufus, choose **GPT**, **UEFI (non CSM)**,
 and **FAT32**. When prompted, choose **ISO Image mode (file copy)**.
 Keep the default volume label; Rufus also rewrites GRUB references when the
 label changes. Use a USB drive of at least 16 GB. Writing replaces its contents.

@@ -22,21 +22,23 @@ def candidate(commit,channel):
  identity(commit,channel);dist=ROOT/'dist';iso=dist/ISO;inspection=dist/'xur-installer-x86_64.embedded.json';inspected(inspection)
  receipt={'schema':1,'commit':commit,'channel':channel,'iso':{'file':ISO,'bytes':iso.stat().st_size,'sha256':sha(iso)},'inspectionSha256':sha(inspection),'checks':'Embedded files, boot layout, signature policy and online-only payload inspected','installationTest':'Not run','physicalHardwareTest':'Not run'}
  (dist/'installer-build.json').write_text(json.dumps(receipt,indent=2)+'\n')
-def assets(artifact,output,commit,channel,key):
+def assets(artifact,output,commit,channel,key,version=None):
  identity(commit,channel)
+ if version is not None and not re.fullmatch(r'[0-9]+(?:\.[0-9]+)+',version):raise ValueError('Invalid installer version')
+ filename=f'xur-{channel}-{version}-x86_64.iso' if version else ISO
  receipt=json.loads((artifact/'installer-build.json').read_text());iso=artifact/ISO;inspection=artifact/'xur-installer-x86_64.embedded.json'
  if receipt.get('schema')!=1 or receipt.get('commit')!=commit or receipt.get('channel')!=channel:raise ValueError('Installer candidate identity mismatch')
  if receipt['iso']!={'file':ISO,'bytes':iso.stat().st_size,'sha256':sha(iso)} or receipt['inspectionSha256']!=sha(inspection):raise ValueError('Installer candidate hash mismatch')
  inspected(inspection);output.mkdir(parents=True,exist_ok=True);parts=[];files=[]
  if iso.stat().st_size<SINGLE_ASSET_LIMIT:
-  target=output/ISO;shutil.copyfile(iso,target);files.append(target)
+  target=output/filename;shutil.copyfile(iso,target);files.append(target)
  else:
   with iso.open('rb') as source:
    number=1
    while True:
     chunk=source.read(min(1024*1024,PART_SIZE))
     if not chunk:break
-    target=output/(ISO+'.part'+str(number).zfill(3));number+=1
+    target=output/(filename+'.part'+str(number).zfill(3));number+=1
     with target.open('wb') as dest:
      dest.write(chunk);remaining=PART_SIZE-len(chunk)
      while remaining>0:
@@ -45,10 +47,10 @@ def assets(artifact,output,commit,channel,key):
       dest.write(chunk);remaining-=len(chunk)
     files.append(target)
  for path in files:parts.append({'file':path.name,'bytes':path.stat().st_size,'sha256':sha(path)})
- descriptor=output/'installer.json';descriptor.write_text(json.dumps({**receipt,'parts':parts},indent=2)+'\n')
+ descriptor=output/'installer.json';descriptor.write_text(json.dumps({**receipt,'iso':{**receipt['iso'],'file':filename},'parts':parts},indent=2)+'\n')
  signature=output/'installer.json.sig'
  subprocess.run(['openssl','pkeyutl','-sign','-inkey',str(key),'-rawin','-in',str(descriptor),'-out',str(signature)],check=True)
- checksums=output/'installer-SHA256SUMS';checksums.write_text(receipt['iso']['sha256']+'  '+ISO+'\n'+(''.join(p['sha256']+'  '+p['file']+'\n' for p in parts) if len(parts)>1 else ''))
+ checksums=output/'installer-SHA256SUMS';checksums.write_text(receipt['iso']['sha256']+'  '+filename+'\n'+(''.join(p['sha256']+'  '+p['file']+'\n' for p in parts) if len(parts)>1 else ''))
  for name in ['installer-build.json','xur-installer-x86_64.embedded.json']:shutil.copyfile(artifact/name,output/name)
  guide=output/'INSTALL.md';shutil.copyfile(ROOT/'docs/usage/install.md',guide)
  return files+[descriptor,signature,checksums,output/'installer-build.json',output/'xur-installer-x86_64.embedded.json',guide]

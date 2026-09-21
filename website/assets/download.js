@@ -19,6 +19,13 @@
       return url.href.startsWith(base + section + '/') && !url.search && !url.hash ? url.href : null;
     } catch { return null; }
   }
+  function installerName(release) {
+    const tag = release.tag_name || '';
+    const match = /^(nightly-|v)([0-9]+(?:\.[0-9]+)+)$/.exec(tag);
+    const name = match ? `xur-${match[1] === 'v' ? 'stable' : 'nightly'}-${match[2]}-x86_64.iso` : null;
+    return release.assets.find(a => name && a.name === name) ||
+      release.assets.find(a => a.name === 'xur-installer-x86_64.iso');
+  }
   async function check() {
     if (busy) return;
     busy = true;
@@ -42,7 +49,7 @@
         if (batch.length < 100) break;
       }
       const candidates = releases.filter(r => !r.draft && r.published_at && Array.isArray(r.assets) &&
-        r.assets.some(a => a.name === 'xur-installer-x86_64.iso'))
+        installerName(r))
         .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at));
       const release = candidates[0];
       if (!release) {
@@ -52,9 +59,9 @@
       }
       const url = releaseUrl(release.html_url, 'tag');
       if (!url) throw new Error('Unexpected release URL');
-      const iso = release.assets.find(a => a.name === 'xur-installer-x86_64.iso');
+      const iso = installerName(release);
       const assetUrl = releaseUrl(iso.browser_download_url, 'download');
-      if (!assetUrl || assetUrl !== base + 'download/' + encodeURIComponent(release.tag_name) + '/xur-installer-x86_64.iso') throw new Error('Unexpected installer URL');
+      if (!assetUrl || assetUrl !== base + 'download/' + encodeURIComponent(release.tag_name) + '/' + encodeURIComponent(iso.name)) throw new Error('Unexpected installer URL');
       releaseLink.href = url; releaseLink.textContent = 'Release notes and checksums';
       const label = release.prerelease ? 'Nightly / pre-release' : 'Stable release';
       meta.textContent = `${release.name || release.tag_name} · ${label} · Published ${new Date(release.published_at).toLocaleDateString()}`;

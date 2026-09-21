@@ -25,6 +25,13 @@ const fs=require('fs'),path=require('path'),assert=require('assert/strict');
   const received=page.waitForEvent('download');await page.goto('https://website.test/download/?start=1');await received;
   assert.equal(requested.length,1);assert(requested[0].includes('/nightly-test/'));
   await page.getByText('Download requested.',{exact:false}).waitFor();
+  for(const [channel,tag] of [['stable','v1.2.3'],['nightly','nightly-1.2.3']]){
+   const name=`xur-${channel}-1.2.3-x86_64.iso`;
+   releases=[release(tag,'2026-09-21T00:00:00Z',channel==='nightly')];
+   releases[0].assets[0].name=name;releases[0].assets[0].browser_download_url=base+'download/'+tag+'/'+name;
+   await page.goto('https://website.test/download/');await page.getByText('Your online installer is ready.',{exact:false}).waitFor();
+   assert((await page.locator('#download-iso').getAttribute('href')).endsWith('/'+name));
+  }
   releases=[];await page.goto('https://website.test/download/?start=1');await page.getByText('No newer installer was found.',{exact:false}).waitFor();assert(await page.locator('#download-iso').isVisible());assert.equal(requested.length,1);
   failure=true;await page.locator('#download-retry').click();await page.getByText('Could not check GitHub', {exact:false}).waitFor();failure=false;
   releases=[release('split','2026-09-20T00:00:00Z',false,true)];await page.locator('#download-retry').click();await page.getByText('No newer installer was found.',{exact:false}).waitFor();assert(await page.locator('#download-parts').isHidden());assert.equal(requested.length,1);
