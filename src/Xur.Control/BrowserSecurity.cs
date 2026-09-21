@@ -30,7 +30,7 @@ public static class BrowserSecurity
             (origin.Length==0 && request.Method is "GET" or "HEAD" && request.Headers["Sec-Fetch-Mode"]=="navigate");
     }
     public static bool PollPath(string path)=>path.StartsWith("/api/",StringComparison.Ordinal) &&
-        !(path.StartsWith("/api/auth/",StringComparison.Ordinal) || path=="/api/bootstrap" || path.StartsWith("/api/api-keys",StringComparison.Ordinal) || path.EndsWith("/download",StringComparison.Ordinal) || path.EndsWith("/export",StringComparison.Ordinal));
+        !(path.StartsWith("/api/auth/",StringComparison.Ordinal) || path=="/api/bootstrap" || path.StartsWith("/api/api-keys",StringComparison.Ordinal) || path.EndsWith("/files/list",StringComparison.Ordinal) || path.EndsWith("/download",StringComparison.Ordinal) || path.EndsWith("/export",StringComparison.Ordinal));
     public static void UseBrowserOrigin(this WebApplication app)=>app.Use(async(context,next)=>
     {
         if(!SameOrigin(context.Request)){context.Response.StatusCode=403;await context.Response.WriteAsJsonAsync(new{error="Cross-origin browser requests are not allowed."});return;}

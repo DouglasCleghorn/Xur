@@ -79,3 +79,10 @@ readability; key actions are also described in text.
 For each new published screenshot, record its exact file, all pages using it,
 source (synthetic fixture or sanitized live capture), application version/commit,
 capture date, privacy review, and the features whose next changes require a refresh.
+
+
+- 2026-09-20: Files grid regression captures in `.build/evidence/files-grid/`
+  (`files-1440.png` and `files-390.png`), generated from synthetic workstation
+  and mount fixtures. Reviewed for privacy: only sample paths and file names;
+  no credentials or real user contents. Covers AG Grid, search, paths and menus.
+  Regenerate when the Files page, grid theme or action menu changes.

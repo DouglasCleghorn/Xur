@@ -32,3 +32,7 @@ Existing notices include:
 App bundles carry Xur's `LICENSE` and this notice in `licensing.md`. Installer
 images also carry them under `/usr/share/licenses/xur/`. Existing bundled
 third-party notices remain in their component directories.
+
+- Files grid: AG Grid Community 36.2.0 (MIT). The locally served bundle, upstream
+  package integrity and copyright notice are in
+  `src/Xur.Control/wwwroot/vendor/ag-grid/`. No Enterprise modules are used.

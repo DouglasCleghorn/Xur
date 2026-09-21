@@ -53,7 +53,7 @@ static class ControlPanelRender
                 // Static rendering has no HTTP request from which to generate antiforgery tokens.
                 // Supply a fixture token for browser tests; production renders AntiforgeryToken normally.
                 if(page=="profile-edit") html=html.Replace("<div id=\"workload-rows\"", "<input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"fixture-only\"><div id=\"workload-rows\"");
-                await File.WriteAllTextAsync(Path.Combine(output,page+".html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/workstations.css'></head><body>"+html+"</body></html>");
+                await File.WriteAllTextAsync(Path.Combine(output,page+".html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/workstations.css'><link rel=stylesheet href='/files.css'></head><body>"+html+"</body></html>");
             }
             // Exercise the actual workstation renderer with running, shared, stopped and unassigned desktops.
             var gaming=new Workload("w1","Gaming workstation",stationRecipe,[gpu.Pci],"desktop",new("doug",1000,false));

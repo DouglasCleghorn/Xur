@@ -7,7 +7,7 @@
   const headers=new Headers(input instanceof Request?input.headers:undefined);new Headers(options.headers).forEach((v,k)=>headers.set(k,v));
   const own=url.origin===location.origin,token=document.querySelector('meta[name=xur-csrf]')?.content;
   if(own&&token)headers.set('RequestVerificationToken',token);
-  const eligible=own&&token&&method==='GET'&&url.pathname.startsWith('/api/')&&!/^\/api\/(auth\/|bootstrap|api-keys)/.test(url.pathname)&&!/(\/download|\/export)$/.test(url.pathname);
+  const eligible=own&&token&&method==='GET'&&url.pathname.startsWith('/api/')&&!/^\/api\/(auth\/|bootstrap|api-keys)/.test(url.pathname)&&!/(\/files\/list|\/download|\/export)$/.test(url.pathname);
   const previous=eligible?cache.get(url.href):null;
   if(previous)headers.set('If-None-Match',previous.etag);
   const response=await fetch(input,{...options,headers,credentials:own?'same-origin':options.credentials,cache:own?'no-store':options.cache});

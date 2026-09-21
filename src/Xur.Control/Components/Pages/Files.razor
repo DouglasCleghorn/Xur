@@ -1,29 +1,34 @@
 @page "/files"
 @inject Appliance Device
 <PageTitle>Files · Xur</PageTitle>
+<HeadContent><link rel="stylesheet" href="/files.css" /></HeadContent>
 <div class="page-heading"><h1>Files</h1><a class="button quiet" href="/workstations">Workstations</a></div>
-@if(Device.Installer) { <p>Workstation files are available after installation.</p> }
+@if(Device.Installer) { <p>Files are available after installation.</p> }
 else
 {
     <div class="file-tabs" role="tablist" aria-label="File locations">
         <button type="button" id="storage-files-tab" role="tab" data-file-tab="storage" aria-controls="usage-explorer" aria-selected="true">Storage files</button>
         <button type="button" id="workstation-files-tab" role="tab" data-file-tab="workstation" aria-controls="file-explorer" aria-selected="false" tabindex="-1">Workstation files</button>
     </div>
-    <section class="panel" id="usage-explorer" role="tabpanel" aria-labelledby="storage-files-tab"><div class="section-heading"><h2>Disk usage</h2><button type="button" class="secondary" id="usage-refresh">Refresh</button></div>
-        <nav class="file-path" id="usage-path" aria-label="Storage path"></nav><p id="usage-status" role="status">Reading mount points…</p>
-        <div id="usage-list" aria-label="Mount points and folder sizes"></div>
-        <p class="secondary-text">Allocated space, largest first. Shared filesystems can appear at several mount points. Links and nested mounts are not traversed. Scans are bounded; partial sizes are lower bounds. Use Workstation files to download files from a workstation home folder.</p>
+    <section class="panel file-panel" id="usage-explorer" role="tabpanel" aria-labelledby="storage-files-tab">
+        <div class="section-heading"><h2>Storage files</h2><button type="button" class="secondary" id="usage-refresh">Refresh</button></div>
+        <nav class="file-path" id="usage-path" aria-label="Storage path"></nav>
+        <div class="file-toolbar"><label>Search this folder<input id="usage-filter" type="search" placeholder="Search all columns…" maxlength="200" /></label><button type="button" class="quiet" id="usage-clear">Clear filters</button></div>
+        <p id="usage-status" role="status">Reading mount points…</p>
+        <div id="usage-list" class="file-grid" aria-label="Storage files and folders"></div>
     </section>
-    <section class="panel" id="file-explorer" role="tabpanel" aria-labelledby="workstation-files-tab" hidden>
+    <section class="panel file-panel" id="file-explorer" role="tabpanel" aria-labelledby="workstation-files-tab" hidden>
         <div class="section-heading"><h2>Workstation files</h2><button type="button" class="secondary" id="file-refresh">Refresh</button></div>
-        <p class="secondary-text">Browse workstation home folders and download files. Proton logs appear as <code>steam-&lt;appid&gt;.log</code> after a game runs with logging enabled.</p>
-        <form id="file-controls" class="actions"><label>User<select id="file-user" name="user" required><option value="">Loading users…</option></select></label><label>Filter this folder<input id="file-filter" type="search" name="q" maxlength="200" placeholder="File or folder name" /></label><button class="secondary">Search</button></form>
+        <label class="file-user-label">User<select id="file-user" required><option value="">Loading users…</option></select></label>
         <nav class="file-path" aria-label="Folder path" id="file-breadcrumbs"></nav>
+        <div class="file-toolbar"><label>Search this folder<input id="file-filter" type="search" placeholder="Search all columns…" maxlength="200" /></label><button type="button" class="quiet" id="file-clear">Clear filters</button></div>
         <p id="file-status" role="status">Loading files…</p>
-        <div id="file-list" role="list" aria-label="Files and folders"></div>
-        <p class="secondary-text">Hidden folders are included. Links are listed but not followed. Steam’s original folder is usually <code>.local/share/Steam</code>.</p>
+        <div id="file-list" class="file-grid" aria-label="Workstation files and folders"></div>
     </section>
+    <p class="secondary-text">Folder sizes show allocated space and are cached for 30 minutes. Refresh a folder’s size from its menu. Links and nested mounts are not followed. Hidden files are included.</p>
+    <script src="/vendor/ag-grid/ag-grid-community.min.js" defer></script>
     <script src="/file-navigation.js" defer></script>
+    <script src="/file-grid.js" defer></script>
     <script src="/storage-explorer.js" defer></script>
     <script src="/files.js" defer></script>
 }
