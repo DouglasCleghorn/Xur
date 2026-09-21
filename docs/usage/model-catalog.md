@@ -30,14 +30,34 @@ tensor parallelism across the allocated GPUs. Omni uses its upstream deployment
 defaults; Xur does not invent multi-stage parallelism settings. Models requiring
 custom deployment files or publisher patches need dedicated recipes. The model
 list is discovery, not a guarantee that every upstream architecture runs in the
-pinned engine. Gated models are currently rejected; no model-token entry exists.
-Review the linked model license before applying. Model weights are not bundled.
+pinned engine. Save an authorized Hugging Face token in **Settings** for gated
+repositories and obtain any required publisher access first. Xur's catalog and
+model downloaders use the saved credentials; a token does not grant access the
+account does not already have. Review the linked model license before applying.
+Model weights are not bundled.
 
 `eng/engine-lock.json` records engine versions and manifest digests. Updating a
-catalog entry does not update a running engine. Automatic engine replacement and
-recipe-specific Qwen MTP/Fish/ASR deployments are not implemented by this change.
-The VM evidence covers real downloaded GGUF inference. It does not establish
-execution of the GPU-only engines on the offline example machine.
+catalog entry does not update a running engine. The Updates page lists component
+versions; components that cannot be upgraded separately have no independent
+update button. Saved workload engine versions remain pinned.
+
+The supported Qwen MTP recipe uses `--max-num-seqs 1`, aligned Mamba cache,
+disabled prefix caching and three MTP speculative tokens. Loading or resuming a
+legacy saved Qwen MTP recipe repairs the known missing settings automatically;
+there is no need to reselect that model solely for this migration. This is a
+specific compatibility repair, not a general engine upgrade.
+
+For `fishaudio/s2-pro` on the supported pinned vLLM-Omni image, first load builds
+and caches a hash-locked codec dependency layer. It preserves the base engine's
+package versions and checks codec construction before starting the model.
+The first build requires network access and can take several minutes; later
+starts reuse it. Workload errors report preparation failures, with build logs
+under `/var/lib/xur/fish-engine/<hash>/build.log`. A different base engine needs
+an explicitly supported recipe; Xur does not silently substitute an arbitrary image.
+
+Qwen MTP and Fish speech passed the [September 20 live smoke tests](../releases/live-model-retest-2026-09-20.md).
+Those tests do not establish Qwen3-ASR, every catalog model, or every GPU as
+working. Model lab is a text-chat tester; Fish uses its speech API.
 
 Gaming workstation starts the installed Bazzite Plasma desktop in its own PAM
 session, Unix user and logind seat. KWin uses the selected DRM card. Persistent
@@ -60,7 +80,8 @@ Authenticated catalog APIs:
 
 Resolve returns the registered immutable recipe to use in a profile. Browser
 requests require the same session and antiforgery protection as other mutations.
-API clients may use the existing bearer initialization token.
+API clients should use an **Automation** API key for catalog resolution; see
+[API keys](api-keys.md). The one-time setup code is not a lasting API credential.
 
 Sources: [Unsloth inference defaults](https://github.com/unslothai/unsloth/tree/main/studio/backend/assets/configs),
 [Hugging Face Hub API](https://huggingface.co/docs/hub/api),

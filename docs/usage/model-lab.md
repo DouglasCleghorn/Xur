@@ -62,4 +62,6 @@ frontend and has no new browser dependency or CDN requirement.
 lab API tests, gateway route-pinning tests and desktop/mobile Playwright checks.
 Fixtures verify cancellation, restart recovery, partial/error results, unknown
 usage, context retention, output escaping and responsive controls. These are
-functional checks, not benchmark measurements of the user's physical GPUs.
+functional checks. A separate [September 20 live retest](../releases/live-model-retest-2026-09-20.md)
+records Qwen measurements and Fish speech checks with their limits; the automated
+fixtures are not physical-GPU benchmark evidence.

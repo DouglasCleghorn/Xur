@@ -21,7 +21,11 @@ This workflow does **not** assert that boot/install, GPU or physical USB tests
 passed. Its installer receipt explicitly records these as not run. Run the
 separate media suite before declaring installer hardware support verified.
 No self-hosted runner, signing key or GitHub write token is exposed to PR jobs.
-A full hosted ISO build of this workflow still needs to pass after it is pushed.
+As of the September 20 documentation review, the app build passed but hosted ISO
+acceptance remained pending. Earlier runs stopped at builder initialization:
+cloud-init's fallback JSON query lacked root access. That readiness check is now
+fixed and regression-tested; do not interpret the fix alone as a completed ISO.
+Check the latest branch workflow and actual release assets for current results.
 
 ## Runner resources and cleanup
 
@@ -32,6 +36,27 @@ runners**; it refuses to run on a developer or self-hosted machine. Builder disk
 keys and caches stay in `RUNNER_TEMP`; the builder is stopped even on failure.
 There is no paid-runner or alternate-registry fallback. All Docker Hub pulls use
 Google's mirror, as required by `AGENTS.md`.
+
+## When a candidate fails
+
+- **Source checks passed, release build failed:** inspect the failed release step.
+  The release job runs additional browser, packaging and installer checks. A source
+  check is not a published update.
+- **Console menu assertion:** download the failed-check artifact and inspect
+  `console-menu-transcript.log`. The fixture uses persistent HTTP/1.1 responses;
+  assertions retain the screen output and do not retry update/power mutations.
+- **Cloud-init permission or readiness error:** both status commands must use
+  `sudo -n`. Review the printed JSON and exit codes. Recoverable warnings are
+  visible; fatal failures and malformed or unfinished state block the build.
+  See [builder readiness](build.md) for details.
+- **No ISO in Releases:** the installer may have failed, been superseded by a new
+  commit, or be waiting for approval. Candidates are Actions artifacts until the
+  approved publication job attaches them to a versioned release. Earlier app-only
+  releases do not acquire media retroactively.
+
+A new push supersedes the branch's previous release workflow. Review and approve
+the newest successful candidate, not a cancelled or superseded run. These
+instructions never require disabling signature or media inspection checks.
 
 GitHub documents 14 GB guaranteed storage for standard public Linux runners;
 available space after removing unused SDKs can vary. An insufficient-space or KVM

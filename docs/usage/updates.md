@@ -1,13 +1,15 @@
 # Updates
 
-Xur installs the upstream Bazzite KDE Desktop NVIDIA-open image from
-`os/bootc/upstream-lock.json`. The live installer remains a separate Fedora
-image. No Xur-derived OS image is published or required for installed updates.
-The initial upstream image is digest-pinned and signature-verified in the
-builder. OSBuild changes the offline container layer representation; its copy
-removes transport signatures after verification, without modifying the upstream
-filesystem. Subsequent network updates enforce Bazzite's container signature
-policy.
+The online installer resolves the upstream Bazzite KDE Desktop NVIDIA-open
+stable channel at installation time, pins that operation to the resolved digest,
+and enforces the upstream signature policy. The ISO contains a separate Fedora
+live environment and Xur, without an embedded Bazzite OS payload. Internet access
+is required. `os/bootc/upstream-lock.json` is a historical reference, not the
+version selector for new online installations.
+
+Installed OS updates use the same upstream Bazzite channel. No Xur-derived OS
+image is published or required. Xur's Stable/Nightly application channel does not
+change the Bazzite channel. See [online installer](../architecture/online-installer.md).
 
 ## Operating system
 

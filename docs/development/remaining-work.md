@@ -1,5 +1,7 @@
 # Historical backlog — September 15, 2026
 
+For current features and validation boundaries, use the [documentation index](../README.md).
+
 This is an archived planning snapshot, not the current implementation checklist.
 Later work added multiple workstation runtime support, model benchmarking, engine
 version display, HF credentials and tested Tailscale/Moonlight access. USB selection, native multi-seat integration and parallel profile loading are now

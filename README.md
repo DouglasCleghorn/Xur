@@ -12,7 +12,7 @@ signed application bundle for its web interface and workload manager.
 **Status: preview development.** Single-workstation gaming and Moonlight streaming
 have been exercised on RTX 3090 hardware. Multiple workstations and USB/hub
 assignment are implemented; physical isolation and reboot acceptance testing are
-still in progress. See [implementation status](docs/development/rebuild-status.md)
+still in progress. See [current documentation and validation status](docs/README.md)
 and [multiseat validation](docs/architecture/multiple-workstations.md).
 
 [Getting started](docs/usage/getting-started.md) ·
@@ -83,7 +83,7 @@ users, headless streaming, USB assignment, API authentication, and updates.
 | Workstation identity and Moonlight | [Named workstations](docs/usage/workstation-identities.md), [workstations and models](docs/usage/workstations-and-models.md) |
 | Profiles and inference APIs | [Profiles](docs/usage/profiles.md), [API keys](docs/usage/api-keys.md) |
 | Model selection | [Model catalog](docs/usage/model-catalog.md) |
-| Storage and GPUs | [Storage](docs/usage/storage.md), [GPU monitoring](docs/usage/gpu-monitoring.md) |
+| Files, storage and GPUs | [File management](docs/usage/files.md), [Storage](docs/usage/storage.md), [GPU monitoring](docs/usage/gpu-monitoring.md) |
 | Updates and local builds | [OS updates](docs/usage/updates.md), [application updates](docs/usage/application-updates.md) |
 | Security boundaries | [Request security](docs/architecture/request-security.md), [multiple workstations](docs/architecture/multiple-workstations.md) |
 
@@ -107,7 +107,7 @@ captures live under `.build/`. Neither belongs in Git. Docker Hub images must us
 Google's mirror as described in [repository rules](AGENTS.md).
 
 The public project site and short guides live in [`website/`](website/README.md),
-ready for Cloudflare Pages at **xur.app**. Release candidates build on every push
+configured for Cloudflare Workers Static Assets at **xur.app**, without a Worker script. Release candidates build on every push
 to `main` (Nightly) or `release` (Stable) and require maintainer approval in GitHub
 before publication. See [release channels](docs/usage/application-updates.md).
 

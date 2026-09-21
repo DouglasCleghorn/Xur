@@ -15,10 +15,12 @@ masked persistently, preventing an automatic desktop session from claiming all
 GPUs. Xur's console runs on VT3; logs use VT2. Desktop packages, Steam and
 libraries remain installed. Native workstation sessions must be explicitly
 launched and stopped through the agent with exact GPU and device assignment;
-the agent now manages one native Plasma workstation with a dedicated user and
-selected DRM GPU. Local input and audio belong to that station. Installing this
-base and this single-station runtime does not
-implement multiseat or separate desktops on individual outputs of one GPU.
+the agent supports multiple native Plasma workstations on distinct GPUs and
+Unix users, with dedicated logind seats and device restrictions. USB input and
+audio follow explicit device/hub assignments; the primary workstation receives
+unassigned input and built-in audio. See [multiple workstations](multiple-workstations.md)
+for supported device classes, matching rules and outstanding physical isolation
+checks. Separate desktops on individual outputs of one GPU are unsupported.
 
 The four-3090 topology remains an example, not a hardcoded distro layout.
 Bazzite's NVIDIA image includes the normal AMD/Intel graphics stack as well;

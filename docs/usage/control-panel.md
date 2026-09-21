@@ -8,4 +8,5 @@ Update All is an authenticated, CSRF-protected POST to `/updates/all` (or bearer
 
 Update All does not reboot, change an upstream channel, upgrade standalone engines, or rewrite saved workload recipes. Engine versions remain pinned by each workload. Manual update actions and reboot are blocked while the aggregate operation is active. Existing OS and application locks also protect their operations.
 
-Local checks exercise the real Razor pages at desktop/phone widths, profile selection and reboot confirmation, unavailable VRAM, and the update sequence's ordering, skip/failure behavior and interruption reporting. These prep changes have not been published or used to stage a real OS update.
+Local checks exercise the real Razor pages at desktop/phone widths, profile selection and reboot confirmation, unavailable VRAM, and the update sequence's ordering, skip/failure behavior and interruption reporting. These checks validate the control flow; verify the installed and pending OS
+deployments on the target machine before reporting an update as applied.

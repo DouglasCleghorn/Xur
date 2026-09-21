@@ -35,7 +35,18 @@ the user-local tools prepared for this workspace; the script does not install
 system packages or change security policy on the Ubuntu host.
 
 Build logs are in `.build/build-publish.log` and the builder VM
-`/home/builder/iso-build-script.log`. The VM remains available for inspection.
+`/home/builder/iso-build-script.log`. A local VM remains available for inspection;
+CI stops its disposable builder on completion or failure.
+
+The builder readiness helper runs both `cloud-init status --wait` and its JSON
+status query through `sudo -n`. Fedora protects `/run/cloud-init/cloud.cfg`, so
+an unprivileged fallback query fails even when initialization has finished.
+Completed initialization with exit code 2 prints its recoverable warnings and
+continues to toolchain preparation. Fatal exit codes, malformed status, unfinished
+initialization or a nonempty fatal `errors` list stop the build. Read the emitted
+status before retrying; this does not bypass failed package preparation.
+`tests/Xur.Integration.Tests/builder-ready.py` covers these paths without a VM.
+See [cloud-init exit codes](https://docs.cloud-init.io/en/latest/explanation/return_codes.html).
 
 
 Build on a disposable Fedora 44 x86-64 VM with SELinux Enforcing. The development
@@ -182,9 +193,18 @@ Run application checks without an ISO build:
 ./eng/test-fast.sh
 ```
 
-This publishes the three applications and runs authentication, console ownership,
-SQLite/profile recovery and twenty real-child switching cycles. A measured run
-on this workspace took 45–46 seconds. Logs are under `.build/fast/`.
+This publishes the three applications and runs unit, authenticated API,
+desktop/mobile browser, storage/file, model-lab, update, console, network and
+profile lifecycle checks. Real-child switching tests exercise SQLite recovery and
+streaming continuity. Logs are under `.build/fast/`; duration depends on available
+native caches, downloads and machine speed. It does not establish physical GPU,
+USB or ISO boot/install acceptance.
+
+The interactive console fixture uses persistent HTTP/1.1 responses over a Unix
+socket, matching the real server. Failed runs retain
+`.build/fast/console-menu-transcript.log`; output assertions also print the
+actual screen. Source CI runs this test early, while release CI runs the full
+suite. The fixture cannot reboot or power off the host.
 
 For browser, real-container and kernel-console testing, keep an installed test VM
 and its model cache. Create a development clone once from a stopped, installed VM
@@ -224,6 +244,16 @@ change, and once for final release verification. Do not run the entire ISO
 pipeline for each CSS, form or controller edit. Keep final ISO install/reboot and
 non-target-disk checks separate from this short iteration loop.
 
+## GitHub release builds
+
+Pushes to `main` build Nightly candidates; pushes to `release` build Stable
+candidates. The hosted workflow builds the app, then the online installer, and
+requires GitHub Environment approval before signing or publishing either.
+Hosted build/inspection success is not an install/reboot test. The local commands
+above remain available independently of CI. See
+[installer release automation](installer-releases.md) for candidate retention,
+runner resources, approval and multipart ISO downloads.
+
 The console guard uses TIOCL_SETKMSGREDIRECT to pin kernel messages to VT1 and
 restores console verbosity after installer tools change it. The kernel ring and
 journal remain available. `console=tty1` is the only registered kernel console;
@@ -240,8 +270,10 @@ After the initial updater-enabled ISO is installed, use:
 ./eng/package-update.sh --version 2026.09.15.6
 ```
 
-Clients enter the server IP or domain on their Updates page. The single packaging
-command builds and tests the app, stages a signed package, verifies installation
+Clients select **Settings → Update channel → Local build testing**, enter the
+server address and trust its Ed25519 public key. Contributors can generate their
+own key using `XUR_LOCAL_SIGNING_KEY`; see the application update guide below.
+The single packaging command builds and tests the app, stages a signed package, verifies installation
 and reboot persistence in the running disposable `editor-dev` VM, checks the
 diagnostics download, and publishes the tested package on port 8088. Source,
 checksums and evidence are saved to `dist/updates/<version>/`. It does not build

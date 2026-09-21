@@ -25,15 +25,17 @@ This distinguishes a missing driver, framebuffer-only display, disconnected
 connector, discovery failure, and a client running an older app version. The
 report uses fixed read-only probes and includes no login token, kernel command
 line, network configuration, user files, or general journal dump. The page does
-not reload itself while text is selected. Copy works over plain LAN HTTP; manual
-selection remains available when the browser blocks copying.
+not reload itself while text is selected. The manager uses HTTPS, including on the LAN; manual selection remains available
+when the browser blocks clipboard access.
 
 Authenticated automation can retrieve the same JSON at
 `GET /api/diagnostics/display`. Anonymous requests are denied.
 
 Choosing **Workstation** in the profile editor automatically selects the gaming
-desktop and shows the GPU field. There is no second workstation dropdown. If no
-GPU passes the picker checks, the editor links directly to Diagnostics.
+desktop and shows the GPU field. Choose an existing named workstation to retain
+its user and pairing, or **New workstation** to supply a new identity. Manage
+those identities on Workstations. If no GPU passes the picker checks, the editor
+links directly to Diagnostics.
 
 ## Game rendering
 
@@ -56,5 +58,7 @@ Workstation launch configuration explicitly selects NVIDIA's GLX vendor. Mesa
 workstations select their GPU by PCI identity using DRI_PRIME. Device restrictions
 continue to enforce assigned GPU access. No NVIDIA Vulkan selection is guessed
 from card names or runtime indices; several cards can have identical names.
-The reported Astroneer/Sonic Racing crashes on a 3090 remain unresolved pending
-an actual graphics report and game log from that machine.
+The owner subsequently confirmed that game rendering, Moonlight input and sound
+worked on the RTX 3090. This does not establish compatibility for every game or
+multi-workstation configuration. For a new regression, collect fresh reports and
+download the Proton log through **Files → Workstation files**; see [Files](files.md).

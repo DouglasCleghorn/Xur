@@ -75,6 +75,19 @@ alone does not establish endpoint readiness. If the page is empty, check the
 profile operation and workload logs. **Model lab** provides test chat and saved
 benchmarks, including model identity, running workloads, results and sampled VRAM.
 
+## Files, storage and time
+
+Use **Files → Storage files** for mounts or **Workstation files** for home
+folders. Both use the same grid and breadcrumb navigation, with search, filters,
+streamed downloads, rename/move and confirmed deletion. Folder sizes are cached;
+directory listings refresh on navigation. See [Files](files.md) before moving or
+deleting data. **Storage** shows capacity, category usage and eligible SSD TRIM.
+
+In **Settings**, save HF credentials, choose manual or automatic timezone, and
+configure NTP. Automatic timezone uses the server's public IP, with a refresh
+button and a retained previous zone on lookup failure. New NTP settings prefer
+Cloudflare. See [timezone and NTP](timezone.md) for workload reload behavior.
+
 ## Keep the server up to date
 
 **Update All** checks the OS and Xur application. These have separate lifecycles:

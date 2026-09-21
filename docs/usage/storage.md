@@ -25,3 +25,20 @@ Authenticated API: `GET /api/storage/usage`,
 `POST /api/storage/usage/refresh`. Cookie mutations require CSRF; authenticated
 bearer clients use the same API. Installer mode disables these installed-system
 endpoints.
+
+## SSD TRIM
+
+The SSD TRIM section shows the scheduled timer state, eligible mount points,
+discard support and the latest recorded manual result. **Refresh status** reads
+the current state. **Trim SSD** starts a manual operation for an eligible mount;
+review its result on Storage. Unsupported targets do not offer the action.
+
+TRIM returns unused filesystem blocks to the device. It does not delete files or
+increase filesystem free space. Actual support is checked when the operation
+runs; a failed operation remains visible. Long device and subvolume paths wrap
+within the page.
+
+For file navigation, compressed downloads, moves and deletion, use [Files](files.md).
+Its folder-size cache is separate from Storage's five-minute category snapshot;
+refresh the relevant view when comparing measurements. Neither is a sum that can
+replace the filesystem's capacity/available-space figures.

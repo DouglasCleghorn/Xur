@@ -1,5 +1,7 @@
 # Historical implementation status
 
+For current features and validation boundaries, use the [documentation index](../README.md).
+
 This document records the earlier offline installer implementation. Current media
 uses the [online installer](../architecture/online-installer.md); the embedded OS
 payload and historical media results below do not describe or validate that path.

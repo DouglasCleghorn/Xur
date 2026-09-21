@@ -1,7 +1,7 @@
 # xur.app
 
 The public Xur project site and short guides. Plain HTML, CSS and a small optional
-profile-diagram script; Python's standard library assembles shared navigation and
+profile-diagram and release-download scripts; Python's standard library assembles shared navigation and
 copies the existing brand assets. No npm install, external fonts, tracking,
 server-side Functions or Worker code, database, or paid storage service. Xur’s
 original site code and content use the root MIT license; the font retains its OFL

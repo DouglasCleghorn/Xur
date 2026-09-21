@@ -33,3 +33,11 @@ layouts. Four-card chart screenshots are explicitly browser-only layout fixtures
 they are not physical GPU measurement evidence.
 
 Reference: [NVIDIA System Management Interface](https://docs.nvidia.com/deploy/nvidia-smi/).
+
+## Persistent display labels
+
+Short labels such as **GPU 1** come from the persistent registry in
+`/var/lib/xur/gpu-labels.json`. For NVIDIA cards a hardware UUID lets the label
+follow a PCI-slot move; adapters without a hardware UUID use their bus identity.
+Removed cards do not renumber the others. These labels aid recognition; profile
+allocations still use PCI identities, so review assignments after moving hardware.

@@ -36,8 +36,8 @@ xur application-updates rollback
 ```
 
 Authenticated automation uses `GET /api/application-updates` and
-`POST /api/application-updates`, with a bearer token obtained through
-`POST /api/bootstrap`. The request bodies are:
+`POST /api/application-updates`, with an **Automation** API key created in
+Settings. Send it in `Authorization: Bearer …`; see [API keys](api-keys.md). The request bodies are:
 
 ```json
 {"action":"channel","channel":"local","server":"192.0.2.10:8088","publicKey":"-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"}

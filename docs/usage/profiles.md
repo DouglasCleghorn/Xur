@@ -30,9 +30,13 @@ workload retains its container, PID, allocation and active requests. Changed or
 removed workloads drain before stopping. Added workloads pass their HTTP health
 check before routes are published. GPU assignments are currently exclusive;
 shared-memory scheduling is still pending. Gaming workstation starts a native
-Plasma session on one selected display GPU. One local station is supported; its
-keyboard, mouse and audio are the machine’s local devices. Workstation's User
-selector lists existing local desktop accounts, Temporary user, and Add user.
+Plasma session on one selected display GPU. Multiple workstations can run on
+distinct GPUs and users. Select an existing named workstation to keep its user
+and Moonlight pairing, or choose New workstation to enter its name and user.
+Manage shared identities on Workstations. USB input/audio follow explicit
+assignments, while the primary receives unassigned input and built-in audio.
+For a new workstation, the User selector offers existing local desktop accounts,
+Temporary user, and Add user.
 Add user asks for a display name and creates an ordinary local account with a
 persistent home under `/var/home`; changing profiles or deleting a saved profile
 does not remove it. Steam logins and desktop files follow the selected user.
@@ -78,9 +82,10 @@ workstations. Preserving a PID across a host reboot is impossible.
 
 # API
 
-Use the existing authenticated bootstrap API to obtain a bearer token. Installer
-mode rejects profile mutations. Browser forms also require the application's
-antiforgery token.
+Create an **Automation** key in Settings and send it in `Authorization: Bearer …`
+for profile mutations. Diagnostics keys can read profile state. Installer mode
+rejects profile mutations. Browser forms also require the application's
+antiforgery token. See [API keys](api-keys.md).
 
 - `GET /api/station-users`: eligible persistent local desktop accounts.
 - `POST /api/station-users`: create a persistent account with `{"name":"Alex"}`.
@@ -171,10 +176,12 @@ cannot cancel a newer profile change. Cancelled operations cannot be resumed;
 load a profile again to generate a fresh plan.
 
 
-## Parallel loading and peripheral assignment
+## Parallel loading, unloading and peripheral assignment
 
-Independent workloads start in parallel (up to four pipelines). A failed start
-is reported individually while successful siblings keep running and serving.
+Independent workloads load and unload in parallel (up to four pipelines). Each
+stop waits for that workload's requests to drain; conflicting GPU/seat handoffs
+still wait for their dependencies. Failures are reported individually while
+successful siblings keep their completed state and healthy routes remain available.
 **Resume** retries unfinished work. **Cancel change** stops queued actions;
 starts/stops already in flight finish at their safe boundary.
 

@@ -90,9 +90,10 @@ integration and is not an acceptance test for the whole feature.
 Physical acceptance is still required: load two distinct users/GPUs through the
 profile UI; pair two Moonlight clients; verify keyboard, mouse, controller and
 audio isolation; move a serial-bearing hub; unplug/replug devices; reboot; stop
-one desktop and confirm the other remains usable. This development environment
-currently lacks permission to use `/dev/kvm`, and this pass does not alter the
-live Xur server. Separate desktops on outputs of a single GPU are not supported.
+one desktop and confirm the other remains usable. Single-workstation Moonlight,
+input, game rendering and audio were subsequently confirmed on an RTX 3090;
+that does not complete this simultaneous-workstation acceptance checklist.
+Separate desktops on outputs of a single GPU are not supported.
 
 References: [systemd device properties](https://github.com/systemd/systemd/blob/main/src/core/dbus-cgroup.c),
 [pinned Sunshine input adapter](https://github.com/LizardByte/Sunshine/blob/63d35f702ee9e362e43263742981836ec0710384/src/platform/linux/input/virtualhid.cpp),
