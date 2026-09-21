@@ -35,7 +35,9 @@ the user-local tools prepared for this workspace; the script does not install
 system packages or change security policy on the Ubuntu host.
 
 Build logs are in `.build/build-publish.log` and the builder VM
-`/home/builder/iso-build-script.log`. A local VM remains available for inspection;
+`/home/builder/iso-build-script.log`. The Fedora build also streams its output to
+the calling terminal or GitHub Actions log, preserving a failed build exit code.
+A local VM remains available for inspection;
 CI stops its disposable builder on completion or failure.
 
 The builder readiness helper runs both `cloud-init status --wait` and its JSON

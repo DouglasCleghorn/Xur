@@ -58,7 +58,7 @@ if not args.inspect_existing:
  run(['tar','-cf','.build/context.tar','-C','.build/context','.'])
  run(scp+['.build/context.tar','eng/build-in-fedora.sh','eng/label-live-manifest.py','eng/context-receipt.py','eng/inspect-media.sh','builder@127.0.0.1:.'])
  print('Building host, live environment and ISO in Fedora; log: builder:iso-build-script.log',flush=True)
- run(ssh+['while pgrep -f "^bash build-in-fedora.sh /home/builder/xur-build$" >/dev/null; do sleep 2; done; set -eu; rm -rf /home/builder/xur-build; mkdir /home/builder/xur-build; tar -xf context.tar -C xur-build; sudo bash build-in-fedora.sh /home/builder/xur-build > iso-build-script.log 2>&1'])
+ run(ssh+['while pgrep -f "^bash build-in-fedora.sh /home/builder/xur-build$" >/dev/null; do sleep 2; done; set -euo pipefail; rm -rf /home/builder/xur-build; mkdir /home/builder/xur-build; tar -xf context.tar -C xur-build; sudo bash build-in-fedora.sh /home/builder/xur-build 2>&1 | tee iso-build-script.log'])
 else:
  run(['python3','eng/context-receipt.py','verify','.build/context'])
  local=json.loads(pathlib.Path('.build/context/publish-receipt.json').read_text())
