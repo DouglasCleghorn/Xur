@@ -39,11 +39,21 @@ app.MapGet("/power/status",async()=>Results.Json(await serverPower.Status()));
 var hfCredentials=new HuggingFaceCredentials(stateDir);
 app.MapGet("/huggingface",()=>new {configured=hfCredentials.Configured});
 app.MapPost("/huggingface",IResult(HuggingFaceTokenRequest request)=>{try{hfCredentials.Save(request.Token);return Results.Ok(new{configured=hfCredentials.Configured});}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});
+var computerName=new ComputerNameSettings();
+app.MapGet("/computer-name",()=>computerName.Read());
+app.MapPost("/computer-name",async Task<IResult>(ComputerNameRequest request)=>{try{return Results.Json(await computerName.Set(request.Name));}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});
 var networkSettings=new NetworkSettings(run);
 app.MapGet("/network/settings",async Task<IResult>()=>{try{return Results.Json(await networkSettings.Read());}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}});
 app.MapPost("/network/settings",async Task<IResult>(NetworkConfiguration request)=>{if(installer && (storage.Scan.State=="Starting" || storage.Scan.State=="AnswerFound" && !storage.NetworkReady))return Results.Conflict(new{error="Wait for answer-file discovery and networking to finish."});try{return Results.Accepted(value:await networkSettings.Apply(request));}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});
 foreach(var action in new[]{"keep","revert"})
     app.MapPost("/network/"+action,async Task<IResult>(NetworkChangeRequest request)=>{try{return Results.Json(await networkSettings.Finish(request.Id,action=="keep"));}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}});
+app.MapGet("/network/wifi",async Task<IResult>()=>{try{return Results.Json(await networkSettings.ReadWifi());}catch(InvalidOperationException){return Results.Conflict(new{error="Could not read Wi-Fi adapters. Check NetworkManager and refresh."});}});
+app.MapPost("/network/wifi/scan",async Task<IResult>(WifiScanRequest request)=>{try{return Results.Json(await networkSettings.ScanWifi(request));}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});
+app.MapPost("/network/wifi/enable",async Task<IResult>()=>{try{await networkSettings.EnableWifi();return Results.Ok();}catch(InvalidOperationException){return Results.Conflict(new{error="Could not enable Wi-Fi. Check the adapter or airplane-mode switch."});}});
+app.MapPost("/network/wifi/connect",async Task<IResult>(WifiConnectRequest request)=>{
+    if(installer && (storage.Scan.State=="Starting" || storage.Scan.State=="AnswerFound" && !storage.NetworkReady))return Results.Conflict(new{error="Wait for answer-file discovery and networking to finish."});
+    try{return Results.Json(await networkSettings.ConnectWifi(request));}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}
+});
 var ntpSettings=new NtpSettings();
 app.MapGet("/ntp",async Task<IResult>()=> {try{return Results.Json(await ntpSettings.Read());}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}});
 app.MapPost("/ntp",async Task<IResult>(NtpRequest request)=> {try{return Results.Json(await ntpSettings.Set(request));}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});

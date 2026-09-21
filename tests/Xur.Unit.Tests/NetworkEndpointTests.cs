@@ -18,6 +18,11 @@ static class NetworkEndpointTests
         agent.MapGet("/network/settings",()=>new NetworkSettingsStatus([],null));
         agent.MapPost("/network/settings",IResult(NetworkConfiguration config)=>{received=config;return fail?Results.BadRequest(new{error="Invalid gateway"}):Results.Accepted(value:new{id="pending"});});
         agent.MapPost("/network/{action}",IResult(string action,NetworkChangeRequest request)=>{finish=action+":"+request.Id;return Results.Ok();});
+        WifiConnectRequest? wifi=null;
+        agent.MapGet("/network/wifi",()=>new WifiStatus(true,true,[]));
+        agent.MapPost("/network/wifi/connect",(WifiConnectRequest request)=>{wifi=request;return Results.Ok(new{connected=true});});
+        agent.MapGet("/computer-name",()=>new ComputerNameStatus("xur-test",false));
+        agent.MapPost("/computer-name",(ComputerNameRequest request)=>new ComputerNameStatus(request.Name,true));
         var controlBuilder=WebApplication.CreateBuilder();controlBuilder.Logging.ClearProviders();controlBuilder.WebHost.ConfigureKestrel(k=>k.Listen(IPAddress.Loopback,0));
         await using var control=controlBuilder.Build();var device=new Appliance();using var applianceAgent=device.Agent;
         // Appliance resolves the root-private socket from the temporary run directory.
@@ -33,6 +38,11 @@ static class NetworkEndpointTests
             check(rejected.Headers.Location?.OriginalString.Contains("Invalid%20gateway")==true,"Browser network errors return to the editor with the agent message");
             using var api=await client.PostAsJsonAsync("/api/network/settings",received);
             check(api.StatusCode==HttpStatusCode.BadRequest && (await api.Content.ReadAsStringAsync()).Contains("Invalid gateway"),"JSON network API preserves agent errors and status codes");
+            using var wifiResponse=await client.PostAsJsonAsync("/local/network/wifi/connect",new WifiConnectRequest("wlan0","02:00:00:00:00:10","Home","02:00:00:00:00:20","wpa-psk","  fixture password "));
+            check(wifiResponse.IsSuccessStatusCode&&wifi?.Password=="  fixture password ","Private console Wi-Fi route preserves password whitespace through the agent socket");
+            var name=await client.GetFromJsonAsync<ComputerNameStatus>("/local/computer-name");
+            using var named=await client.PostAsJsonAsync("/local/computer-name",new ComputerNameRequest("living-room"));
+            check(name is {Configured:false} && (await named.Content.ReadFromJsonAsync<ComputerNameStatus>()) is {Name:"living-room",Configured:true},"Private console routes expose the initial server-name prompt and save the name");
             foreach(var action in new[]{"keep","revert"})
             {
                 using var finished=await client.PostAsync("/settings/network/"+action,new FormUrlEncodedContent(new Dictionary<string,string>{{"id","pending"}}));

@@ -129,25 +129,47 @@ public sealed class Appliance
     public string TailscaleState { get; private set; } = "Not connected";
     public string TailUrl { get; private set; } = "";
     public string TailIdentity { get; private set; } = "";
+    public bool TailServeReady {get;private set;}
+    public string TailServeStatus {get;private set;}="Not configured";
+    readonly SemaphoreSlim serveGate=new(1,1);
+    DateTimeOffset nextServeCheck;string serveHost="";
+    Task<ProcessResult> Command(string exe,string[] args,int timeout)=>commandRunner!=null?commandRunner(exe,args,timeout):Processes.Run(exe,args,timeout);
     public string? ConfirmedAdministrator { get; private set; }
     public bool QrRunning { get; private set; }
     public string TailLoginUrl { get; private set; } = "";
     public InstallPlan? Plan { get; set; }
     public int Port { get; } = int.TryParse(Environment.GetEnvironmentVariable("XUR_PORT"),out var p) ? p : 8080;
     public string BootId { get; } = File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim();
-    public Appliance()
+    readonly Func<string,string[],int,Task<ProcessResult>>? commandRunner;
+    readonly Func<NetworkAdapter[]>? networkObserver;
+    public Appliance(Func<string,string[],int,Task<ProcessResult>>? commandRunner=null,Func<NetworkAdapter[]>? networkObserver=null)
     {
+        this.commandRunner=commandRunner;this.networkObserver=networkObserver;
         Agent = LocalClient.Create(Path.Combine(RunDirectory,"agent.sock"));
         var adminFile = Path.Combine(Installer ? RunDirectory : "/var/lib/xur", "administrator.json");
         if(File.Exists(adminFile))
             try { using var doc=JsonDocument.Parse(File.ReadAllText(adminFile)); ConfirmedAdministrator=doc.RootElement.GetProperty("login").GetString(); } catch { }
     }
-    public NetworkAdapter[] Network() => NetworkInterface.GetAllNetworkInterfaces().Where(n => n.NetworkInterfaceType != NetworkInterfaceType.Loopback).OrderBy(n => n.Name)
-        .Select(n => new NetworkAdapter(n.Name, n.OperationalStatus.ToString(), n.NetworkInterfaceType.ToString(),
-            n.GetIPProperties().UnicastAddresses.Where(a => !System.Net.IPAddress.IsLoopback(a.Address)).Select(a => a.Address.ToString()).Distinct().Order().ToArray())).ToArray();
-    public string[] Urls() => NetworkInterface.GetAllNetworkInterfaces().Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-        .SelectMany(n => n.GetIPProperties().UnicastAddresses).Where(a => !a.Address.IsIPv6LinkLocal && !System.Net.IPAddress.IsLoopback(a.Address))
-        .Select(a => $"https://{(a.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? "["+a.Address+"]" : a.Address.ToString())}:{Port+363}/").Distinct().ToArray();
+    public NetworkAdapter[] Network()
+    {
+        try{return networkObserver?.Invoke()??ObserveNetwork();}
+        catch(Exception e) when(e is NetworkInformationException or System.Net.Sockets.SocketException or IOException){return [];}
+    }
+    public static NetworkAdapter[] ObserveNetwork()
+    {
+        var adapters=new List<NetworkAdapter>();
+        foreach(var n in NetworkInterface.GetAllNetworkInterfaces())try
+        {
+            if(n.NetworkInterfaceType==NetworkInterfaceType.Loopback)continue;
+            adapters.Add(new(n.Name,n.OperationalStatus.ToString(),n.NetworkInterfaceType.ToString(),
+                n.GetIPProperties().UnicastAddresses.Where(a=>!System.Net.IPAddress.IsLoopback(a.Address)).Select(a=>a.Address.ToString()).Distinct().Order().ToArray()));
+        }
+        catch(Exception e) when(e is NetworkInformationException or System.Net.Sockets.SocketException or IOException){ /* An adapter may disappear between enumeration and address lookup. */ }
+        return adapters.OrderBy(n=>n.Name).ToArray();
+    }
+    public string[] Urls()=>Network().Where(n=>n.State=="Up").SelectMany(n=>n.Addresses)
+        .Select(a=>System.Net.IPAddress.TryParse(a,out var ip)?ip:null).Where(a=>a!=null&&!a.IsIPv6LinkLocal&&!System.Net.IPAddress.IsLoopback(a))
+        .Select(a=>$"https://{(a!.AddressFamily==System.Net.Sockets.AddressFamily.InterNetworkV6?"["+a+"]":a.ToString())}:{Port+363}/").Distinct().ToArray();
     public async Task<JsonElement?> AgentStatus()
     { try { return await Agent.GetFromJsonAsync<JsonElement>("/status"); } catch { return null; } }
     public async Task<Inventory?> Inventory()
@@ -156,19 +178,53 @@ public sealed class Appliance
     {
         try
         {
-            var result = await Processes.Run("tailscale", ["status","--json"],10);
-            if (result.ExitCode != 0) { TailscaleState="Unavailable"; TailUrl=""; TailIdentity=""; return; }
+            var result = await Command("tailscale",["status","--json"],10);
+            if (result.ExitCode != 0) { TailscaleState="Unavailable"; TailUrl=""; TailIdentity=""; TailServeReady=false;nextServeCheck=default;TailServeStatus="Not connected";return; }
             using var doc = JsonDocument.Parse(result.Output); var root = doc.RootElement;
             TailscaleState = root.GetProperty("BackendState").GetString() ?? "Unknown";
-            if (TailscaleState != "Running") { TailUrl=""; TailIdentity=""; return; }
+            if (TailscaleState != "Running") { TailUrl=""; TailIdentity=""; TailServeReady=false;nextServeCheck=default;TailServeStatus="Not connected";return; }
             TailLoginUrl = "";
             var self = root.GetProperty("Self");
             var dns = self.GetProperty("DNSName").GetString()?.TrimEnd('.') ?? "";
+            TailUrl="";
             if (Uri.CheckHostName(dns) == UriHostNameType.Dns) TailUrl = "https://" + dns + "/";
             if (root.TryGetProperty("User",out var users) && self.TryGetProperty("UserID",out var uid) && users.TryGetProperty(uid.ToString(),out var user))
                 TailIdentity = user.GetProperty("LoginName").GetString() ?? "";
+            await RefreshServe();
         }
-        catch { TailscaleState = "Unavailable"; TailUrl=""; TailIdentity=""; }
+        catch { TailscaleState = "Unavailable"; TailUrl=""; TailIdentity="";TailServeReady=false;TailServeStatus="Not connected";nextServeCheck=default; }
+    }
+    async Task RefreshServe()
+    {
+        if(TailUrl.Length==0){TailServeReady=false;TailServeStatus="Waiting for a Tailscale DNS name";return;}
+        if(serveHost==TailUrl&&DateTimeOffset.UtcNow<nextServeCheck || !await serveGate.WaitAsync(0))return;
+        try
+        {
+            serveHost=TailUrl;nextServeCheck=DateTimeOffset.UtcNow.AddSeconds(30);
+            var socket=Path.Combine(RunDirectory,"serve.sock");
+            if(commandRunner==null&&!File.Exists(socket)){TailServeReady=false;TailServeStatus="Waiting for the web manager";return;}
+            var host=new Uri(TailUrl).Host+":443";var target="unix:"+socket;
+            bool Configured(ProcessResult result)
+            {
+                try
+                {
+                    using var json=JsonDocument.Parse(result.Output);var root=json.RootElement;
+                    return result.ExitCode==0&&root.TryGetProperty("TCP",out var tcp)&&tcp.TryGetProperty("443",out var port)&&port.TryGetProperty("HTTPS",out var https)&&https.ValueKind==JsonValueKind.True&&
+                        root.TryGetProperty("Web",out var web)&&web.TryGetProperty(host,out var site)&&site.TryGetProperty("Handlers",out var handlers)&&handlers.TryGetProperty("/",out var handler)&&handler.TryGetProperty("Proxy",out var proxy)&&proxy.GetString()==target;
+                }catch{return false;}
+            }
+            var status=await Command("tailscale",["serve","status","--json"],10);
+            TailServeReady=Configured(status);
+            if(!TailServeReady)
+            {
+                TailServeStatus="Configuring HTTPS proxy";
+                var configured=await Command("tailscale",["serve","--bg","--https=443",target],15);
+                TailServeReady=configured.ExitCode==0&&Configured(await Command("tailscale",["serve","status","--json"],10));
+            }
+            TailServeStatus=TailServeReady?"HTTPS proxy configured":"HTTPS proxy unavailable. Check that HTTPS is enabled in the Tailscale admin console; use the LAN address meanwhile. Retrying automatically.";
+        }
+        catch{TailServeReady=false;TailServeStatus="HTTPS proxy unavailable. Check Tailscale HTTPS settings; use the LAN address meanwhile. Retrying automatically.";}
+        finally{serveGate.Release();}
     }
     public async Task ConfirmAdmin()
     {
@@ -196,7 +252,8 @@ public sealed class Appliance
             {
                 // The claim is kept in memory for the authenticated page and local console only.
                 var info = new ProcessStartInfo("tailscale") { RedirectStandardOutput = true, RedirectStandardError = true };
-                var hostname="xur-"+File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim()[..8];
+                var hostname=Environment.MachineName;
+                try{hostname=(await Agent.GetFromJsonAsync<ComputerNameStatus>("/computer-name"))?.Name??hostname;}catch{}
                 foreach (var arg in new[]{"up","--qr","--qr-format=small","--hostname="+hostname,"--accept-dns=false"}) info.ArgumentList.Add(arg);
                 using var process = Process.Start(info) ?? throw new IOException();
                 using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(15));
@@ -213,8 +270,7 @@ public sealed class Appliance
                 await RefreshTailscale();
                 if (TailscaleState == "Running")
                 {
-                    var serve = await Processes.Run("tailscale", ["serve","--bg","--https=443","unix:"+Path.Combine(RunDirectory,"serve.sock")],30);
-                    LocalConsole.EndQr($"Tailscale: {TailUrl}\nHTTPS proxy: {(serve.ExitCode == 0 ? "Ready" : "Needs tailnet HTTPS enablement")}. LAN login remains active.");
+                    LocalConsole.EndQr($"Tailscale: {TailUrl}\n{TailServeStatus}. LAN login remains active.");
                 }
             }
             catch { LocalConsole.EndQr("Tailscale enrollment ended or is unavailable. LAN setup remains available."); }

@@ -12,6 +12,7 @@ if(args is ["--terminal-probe",var terminal])
     }
     Console.WriteLine("Console daemon remains detached from the terminal");return;
 }
+if(args is ["--password-probe",var expected]) { Console.WriteLine("Ready");var value=ConsolePassword.Read();if(value!=(expected=="cancel"?"/cancel":"  correct horse "))throw new Exception("Password input mismatch");Console.WriteLine("Matched");return; }
 if(args is ["--updates-render",var renderOutput]) { await UpdatesRender.Run(renderOutput);return; }
 if(args is ["--workload-settings-smoke"]) { await WorkloadSettingsSmoke.Run();return; }
 if(args is ["--station-units-smoke"]) { await StationUnitsTests.Smoke();return; }
@@ -129,6 +130,8 @@ try{await updater.Start("rollback");}catch(InvalidOperationException){updateBloc
 Check(updateBlocked,"Rollback requires an observed previous deployment");
 await ConsoleMaintenanceTests.Run(Check);
 await NetworkSettingsTests.Run(Check);
+await WifiTests.Run(Check);
+await ConsoleBootTests.Run(Check);
 await NetworkEndpointTests.Run(Check);
 var desktopRecipe=new Recipe("gaming-workstation","Gaming workstation","host:plasma",[],0,"","Display",1,0,"Desktop",Kind:"Workstation",Engine:"Plasma");
 var displayGpu=new GpuDevice("0000:01:00.0","NVIDIA","Display GPU","nvidia","GPU-test",24576,["/dev/dri/renderD128"],["Compute runtime unavailable"],["/dev/dri/card0"],["card0-HDMI-A-1"]);

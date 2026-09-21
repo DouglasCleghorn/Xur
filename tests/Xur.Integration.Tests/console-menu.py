@@ -13,7 +13,9 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
     app_status={'server':'https://updates.invalid','current':{'id':'old','version':'1'},'available':{'id':'new','version':'2'},'previous':None,'busy':False,'channel':'nightly'}
     all_status={'busy':False,'operation':None}
     network_status={'devices':[{'interface':'eno1','macAddress':'02:00:00:00:00:10','state':'connected','addresses':['192.0.2.1/24'],'connection':'fixture','ipv4':{'method':'auto'},'ipv6':{'method':'auto'},'editable':True}],'pending':None}
-    network_payload=None
+    network_payload=None;wifi_payload=None;server_name=None
+    wifi_status={'enabled':True,'hardwareEnabled':True,'adapters':[{'interface':'wlan0','macAddress':'02:00:00:00:00:10','state':'disconnected','connection':None,'devicePath':'/device/1'}]}
+    wifi_networks=[{'ssid':'Home','bssid':'02:00:00:00:00:20','security':'WPA2','signal':80,'keyManagement':'wpa-psk'}]
     installer=False
     polling=False;poll_reads=0;refreshed=threading.Event()
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -28,16 +30,20 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
                 if poll_reads>=2:
                     all_status['operation']={'id':'poll','stage':'Complete','message':'Background refresh observed','updated':0,'results':[]}
                     refreshed.set()
-            body={'/local/network/settings':network_status,'/local/status':{'installer':installer},'/local/updates':os_status,'/local/application-updates':app_status,'/local/update-all':all_status}.get(self.path)
+            body={'/local/computer-name':{'name':'xur','configured':False},'/local/network/wifi':wifi_status,'/local/network/settings':network_status,'/local/status':{'installer':installer},'/local/updates':os_status,'/local/application-updates':app_status,'/local/update-all':all_status}.get(self.path)
             self.reply(200 if body is not None else 404,body or {})
         def do_POST(self):
-            global network_payload
+            global network_payload,wifi_payload,server_name
             data=self.rfile.read(int(self.headers.get('Content-Length',0)))
             if self.headers.get('Transfer-Encoding')=='chunked':
                 while size:=int(self.rfile.readline().split(b';')[0],16):
                     data+=self.rfile.read(size);self.rfile.read(2)
                 self.rfile.readline()
             posts.append(self.path)
+            if self.path=='/local/network/wifi/scan':self.reply(200,wifi_networks);return
+            if self.path=='/local/network/wifi/connect':wifi_payload=json.loads(data)
+            if self.path=='/local/computer-name':
+                server_name=json.loads(data)['name'];self.reply(200,{'name':server_name,'configured':True,'message':'Server name saved.'});return
             if self.path=='/local/network/settings':
                 network_payload=json.loads(data)
                 network_status['pending']={'id':'network-fixture','interface':'eno1','candidate':'candidate','previous':'previous','checkpoint':'checkpoint','expires':'2099-01-01T00:00:00Z','stage':'Confirm','message':'Keep settings','addresses':['192.0.2.20/24']}
@@ -57,10 +63,10 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
     transcript=repo/'.build/fast/console-menu-transcript.log'
     transcript.parent.mkdir(parents=True,exist_ok=True)
     transcript.write_text('')
-    def run(lines='',args=()):
+    def run(lines='',args=(),sensitive=False):
         result=subprocess.run([sdk,str(binary),*args],env=dict(os.environ,XUR_RUN=temp),input=lines,text=True,capture_output=True,timeout=25)
         with transcript.open('a') as log:
-            log.write(f'Arguments: {args!r}; input: {lines!r}; exit: {result.returncode}\n{result.stdout}\n{result.stderr}\n')
+            log.write(f'Arguments: {args!r}; input: {'<hidden>' if sensitive else lines!r}; exit: {result.returncode}\n{result.stdout}\n{result.stderr}\n')
         assert result.returncode==0,result.stderr
         return result.stdout
     try:
@@ -91,8 +97,18 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
         assert network_payload['interface']=='eno1' and network_payload['macAddress']=='02:00:00:00:00:10'
         assert network_payload['ipv4']['addresses']==['192.0.2.20/24'] and network_payload['ipv6']['method']=='auto'
         assert 'Keep settings' in output, output
+        posts.clear()
+        output=run('3\n2\n1\n  fixture wifi password \n0\n0\n0\n',sensitive=True)
+        assert posts==['/local/network/wifi/scan','/local/network/wifi/connect'],posts
+        assert wifi_payload['interface']=='wlan0' and wifi_payload['password']=='  fixture wifi password '
+        assert 'fixture wifi password' not in output and 'Connected to Home' in output
+        wifi_status['adapters'].append(wifi_status['adapters'][0]|{'interface':'wlan1'})
+        output=run('3\n2\n2\n1\nfixture wifi password\n0\n0\n0\n0\n',sensitive=True)
+        assert wifi_payload['interface']=='wlan1' and 'Choose a Wi-Fi adapter' in output
+        output=run('8\nliving-room\n0\n0\n')
+        assert server_name=='living-room' and 'Server name saved' in output
         installer=True;posts.clear()
         output=run('6\n1\n0\n0\n0\n')
         assert '6. Power' in output and 'Updates' not in output and 'Confirm reboot' in output and not posts, output
     finally:server.shutdown();server.server_close()
-print(json.dumps({'suite':'ConsoleMenu','realCli':True,'updateAll':True,'powerConfirmationAndCancellation':True,'failureFeedback':True,'backgroundRefreshWhileReadingInput':True,'installerMode':True,'staticNetworkTextEntryAndKeep':True}))
+print(json.dumps({'suite':'ConsoleMenu','realCli':True,'updateAll':True,'powerConfirmationAndCancellation':True,'failureFeedback':True,'backgroundRefreshWhileReadingInput':True,'installerMode':True,'staticNetworkTextEntryAndKeep':True,'wifiAdapterSsidAndPassword':True,'serverName':True}))

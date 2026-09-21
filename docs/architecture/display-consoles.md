@@ -19,7 +19,9 @@ the same card clone the menu. Connected DRM cards are discovered through the
 existing PCI/VMBus/platform inventory, including virtual adapters.
 
 A native client reads the shared Spectre.Console frame through the root-private
-control socket. It retains the last complete frame during manager reconnection;
+control socket every 100 ms. Unchanged frames are cached and only changed rows
+are written to kmscon. Slow serial writes do not hold the shared menu lock.
+It retains the last complete frame during manager reconnection;
 no frame, access code or QR is written to its journal. Keyboard navigation stays
 on the existing local VT, and serial access remains available. While a desktop
 owns the local keyboard, the other screens continue displaying the menu.
@@ -39,3 +41,9 @@ DRM adapters and Plasma, checking console screenshots, selected-card handoff,
 unchanged console PIDs on the other card, and three load/unload cycles. In that
 VM a console used approximately 16 MiB of systemd-accounted memory and two
 1280×800 32-bit scanout buffers. Actual display modes and drivers affect usage.
+
+Font size follows the preferred mode of connected outputs: Unifont's 16-pixel
+steps preserve at least 45 rows on larger screens, using 32 pixels at 1440p and
+48 pixels at 4K. Cloned outputs use the smallest connected mode. A changed font
+size restarts only the affected unassigned display console. Serial terminals
+continue to use their own font settings.

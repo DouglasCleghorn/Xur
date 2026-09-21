@@ -19,10 +19,12 @@ with tempfile.TemporaryDirectory(prefix='xur-test-') as temp:
     fixed=''.join(secrets.choice('0123456789ABCDEFGHJKMNPQRSTVWXYZ') for _ in range(6))
     operation=None
     discovery_done=False
+    server_name=None
     ntp={'enabled':True,'active':True,'synchronized':True,'servers':[],'details':''}
     timezone={'current':'UTC','zones':['UTC','America/Denver','Asia/Kolkata']}
     class ConfigHandler(socketserver.StreamRequestHandler):
         def handle(self):
+            global server_name
             path=self.rfile.readline().decode().split(' ')[1]
             headers={}
             while line:=self.rfile.readline().strip():
@@ -32,10 +34,12 @@ with tempfile.TemporaryDirectory(prefix='xur-test-') as temp:
                 while size:=int(self.rfile.readline().split(b';')[0].strip(),16):
                     data+=self.rfile.read(size);self.rfile.read(2)
                 self.rfile.readline()
+            if path=='/computer-name' and data:server_name=json.loads(data)['name']
             if path=='/ntp' and data:ntp.update(json.loads(data))
             if path=='/timezone' and data:timezone['current']=json.loads(data)['zone']
             disk={'path':'/dev/test','stablePath':'/dev/disk/by-id/test','serial':'TEST-001','wwn':'','model':'Test disk','bytes':34359738368,'layout':'test','mounts':[],'blocked':[]}
             body=json.dumps({'/bootstrap-config':{'state':'AnswerFound' if discovery_done else 'Starting','token':fixed if discovery_done else None},
+                '/computer-name':{'name':server_name or 'xur','configured':server_name is not None,'message':'Server name saved'},
                 '/timezone':timezone,'/ntp':ntp,
                 '/status':{'scan':{'state':'NoAnswer' if discovery_done else 'Starting'},'operation':operation},
                 '/disks':{'generation':'test','disks':[disk,disk|{'path':'/dev/blocked','model':'Hidden disk','blocked':['Boot media']}]}
@@ -104,7 +108,27 @@ with tempfile.TemporaryDirectory(prefix='xur-test-') as temp:
         try: tls_open(request_with_session,timeout=5);raise AssertionError('Bootstrap accessed installer')
         except urllib.error.HTTPError as error:check(error.code==403,'Bootstrap session requires account setup before accessing installer')
         check(unix_request('control.sock','/local/login')[0]==200,'Private control socket serves local CLI requests')
+        for _ in range(100):
+            if 'Server name' in unix_request('control.sock','/local/console-frame?columns=100&rows=40')[1]:break
+            time.sleep(.05)
+        check(server_name is None,'Initial setup asks for the server name while web management is available')
+        proc.stdin.write(b'living-room\n0\n');proc.stdin.flush()
+        for _ in range(100):
+            if server_name=='living-room' and 'Status and login' in unix_request('control.sock','/local/console-frame?columns=100&rows=40')[1]:break
+            time.sleep(.05)
+        check(server_name=='living-room','Initial console input saves the server hostname')
         check('Status and login' in unix_request('control.sock','/local/console-frame?columns=100&rows=40')[1],'Private console frame contains the shared real menu')
+        proc.stdin.write(b'5\n');proc.stdin.flush()
+        for _ in range(100):
+            if 'Scroll logs' in unix_request('control.sock','/local/console-frame?columns=100&rows=40')[1]:break
+            time.sleep(.05)
+        check(request('/health')[0]==200,'Management remains reachable while the console displays logs')
+        proc.stdin.write(b'0\n');proc.stdin.flush()
+        for _ in range(100):
+            if 'Status and login' in unix_request('control.sock','/local/console-frame?columns=100&rows=40')[1]:break
+            time.sleep(.05)
+        check('Status and login' in unix_request('control.sock','/local/console-frame?columns=100&rows=40')[1],'Logs return to the menu without switching the input terminal')
+
         check(unix_request('serve.sock','/local/console-frame')[0]==404,'Tailscale cannot expose console frames')
         check(unix_request('serve.sock','/local/login')[0]==404,'Tailscale proxy cannot expose local secret endpoints')
         check(unix_request('serve.sock','/network',{'Tailscale-User-Login':'test-admin@example.invalid'})[0]==302,'Account setup is required before tailnet access')

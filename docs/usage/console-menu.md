@@ -1,7 +1,7 @@
 # Console menu
 
 The installed console offers **Status and login**, **Tailscale QR**, **Network settings**,
-**Hardware**, **Logs**, **Updates**, and **Power**. The installer omits Updates.
+**Hardware**, **Logs**, **Updates**, **Power**, and **Server name**. The installer omits Updates.
 The physical/serial console and the interactive `xur` command share the update
 and power screens.
 
@@ -51,3 +51,58 @@ control socket. Update routes reject installer mode.
 
 **Network settings** edits wired IPv4/IPv6 addresses, gateway and DNS, with a
 two-minute keep/revert window. See [networking and answer YAML](answer-file.md).
+
+## Initial server setup
+
+The initial setup boot prompts for the **server name**. Enter a hostname using
+letters, numbers and hyphens, then save. It persists through installation and
+later boots. Escape skips the prompt for now; **Server name** lets you set or
+change it later. New Tailscale enrollment uses the saved name, and renaming an
+already-enrolled server updates its advertised Tailscale name when available.
+Disk installation still requires its own explicit approval.
+
+## Wi-Fi
+
+Choose **Network settings → Wi-Fi setup**. With one adapter, Xur opens the nearby
+network list directly. With multiple adapters, choose the interface first. If
+Wi-Fi is off, select **Enable Wi-Fi**; hardware airplane-mode switches must be
+unblocked on the machine.
+
+Select an SSID from the signal-strength list. WPA2-Personal and WPA3-Personal
+networks prompt for a password; open networks connect directly. Password input
+is hidden on the physical/serial console and interactive `xur` terminal. Spaces
+in passwords are preserved. Enter connects; Escape cancels (or `/cancel` in a
+line-oriented session). Long network lists remain navigable with the arrow keys.
+Use **Scan again** to refresh the list. WEP, enterprise authentication and hidden
+SSIDs require separate configuration.
+
+Successful connections are saved for automatic reconnection and copied into the
+installed system. Failed activation restores the previous connection. Credentials
+are stored in NetworkManager profiles with owner-only permissions and are never
+included in process arguments or console frames. The answer YAML schema remains
+for wired IP configuration; Wi-Fi credentials are entered in this menu.
+
+## Display behavior
+
+The console uses larger text on high-resolution screens: 32-pixel glyphs at
+2560×1440 and 48-pixel glyphs at 3840×2160. Cloned displays on one GPU use the
+smallest screen's size so the menu and QR remain visible.
+
+The Serve login QR appears automatically when enrollment completes, without
+leaving and reopening the screen. Display clients check for changes every
+100 ms, reuse unchanged frames, and redraw only changed rows. Serial writes run
+outside the menu lock so a slow serial terminal does not hold up local input.
+
+**Logs** stays on the menu's input terminal. Choose **Back to menu**, press Enter,
+or press Escape / 0 to return; PgUp/PgDn scroll the log. The separate Alt+F2 log
+terminal also accepts Enter or Escape to switch back to the menu.
+
+Tailscale connection and HTTPS proxy status are shown separately. Xur checks and
+restores its private Serve route after reconnecting or restarting, and shows the
+login QR once that route is configured. If tailnet HTTPS is unavailable, the
+console explains the issue and retains the LAN management addresses.
+
+Network addresses update in place when a cable is connected, DHCP supplies an
+address, or an adapter disappears. Link/address notifications trigger an immediate
+refresh, with periodic refresh as a fallback. You do not need to leave and reopen
+the status or network screen.

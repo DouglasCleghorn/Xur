@@ -51,6 +51,12 @@ if test -d /etc/NetworkManager/system-connections; then
   find "$target/etc/NetworkManager/system-connections" -type f -exec chmod 600 {} +
 fi
 chroot "$target" restorecon -RF /etc/NetworkManager
+# Carry the explicitly chosen computer name into the installed host.
+if test -f /etc/xur/computer-name; then
+  install -m 600 /etc/xur/computer-name "$target/etc/xur/computer-name"
+  install -m 644 /etc/xur/computer-name "$target/etc/hostname"
+  chroot "$target" restorecon /etc/hostname
+fi
 mkdir -p "$target/etc/systemd/system.conf.d" "$target/etc/systemd/journald.conf.d"
 cp /usr/lib/systemd/system.conf.d/50-xur-console.conf "$target/etc/systemd/system.conf.d/"
 cp /usr/lib/systemd/journald.conf.d/50-xur-console.conf "$target/etc/systemd/journald.conf.d/"

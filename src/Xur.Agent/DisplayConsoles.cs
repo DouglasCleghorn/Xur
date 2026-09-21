@@ -11,6 +11,24 @@ public sealed class DisplayConsoles(string directory,string runDirectory)
     public string? Error {get;private set;}
     static string Unit(string pci)=>"xur-console-"+Canonical.Hash(pci)[..16]+".service";
     static string RuntimePath=>Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"console"));
+    // Unifont scales in whole 16px steps. Retain at least 120 columns and 45 rows
+    // on larger displays; cloned outputs share the smallest connected screen.
+    public static int FontSize(IEnumerable<string> modes)
+    {
+        var sizes=modes.Select(mode=>System.Text.RegularExpressions.Regex.Match(mode,@"^(\d+)x(\d+)$"))
+            .Select(m=>m.Success && int.TryParse(m.Groups[1].Value,out var w) && int.TryParse(m.Groups[2].Value,out var h)?16*Math.Clamp(Math.Min(w/960,h/720),1,8):16).ToArray();
+        return sizes.Length==0?16:sizes.Min();
+    }
+    public static int DisplayFontSize(string card,IEnumerable<string> displays,string sysRoot="/sys")
+    {
+        var modes=new List<string>();
+        foreach(var display in displays.Where(d=>d.StartsWith(Path.GetFileName(card)+"-",StringComparison.Ordinal)))
+        {
+            try{modes.Add(File.ReadLines(Path.Combine(sysRoot,"class/drm",display,"modes")).FirstOrDefault()??"");}
+            catch(IOException){modes.Add("");}catch(UnauthorizedAccessException){modes.Add("");}
+        }
+        return FontSize(modes);
+    }
     async Task<HashSet<string>> DesktopCards()
     {
         var result=new HashSet<string>(handingOff);
@@ -52,11 +70,11 @@ public sealed class DisplayConsoles(string directory,string runDirectory)
             }
             foreach(var gpu in wanted)
             {
-                var card=gpu.Cards![0];
+                var card=gpu.Cards![0];var fontSize=DisplayFontSize(card,gpu.Displays??[]);
                 if((await Processes.Run("systemctl",["is-active",Unit(gpu.Pci)],5)).ExitCode==0)
                 {
                     var environment=await Processes.Run("systemctl",["show",Unit(gpu.Pci),"--property=Environment","--value"],5);
-                    if(environment.Output.Contains("XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id)&&environment.Output.Contains("XUR_CONSOLE_CARD="+card+" "))continue;
+                    if(environment.Output.Contains("XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id)&&environment.Output.Contains("XUR_CONSOLE_CARD="+card+" ")&&environment.Output.Contains("XUR_CONSOLE_FONT="+fontSize+" "))continue;
                     await Processes.Run("systemctl",["stop",Unit(gpu.Pci)],20);
                 }
                 await Processes.Run("systemctl",["reset-failed",Unit(gpu.Pci)],5);
@@ -65,8 +83,8 @@ public sealed class DisplayConsoles(string directory,string runDirectory)
                     "--property=TimeoutStopSec=10","--property=StandardOutput=null","--property=StandardError=journal",
                     "--property=DevicePolicy=closed","--property=DeviceAllow="+card+" rw","--property=DeviceAllow=char-pts rw",
                     "--property=UMask=0077","--setenv=LANG=C.UTF-8","--setenv=LD_LIBRARY_PATH="+root+"/lib",
-                    "--setenv=XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id,"--setenv=XUR_CONSOLE_CARD="+card,"--setenv=XUR_CONSOLE_MODULES="+root+"/lib",
-                    root+"/kmscon","--vt=/dev/null","--no-libseat","--no-hwaccel","--font-engine=unifont","--font-size=16",
+                    "--setenv=XUR_CONSOLE_FONT="+fontSize,"--setenv=XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id,"--setenv=XUR_CONSOLE_CARD="+card,"--setenv=XUR_CONSOLE_MODULES="+root+"/lib",
+                    root+"/kmscon","--vt=/dev/null","--no-libseat","--no-hwaccel","--font-engine=unifont","--font-size="+fontSize,
                     "--no-mouse","--no-blink","--dpms-timeout=0","--multi-monitor=clone","--session-max=1","--no-session-control","--no-issue",
                     "--login","--",root+"/client",Path.Combine(runDirectory,"control.sock")],15);
                 if(r.ExitCode!=0)Error="Display console start failed: "+r.Output.Trim();

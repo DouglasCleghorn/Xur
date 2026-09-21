@@ -28,7 +28,7 @@ async Task Root()
         var choice=Console.ReadLine()?.Trim();if(choice is null or "0")return;
         if(!int.TryParse(choice,out var selected) || selected<1 || selected>LocalConsole.RootOptions(installer).Length)continue;
         var key=LocalConsole.RootKey(selected-1,installer);
-        if(key is 'u' or 'w' or 'j'){await InteractiveMaintenance(menu,key=='u'?"updates":key=='j'?"network":"power");continue;}
+        if(key is 'u' or 'w' or 'j' or 'm'){await InteractiveMaintenance(menu,key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":"power");continue;}
         var action=key switch { '1'=>"status", '2'=>"qr", '3'=>"network", '4'=>"hardware", '5'=>"logs", _=>"" };
         if(action.Length>0)await RunCommand(action,false);
         if(key=='1')await RunCommand("login",false);
@@ -44,10 +44,10 @@ async Task InteractiveMaintenance(ConsoleMaintenance menu,string view)
     {
         var screen=menu.Screen;
         var frame="\n"+screen.Title+"\n"+screen.Body+"\n"+string.Join('\n',screen.Options.Select((o,i)=>$"{i+1}. {o.Display}"))+"\n0. Back\nSelection: ";
-        if(frame!=lastFrame){Console.Write(frame);if(screen.InputValue!=null)Console.Write("Current: "+screen.InputValue+"\nNew value (blank clears; /cancel goes back): ");lastFrame=frame;}
-        read??=Task.Run(Console.ReadLine);
+        if(frame!=lastFrame){Console.Write(frame);if(screen.InputValue!=null)Console.Write(screen.Secret?"Password (hidden; Escape cancels): ":"Current: "+screen.InputValue+"\nNew value (blank clears; /cancel goes back): ");lastFrame=frame;}
+        read??=Task.Run(()=>screen.Secret?ConsolePassword.Read():Console.ReadLine());
         if(await Task.WhenAny(read,Task.Delay(5000))!=read){if(screen.InputValue==null)await menu.Refresh();continue;}
-        var choice=(await read)?.Trim();read=null;lastFrame="";if(choice==null)return;
+        var entered=await read;var choice=screen.Secret?entered:entered?.Trim();read=null;lastFrame="";if(choice==null)return;
         if(screen.InputValue!=null){if(choice=="/cancel")await menu.Select('0');else await menu.Submit(choice);continue;}
         if(choice=="0"){await menu.Select('0');continue;}
         if(int.TryParse(choice,out var selected) && selected>=1 && selected<=screen.Options.Length)
@@ -394,14 +394,40 @@ async Task StartHost()
     });
     app.Lifetime.ApplicationStopping.Register(LocalConsole.Stop);
     var consoleMenu=new ConsoleMaintenance(appliance.Agent,appliance.Installer);
-    async Task Input(TextReader input, bool physical)
+    void ShowConsoleMenu(){if(consoleMenu.Closed)LocalConsole.Status(appliance,auth);else LocalConsole.OpenMaintenance(consoleMenu.Screen);}
+    try
+    {
+        if(await appliance.Agent.GetFromJsonAsync<ComputerNameStatus>("/computer-name") is {Configured:false})
+        {await consoleMenu.Open("computer-name");ShowConsoleMenu();}
+    }catch{ /* Keep boot and LAN management available when the agent is restarting. */ }
+    var networkRefreshGate=new SemaphoreSlim(1,1);
+    async Task RefreshNetworkConsole()
+    {
+        if(!await networkRefreshGate.WaitAsync(0))return;
+        try
+        {
+            LocalConsole.Refresh();
+            if(LocalConsole.ViewingMaintenance){await consoleMenu.Refresh();LocalConsole.OpenMaintenance(consoleMenu.Screen,refreshOnly:true);}
+        }
+        catch{ /* A transient hot-plug failure must not stop later address updates. */ }
+        finally{networkRefreshGate.Release();}
+    }
+    System.Net.NetworkInformation.NetworkAddressChangedEventHandler addressChanged=(_,_)=>_ = Task.Run(RefreshNetworkConsole);
+    System.Net.NetworkInformation.NetworkAvailabilityChangedEventHandler availabilityChanged=(_,_)=>_ = Task.Run(RefreshNetworkConsole);
+    System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged+=addressChanged;
+    System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged+=availabilityChanged;
+    app.Lifetime.ApplicationStopping.Register(()=>{
+        System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged-=addressChanged;
+        System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged-=availabilityChanged;
+    });
+    async Task Input(TextReader input, bool logTerminal)
     {
         var keys=new ConsoleKeyReader();var buffer=new char[1];Task<int>? read=null;
         while (!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {
             char? key;
             if(Environment.GetEnvironmentVariable("XUR_CONSOLE")=="stdio")
-            { var line=await input.ReadLineAsync(); if(line==null)break;if(LocalConsole.EditingText){if(line=="/cancel")await consoleMenu.Select('0');else await consoleMenu.Submit(line);LocalConsole.OpenMaintenance(consoleMenu.Screen);continue;}key=LocalConsole.SelectLine(line); }
+            { var line=await input.ReadLineAsync(); if(line==null)break;if(LocalConsole.EditingText){if(line=="/cancel")await consoleMenu.Select('0');else await consoleMenu.Submit(line);ShowConsoleMenu();continue;}key=LocalConsole.SelectLine(line); }
             else
             {
                 read??=input.ReadAsync(buffer,0,1);
@@ -413,10 +439,16 @@ async Task StartHost()
                     if(await read==0)break;
                     read=null;var escaped=keys.InEscapeSequence || buffer[0]=='\x1b';action=keys.Read(buffer[0]);if(!escaped)typed=buffer[0];
                 }
+                if(logTerminal)
+                {
+                    if(action is ConsoleKeyAction.Enter or ConsoleKeyAction.Back){LocalConsole.Status(appliance,auth);await Processes.Run("chvt",["3"]);}
+                    else if(action is ConsoleKeyAction.PageDown or ConsoleKeyAction.PageUp)LocalConsole.Page(action==ConsoleKeyAction.PageDown?1:-1);
+                    continue;
+                }
                 if(LocalConsole.EditingText)
                 {
-                    if(action==ConsoleKeyAction.Enter){await consoleMenu.Submit(LocalConsole.TextValue);LocalConsole.OpenMaintenance(consoleMenu.Screen);}
-                    else if(action==ConsoleKeyAction.Back && typed==null){await consoleMenu.Select('0');LocalConsole.OpenMaintenance(consoleMenu.Screen);}
+                    if(action==ConsoleKeyAction.Enter){var value=LocalConsole.TextValue;LocalConsole.ClearText();await consoleMenu.Submit(value);ShowConsoleMenu();}
+                    else if(action==ConsoleKeyAction.Back && typed==null){await consoleMenu.Select('0');ShowConsoleMenu();}
                     else if(typed.HasValue)LocalConsole.EditText(typed.Value);
                     continue;
                 }
@@ -430,7 +462,7 @@ async Task StartHost()
                 {
                     await consoleMenu.Select(key.Value);
                     if(consoleMenu.Closed)LocalConsole.Status(appliance,auth);
-                    else LocalConsole.OpenMaintenance(consoleMenu.Screen);
+                    else ShowConsoleMenu();
                     continue;
                 }
                 switch(key.Value)
@@ -438,11 +470,10 @@ async Task StartHost()
                     case '0': case '1': LocalConsole.Status(appliance,auth);break;
                     case '2': appliance.StartQr();break;
                     case '4': LocalConsole.Show("Hardware",await appliance.Agent.GetStringAsync("/hardware"));break;
-                    case 'u': case 'w': case 'j':
-                        await consoleMenu.Open(key=='u'?"updates":key=='j'?"network":"power");LocalConsole.OpenMaintenance(consoleMenu.Screen);break;
+                    case 'u': case 'w': case 'j': case 'm':
+                        await consoleMenu.Open(key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":"power");ShowConsoleMenu();break;
                     case '5':
                         LocalConsole.UpdateLogs(await appliance.Agent.GetStringAsync("/console-logs")); LocalConsole.OpenLogs();
-                        if(physical)await Processes.Run("chvt",["2"]);
                         break;
                     case 'n': LocalConsole.Page(1); break;
                     case 'p': LocalConsole.Page(-1); break;
@@ -452,13 +483,13 @@ async Task StartHost()
         }
     }
     if(Environment.GetEnvironmentVariable("XUR_CONSOLE") == "stdio") _ = Task.Run(()=>Input(Console.In,false));
-    else foreach(var path in new[]{"/dev/tty3","/dev/ttyS0"}) _ = Task.Run(async()=>{
-        try { using var input = new StreamReader(LocalConsole.OpenDevice(path,FileAccess.Read)); await Input(input,path=="/dev/tty3"); } catch { }
+    else foreach(var path in new[]{"/dev/tty3","/dev/ttyS0","/dev/tty2"}) _ = Task.Run(async()=>{
+        try { using var input = new StreamReader(LocalConsole.OpenDevice(path,FileAccess.Read)); await Input(input,path=="/dev/tty2"); } catch { }
     });
     _ = Task.Run(async()=>{
         while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {
-            await Task.Delay(500);LocalConsole.Refresh();
+            await Task.Delay(500);try{LocalConsole.Refresh();}catch{ /* Retry on the next tick, including during link changes. */ }
         }
     });
     // Network enrollment must not wait behind journal or update requests.
@@ -466,7 +497,7 @@ async Task StartHost()
         while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {
             await appliance.RefreshTailscale();
-            LocalConsole.Refresh();
+            try{LocalConsole.Refresh();}catch{}
             await Task.Delay(appliance.TailscaleState=="Running"?3000:1000);
         }
     });
@@ -474,11 +505,11 @@ async Task StartHost()
         while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {
             await Task.Delay(5000);
-            if(LocalConsole.ViewingMaintenance)
+            try{if(LocalConsole.ViewingMaintenance)
             {
                 await consoleMenu.Refresh();
                 LocalConsole.OpenMaintenance(consoleMenu.Screen,refreshOnly:true);
-            }
+            }}catch{ /* Keep subsequent refreshes alive after a temporary agent failure. */ }
             try { LocalConsole.UpdateLogs(await appliance.Agent.GetStringAsync("/console-logs")); } catch { }
         }
     });

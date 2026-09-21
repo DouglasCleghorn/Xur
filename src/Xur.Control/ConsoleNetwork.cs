@@ -5,6 +5,8 @@ namespace Xur.Control;
 
 public sealed class ConsoleNetwork(HttpClient client,bool local=false)
 {
+    readonly ConsoleWifi wifi=new(client,local);
+    bool wifiOpen;
     NetworkSettingsStatus? status;
     NetworkConfiguration? draft;
     string view="list",editField="",notice="";
@@ -17,6 +19,7 @@ public sealed class ConsoleNetwork(HttpClient client,bool local=false)
     {
         get
         {
+            if(wifiOpen)return wifi.Screen;
             var options=new List<ConsoleOption>();string title,body;string? input=null;
             if(view=="list")
             {
@@ -28,7 +31,7 @@ public sealed class ConsoleNetwork(HttpClient client,bool local=false)
                     if(busy){options.Add(new('k',"Keep settings",pending.Stage=="Confirm"));options.Add(new('r',"Revert",pending.Stage=="Confirm"));}
                 }
                 if(status!=null)for(var i=0;i<status.Devices.Length;i++)options.Add(new((char)(256+i),status.Devices[i].Interface+" · "+status.Devices[i].MacAddress,status.Devices[i].Editable&&!busy));
-                options.AddRange([new('v',"Refresh status"),new('0',"Back to menu")]);
+                options.AddRange([new('w',"Wi-Fi setup",!busy),new('v',"Refresh status"),new('0',"Back to menu")]);
             }
             else if(view=="adapter")
             {
@@ -54,14 +57,16 @@ public sealed class ConsoleNetwork(HttpClient client,bool local=false)
             return new("network-"+view+(view=="editField"?"-"+editField:""),title,body,options.ToArray(),input);
         }
     }
-    public async Task Open(){Closed=false;view="list";notice="";await Refresh();}
+    public async Task Open(){wifiOpen=false;Closed=false;view="list";notice="";await Refresh();}
     public async Task Refresh()
     {
+        if(wifiOpen)return; // Keep adapter/network choices stable until an explicit rescan.
         try{status=await client.GetFromJsonAsync<NetworkSettingsStatus>(Prefix+"/network/settings");}
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException){status=null;}
     }
     public async Task Select(char key)
     {
+        if(wifiOpen){await wifi.Select(key);if(wifi.Closed){wifiOpen=false;await Refresh();}return;}
         var option=Screen.Options.FirstOrDefault(o=>o.Key==key);if(option?.Enabled!=true)return;notice="";
         if(key=='0')
         {
@@ -73,6 +78,7 @@ public sealed class ConsoleNetwork(HttpClient client,bool local=false)
         }
         if(view=="list")
         {
+            if(key=='w'){wifiOpen=true;await wifi.Open();return;}
             if(key=='v'){await Refresh();return;}
             if(key is 'k' or 'r'){await Send("/network/"+(key=='k'?"keep":"revert"),new NetworkChangeRequest(status!.Pending!.Id));return;}
             var device=status!.Devices[key-256];draft=new(device.Interface,device.MacAddress,device.Ipv4,device.Ipv6);view="adapter";return;
@@ -89,8 +95,9 @@ public sealed class ConsoleNetwork(HttpClient client,bool local=false)
         if(key=='s'){FamilySet(Family with {Method="manual"});editField="addresses";view="editField";return;}
         editField=key switch{'i'=>"addresses",'g'=>"gateway",_=>"dns"};view="editField";
     }
-    public void Submit(string text)
+    public async Task Submit(string text)
     {
+        if(wifiOpen){await wifi.Submit(text);return;}
         if(view!="editField")return;
         var values=text.Split([',',' ','\r','\n'],StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries);
         FamilySet(editField switch{"addresses"=>Family with{Addresses=values},"gateway"=>Family with{Gateway=text.Trim()},_=>Family with{Dns=values}});view="family";

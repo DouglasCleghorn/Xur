@@ -19,6 +19,18 @@ public static class NetworkEndpoints
             if(!result.IsSuccessStatusCode)try{using var json=JsonDocument.Parse(body);if(json.RootElement.ValueKind==JsonValueKind.Object && json.RootElement.TryGetProperty("error",out var message) && message.ValueKind==JsonValueKind.String)error=message.GetString()??error;}catch(JsonException){}
             return Results.Redirect("/settings/network"+(result.IsSuccessStatusCode?"":"?error="+Uri.EscapeDataString(error)));
         }
+        app.MapGet("/local/computer-name",async Task<IResult>()=>{
+            using var result=await device.Agent.GetAsync("/computer-name");
+            return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
+        });
+        app.MapPost("/local/computer-name",(ComputerNameRequest request)=>Send("/computer-name",request));
+        app.MapGet("/local/network/wifi",async Task<IResult>()=>{
+            using var result=await device.Agent.GetAsync("/network/wifi");
+            return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
+        });
+        app.MapPost("/local/network/wifi/scan",(WifiScanRequest request)=>Send("/network/wifi/scan",request));
+        app.MapPost("/local/network/wifi/connect",(WifiConnectRequest request)=>Send("/network/wifi/connect",request));
+        app.MapPost("/local/network/wifi/enable",()=>Send("/network/wifi/enable",new{}));
         foreach(var prefix in new[]{"/api","/local"})
         {
             app.MapGet(prefix+"/network/settings",Read);

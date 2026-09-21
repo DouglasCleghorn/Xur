@@ -33,10 +33,16 @@ elif text=='connection show xur-dhcp-eno1':sys.exit(10)
     # Exercise the actual handoff commands on disposable paths, with no chroot or host edits.
     source=temp/'source';source.mkdir();target=temp/'target';target.mkdir()
     profile=source/'static.nmconnection';profile.write_text('[connection]\nid=static\nautoconnect=true\n[ipv4]\nmethod=manual\naddress1=192.0.2.10/24\n');profile.chmod(0o644)
-    script=(repo/'os/installer/install-manager').read_text().split('# Copy saved NetworkManager profiles,',1)[1].split('mkdir -p "$target/etc/systemd/system.conf.d"',1)[0]
+    script=(repo/'os/installer/install-manager').read_text().split('# Copy saved NetworkManager profiles,',1)[1].split('# Carry the explicitly chosen computer name',1)[0]
     script=script[script.index('mkdir -p'):].replace('chroot "$target" restorecon -RF /etc/NetworkManager','true')
     script=script.replace('/etc/NetworkManager/system-connections/.',str(source)+'/.').replace('if test -d /etc/NetworkManager/system-connections;',f'if test -d "{source}";')
     subprocess.run(['bash','-euc','target="$1"\n'+script,'test',str(target)],check=True)
     saved=target/'etc/NetworkManager/system-connections/static.nmconnection'
     assert saved.read_bytes()==profile.read_bytes() and saved.stat().st_mode&0o777==0o600
-print(json.dumps({'suite':'NetworkStartup','savedStaticPreserved':True,'unconfirmedCandidateExcluded':True,'dhcpFallback':True,'installerProfileHandoff':True}))
+    name_source=temp/'computer-name';name_source.write_text('living-room\n');(target/'etc/xur').mkdir(parents=True)
+    handoff=(repo/'os/installer/install-manager').read_text().split('# Carry the explicitly chosen computer name',1)[1].split('mkdir -p "$target/etc/systemd/system.conf.d"',1)[0]
+    handoff=handoff[handoff.index('if test'):].replace('chroot "$target" restorecon /etc/hostname','true')
+    handoff=handoff.replace('if test -f /etc/xur/computer-name;',f'if test -f "{name_source}";').replace('install -m 600 /etc/xur/computer-name',f'install -m 600 "{name_source}"').replace('install -m 644 /etc/xur/computer-name',f'install -m 644 "{name_source}"')
+    subprocess.run(['bash','-euc','target="$1"\n'+handoff,'test',str(target)],check=True)
+    assert (target/'etc/hostname').read_text()=='living-room\n' and (target/'etc/xur/computer-name').read_text()=='living-room\n'
+print(json.dumps({'suite':'NetworkStartup','savedStaticPreserved':True,'unconfirmedCandidateExcluded':True,'dhcpFallback':True,'installerProfileHandoff':True,'serverNameHandoff':True}))

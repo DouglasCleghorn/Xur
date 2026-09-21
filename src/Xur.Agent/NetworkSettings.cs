@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using Xur.Domain;
 namespace Xur.Agent;
 
-public sealed class NetworkSettings(string directory="/run/xur",Func<string,string[],int,Task<ProcessResult>>? runner=null)
+public sealed partial class NetworkSettings(string directory="/run/xur",Func<string,string[],int,Task<ProcessResult>>? runner=null,string profilesDirectory="/etc/NetworkManager/system-connections")
 {
     readonly SemaphoreSlim gate=new(1,1);
     const string Bus="org.freedesktop.NetworkManager",BusPath="/org/freedesktop/NetworkManager";

@@ -5,6 +5,8 @@
 <h1>Tailscale</h1>
 <section class="panel">
     <p>@Device.TailscaleState</p>
+    <p role="status">@Device.TailServeStatus</p>
+    @if(Device.TailscaleState=="Running"&&!Device.TailServeReady) { <p><a href="https://login.tailscale.com/admin/dns" target="_blank" rel="noopener noreferrer">Open Tailscale DNS / HTTPS settings</a>. Xur retries the HTTPS proxy automatically.</p> }
     @if(Device.TailscaleState != "Running")
     {
         @if(Device.TailLoginUrl is { Length: >0 } loginUrl)
