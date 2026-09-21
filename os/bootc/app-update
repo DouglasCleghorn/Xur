@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """Root-only, signed application update transactions. Never changes workload data."""
-import fcntl,hashlib,http.client,json,os,pathlib,re,shutil,socket,sqlite3,subprocess,sys,tarfile,tempfile,time,urllib.parse,urllib.request,uuid
+import base64,fcntl,hashlib,http.client,json,os,pathlib,re,shutil,socket,sqlite3,subprocess,sys,tarfile,tempfile,time,urllib.parse,urllib.request,uuid
 ROOT=pathlib.Path('/var/lib/xur/app');CONFIG=pathlib.Path('/etc/xur/application-updates.json');KEY=pathlib.Path('/etc/xur/application-update-key.pem')
 GITHUB='https://github.com/DouglasCleghorn/Xur/releases'
 PUBLIC=GITHUB+'/latest/download'
@@ -102,7 +102,7 @@ def fetch(url,path,limit):
             out.write(chunk)
         out.flush();os.fsync(out.fileno())
     return release_base
-def check(stage):
+def check_legacy(stage):
     server=source()
     if not server:raise ValueError('Set the update server address first')
     if server==NIGHTLY:
@@ -128,6 +128,63 @@ def check(stage):
     if 'channel' not in entry and channel()!='local':floor=max(floor,read(ROOT/'highest-sequence.json',0))
     if entry.get('sequence',0)<floor:raise ValueError('Repository offered an older release in this channel; use Roll back for the previous installation')
     atomic(ROOT/'available.json',entry);return entry
+
+# The JSON envelope carries its own Ed25519 signature. Checks fetch only this
+# small descriptor; archives remain ordinary gzip tar files.
+DESCRIPTOR='xur-update.json'
+ARCHIVE='xur-update-x86_64.tar.gz'
+
+def signed_descriptor(path,stage):
+    envelope=read(path)
+    if envelope.get('schema')!=2 or not isinstance(envelope.get('release'),dict):raise ValueError('Invalid update descriptor')
+    entry=envelope['release']
+    raw=json.dumps(entry,sort_keys=True,separators=(',',':')).encode()
+    try:signature=base64.b64decode(envelope.get('signature',''),validate=True)
+    except (ValueError,TypeError):raise ValueError('Invalid update signature') from None
+    if len(signature)!=64:raise ValueError('Invalid update signature')
+    (stage/'release.json').write_bytes(raw);(stage/'release.sig').write_bytes(signature)
+    key=stage/'verification-key.pem';key.write_text(trust_key())
+    call(['openssl','pkeyutl','-verify','-pubin','-inkey',str(key),'-rawin','-in',str(stage/'release.json'),'-sigfile',str(stage/'release.sig')])
+    if entry.get('schema')!=2 or entry.get('hostAbi')!=1 or entry.get('dataSchema')!=1 or not re.fullmatch('[a-f0-9]{64}',entry.get('id','')):raise ValueError('Release is incompatible with this installation')
+    if entry.get('file') not in (ARCHIVE,entry['id']+'.tar.gz'):raise ValueError('Invalid update archive name')
+    if type(entry.get('bytes')) is not int or not 0<entry['bytes']<=2*1024**3 or not re.fullmatch('[a-f0-9]{64}',entry.get('sha256','')):raise ValueError('Invalid release metadata')
+    if type(entry.get('sequence')) is not int or entry['sequence']<0:raise ValueError('Invalid release sequence')
+    if channel()!='local' and entry.get('channel')!=channel():raise ValueError('Signed release does not match the selected channel')
+    floor=read(ROOT/'channel-sequences.json',{}).get(sequence_scope(),0)
+    if entry['sequence']<floor:raise ValueError('Repository offered an older release in this channel; use Roll back for the previous installation')
+    return entry
+
+def check(stage):
+    server=source()
+    if not server:raise ValueError('Set the update server address first')
+    # New channel pointers are separate from the frozen legacy migration pointers.
+    official=channel()!='local'
+    base=GITHUB+'/download/'+channel() if official else server
+    try:fetch(base+'/current',stage/'current',128)
+    except urllib.error.HTTPError as error:
+        if error.code!=404:raise
+        return check_legacy(stage) # Existing contributor repositories and rollout bootstrap.
+    target=(stage/'current').read_text().strip()
+    if official:
+        pattern=r'nightly-[0-9]+(?:[.][0-9]+)+' if channel()=='nightly' else r'v[0-9]+(?:[.][0-9]+)+'
+        if not re.fullmatch(pattern,target):raise ValueError('Invalid release pointer')
+        base=GITHUB+'/download/'+target
+        name=DESCRIPTOR
+    else:
+        if not re.fullmatch('[a-f0-9]{64}',target):raise ValueError('Invalid release identity')
+        name=target+'.update.json'
+    fetch(base+'/'+name,stage/'descriptor.json',65536)
+    entry=signed_descriptor(stage/'descriptor.json',stage)
+    if not official and entry['id']!=target:raise ValueError('Release identity mismatch')
+    (stage/'source').write_text(base)
+    atomic(ROOT/'available.json',entry)
+    return entry
+
+def download_bundle(stage,entry):
+    archive=stage/'bundle.tar.gz'
+    fetch((stage/'source').read_text()+'/'+entry['file'],archive,entry['bytes'])
+    if archive.stat().st_size!=entry['bytes'] or hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()!=entry['sha256']:raise ValueError('Download hash mismatch')
+    return archive
 
 def unpack(archive,target,entry):
     with tarfile.open(archive,'r:gz') as tar:
@@ -251,10 +308,12 @@ if __name__=='__main__':
                 with tempfile.TemporaryDirectory(prefix='download-',dir=ROOT) as directory:
                     stage=pathlib.Path(directory);entry=check(stage)
                     if action=='check':progress('Complete','Update check finished')
+                    elif current()['id']==entry['id']:
+                        remember_sequence(entry,sequence_scope());atomic(ROOT/('release-'+entry['id']+'.json'),entry)
+                        progress('Complete','This version is already installed')
                     else:
                         progress('Downloading','Downloading and verifying application files')
-                        archive=stage/'bundle.tar.gz';fetch((stage/'source').read_text()+'/'+entry['file'],archive,entry['bytes'])
-                        if archive.stat().st_size!=entry['bytes'] or hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()!=entry['sha256']:raise ValueError('Download hash mismatch')
+                        archive=download_bundle(stage,entry)
                         unpack(archive,stage/'bundle',entry)
                         release=ROOT/'releases'/entry['id'];release.parent.mkdir(exist_ok=True)
                         if not release.exists():(stage/'bundle').rename(release)

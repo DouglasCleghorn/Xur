@@ -177,7 +177,7 @@ per channel is retained; after publication its Actions artifact is deleted. The
 public release assets stay on GitHub Releases.
 
 Nightly uses a small `nightly` release pointer to an immutable per-build release.
-Stable uses GitHub's latest non-prerelease. Signed metadata binds each release to
+Stable uses its own small channel pointer. GitHub Latest is reserved for legacy migration. Signed metadata binds each release to
 its channel. Downloads resolve the pointer before fetching metadata and payload,
 so a concurrent publication cannot mix release assets.
 
@@ -197,8 +197,42 @@ records that VM validation was skipped rather than claiming a VM pass. Enable
 and configure the local repository and public key. Signatures and compatibility
 checks remain required. Select Stable or Nightly to return to official builds.
 
-The older `eng/publish-github.py` is a manual maintainer recovery path, outside the
-CI approval flow. Use it only after explicit publication authorization. Normal
-public updates use the gated workflow. Both paths publish source archives and
-signed app bundles, not private build state or signing keys. The gated CI workflow
-also attaches installer media; see [installer releases](../development/installer-releases.md).
+The older `eng/publish-github.py` can inspect legacy packages but cannot publish.
+Public releases use the approval-gated CI workflow, protecting the fixed migration
+entry points. Contributor builds can still be served locally without GitHub.
+
+## Compact releases and migration
+
+New official releases contain three files: `xur-installer-x86_64.iso`,
+`xur-update-x86_64.tar.gz`, and `xur-update.json`. The updater never downloads the
+ISO. A check fetches a small channel pointer and the JSON descriptor (normally a
+few KiB, bounded at 64 KiB). Installing fetches the app archive once, directly into
+staging. An already-installed bundle requires no archive download. Channel checks
+retain signature, channel, ABI and replay validation; activation and rollback
+retain their health checks.
+
+The JSON envelope has `schema: 2`, a `release` object and a base64 Ed25519
+`signature`. The signed bytes are the release object serialized with Python's
+`json.dumps(release, sort_keys=True, separators=(',', ':')).encode()` (ASCII-escaped
+JSON, UTF-8, no trailing newline). The signature covers the archive filename,
+hash/length, version, channel, sequence, compatibility fields and installer receipt.
+Metadata and downloads are pinned to an immutable release. No archive extraction
+happens before hash verification. `eng/verify-release.py` checks the same signature
+and can verify an ISO without downloading the app archive.
+
+One transition release per legacy channel includes the previous four app assets;
+the tar archive is reused, so there are six assets in a bridge and three thereafter.
+Old clients find that bridge via their unchanged discovery mechanism; after
+installing it they use `nightly/current` or `stable/current`. The old Nightly
+pointer and Stable GitHub Latest designation remain frozen on their bridges.
+`migration` on each channel alias records the permanent bridge tag. Do not delete
+bridges or change the GitHub Latest designation manually. A missing `current`
+(HTTP 404 only) permits legacy repository fallback; invalid signatures or other
+failed requests do not. Each channel gets its bridge through its own approved
+workflow; Nightly publication does not promote a build to Stable.
+
+Contributor repositories publish `current`, an immutable `<bundle-id>.update.json`,
+and `<bundle-id>.tar.gz`, using the contributor's configured public key. Legacy
+files remain available for older local clients. `eng/package-update.py` still
+prepares local test updates; public publication goes through GitHub's approval-gated
+release workflow.

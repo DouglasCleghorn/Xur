@@ -12,6 +12,7 @@
   const base = 'https://github.com/DouglasCleghorn/Xur/releases/';
   let autoStart = new URLSearchParams(location.search).get('start') === '1';
   let busy = false;
+  const fallback = {href: download.href, meta: meta.textContent, release: releaseLink.href};
   function releaseUrl(value, section) {
     try {
       const url = new URL(value);
@@ -21,8 +22,9 @@
   async function check() {
     if (busy) return;
     busy = true;
-    download.hidden = true; retry.hidden = true; parts.hidden = true;
-    meta.textContent = '';
+    retry.hidden = true; parts.hidden = true;
+    download.href = fallback.href; meta.textContent = fallback.meta; releaseLink.href = fallback.release;
+
     status.textContent = 'Checking GitHub for the latest published installer…';
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
@@ -40,28 +42,22 @@
         if (batch.length < 100) break;
       }
       const candidates = releases.filter(r => !r.draft && r.published_at && Array.isArray(r.assets) &&
-        r.assets.some(a => a.name === 'installer.json') &&
-        r.assets.some(a => a.name === 'xur-installer-x86_64.iso' || /^xur-installer-x86_64\.iso\.part\d+$/.test(a.name)))
+        r.assets.some(a => a.name === 'xur-installer-x86_64.iso'))
         .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at));
       const release = candidates[0];
       if (!release) {
-        status.textContent = 'No installer ISO has been published yet. App update archives cannot be used to make a bootable USB.';
+        status.textContent = 'No newer installer was found. The published installer below is still available.';
         retry.hidden = false;
         return;
       }
       const url = releaseUrl(release.html_url, 'tag');
       if (!url) throw new Error('Unexpected release URL');
+      const iso = release.assets.find(a => a.name === 'xur-installer-x86_64.iso');
+      const assetUrl = releaseUrl(iso.browser_download_url, 'download');
+      if (!assetUrl || assetUrl !== base + 'download/' + encodeURIComponent(release.tag_name) + '/xur-installer-x86_64.iso') throw new Error('Unexpected installer URL');
       releaseLink.href = url; releaseLink.textContent = 'Release notes and checksums';
       const label = release.prerelease ? 'Nightly / pre-release' : 'Stable release';
       meta.textContent = `${release.name || release.tag_name} · ${label} · Published ${new Date(release.published_at).toLocaleDateString()}`;
-      const iso = release.assets.find(a => a.name === 'xur-installer-x86_64.iso');
-      if (!iso) {
-        status.textContent = 'The latest installer is available in multiple parts. Open the release to download and assemble it.';
-        parts.hidden = false;
-        return;
-      }
-      const assetUrl = releaseUrl(iso.browser_download_url, 'download');
-      if (!assetUrl || !assetUrl.endsWith('/xur-installer-x86_64.iso')) throw new Error('Unexpected installer URL');
       download.href = assetUrl;
       download.hidden = false;
       if (Number.isFinite(iso.size) && iso.size > 0) meta.textContent += ` · ${(iso.size / 1024 ** 3).toFixed(2)} GiB`;
@@ -73,7 +69,7 @@
         download.click();
       }
     } catch {
-      status.textContent = 'Could not check GitHub for an installer. Try again or browse releases directly.';
+      status.textContent = 'Could not check GitHub for a newer installer. The published installer below is still available; try again to check for updates.';
       retry.hidden = false;
     } finally {
       clearTimeout(timeout); busy = false;

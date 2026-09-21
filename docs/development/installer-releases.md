@@ -13,19 +13,32 @@ A push to `main` (Nightly) or `release` (Stable) runs **Build and approve releas
 4. Wait for the maintainer's GitHub Environment approval (`nightly` or `stable`).
    Review both builds before approving. The publication job rejects superseded
    commits and verifies both candidates' hashes and commit/channel receipts.
-5. Sign the app descriptor and installer descriptor, publish them in the same
-   versioned GitHub release, then remove the Actions candidates. Update the
-   Nightly pointer or Stable latest-release designation only after asset upload.
+5. Sign a self-contained JSON descriptor containing the app archive manifest and
+   installer hash/inspection receipt. Publish it with the app archive and ISO, then advance the channel's
+   `current` pointer and remove the Actions candidates. No source tarball is
+   uploaded; GitHub provides source archives for each tag.
+
+Normal versioned releases have **three assets**: `xur-installer-x86_64.iso`,
+`xur-update-x86_64.tar.gz`, and `xur-update.json`. The first compact-format release on each channel also has
+the legacy descriptor, detached signature and pointer (reusing the app archive). Those transition releases must remain available. Legacy
+Nightly `nightly/latest` and GitHub's Stable **Latest** designation stay fixed on
+these bridges. New clients use `nightly/current` or `stable/current`, which point
+to immutable versioned releases. Consequently GitHub's **Latest** badge is a
+migration entry point, not the newest Stable version; use Xur's channel selector
+or the website download page. Do not manually move that designation or delete a
+migration release. The channel alias's `migration` asset records its fixed tag.
+
+There is one transition generation per channel because old clients reject signed
+metadata for the other channel. Each bridge is created by that channel's approved
+workflow; publishing Nightly does not silently promote it to Stable.
 
 This workflow does **not** assert that boot/install, GPU or physical USB tests
 passed. Its installer receipt explicitly records these as not run. Run the
 separate media suite before declaring installer hardware support verified.
 No self-hosted runner, signing key or GitHub write token is exposed to PR jobs.
-As of the September 20 documentation review, the app build passed but hosted ISO
-acceptance remained pending. Earlier runs stopped at builder initialization:
-cloud-init's fallback JSON query lacked root access. That readiness check is now
-fixed and regression-tested; do not interpret the fix alone as a completed ISO.
-Check the latest branch workflow and actual release assets for current results.
+The September 21 `nightly-2026.09.21.26.1` release completed the hosted build and
+published a single 1.78 GiB ISO. This proves the build and embedded inspection,
+not physical installation or GPU validation.
 
 ## Runner resources and cleanup
 
@@ -65,44 +78,31 @@ incomplete installer. See [runner limits](https://docs.github.com/en/actions/ref
 
 ## Download and verify
 
-Release assets include `installer.json`, its Ed25519 signature,
-`installer-SHA256SUMS`, an embedded-file inspection report and `INSTALL.md`.
-Verify the descriptor against the official public key obtained from a trusted
-checkout of `os/bootc/application-update-key.pem`:
+Download `xur-installer-x86_64.iso` from the release's prominent download link or
+[xur.app/download](https://xur.app/download/). The release notes include its SHA-256.
+On Windows use `Get-FileHash xur-installer-x86_64.iso -Algorithm SHA256`; on Linux
+use `sha256sum xur-installer-x86_64.iso`.
+
+For authenticated verification, download the matching `xur-update.json`
+from **the same release** and use a trusted source checkout/public key:
 
 ```bash
-openssl pkeyutl -verify -pubin -inkey application-update-key.pem -rawin \
-  -in installer.json -sigfile installer.json.sig
+python3 eng/verify-release.py xur-update.json --iso xur-installer-x86_64.iso
 ```
 
-For a small ISO, download `xur-installer-x86_64.iso`. GitHub requires each release
-asset to be [smaller than 2 GiB](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases),
-so ISOs below that limit are uploaded as one `.iso` file; larger ISOs are split
-into 1900 MiB parts. Download all `.partNNN` files from
-**the same versioned release**, then assemble in filename order:
+This verifies the Ed25519 signature and ISO size/hash without downloading the app
+archive. Add `--archive xur-update-x86_64.tar.gz` to verify that too. The signed
+JSON contains the installer build receipt and inspection report digest. Full
+embedded reports remain in the build's CI inspection output rather than adding
+more download assets. Checksums in release notes alone do not authenticate media.
 
-```bash
-cat xur-installer-x86_64.iso.part* > xur-installer-x86_64.iso
-sha256sum xur-installer-x86_64.iso
-```
-
-On Windows, in PowerShell:
-
-```powershell
-$parts = Get-ChildItem xur-installer-x86_64.iso.part* | Sort-Object Name
-$output = [IO.File]::Create("$PWD/xur-installer-x86_64.iso")
-try {
-  foreach ($part in $parts) {
-    $partStream = [IO.File]::OpenRead($part.FullName)
-    try { $partStream.CopyTo($output) } finally { $partStream.Dispose() }
-  }
-} finally { $output.Dispose() }
-Get-FileHash xur-installer-x86_64.iso -Algorithm SHA256
-```
-
-Compare the assembled SHA-256 to `iso.sha256` in the **verified** `installer.json`.
-The descriptor also records each part's name, length and hash. Checksums alone do
-not authenticate a download. Write the assembled ISO following [installation](../usage/install.md).
+Publication refuses an ISO of 2 GiB or larger so a size regression cannot silently
+reintroduce split downloads. Historical split releases still work: concatenate
+all `.partNNN` files in filename order, then verify their old `installer.json`
+with its `.sig` using `openssl pkeyutl -verify -pubin -inkey
+os/bootc/application-update-key.pem -rawin -in installer.json -sigfile
+installer.json.sig`. Compare the assembled hash to `iso.sha256` in that verified
+JSON. Never write an individual part to USB.
 
 Local builds still use `./eng/build-iso.sh`; `XUR_INSTALLER_CHANNEL=nightly` selects
 Nightly, otherwise they default to Stable. Use `xur.app-update=off` at installer

@@ -102,14 +102,14 @@ with tempfile.TemporaryDirectory() as t:
   if url==u.GITHUB+'/download/v1.2/'+identity+'.json.sig':path.write_bytes(signature.read_bytes());return
   raise AssertionError('Metadata escaped pinned release: '+url)
  original_fetch=u.fetch;u.fetch=fetch
- stage=root/'stage';stage.mkdir();assert u.check(stage)==entry
+ stage=root/'stage';stage.mkdir();assert u.check_legacy(stage)==entry
  assert (stage/'source').read_text()==u.GITHUB+'/download/v1.2'
  descriptor.write_text(descriptor.read_text()+' ')
- try:u.check(stage)
+ try:u.check_legacy(stage)
  except subprocess.CalledProcessError:pass
  else:raise AssertionError('Tampered signed metadata accepted')
  sign();(root/'highest-sequence.json').write_text('11')
- try:u.check(stage)
+ try:u.check_legacy(stage)
  except ValueError as e:assert 'older release' in str(e)
  else:raise AssertionError('Downgrade accepted')
  # Each signed channel has its own replay floor; selecting stable after a newer
@@ -122,17 +122,17 @@ with tempfile.TemporaryDirectory() as t:
   if url.startswith(u.GITHUB+'/download/nightly-1.3/'):
    path.write_bytes(signature.read_bytes() if url.endswith('.sig') else descriptor.read_bytes());return
   return fetch(url,path,limit)
- u.fetch=channel_fetch;assert u.check(stage)==entry
+ u.fetch=channel_fetch;assert u.check_legacy(stage)==entry
  assert (stage/'source').read_text()==u.GITHUB+'/download/nightly-1.3'
  (root/'channel-sequences.json').write_text(json.dumps({'nightly':20,'stable':5}))
  u.select_channel('stable');entry['channel']='stable';entry['sequence']=6;sign()
- assert u.check(stage)==entry # Older than nightly and legacy global floor.
+ assert u.check_legacy(stage)==entry # Older than nightly and legacy global floor.
  entry['sequence']=4;sign()
- try:u.check(stage)
+ try:u.check_legacy(stage)
  except ValueError as e:assert 'older release' in str(e)
  else:raise AssertionError('Same-channel replay accepted')
  entry['sequence']=21;entry['channel']='nightly';sign()
- try:u.check(stage)
+ try:u.check_legacy(stage)
  except ValueError as e:assert 'selected channel' in str(e)
  else:raise AssertionError('Wrong signed channel accepted')
  u.fetch=original_fetch
@@ -165,25 +165,25 @@ with tempfile.TemporaryDirectory() as t:
  def fetch_fixture(url,path,limit):
   if url.endswith('/latest'):path.write_text(identity);return u.GITHUB+'/download/v1' if url.startswith(u.PUBLIC) else None
   path.write_bytes(signature.read_bytes() if url.endswith('.sig') else descriptor.read_bytes())
- u.fetch=fetch_fixture;sign_with(contributor);assert u.check(stage)==entry
+ u.fetch=fetch_fixture;sign_with(contributor);assert u.check_legacy(stage)==entry
  scope=u.sequence_scope();u.remember_sequence(entry,scope)
  assert not (root/'highest-sequence.json').exists()
  entry['sequence']=0;sign_with(contributor)
- try:u.check(stage)
+ try:u.check_legacy(stage)
  except ValueError:pass
  else:raise AssertionError('Local replay accepted')
  u.select_channel('local','192.0.2.11:8088',custom_public);assert u.sequence_scope()!=scope
- assert u.check(stage)==entry
+ assert u.check_legacy(stage)==entry
  u.select_channel('stable');assert u.source()==u.PUBLIC and u.trust_key()==official_public
  assert u.read(u.CONFIG)['publicKey']==custom_public and not (root/'available.json').exists()
  entry['channel']='stable';entry['sequence']=2;sign_with(contributor)
- try:u.check(stage)
+ try:u.check_legacy(stage)
  except subprocess.CalledProcessError:pass
  else:raise AssertionError('Contributor key accepted for official release')
- sign_with(official);assert u.check(stage)==entry
+ sign_with(official);assert u.check_legacy(stage)==entry
  u.remember_sequence(entry,'stable');assert u.read(root/'channel-sequences.json')['stable']==2
  u.select_channel('local','192.0.2.10:8088',custom_public)
- try:u.check(stage)
+ try:u.check_legacy(stage)
  except subprocess.CalledProcessError:pass
  else:raise AssertionError('Local key selection ignored')
  u.fetch=original_fetch

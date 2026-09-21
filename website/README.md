@@ -109,14 +109,13 @@ a full accessibility audit. Guides describe steps in text as well as screenshots
 
 `/download/` fetches public metadata from `api.github.com` with no credentials and
 selects the newest published installer by publication date (including pre-releases,
-clearly labeled). It checks up to 300 recent releases, requires the installer
-descriptor asset, and only links to this repository's GitHub release assets.
+clearly labeled). It checks up to 300 recent releases, requires an actual ISO asset, and only links to this repository's GitHub release assets.
 `/download/?start=1` additionally requests one automatic ISO download after the page
 loads; normal navigation to `/download/` does not start one. Downloads go directly
 from GitHub, never through Cloudflare or browser-memory blobs. Empty releases,
 rate limits, missing media and multipart media have explicit fallback messages.
-Multipart media must be assembled according to the release instructions. No live
-installer is claimed to exist until a release actually contains it.
+Multipart media must be assembled according to the release instructions. A direct link to the verified September 21 installer remains usable without
+JavaScript or when the API is unavailable; successful lookups select newer media.
 
 Only the download page contacts GitHub's API. CSP permits that API origin for
 connections and retains strict local script/style rules. No tracking is added.

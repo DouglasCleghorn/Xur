@@ -114,6 +114,8 @@ examples are in `docs/usage/application-updates.md` in the source archive.
 
 ## Release download verification
 
-GitHub releases include a signed installer descriptor and checksums. ISOs larger
+Current releases contain one ISO, one app archive and one signed JSON descriptor, with the ISO
+checksum in the release notes and authenticated metadata inside the JSON.
+See [verification instructions](../development/installer-releases.md#download-and-verify). Historical ISOs larger
 than the per-file upload limit are split into numbered parts; assemble and verify
 them before writing a USB drive. See [download and verification instructions](../development/installer-releases.md#download-and-verify).

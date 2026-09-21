@@ -15,6 +15,8 @@ subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(trusted),'-r
 def sha(path):
  with path.open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
 assert sha(stage/entry['file'])==entry['sha256']
+verified=json.loads(subprocess.check_output(['python3',str(repo/'eng/verify-release.py'),str(stage/(identity+'.update.json')),'--key',str(trusted),'--archive',str(stage/entry['file'])],text=True))
+assert verified=={**entry,'schema':2},'Compact and legacy descriptors differ'
 evidence=repo/'.build/evidence/updates'/a.version
 if a.skip_vm_checks:
  evidence.mkdir(parents=True,exist_ok=True)
@@ -50,7 +52,8 @@ manifest={'schema':1,'version':a.version,'application':entry,'sourceSha256':sha(
 (out/'SHA256SUMS').write_text(''.join(sha(f)+'  '+f.name+'\n' for f in [source,out/'manifest.json']))
 # Publish the exact staged archive and signature, preserving validation provenance.
 public.mkdir(parents=True,exist_ok=True)
-for name in [entry['file'],identity+'.json',identity+'.json.sig','application-update-key.pem']:
+for name in [entry['file'],identity+'.json',identity+'.json.sig',identity+'.update.json','application-update-key.pem']:
  temporary=public/(name+'.tmp');shutil.copyfile(stage/name,temporary);temporary.replace(public/name)
 latest=public/'latest.tmp';latest.write_text(identity);latest.replace(public/'latest')
+current=public/'current.tmp';current.write_text(identity);current.replace(public/'current')
 print(json.dumps({'result':'Published','version':a.version,'bundle':identity,'source':str(source),'privateArtifactScan':'Passed'}))

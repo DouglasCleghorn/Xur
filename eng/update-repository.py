@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Publish signed Xur bundles or serve the public repository on all interfaces."""
-import argparse,fcntl,functools,hashlib,http.server,json,os,pathlib,socket,subprocess,tarfile,time
+import base64,argparse,fcntl,functools,hashlib,http.server,json,os,pathlib,socket,subprocess,tarfile,time
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 PUBLIC=ROOT/'.build/update-repository'
 KEY=pathlib.Path(os.environ.get('XUR_UPDATE_SIGNING_KEY',pathlib.Path.home()/'.local/share/xur-updates/signing-key.pem'))
@@ -22,7 +22,7 @@ def keys(local=True):
     # Export only the public half; never rewrite the official source/ISO trust anchor.
     (PUBLIC/'application-update-key.pem').write_bytes(public)
     return key,public
-def publish(version,channel="development"):
+def publish(version,channel="development",installer=None):
     if channel not in ("development","nightly","stable"):raise ValueError("Invalid release channel")
     context_lock=(ROOT/".build/context.lock").open("w");fcntl.flock(context_lock,fcntl.LOCK_SH)
     key,public=keys(local=channel=='development')
@@ -37,8 +37,22 @@ def publish(version,channel="development"):
     descriptor=PUBLIC/(meta['id']+'.json');descriptor.write_text(json.dumps(entry,sort_keys=True)+'\n')
     subprocess.run(['openssl','pkeyutl','-sign','-inkey',str(key),'-rawin','-in',str(descriptor),'-out',str(descriptor)+'.sig'],check=True)
     tmp=PUBLIC/'latest.tmp';tmp.write_text(meta['id']);tmp.replace(PUBLIC/'latest')
+    compact(PUBLIC,entry,key,installer)
+    tmp=PUBLIC/'current.tmp';tmp.write_text(meta['id']);tmp.replace(PUBLIC/'current')
     (PUBLIC/'application-update-key.pem').write_bytes(public)
     print(json.dumps(entry))
+def compact(public,entry,key,installer=None,archive_name=None):
+    metadata={**entry,'schema':2,'file':archive_name or entry['file']}
+    if installer is not None:metadata['installer']=installer
+    descriptor=public/'compact.json';descriptor.write_text(json.dumps(metadata,sort_keys=True,separators=(',',':')))
+    signature=public/'compact.sig'
+    subprocess.run(['openssl','pkeyutl','-sign','-inkey',str(key),'-rawin','-in',str(descriptor),'-out',str(signature)],check=True)
+    envelope=json.dumps({'schema':2,'release':metadata,'signature':base64.b64encode(signature.read_bytes()).decode()},sort_keys=True,indent=2)+'\n'
+    if len(envelope.encode())>65536:raise ValueError('Update metadata exceeds descriptor limit')
+    target=public/(entry['id']+'.update.json');temporary=target.with_suffix('.partial')
+    temporary.write_text(envelope);temporary.replace(target)
+    descriptor.unlink();signature.unlink()
+    return target
 class Handler(http.server.SimpleHTTPRequestHandler):
     def list_directory(self,path):self.send_error(404);return None
     def log_message(self,*args):pass

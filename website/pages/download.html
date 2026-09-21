@@ -3,9 +3,9 @@
 <p class="lead">Start with the online installer. Put it on a USB drive, boot your GPU host, and finish setup from a browser. Bazzite downloads during installation, so keep the host connected to the Internet.</p>
 <section class="download-panel" aria-labelledby="installer-heading" data-installer>
 <h2 id="installer-heading">Online installer ISO</h2>
-<p id="download-status" role="status" aria-live="polite" aria-atomic="true">Installer downloads are hosted on GitHub. Enable JavaScript to check release availability here.</p>
-<p id="download-meta" class="download-meta"></p>
-<div class="actions"><a id="download-iso" class="button" hidden>Download ISO</a><button id="download-retry" type="button" class="button secondary" hidden>Check again</button><a id="download-release" href="https://github.com/DouglasCleghorn/Xur/releases">Browse releases</a></div>
+<p id="download-status" role="status" aria-live="polite" aria-atomic="true">Download the published Nightly installer below. JavaScript checks for newer releases automatically.</p>
+<p id="download-meta" class="download-meta">nightly-2026.09.21.26.1 · Nightly / pre-release · 1.78 GiB</p>
+<div class="actions"><a id="download-iso" class="button" href="https://github.com/DouglasCleghorn/Xur/releases/download/nightly-2026.09.21.26.1/xur-installer-x86_64.iso">Download ISO</a><button id="download-retry" type="button" class="button secondary" hidden>Check again</button><a id="download-release" href="https://github.com/DouglasCleghorn/Xur/releases/tag/nightly-2026.09.21.26.1">Release notes and checksums</a></div>
 <p id="download-parts" hidden>This release has a split ISO. Download all numbered parts from its release page and <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/development/installer-releases.md#download-and-verify">assemble and verify them</a> before opening the ISO in Rufus. An individual part is not bootable.</p>
 <noscript><p>JavaScript is off. Open <a href="https://github.com/DouglasCleghorn/Xur/releases">GitHub Releases</a> and download <code>xur-installer-x86_64.iso</code> from the newest release that includes installer media.</p></noscript>
 </section>
@@ -20,6 +20,6 @@
 <li><strong>Boot the host from USB.</strong><p>Safely eject the USB drive, connect it to your x86-64 GPU host, and select its UEFI entry in the boot menu. Keep Internet access available; wired Ethernet is the simplest setup.</p></li>
 <li><strong>Finish in your browser.</strong><p>Open the HTTPS address shown on the host console, enter its setup code and create an account. Select the target disk (at least 64 GiB), install, then reboot. Follow the <a href="/guides/getting-started/">getting-started guide</a> for your first profile.</p></li>
 </ol>
-<details><summary>Verify the download or use another operating system</summary><p>Each installer release includes checksums and a signed descriptor. See the <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/development/installer-releases.md#download-and-verify">verification and split-ISO instructions</a>. Linux and macOS users can use a raw-image USB writer; see the <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/usage/rufus.md">USB media guide</a>. Read the release notes for known limitations and tested hardware.</p></details>
+<details><summary>Verify the download or use another operating system</summary><p>The release notes include the ISO checksum; the JSON descriptor includes its signature and authenticated installer metadata. Older releases have a separate signed descriptor. See the <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/development/installer-releases.md#download-and-verify">verification and split-ISO instructions</a>. Linux and macOS users can use a raw-image USB writer; see the <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/usage/rufus.md">USB media guide</a>. Read the release notes for known limitations and tested hardware.</p></details>
 </article>
 <script src="/assets/download.js" defer></script>

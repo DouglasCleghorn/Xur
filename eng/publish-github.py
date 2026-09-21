@@ -27,15 +27,4 @@ if __name__=='__main__':
     args=parser.parse_args();files=assets(args.version,args.iso)
     print(json.dumps({'tag':'v'+args.version,'assets':[str(p) for p in files],'publish':args.publish}))
     if args.publish:
-        def git(*args):return subprocess.check_output(['git',*args],cwd=ROOT,text=True).strip()
-        if git('status','--porcelain'):raise SystemExit('Commit and push the tested source before publishing')
-        head=git('rev-parse','HEAD')
-        remote=git('ls-remote','origin','refs/heads/main').split()
-        if not remote or remote[0]!=head:raise SystemExit('Push this commit to origin/main first')
-        details=json.loads(subprocess.check_output(['gh','repo','view',REPO,'--json','visibility'],text=True))
-        if details['visibility']!='PUBLIC':raise SystemExit('The public updater requires a public repository')
-        tag='v'+args.version
-        # A draft keeps /releases/latest unchanged until every asset is uploaded.
-        # Failure leaves the draft for inspection; no overwrite of existing releases.
-        subprocess.run(['gh','release','create',tag,'--repo',REPO,'--target',head,'--draft','--title','Xur '+args.version,'--notes','Signed Xur application update. See the included source archive and repository documentation.',*[str(p) for p in files]],check=True)
-        subprocess.run(['gh','release','edit',tag,'--repo',REPO,'--draft=false','--latest'],check=True)
+        raise SystemExit('Use the approved release workflow. Manual publication could break the frozen legacy migration pointers; local testing remains available through eng/update-repository.py serve.')
