@@ -1,0 +1,34 @@
+.profile-editor-page{max-width:1120px}
+.profile-editor-heading>div{width:100%;min-width:0}
+#profile-title-display,#profile-name-editor{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:40px}
+#profile-title{overflow-wrap:anywhere;min-width:0}
+#profile-name-input{font-size:24px;font-weight:550;width:min(100%,480px);line-height:1.25}
+#profile-form{gap:16px}
+#profile-form .workload-editor{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px 24px;padding:20px}
+#profile-form .workload-choice:not(.recipe-choice){grid-column:1/-1;align-items:end}
+#profile-form .catalog-picker{max-width:320px}
+#profile-form .remove-workload{margin-left:auto;align-self:end}
+#profile-form .station-identity-choice{grid-column:1;display:block}
+#profile-form .station-identity-choice small{display:block;margin-top:8px;font-size:13px;max-width:55ch}
+#profile-form .recipe-choice,#profile-form .model-options,#profile-form .gpu-choices{grid-column:1/-1;grid-row:auto}
+#profile-form .workload-editor:has(.recipe-choice[hidden]) .gpu-choices{grid-column:2;grid-row:auto}
+#profile-form .station-new-name{grid-column:1;grid-row:auto}
+#profile-form .station-new-name input{display:block;width:100%;margin-top:5px;min-height:39px;font-size:15px}
+#profile-form .station-user-choice{grid-column:2;grid-row:auto}
+#profile-form .station-devices{margin:0;padding-top:12px;border-top:1px solid var(--rule)}
+#profile-form .station-devices>summary{padding:4px 0}
+#profile-form .station-devices[open]>summary{margin-bottom:12px}
+#profile-form .station-devices .secondary-text{font-size:13px}
+#profile-form .nvlink-hint,#profile-form .container-library-link{grid-column:1/-1;margin:0}
+#profile-form #add-workload{justify-self:start}
+#profile-form .action-bar{margin:0;gap:10px}
+@media(max-width:800px){
+ #profile-form .workload-editor{grid-template-columns:minmax(0,1fr);padding:16px;gap:18px}
+ #profile-form .station-identity-choice,#profile-form .station-new-name,#profile-form .station-user-choice,#profile-form .workload-editor:has(.recipe-choice[hidden]) .gpu-choices{grid-column:1}
+ #profile-form .catalog-picker{max-width:none}
+}
+@media(max-width:700px){
+ #profile-name-input{width:100%;font-size:22px;min-height:44px}
+ #profile-form .station-new-name input{min-height:44px;font-size:16px}
+ #profile-form .station-devices>summary{min-height:44px;padding:10px 0}
+}

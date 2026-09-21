@@ -43,6 +43,15 @@ readability; key actions are also described in text.
 
 ## Change log
 
+- 2026-09-20: Profile editor captures in `.build/evidence/profile-editor/`
+  (`existing`, `new`, and `devices` at 1440, 900, 390 and 320 px) cover the
+  working-tree inline Rename control, conditional workstation name/user fields,
+  field order and device assignments. Generated from synthetic Razor fixtures;
+  reviewed for privacy, with no live accounts, credentials or host addresses.
+  The supplied profile-title and device-permission screenshots remain private
+  T3 attachments. Refresh the published `docs/assets/profile-editor.jpg` before
+  the next release; it predates these editor changes.
+
 - 2026-09-20: Added the five reviewed synthetic app screenshots above to the dark
   website and guides. Captured responsive site previews under `.build/website/`
   and recorded automated accessibility results there. No live application or

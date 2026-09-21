@@ -52,6 +52,13 @@ static class GpuInventoryTests
             Write(fbProc+"/cmdline","bootstrapToken=DO-NOT-COLLECT");
             var fbReport=await DisplayDiagnostics.Collect(fbSys,fbDev,fbProc,false);
             check(fbReport["inventory"]!.AsArray().Count==0 && fbReport["framebuffer"]!.AsArray().Count==1 && fbReport["summary"]!.GetValue<string>().Contains("framebuffer") && !fbReport.ToJsonString().Contains("DO-NOT-COLLECT"),"Diagnostics distinguish framebuffer-only Hyper-V and omit the kernel command line");
+            Write(dev+"/input/event7");Write(dev+"/snd/controlC0");Write(dev+"/hidraw2");Write(dev+"/uinput");Write(dev+"/uhid");Write(dev+"/private-key");
+            File.CreateSymbolicLink(dev+"/input/event8",dev+"/private-key");
+            string[] aclArgs=[];
+            var permissions=System.Text.Json.JsonSerializer.SerializeToNode(await DisplayDiagnostics.DevicePermissions(dev,(exe,args,timeout)=>
+            {check(exe=="getfacl"&&timeout==10,"Device diagnostics use a bounded read-only ACL probe");aclArgs=args;return Task.FromResult(new ProcessResult(0,"# file: "+dev+"/input/event7\nmask::---\n"));}))!;
+            check(new[]{"dri/card1","input/event7","snd/controlC0","hidraw2","uinput","uhid"}.All(n=>aclArgs.Contains(dev+"/"+n))&&!aclArgs.Any(a=>a.EndsWith("private-key")||a.EndsWith("event8")),"ACL diagnostics include graphics and peripherals but exclude other files and aliases");
+            check(permissions["acl"]!.GetValue<string>().Contains("mask::---")&&permissions["exitCode"]!.GetValue<int>()==0,"Diagnostics preserve ACL masks with their device paths");
         }
         finally{if(Directory.Exists(root))Directory.Delete(root,true);}
     }

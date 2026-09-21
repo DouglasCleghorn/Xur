@@ -47,3 +47,19 @@ are expandable. Desktop uses two columns; phones use one with the same controls.
 The time range is shared across charts. Blue means memory, amber means power,
 green means activity, and coral means temperature. Missing telemetry is text,
 never a fabricated zero line. No aggregate hero or decorative status tiles.
+
+The profile editor pass (2026-09-20) follows the current Anthropic
+`frontend-design` guidance while retaining these colors and IBM Plex Sans.
+Its title is the single place to name the profile: Rename replaces the title
+with an inline editor, with Enter/Done to accept and Escape/Cancel to discard.
+The name is persisted with Save profile. Each workload starts with its type
+and a quiet Remove action, then workstation/model selection and GPU assignment.
+Only a new workstation shows its name and user fields, below the GPU selection;
+USB and audio stay in a disclosure beneath them. Desktop fields align in two
+columns and become one column on narrow screens. Add workload belongs below
+the workload list; Save profile and Cancel share the final action bar.
+
+Review against the brief: an always-visible profile-name form duplicated the
+title, and placing user selection beside workload type made related fields
+harder to follow. Keep one title and follow the assignment order, without new
+decorative cards or a separate visual theme for this page.

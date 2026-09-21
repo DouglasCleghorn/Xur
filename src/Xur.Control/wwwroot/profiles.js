@@ -1,11 +1,29 @@
 (() => {
  const form=document.querySelector('#profile-form'),rows=document.querySelector('#workload-rows');
  if(!form||!rows)return;
+ const titleDisplay=document.querySelector('#profile-title-display'),nameEditor=document.querySelector('#profile-name-editor'),rename=document.querySelector('#rename-profile'),nameInput=document.querySelector('#profile-name-input');
+ function finishRename(apply){
+  if(!nameEditor||nameEditor.hidden)return true;
+  if(apply){
+   nameInput.value=nameInput.value.trim();nameInput.setCustomValidity(nameInput.value?'':'Enter a profile name.');
+   if(!nameInput.reportValidity())return false;
+   form.elements.name.value=nameInput.value;document.querySelector('#profile-title').textContent=nameInput.value;
+  }
+  nameInput.value=form.elements.name.value;nameInput.setCustomValidity('');nameEditor.hidden=true;titleDisplay.hidden=false;rename.focus();return true;
+ }
+ if(rename){
+  rename.hidden=false;
+  rename.addEventListener('click',()=>{nameInput.value=form.elements.name.value;titleDisplay.hidden=true;nameEditor.hidden=false;nameInput.focus();nameInput.select();});
+  nameInput.addEventListener('input',()=>nameInput.setCustomValidity(''));
+  nameInput.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key==='Escape'){event.preventDefault();finishRename(event.key==='Enter');}});
+  document.querySelector('#apply-profile-name').addEventListener('click',()=>finishRename(true));
+  document.querySelector('#cancel-profile-name').addEventListener('click',()=>finishRename(false));
+ }
  const template=rows.firstElementChild.cloneNode(true);
  let topology=null;
  (window.xurFetch ?? window.fetch)('/api/gpus').then(r=>r.ok?r.json():null).then(data=>{topology=data?.topology;for(const row of rows.children)hint(row);}).catch(()=>{});
  function hint(row){
-  let p=row.querySelector('.nvlink-hint');if(!p){p=document.createElement('p');p.className='nvlink-hint';row.append(p);}
+  let p=row.querySelector('.nvlink-hint');if(!p){p=document.createElement('p');p.className='nvlink-hint';row.querySelector('.gpu-empty').after(p);}
   const selected=[...row.querySelectorAll('.gpu-choices select')].map(s=>s.value).filter(Boolean);
   const pairs=(topology?.links??[]).filter(l=>l.connection==='NVLink');
   const pair=pairs.find(l=>selected.includes(l.from)&&selected.includes(l.to));
@@ -33,7 +51,7 @@
   list.setAttribute('role','listbox');list.hidden=true;input.setAttribute('aria-controls',list.id);
   box.append(input,list);select.after(box);
   let choices=[],active=-1,request=0,timer;
-  const restore=()=>{input.value=select.value ? select.selectedOptions[0]?.textContent??'' : '';};
+  const restore=()=>{input.value=select.value||select.name==='stationId' ? select.selectedOptions[0]?.textContent??'' : '';};
   const close=()=>{++request;clearTimeout(timer);list.hidden=true;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');restore();};
   const choose=option=>{select.value=option.value;close();select.dispatchEvent(new Event('change',{bubbles:true}));};
   function highlight(index){
@@ -183,6 +201,7 @@
   }
  });
  form.addEventListener('submit',event=>{
+  if(!finishRename(true)){event.preventDefault();return;}
   if([...rows.children].some(row=>row.dataset.resolving||row.querySelector('[name=recipe]').value.startsWith('hub:'))){event.preventDefault();const row=[...rows.children].find(row=>row.dataset.resolving||row.querySelector('[name=recipe]').value.startsWith('hub:'));error(row,'Choose a model format that can run on this machine before saving.');}
  });
  form.addEventListener('click',event=>{if(event.target.matches('.remove-workload')){event.target.closest('.workload-editor').remove();renumber();}});

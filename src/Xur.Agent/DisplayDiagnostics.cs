@@ -6,6 +6,26 @@ namespace Xur.Agent;
 
 public static class DisplayDiagnostics
 {
+    public static async Task<object> DevicePermissions(string devRoot="/dev",Func<string,string[],int,Task<ProcessResult>>? runner=null)
+    {
+        // Fixed device classes only: never recurse, follow aliases, or accept a
+        // caller-supplied file from the diagnostics endpoint.
+        try
+        {
+            var nodes=new List<string>();
+            foreach(var (directory,pattern) in new[]{("dri",@"^(card[0-9]+|renderD[0-9]+)$"),("input",@"^event[0-9]+$"),("snd",@"^(controlC[0-9]+|pcmC[0-9]+D[0-9]+[pc]|hwC[0-9]+D[0-9]+|midiC[0-9]+D[0-9]+|seq|timer)$"),("",@"^(hidraw[0-9]+|uinput|uhid)$")})
+            {
+                var path=Path.Combine(devRoot,directory);if(!Directory.Exists(path))continue;
+                nodes.AddRange(Directory.EnumerateFiles(path).Where(p=>Regex.IsMatch(Path.GetFileName(p),pattern)&&new FileInfo(p).LinkTarget==null));
+            }
+            var selected=nodes.Order().Take(256).ToArray();
+            if(selected.Length==0)return new{nodes=selected,truncated=false,exitCode=0,acl=""};
+            var args=new[]{"--absolute-names","--numeric","--"}.Concat(selected).ToArray();
+            var result=runner!=null?await runner("getfacl",args,10):await Processes.Run("getfacl",args,10);
+            return new{nodes=selected,truncated=nodes.Count>selected.Length||result.Output.Length>65536,exitCode=result.ExitCode,acl=result.Output.Length>65536?result.Output[..65536]+"\n[truncated]":result.Output};
+        }
+        catch(Exception e){return new{exitCode=-1,error=e.GetType().Name};}
+    }
     // Fixed read-only probes. No shell, caller-supplied paths, environment dump,
     // kernel command line, user files, network state or general journal export.
     public static async Task<JsonObject> Collect(string sysRoot="/sys",string devRoot="/dev",string procRoot="/proc",bool runCommands=true)
@@ -52,7 +72,8 @@ public static class DisplayDiagnostics
             schema=1,capturedAt=DateTimeOffset.UtcNow,agentBundle=ApplicationIdentity.Id,
             kernel=Read(procRoot+"/sys/kernel/osrelease"),osRelease=Read("/etc/os-release"),
             summary=inventory.Any(g=>g.workstationEligible)?"Display adapters are available for a workstation.":framebuffer.Length>0&&!drm.Any()?"A framebuffer is present, but no DRM device was found.":"No display adapter currently passes the workstation picker checks.",
-            pickerRequirements=new[]{"DRM card node exists"},inventory,drm,framebuffer,pci,vmbus,modules,commands,nvidiaDevices,errors
+            pickerRequirements=new[]{"DRM card node exists"},inventory,drm,framebuffer,pci,vmbus,modules,commands,nvidiaDevices,
+            devicePermissions=runCommands?await DevicePermissions(devRoot):null,errors
         },new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.AsObject();
     }
 }

@@ -19,6 +19,16 @@ allowlist for that GPU and virtual input creation. Per-user ACLs replace global
 `/dev/uinput` ownership changes. Desktop applications do not inherit access to
 `/dev/uinput` or `/dev/uhid` from the user slice.
 
+Device access grants tolerate a restrictive ACL mask left by session cleanup
+only when raising it to read/write leaves every other named user's and group's
+effective permissions unchanged. Receipts retain the original mask and user
+entry across retries. Teardown restores that mask when it is still safe, keeps
+concurrent grants intact, and tolerates entries already removed by logind.
+Conflicts name the actual device, mask and restricted entry; the display
+diagnostics report includes numeric ACLs for DRM, input, audio, hidraw, uinput
+and UHID nodes. These checks use real ACL tools on temporary test files; live
+profile switching still needs verification after installing the updated agent.
+
 `tools/Xur.Input/seat-input.c` tags Sunshine's uinput and UHID devices before
 creation. Udev matches the stable workstation seat tag, including before the
 first input event. The reconciler also adds those interfaces to the matching

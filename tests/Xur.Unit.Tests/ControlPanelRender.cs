@@ -48,12 +48,15 @@ static class ControlPanelRender
             await using var provider=services.BuildServiceProvider();await using var renderer=new HtmlRenderer(provider,provider.GetRequiredService<ILoggerFactory>());
             foreach(var page in new[]{"home","workstations","endpoints","monitoring","files","model-lab","api-keys","settings","network-settings","storage","profile-edit"})
             {
+                var priorSnapshot=observer.Snapshot;
+                if(page=="profile-edit")observer.Snapshot=observer.Snapshot with{Gpus=[gpu with{ShortId="GPU 1",Cards=["/dev/dri/card0"]}]};
                 RenderFragment body=b=>{b.OpenComponent(0,page=="workstations"?typeof(Xur.Control.Components.Pages.Workstations):page=="endpoints"?typeof(Xur.Control.Components.Pages.Endpoints):page=="profile-edit"?typeof(ProfileEditor):page=="network-settings"?typeof(Xur.Control.Components.Pages.NetworkSettingsPage):page=="settings"?typeof(Xur.Control.Components.Pages.Network):page=="storage"?typeof(Xur.Control.Components.Pages.StorageUsagePage):page=="api-keys"?typeof(Xur.Control.Components.Pages.ApiKeysPage):page=="model-lab"?typeof(Xur.Control.Components.Pages.ModelLab):page=="home"?typeof(Xur.Control.Components.Pages.Home):page=="files"?typeof(Xur.Control.Components.Pages.Files):typeof(Xur.Control.Components.Pages.Monitoring));b.CloseComponent();};
                 var html=await renderer.Dispatcher.InvokeAsync(async()=> (await renderer.RenderComponentAsync<Xur.Control.Components.Layout.MainLayout>(ParameterView.FromDictionary(new Dictionary<string,object?>{{"Body",body}}))).ToHtmlString());
                 // Static rendering has no HTTP request from which to generate antiforgery tokens.
                 // Supply a fixture token for browser tests; production renders AntiforgeryToken normally.
                 if(page=="profile-edit") html=html.Replace("<div id=\"workload-rows\"", "<input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"fixture-only\"><div id=\"workload-rows\"");
-                await File.WriteAllTextAsync(Path.Combine(output,page+".html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/workstations.css'><link rel=stylesheet href='/files.css'></head><body>"+html+"</body></html>");
+                await File.WriteAllTextAsync(Path.Combine(output,page+".html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/workstations.css'><link rel=stylesheet href='/files.css'><link rel=stylesheet href='/profile-editor.css'></head><body>"+html+"</body></html>");
+                observer.Snapshot=priorSnapshot;
             }
             // Exercise the actual workstation renderer with running, shared, stopped and unassigned desktops.
             var gaming=new Workload("w1","Gaming workstation",stationRecipe,[gpu.Pci],"desktop",new("doug",1000,false));
