@@ -32,9 +32,14 @@ with tempfile.TemporaryDirectory() as directory:
  app.READY.unlink();broken=root/'broken';broken.mkdir();(broken/'bundle.json').write_text('{"id":"broken"}');app.select(broken)
  app.verify();assert (app.ROOT/'current').resolve()==app.BUNDLED and app.READY.exists()
  # Verify the ISO manifest stays payload-free and retains SELinux labeling.
- manifest={'pipelines':[{'name':'os-tree','stages':[{'type':'org.osbuild.container-deploy'}]},{'name':'bootiso-tree','stages':[]}]}
+ manifest={'pipelines':[{'name':'os-tree','stages':[{'type':'org.osbuild.container-deploy'}]},{'name':'bootiso-tree','stages':[{'type':'org.osbuild.squashfs','inputs':{'tree':{'origin':'org.osbuild.pipeline','references':['name:os-tree']}},'options':{'filename':'LiveOS/squashfs.img','exclude_paths':['boot/efi/.*'],'compression':{'method':'zstd'}}},{'type':'org.osbuild.xorrisofs','options':{'volid':'fixture'}}]}]}
  before=root/'before';after=root/'after';before.write_text(json.dumps(manifest))
  subprocess.run(['python3',str(repo/'eng/label-live-manifest.py'),str(before),str(after)],check=True)
  result=json.loads(after.read_text());assert result['pipelines'][0]['stages'][-1]['type']=='org.osbuild.selinux'
- assert result['pipelines'][1]['stages']==[]
+ expected=json.loads(json.dumps(manifest['pipelines'][1]))
+ expected['stages'][0]['options']['exclude_paths'].append('usr/lib/modules/.*/initramfs[.]img')
+ assert result['pipelines'][1]==expected, 'Removing the duplicate initramfs must not change source, compression or boot layout'
+ manifest['pipelines'][1]['stages']=[];before.write_text(json.dumps(manifest))
+ invalid=subprocess.run(['python3',str(repo/'eng/label-live-manifest.py'),str(before),str(after)],capture_output=True,text=True)
+ assert invalid.returncode!=0 and 'Expected exactly one' in invalid.stderr
 print(json.dumps({'suite':'OnlineInstaller','result':'Passed','digestPinned':True,'sameUpdateChannel':True,'networkFallback':True,'unhealthyAppFallback':True,'noEmbeddedPayload':True,'liveBootTested':False}))

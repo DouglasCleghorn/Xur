@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add host SELinux labeling to the pinned builder's live OS tree before squashfs.
+"""Label the live OS tree and omit its redundant boot initramfs copy.
 
 The stock generic ISO pipeline labels its build root but does not label the
 live os-tree. Container labels prevent PID 1 transitioning to init_t on boot.
@@ -24,4 +24,11 @@ trees[0]['stages'].append({'type':'org.osbuild.selinux','options':{
         '/usr/lib/xur/agent/console/client':'system_u:object_r:bin_t:s0',
         '/usr/libexec/xur-run-install':'system_u:object_r:install_exec_t:s0'
     }}})
+# The bootiso-tree copy stage already puts this exact initramfs at
+# images/pxeboot/initrd.img. It is needed there for BIOS/UEFI boot, not again
+# inside the live root. Keep upstream compression, firmware and drivers.
+squashfs=[s for p in manifest['pipelines'] for s in p['stages']
+          if s['type']=='org.osbuild.squashfs' and s['options']['filename']=='LiveOS/squashfs.img']
+assert len(squashfs)==1, 'Expected exactly one live filesystem compression stage'
+squashfs[0]['options'].setdefault('exclude_paths',[]).append('usr/lib/modules/.*/initramfs[.]img')
 with open(sys.argv[2],'w') as out:json.dump(manifest,out,indent=2);out.write('\n')

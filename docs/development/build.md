@@ -90,10 +90,17 @@ reproducible.
 7. Extract the assemblies and Kickstart template from the final ISO and verify
    them against the context receipt before creating release checksums.
 
+The ISO keeps its boot initramfs at `images/pxeboot/initrd.img` and excludes the
+redundant `usr/lib/modules/<kernel>/initramfs.img` copy from the live SquashFS.
+The upstream pipeline copies the boot file before compressing the live root.
+This reduces download size while retaining Zstandard compression, installer
+features, drivers, firmware and the BIOS/UEFI layout. Media inspection checks
+that the boot initramfs remains valid and its duplicate is absent.
+
 The generic ISO pipeline needs explicit live-tree SELinux labeling; container
 labels prevented PID 1 from starting under enforcement in an earlier candidate.
-The manifest transformation changes labels, not boot geometry or payload
-references. The image also provides `/usr/sbin/ldconfig` as a compatibility link
+The manifest transformation changes labels and the duplicate-file exclusion,
+not boot geometry or payload references. The image also provides `/usr/sbin/ldconfig` as a compatibility link
 because Python's ctypes lookup uses `/sbin/ldconfig`; pyudev startup is checked
 inside the live image build.
 

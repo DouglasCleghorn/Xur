@@ -12,6 +12,7 @@ xorriso -osirrox on -indev "$iso" -extract /LiveOS/squashfs.img "$out/squashfs.i
     -extract /EFI/BOOT/grubx64.efi "$out/removable-grub.efi" \
     -report_el_torito plain > "$out/boot-layout.txt" 2>&1
 lsinitrd "$out/initrd.img" > "$out/initrd-files.txt"
+unsquashfs -l "$out/squashfs.img" > "$out/live-files.txt"
 mkdir "$out/media"
 mount -o loop,ro "$iso" "$out/media"
 trap 'umount "$out/media"' EXIT
@@ -23,7 +24,7 @@ unsquashfs -d "$out/root" "$out/squashfs.img" \
     usr/bin/xur-control usr/bin/xur-agent usr/bin/xur-gateway usr/bin/tailscale usr/sbin/tailscaled usr/lib/systemd/system/xur-control.service usr/lib/systemd/system/xur-gateway.service \
     usr/lib/systemd/system.conf.d/50-xur-console.conf usr/lib/systemd/journald.conf.d/50-xur-console.conf > "$out/extract.txt"
 python3 - "$out" /home/builder/xur-build "$iso" <<'PY'
-import hashlib,json,pathlib,sys
+import hashlib,json,pathlib,re,sys
 out,context,iso=map(pathlib.Path,sys.argv[1:]);root=out/'root'
 def sha(p):
  with p.open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
@@ -48,12 +49,13 @@ for p in [out/'uefi-grub.cfg',out/'bios-grub.cfg']:
 layout=(out/'boot-layout.txt').read_text();assert 'UEFI' in layout and 'BIOS' in layout
 initrd=(out/'initrd-files.txt').read_text()
 assert 'vfat.ko' in initrd, 'FAT32 initramfs driver is missing'
+assert not any(re.fullmatch(r'squashfs-root/usr/lib/modules/[^/]+/initramfs[.]img',line) for line in (out/'live-files.txt').read_text().splitlines()), 'Redundant boot initramfs is embedded in the live filesystem'
 assert sha(out/'removable-grub.efi')==sha(out/'supplied-grub.efi'), 'Supplied EFI bootloader was replaced'
 files=[p for p in (out/'media').rglob('*') if p.is_file()]
 largest=max(files,key=lambda p:p.stat().st_size)
 assert largest.stat().st_size <= 2**32-1, 'ISO contains a file too large for FAT32: '+str(largest)
 assert 'registry:ghcr.io/ublue-os/bazzite-nvidia-open:stable' in ks
 assert not (out/'media/xur/payload').exists(), 'Online ISO embeds an OS payload'
-(out/'embedded-verification.json').write_text(json.dumps({'verifiedFiles':checks,'safeKickstartTemplate':True,'uefiAndBiosLayout':True,'enforcementNotDisabled':True,'fat32Compatible':True,'largestFile':str(largest.relative_to(out/'media')),'largestFileBytes':largest.stat().st_size,'isoFilesChecked':len(files),'suppliedEfiLoaderSha256':sha(out/'removable-grub.efi'),'onlineInstaller':True,'osChannel':'ghcr.io/ublue-os/bazzite-nvidia-open:stable'},indent=2)+'\n')
+(out/'embedded-verification.json').write_text(json.dumps({'verifiedFiles':checks,'safeKickstartTemplate':True,'uefiAndBiosLayout':True,'enforcementNotDisabled':True,'fat32Compatible':True,'largestFile':str(largest.relative_to(out/'media')),'largestFileBytes':largest.stat().st_size,'isoFilesChecked':len(files),'suppliedEfiLoaderSha256':sha(out/'removable-grub.efi'),'onlineInstaller':True,'deduplicatedBootInitrd':True,'osChannel':'ghcr.io/ublue-os/bazzite-nvidia-open:stable'},indent=2)+'\n')
 print(json.dumps({'embeddedFilesVerified':len(checks),'safeKickstartTemplate':True,'uefiAndBiosLayout':True}))
 PY

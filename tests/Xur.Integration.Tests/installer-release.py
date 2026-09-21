@@ -9,10 +9,14 @@ with tempfile.TemporaryDirectory() as t:
  report=dist/'xur-installer-x86_64.embedded.json';report.write_text(json.dumps({**{k:True for k in m.REQUIRED},'verifiedFiles':{str(n):'hash' for n in range(101)}}))
  commit='a'*40;m.candidate(commit,'nightly');receipt=dist/'installer-build.json';original=receipt.read_bytes()
  key=root/'key';pub=root/'pub';subprocess.run(['openssl','genpkey','-algorithm','ED25519','-out',str(key)],check=True,capture_output=True);pub.write_bytes(subprocess.check_output(['openssl','pkey','-in',str(key),'-pubout']))
- for limit in [2000,512]:
-  m.PART_SIZE=limit;out=root/str(limit);files=m.assets(dist,out,commit,'nightly',key)
+ for limit in [2000,iso.stat().st_size+1,iso.stat().st_size,512]:
+  m.SINGLE_ASSET_LIMIT=limit;m.PART_SIZE=256;out=root/str(limit);files=m.assets(dist,out,commit,'nightly',key)
   meta=json.loads((out/'installer.json').read_text());assembled=b''.join((out/p['file']).read_bytes() for p in meta['parts'])
-  assert assembled==iso.read_bytes() and all(p['bytes']<=limit for p in meta['parts'])
+  assert assembled==iso.read_bytes() and all(p['bytes']<limit for p in meta['parts'])
+  if iso.stat().st_size<limit:
+   assert [p['file'] for p in meta['parts']]==[m.ISO], 'A valid single asset was unnecessarily split'
+  else:
+   assert len(meta['parts'])>1 and all(p['bytes']<=m.PART_SIZE for p in meta['parts'])
   assert all(hashlib.sha256((out/p['file']).read_bytes()).hexdigest()==p['sha256'] for p in meta['parts'])
   assert meta['installationTest']=='Not run'
   subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(pub),'-rawin','-in',str(out/'installer.json'),'-sigfile',str(out/'installer.json.sig')],check=True,capture_output=True)

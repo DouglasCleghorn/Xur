@@ -77,7 +77,8 @@ openssl pkeyutl -verify -pubin -inkey application-update-key.pem -rawin \
 
 For a small ISO, download `xur-installer-x86_64.iso`. GitHub requires each release
 asset to be [smaller than 2 GiB](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases),
-so larger ISOs are split into 1900 MiB parts. Download all `.partNNN` files from
+so ISOs below that limit are uploaded as one `.iso` file; larger ISOs are split
+into 1900 MiB parts. Download all `.partNNN` files from
 **the same versioned release**, then assemble in filename order:
 
 ```bash

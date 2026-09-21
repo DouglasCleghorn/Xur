@@ -7,6 +7,7 @@ per-asset limit; the signed descriptor records every part and the assembled hash
 import argparse,hashlib,json,pathlib,re,shutil,subprocess
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 ISO='xur-installer-x86_64.iso'
+SINGLE_ASSET_LIMIT=2*1024**3 # GitHub requires each asset to be strictly smaller.
 PART_SIZE=1900*1024**2
 REQUIRED=('safeKickstartTemplate','uefiAndBiosLayout','enforcementNotDisabled','fat32Compatible','onlineInstaller')
 def sha(path):
@@ -27,7 +28,7 @@ def assets(artifact,output,commit,channel,key):
  if receipt.get('schema')!=1 or receipt.get('commit')!=commit or receipt.get('channel')!=channel:raise ValueError('Installer candidate identity mismatch')
  if receipt['iso']!={'file':ISO,'bytes':iso.stat().st_size,'sha256':sha(iso)} or receipt['inspectionSha256']!=sha(inspection):raise ValueError('Installer candidate hash mismatch')
  inspected(inspection);output.mkdir(parents=True,exist_ok=True);parts=[];files=[]
- if iso.stat().st_size<=PART_SIZE:
+ if iso.stat().st_size<SINGLE_ASSET_LIMIT:
   target=output/ISO;shutil.copyfile(iso,target);files.append(target)
  else:
   with iso.open('rb') as source:
