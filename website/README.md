@@ -5,7 +5,8 @@ profile-diagram and release-download scripts; Python's standard library assemble
 copies the existing brand assets. No npm install, external fonts, tracking,
 server-side Functions or Worker code, database, or paid storage service. Xur’s
 original site code and content use the root MIT license; the font retains its OFL
-notice. The build publishes `/license.txt` and links it from the footer.
+notice. The footer links to the repository’s [MIT license](https://github.com/DouglasCleghorn/Xur/blob/main/LICENSE).
+The build also includes `/license.txt` in the static output.
 
 ## Local preview
 
