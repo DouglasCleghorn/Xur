@@ -182,12 +182,8 @@ async Task StartHost()
         return Results.Redirect(response.IsSuccessStatusCode?"/settings?hfSaved=true":"/settings?error=Invalid%20Hugging%20Face%20token.");
     });
     app.MapStationFiles(appliance);
-    app.MapGet("/settings/backup",async Task<IResult>()=>{
-        using var r=await appliance.Agent.GetAsync("/configuration/export");
-        if(!r.IsSuccessStatusCode)return Results.Conflict(new{error="Could not export system settings. No incomplete backup was downloaded."});
-        var host=await r.Content.ReadFromJsonAsync<JsonElement>();
-        return Results.File(ConfigBackup.Create(await profileManager.ExportProfiles(),host,await profileManager.Stations()),"application/json","xur-config-"+DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss")+".json");
-    });
+    app.MapGet("/settings/backup",(HttpContext context)=>BackupEndpoints.Download(context,appliance.Installer,appliance.Port,
+        ()=>new RecoveryBackup().Create(Path.Combine(appliance.RunDirectory,"backups"),profileManager.BackupConfiguration,context.RequestAborted)));
     app.MapGet("/api/storage/mounts",async()=>{var r=await appliance.Agent.GetAsync("/storage/mounts");return Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);});
     app.MapGet("/api/storage/explore",async(string id,string? path,bool? refresh)=>{var r=await appliance.Agent.GetAsync("/storage/explore?id="+Uri.EscapeDataString(id)+"&path="+Uri.EscapeDataString(path??"")+"&refresh="+(refresh==true?"true":"false"));return Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);});
     app.MapGet("/api/storage/trim",async()=>{var r=await appliance.Agent.GetAsync("/storage/trim");return Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);});

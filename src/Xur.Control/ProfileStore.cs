@@ -109,6 +109,14 @@ public sealed class ProfileStore : IDisposable
         using var tx=db.BeginTransaction();transaction=tx;
         try {Remove("active","current");Put("journal","current",journal);Put("epoch","current",Guid.NewGuid().ToString("N"));tx.Commit();}finally{transaction=null;}
     }
+    // SQLite's online backup includes committed WAL content without copying live journal files.
+    public void Backup(string destination)
+    {
+        using var copy=new SqliteConnection(new SqliteConnectionStringBuilder { DataSource=destination,Pooling=false }.ToString());
+        copy.Open();db.BackupDatabase(copy);
+        using var check=copy.CreateCommand();check.CommandText="PRAGMA integrity_check";
+        if(check.ExecuteScalar() as string!="ok")throw new IOException("The database backup did not pass its integrity check.");
+    }
     public void Dispose()=>db.Dispose();
 }
 public record Journal(ProfilePlan Plan,RuntimeObservation Source,int Completed,string Stage,string? Error,DateTimeOffset Updated,

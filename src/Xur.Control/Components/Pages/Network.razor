@@ -16,7 +16,7 @@
 </form>
 @if(hfConfigured) { <form method="post" action="/settings/huggingface"><AntiforgeryToken /><input type="hidden" name="remove" value="true" /><button class="secondary">Remove token</button></form> }
 @if(HfSaved) { <p role="status">Hugging Face token setting saved.</p> }
-<p class="secondary-text">Used for model discovery and downloads, including gated models you have permission to access. Reload running model workloads to apply a changed token. The token is never displayed or included in config backups.</p>
+<p class="secondary-text">Used for model discovery and downloads, including gated models you have permission to access. Reload running model workloads to apply a changed token. The token is never displayed. Recovery backups include it.</p>
 </section>
 <section class="panel"><h2>Timezone</h2>
 @if(timezone!=null) {
@@ -47,7 +47,7 @@
     @if(NtpSaved) { <p role="status">NTP settings saved. Synchronization may take a few minutes.</p> }
 } else { <p role="alert">Could not read NTP settings. <a href="/settings">Refresh</a></p> }
 </section>
-<section class="panel"><h2>Configuration backup</h2><p>Download profiles, workload definitions, device assignments and system preferences. Keep this file private: workload definitions may contain environment secrets. Passwords, API keys, Tailscale identity, model data and user files are excluded.</p><a class="button secondary" href="/settings/backup" download>Download config backup</a><p class="secondary-text">Configuration export for recovery and reference; automatic restore is not available yet.</p></section>
+<section class="panel"><h2>Configuration backup</h2><p>Download a recovery ZIP with the database, settings, accounts, API credentials, network configuration and streaming identities. Includes timestamps, file checksums, permissions and a restore guide.</p><p><strong>Contains passwords and private keys. Store securely.</strong> The ZIP is not encrypted. Download requires HTTPS.</p><a class="button secondary" href="/settings/backup">Download config backup</a><p class="secondary-text">Models, games, home directories and container images/volumes need separate backups. Automatic restore is not available yet.</p></section>
 <section class="panel"><h2>IP addresses</h2>
 <p><a class="button secondary" href="/settings/network">Manage automatic and static IPs</a></p>
 @foreach (var adapter in Device.Network())

@@ -52,6 +52,20 @@ readability; key actions are also described in text.
   T3 attachments. Refresh the published `docs/assets/profile-editor.jpg` before
   the next release; it predates these editor changes.
 
+- 2026-09-20: Refreshed private Settings captures in
+  `.build/fast/control-panel/settings-{1440,390}.png` for the recovery ZIP scope,
+  credential warning and HTTPS requirement. Working-tree recovery-backup feature;
+  fixture UI only, no backup payloads or secrets displayed. Review the backup
+  text again if included identities or restore support changes.
+
+- 2026-09-20: Refreshed workstation overview/expanded captures and added
+  `display-dialog-{1440,390,320}.png` in `.build/evidence/workstation-design/`.
+  Working-tree revision adds the JSON display dialog and adjacent client refresh
+  control and removes profile loading and launch shortcuts. Synthetic JSON and
+  account fixtures only; private regression evidence, not publication assets.
+  Published `docs/assets/workstations.jpg` should be refreshed before the next
+  release because its controls predate these changes.
+
 - 2026-09-20: Added the five reviewed synthetic app screenshots above to the dark
   website and guides. Captured responsive site previews under `.build/website/`
   and recorded automated accessibility results there. No live application or

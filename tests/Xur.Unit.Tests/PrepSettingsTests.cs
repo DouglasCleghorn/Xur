@@ -1,4 +1,5 @@
 using System.Net;
+using System.IO.Compression;
 using System.Text.Json;
 using Xur.Agent;
 using Xur.Control;
@@ -26,8 +27,16 @@ static class PrepSettingsTests
             File.WriteAllText(root+"/gpu-power.json","{\"GPU-test\":250}");File.WriteAllText(root+"/api-keys.json","{\"secret\":\"DO-NOT-EXPORT\"}");File.WriteAllText(root+"/account.json","{\"secret\":\"DO-NOT-EXPORT\"}");
             var exported=ConfigExport.Read(root,root+"/absent");
             check(exported.Count==1&&exported.ContainsKey("gpu-power.json"),"Configuration export allowlist excludes account and API credentials");
-            using var host=JsonDocument.Parse(JsonSerializer.Serialize(exported));var backup=ConfigBackup.Create([],host.RootElement);
-            check(!System.Text.Encoding.UTF8.GetString(backup).Contains("DO-NOT-EXPORT"),"Downloaded config contains selected configuration, not arbitrary state files");
+            using var host=JsonDocument.Parse(JsonSerializer.Serialize(exported));
+            var station=new StationDefinition("desk-1","Desktop",new StationUser("person",1000));
+            var profile=new Profile("profile-1","My profile",1,[]);
+            var backup=ConfigBackup.Create([profile],host.RootElement,[station]);
+            using var archive=new ZipArchive(new MemoryStream(backup),ZipArchiveMode.Read);
+            check(archive.Entries.Count==1&&archive.Entries[0].FullName=="xur-config.json","Configuration backup is a ZIP containing readable JSON");
+            var entry=archive.Entries[0];using var reader=new StreamReader(entry.Open());var json=await reader.ReadToEndAsync();using var restored=JsonDocument.Parse(json);
+            check(entry.CompressedLength<entry.Length,"Configuration JSON is compressed in the download");
+            check(restored.RootElement.GetProperty("profiles")[0].GetProperty("name").GetString()==profile.Name&&restored.RootElement.GetProperty("workstations")[0].GetProperty("id").GetString()==station.Id&&restored.RootElement.GetProperty("host").GetProperty("gpu-power.json").GetProperty("GPU-test").GetInt32()==250,"ZIP round trip preserves profiles, workstation identities and settings outside the database");
+            check(!json.Contains("DO-NOT-EXPORT"),"Decompressed backup excludes account and API credentials");
             var link=ConsoleQr.LoginUrl("https://xur.example.ts.net/",false,"ABC-DEF");
             check(link=="https://xur.example.ts.net/login#code=ABC-DEF"&&new Uri(link).Query=="","Initial console QR keeps the access code out of HTTP requests");
             check(ConsoleQr.LoginUrl("https://xur.example.ts.net/",true,"ABC-DEF")=="https://xur.example.ts.net/login","Configured account QR contains only login URL");

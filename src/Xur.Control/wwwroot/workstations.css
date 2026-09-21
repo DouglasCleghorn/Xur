@@ -24,10 +24,8 @@
 .station-identity { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; }
 .station-identity h2 { margin: 0; font-size: 21px; overflow-wrap: anywhere; }
 .station-identity .state-label { flex-shrink: 0; }
-.station-actions, .station-load { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.station-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .station-actions { margin-left: auto; }
-.station-load label { max-width: 240px; }
-.workstations-page .station-load select { margin: 0; }
 .station-overview { display: grid; grid-template-columns: minmax(100px,.7fr) minmax(180px,1.5fr) minmax(140px,1fr) minmax(120px,1fr); gap: 16px 24px; margin: 22px 0; }
 .station-overview > div { min-width: 0; }
 .station-overview dt { font-size: 13px; margin-bottom: 5px; }
@@ -52,7 +50,6 @@
 .station-delete p { margin: 0; max-width: 65ch; }
 .station-unassigned { margin: 18px 0; }
 .workstations-page .station-pair { max-width: 560px; }
-.workstations-page .station-connect > details { margin: 4px 0 20px; }
 .station-help { margin-top: 24px; font-size: 14px; }
 .station-help p { max-width: 80ch; }
 @media (max-width: 1050px) {
@@ -65,8 +62,6 @@
     .station-identity { gap: 8px 12px; }
     .station-identity h2 { font-size: 19px; }
     .station-actions { margin-left: 0; width: 100%; }
-    .station-actions .station-load { flex: 1 1 100%; }
-    .station-load label { flex: 1; max-width: none; min-width: 0; }
     .station-overview { margin: 20px 0; gap: 16px; }
     .station-create-body { padding: 18px 16px; }
     .station-create-form { align-items: stretch; flex-direction: column; }
@@ -76,4 +71,19 @@
     .station-settings-body .station-facts { grid-template-columns: 1fr; gap: 4px; }
     .station-settings-body .station-facts dd { margin-bottom: 8px; }
     .station-delete { gap: 10px; }
+}
+
+.station-client-picker { display: flex; align-items: end; gap: 10px; }
+.station-client-picker label { flex: 1; min-width: 0; }
+.station-client-picker button { flex-shrink: 0; }
+#station-display-dialog { width: min(800px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+#station-display-dialog .section-heading { align-items: center; flex-wrap: nowrap; }
+#station-display-json { max-height: 55dvh; overflow: auto; margin: 16px 0; }
+#station-display-status:empty { display: none; }
+#station-display-name { overflow-wrap: anywhere; }
+#station-display-dialog .actions { justify-content: flex-end; }
+@media (max-width: 700px) {
+    #station-display-dialog { padding: 18px; }
+    .station-client-picker { gap: 8px; }
+    .station-client-picker button { padding-inline: 8px; font-size: 14px; }
 }

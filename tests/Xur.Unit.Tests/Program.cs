@@ -49,6 +49,7 @@ await StationNetworkPolicyTests.Run(Check);
 await TimezoneTests.Run(Check);
 await NtpTests.Run(Check);
 await PrepSettingsTests.Run(Check);
+await RecoveryBackupTests.Run(Check);
 StationDeviceTests.Run(Check);
 ContainerTests.Run(Check);
 BootMediaTests.Run(Check);

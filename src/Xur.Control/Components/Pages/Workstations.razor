@@ -40,14 +40,6 @@ else
                 <div class="station-actions">
                     @if(station!=null && w!=null)
                     {
-                        @if(!running && station.Profiles.Length>0)
-                        {
-                            <form method="post" action="/profiles/load" class="station-load"><AntiforgeryToken />
-                                @if(station.Profiles.Length>1) { <label><span class="sr-only">Profile for @entry.Name</span><select name="id">@foreach(var profile in station.Profiles) { <option value="@profile.Id">@profile.Name</option> }</select></label> }
-                                else { <input type="hidden" name="id" value="@station.Profiles[0].Id" /> }
-                                <button class="secondary" disabled="@busy">Load profile</button>
-                            </form>
-                        }
                         @if(running && station.Stream?.State!="Ready") { <form method="post" action="/workstations/stream"><AntiforgeryToken /><input type="hidden" name="id" value="@w.Id" /><button disabled="@busy">Start streaming</button></form> }
                         <a class="button quiet" href="@("/files?user="+Uri.EscapeDataString(w.User is {Temporary:false}?w.User.Username:(w.User?.Temporary==true?"xurtmp":"xurws")+Canonical.Hash(w.Id)[..12]))">Browse files</a>
                     }
@@ -74,10 +66,9 @@ else
                 <p>Streaming encryption is required on every connection. For access outside your LAN, connect both devices through <a href="/tailscale">Tailscale</a> and use Xur's tailnet address.</p>
                 @if(secure)
                 {
-                    <form class="station-pair" data-station="@w.Id"><AntiforgeryToken /><label>Client<select name="pairingId" required><option value="">Refresh to find a pairing request</option></select></label><div class="pair-fields"><label>PIN<input name="pin" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" required /></label><label>Client name<input name="name" maxlength="80" value="Moonlight" required /></label></div><div class="actions"><button type="button" class="secondary refresh-pairings">Refresh clients</button><button disabled="@(station.Stream?.State!="Ready")">Pair client</button></div><p role="status"></p></form>
+                    <form class="station-pair" data-station="@w.Id"><AntiforgeryToken /><div class="station-client-picker"><label>Client<select name="pairingId" required><option value="">Refresh to find a pairing request</option></select></label><button type="button" class="secondary refresh-pairings">Refresh clients</button></div><div class="pair-fields"><label>PIN<input name="pin" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" required /></label><label>Client name<input name="name" maxlength="80" value="Moonlight" required /></label></div><div class="actions"><button disabled="@(station.Stream?.State!="Ready")">Pair client</button></div><p role="status"></p></form>
                 }
                 else { <p><a href="@https">Open the encrypted manager</a> to pair a client. On your LAN, the browser will ask you to trust this machine's certificate. Tailscale HTTPS also works.</p> }
-                <details><summary>Launch shortcuts</summary><p>After pairing, download a shortcut for your client. Moonlight must already be installed.</p><div class="actions"><a class="button secondary" href="/api/workstations/@w.Id/launcher?platform=windows">Windows shortcut</a><a class="button secondary" href="/api/workstations/@w.Id/launcher?platform=linux">Linux shortcut</a><a class="button secondary" href="/api/workstations/@w.Id/launcher?platform=macos">macOS shortcut</a></div></details>
             </details>
 
                 }
@@ -105,7 +96,7 @@ else
                             <label>Refresh rate (Hz)<input name="fps" type="number" min="10" max="240" value="60" required /></label>
                             <button class="secondary" disabled="@busy">Apply resolution</button>
                         </form>
-                        <a href="/api/workstations/@w.Id/display" target="_blank" rel="noopener">Current display details</a>
+                        <button type="button" class="quiet station-display-details" data-url="/api/workstations/@w.Id/display" data-name="@w.Name" aria-haspopup="dialog">Current display details</button>
                     }
                 </details>
             }
@@ -122,6 +113,13 @@ else
     }
     </div>
     <div class="station-help"><details><summary>Game troubleshooting</summary><p>If a Steam game exits or shows a blank screen, set its Launch Options to <code>PROTON_LOG=1 %command%</code>, reproduce once, then remove that option. The log is <code>steam-&lt;appid&gt;.log</code> in this workstation user's home. Review it before sharing.</p><p>The Graphics report checks Vulkan, OpenGL and installed graphics packages using this workstation's device access. On NVIDIA it also runs a short encoder test and includes GPU mapping and active encoder sessions.</p></details></div>
+    <dialog id="station-display-dialog" aria-labelledby="station-display-title">
+        <div class="section-heading"><h2 id="station-display-title">Current display details</h2><button type="button" class="quiet" id="station-display-close" autofocus>Close</button></div>
+        <p id="station-display-name" class="secondary-text"></p>
+        <p id="station-display-status" role="status"></p>
+        <pre id="station-display-json" tabindex="0" aria-label="Display details JSON" hidden></pre>
+        <div class="actions"><button type="button" class="secondary" id="station-display-copy" disabled>Copy JSON</button><a class="button secondary" id="station-display-download" hidden>Download JSON</a><button type="button" class="secondary" id="station-display-retry" hidden>Retry</button></div>
+    </dialog>
     <script src="/workstations.js" defer></script>
 }
 </div>
