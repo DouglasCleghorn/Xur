@@ -49,8 +49,19 @@ const assert=require('assert/strict');
   for(const action of ['/profiles/load','/profiles/cancel','/storage/trim','/settings/ntp']) {
    const error=await request.post(tls+action,{headers:htmlHeaders,form:{},maxRedirects:0});assert.equal(error.status(),400);assert(error.headers()['content-type'].includes('text/html'));assert((await error.text()).includes('This form expired'));
   }
-  const missing=await request.get(tls+'/no-such-page',{headers:htmlHeaders});assert.equal(missing.status(),404);assert((await missing.text()).includes('This page could not be found'));
-  const blockedForm=await request.post(tls+'/profiles/load',{headers:{...htmlHeaders,Origin:'https://evil.example'},form:{}});assert.equal(blockedForm.status(),403);assert((await blockedForm.text()).includes('rejected for your security'));
+  const assertRecovery=async(response,status,title,href,label)=>{
+   assert.equal(response.status(),status);assert(response.headers()['content-type'].includes('text/html'));
+   const html=await response.text();
+   const content=await page.evaluate(html=>{
+    const document=new DOMParser().parseFromString(html,'text/html');
+    return {heading:document.querySelector('h1')?.textContent,links:[...document.querySelectorAll('.actions a')].map(a=>({href:a.getAttribute('href'),label:a.textContent}))};
+   },html);
+   assert.equal(content.heading,title);assert.deepEqual(content.links,[{href,label}]);
+  };
+  const missing=await request.get(tls+'/no-such-page',{headers:htmlHeaders});
+  await assertRecovery(missing,404,'Page not found','/','Return home');
+  const blockedForm=await request.post(tls+'/profiles/load',{headers:{...htmlHeaders,Origin:'https://evil.example'},form:{}});
+  await assertRecovery(blockedForm,403,'Request blocked','/profiles','Return to Profiles');
   const csrf=await page.locator('meta[name=xur-csrf]').getAttribute('content');
   const headers={RequestVerificationToken:csrf,'Accept-Encoding':'gzip'};
   const first=await request.get(tls+'/api/status',{headers});assert.equal(first.status(),200);assert.equal(first.headers()['content-encoding'],'gzip');assert(first.headers().etag);assert((await first.json()).bootId);
