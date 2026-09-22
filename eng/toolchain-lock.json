@@ -60,9 +60,9 @@
     "amd64Image": "ghcr.io/ggml-org/llama.cpp@sha256:e33f80e54fc3f403118ab92b24f21dc1a3125ffd0c7725532028eca8128b548d"
   },
   "liveInstallerBase": {
-    "reference": "quay.io/fedora/fedora-bootc@sha256:50cfd3eb8ef8cc8e6d020aa78c1777780cc24c65db173fa215064a981c3dfd49",
+    "reference": "quay.io/fedora/fedora-bootc@sha256:2e1c2bbd87411f2c6d90271bf2c51bf036c9cc4605cededbc56b2a9d998d1271",
     "kernel": "7.2.5-200.fc44.x86_64",
-    "version": "44.20260920.0",
-    "resolvedAt": "2026-09-21"
+    "version": "44.20260921.0",
+    "resolvedAt": "2026-09-22"
   }
 }
