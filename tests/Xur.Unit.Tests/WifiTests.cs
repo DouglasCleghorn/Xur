@@ -24,6 +24,10 @@ static class WifiTests
             check(malformed,"Unparseable Wi-Fi results report a scan error instead of no visible networks");
             fake.FirmwareMissing=true;var missing=false;try{await settings.ScanWifi(new("wlan0",Mac));}catch(InvalidOperationException e){missing=e.Message.Contains("Firmware is missing");}fake.FirmwareMissing=false;
             check(missing,"Missing adapter firmware is reported before attempting a scan");
+            fake.State="20 (unavailable)";var reads=fake.ScanReads;var unavailable=false;
+            try{await settings.ScanWifi(new("wlan0",Mac));}catch(InvalidOperationException e){unavailable=e.Message.Contains("supplicant");}
+            check(unavailable&&fake.ScanReads==reads,"Unavailable adapters report the NetworkManager reason without requesting a scan");
+            fake.State="100 (connected)";
             var request=new WifiConnectRequest("wlan0",Mac,"Home",Bssid,"wpa-psk",Secret);
             var result=await settings.ConnectWifi(request);
             check(result.Stage=="Kept"&&fake.AutoConnect,"Successful Wi-Fi connection is saved for automatic reconnection");
@@ -55,6 +59,10 @@ static class WifiTests
         LocalConsole.OpenMaintenance(menu.Screen);foreach(var c in Secret)LocalConsole.EditText(c);
         var frame=LocalConsole.ExportFrame(120,33);check(!frame.Contains(Secret)&&frame.Contains(new string('*',Secret.Length)),"Physical and mirrored console frames contain only password masks");
         await menu.Submit(Secret);check(handler.Request?.Password==Secret&&!menu.Screen.Body.Contains(Secret)&&menu.Screen.Body.Contains("Connected"),"Wi-Fi menu preserves password spaces and reports connection success without echoing credentials");
+        var flow=new ConsoleNetwork(client,setup:true);await flow.Open();await flow.Select('w');await flow.Select((char)256);await flow.Submit(Secret);
+        check(flow.Screen.Options[0].Key=='c',"Connected Wi-Fi offers Continue directly within the setup flow");
+        await flow.Select((char)256);check(flow.Screen.Secret&&!flow.Screen.Options.Any(o=>o.Key=='c'),"Continue is hidden while editing another Wi-Fi password");await flow.Select('0');
+        await flow.Select('c');check(flow.Closed&&flow.Completed,"Wi-Fi Continue completes the networking step without returning through menus");
         handler.Adapters=2;await menu.Open("network");await menu.Select('w');check(menu.Screen.Id=="wifi-adapters","Multiple Wi-Fi adapters require explicit selection");
         await menu.Select((char)257);check(handler.Scanned=="wlan1","Wi-Fi scan follows the chosen adapter");
         await menu.Select((char)257);check(handler.Request?.Password==""&&menu.Screen.Id=="wifi-networks","Open SSIDs connect without a password prompt");
@@ -62,6 +70,9 @@ static class WifiTests
         check(menu.Screen.Id=="wifi-scanning"&&menu.Screen.Body.Contains("wlan0"),"Slow Wi-Fi scans show progress and adapter identity without blocking menu input");
         await menu.Select('0');check(menu.Screen.Id=="wifi-adapters","A pending Wi-Fi scan can be left without waiting for its timeout");
         handler.PendingScan.SetResult();handler.PendingScan=null;
+        handler.Unavailable=true;handler.Scanned=null;await menu.Open("network");await menu.Select('w');
+        check(menu.Screen.Id=="wifi-unavailable"&&handler.Scanned==null&&menu.Screen.Body.Contains("supplicant"),"Unavailable adapter shows its cause without entering a misleading scanning screen");
+        handler.Unavailable=false;await menu.Select('v');check(menu.Screen.Id=="wifi-networks"&&handler.Scanned=="wlan0","Refreshing a recovered adapter scans normally");
         handler.Adapters=0;await menu.Open("network");await menu.Select('w');check(menu.Screen.Body.Contains("No Wi-Fi adapters"),"Missing Wi-Fi hardware has a useful menu state");
         check(DisplayConsoles.FontSize(["1280x720"])==16&&DisplayConsoles.FontSize(["1920x1080"])==16&&DisplayConsoles.FontSize(["2560x1440"])==32&&DisplayConsoles.FontSize(["3840x2160"])==48,"Console fonts scale to readable pixel sizes on HD, QHD and 4K displays");
         check(DisplayConsoles.FontSize(["3840x2160","1280x720"])==16&&DisplayConsoles.FontSize(["unknown"])==16,"Cloned or unknown displays retain a font that fits the smallest screen");
@@ -73,7 +84,7 @@ static class WifiTests
     }
     sealed class Nm
     {
-        public List<string> Calls=[];public bool Fail,AutoConnect,RolledBack,Malformed,FirmwareMissing;public int EmptyReads,ScanReads;public string Profile="";public UnixFileMode Permissions;
+        public List<string> Calls=[];public bool Fail,AutoConnect,RolledBack,Malformed,FirmwareMissing;public int EmptyReads,ScanReads;public string Profile="",State="100 (connected)";public UnixFileMode Permissions;
         string active="00000000-0000-4000-8000-000000000001",candidate="";
         public async Task<ProcessResult> Run(string exe,string[] args,int timeout)
         {
@@ -85,8 +96,8 @@ static class WifiTests
             }
             if(text.Contains("WIFI,WIFI-HW"))return new(0,"enabled:enabled");
             if(text.Contains("DEVICE,TYPE"))return new(0,"wlan0:wifi\n");
-            if(text.Contains("GENERAL.STATE"))return new(0,"100 (connected)\n"+active+"\n/org/freedesktop/NetworkManager/Devices/1");
-            if(text.Contains("GENERAL.PRODUCT"))return new(0,"Test adapter\ntest_wifi\n1.0\n"+(FirmwareMissing?"yes":"no"));
+            if(text.Contains("GENERAL.STATE"))return new(0,State+"\n"+active+"\n/org/freedesktop/NetworkManager/Devices/1");
+            if(text.Contains("GENERAL.PRODUCT"))return new(0,"Test adapter\ntest_wifi\n1.0\n"+(FirmwareMissing?"yes":"no")+"\n42 (The supplicant is not available)");
             if(text.Contains("PermHwAddress"))return new(0,"s \""+Mac+"\"");
             if(text.Contains("BSSID,SSID")){ScanReads++;return new(0,Malformed?"unreadable":EmptyReads-->0?"":"02\\:00\\:00\\:00\\:00\\:20:Home:WPA2:80");}
             if(text.Contains("CheckpointCreate"))return new(0,"o \"/org/freedesktop/NetworkManager/Checkpoint/1\"");
@@ -101,13 +112,13 @@ static class WifiTests
     }
     sealed class Menu:HttpMessageHandler
     {
-        public int Adapters=1;public WifiConnectRequest? Request;public string? Scanned;
+        public bool Unavailable;public int Adapters=1;public WifiConnectRequest? Request;public string? Scanned;
         public TaskCompletionSource? PendingScan;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken cancellation)
         {
             object result=new{};var path=request.RequestUri!.AbsolutePath;
             if(path=="/network/settings")result=new NetworkSettingsStatus([],null);
-            if(path=="/network/wifi")result=new WifiStatus(true,true,Enumerable.Range(0,Adapters).Select(i=>new WifiAdapter("wlan"+i,Mac,"disconnected",null,"/device"+i)).ToArray());
+            if(path=="/network/wifi")result=new WifiStatus(true,true,Enumerable.Range(0,Adapters).Select(i=>new WifiAdapter("wlan"+i,Mac,Unavailable?"20 (unavailable)":"disconnected",null,"/device"+i,Reason:Unavailable?"42 (The supplicant is not available)":"")).ToArray());
             if(path.EndsWith("/scan")){Scanned=(await request.Content!.ReadFromJsonAsync<WifiScanRequest>())!.Interface;if(PendingScan!=null)await PendingScan.Task;result=new[]{new WifiNetwork("Home",Bssid,"WPA2",80,"wpa-psk"),new WifiNetwork("Guest",Bssid,"--",50,"open")};}
             if(path.EndsWith("/connect"))Request=await request.Content!.ReadFromJsonAsync<WifiConnectRequest>();
             return new(HttpStatusCode.OK){Content=JsonContent.Create(result)};

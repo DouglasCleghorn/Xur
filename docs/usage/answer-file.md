@@ -30,7 +30,10 @@ even on the same disk. The installer scans all eligible storage read-only;
 multiple answers are ambiguous and leave installation locked. The answer's
 parent disk is protected from erasure. The file must be a regular file, not a
 symlink, at most 32 KiB, with one YAML document. Unknown fields and malformed
-configuration are rejected rather than ignored.
+configuration are rejected rather than ignored. Locked LUKS containers have no
+readable root directory, so discovery leaves them unopened and lists them as
+skipped. Put the answer file on a supported unencrypted configuration filesystem.
+An existing LUKS partition does not by itself prevent explicit whole-disk erasure.
 
 The bundled installer can apply the answer's networking without first
 downloading an application update. Signed update checks run in the background

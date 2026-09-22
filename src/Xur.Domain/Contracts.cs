@@ -10,7 +10,7 @@ public record Disk(string Path, string StablePath, string Serial, string Wwn, st
     long Bytes, string Layout, string[] Mounts, string[] Blocked);
 public record Inventory(string Generation, Disk[] Disks);
 public record ScanMount(string Device, string Filesystem, string Options, bool BlockReadOnly, bool AnswerFound);
-public record ScanResult(string State, string[] Answers, string[] Errors, string[] ReadOnlyDevices, ScanMount[] Mounts);
+public record ScanResult(string State, string[] Answers, string[] Errors, string[] ReadOnlyDevices, ScanMount[] Mounts,string[]? Skipped=null);
 public record InstallPlan(string Id, string Digest, string Generation, Disk Target, Disk[] Unaffected,
     string[] Actions, DateTimeOffset Expires);
 public record Approval(string Id, string Digest);

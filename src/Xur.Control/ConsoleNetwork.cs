@@ -3,7 +3,7 @@ using System.Text.Json;
 using Xur.Domain;
 namespace Xur.Control;
 
-public sealed class ConsoleNetwork(HttpClient client,bool local=false)
+public sealed class ConsoleNetwork(HttpClient client,bool local=false,bool setup=false)
 {
     readonly ConsoleWifi wifi=new(client,local);
     bool wifiOpen;
@@ -12,6 +12,7 @@ public sealed class ConsoleNetwork(HttpClient client,bool local=false)
     string view="list",editField="",notice="";
     bool ipv6;
     string Prefix=>local?"/local":"";
+    public bool Completed {get;private set;}
     public bool Closed {get;private set;}
     IpConfiguration Family=> (ipv6?draft!.Ipv6:draft!.Ipv4)??new();
     void FamilySet(IpConfiguration value){draft=ipv6?draft! with{Ipv6=value}:draft! with{Ipv4=value};}
@@ -19,7 +20,7 @@ public sealed class ConsoleNetwork(HttpClient client,bool local=false)
     {
         get
         {
-            if(wifiOpen)return wifi.Screen;
+            if(wifiOpen)return setup&&wifi.Connected&&wifi.Screen.Id=="wifi-networks"?wifi.Screen with{Options=[new('c',"Continue to disk selection"),..wifi.Screen.Options]}:wifi.Screen;
             var options=new List<ConsoleOption>();string title,body;string? input=null;
             if(view=="list")
             {
@@ -31,7 +32,8 @@ public sealed class ConsoleNetwork(HttpClient client,bool local=false)
                     if(busy){options.Add(new('k',"Keep settings",pending.Stage=="Confirm"));options.Add(new('r',"Revert",pending.Stage=="Confirm"));}
                 }
                 if(status!=null)for(var i=0;i<status.Devices.Length;i++)options.Add(new((char)(256+i),status.Devices[i].Interface+" · "+status.Devices[i].MacAddress,status.Devices[i].Editable&&!busy));
-                options.AddRange([new('w',"Wi-Fi setup",!busy),new('v',"Refresh status"),new('0',"Back to menu")]);
+                if(setup)options.Insert(0,new('c',"Continue to disk selection",status!=null&&!busy));
+                options.AddRange([new('w',"Wi-Fi setup",!busy),new('v',"Refresh status"),new('0',setup?"Back to server name":"Back to menu")]);
             }
             else if(view=="adapter")
             {
@@ -57,7 +59,7 @@ public sealed class ConsoleNetwork(HttpClient client,bool local=false)
             return new("network-"+view+(view=="editField"?"-"+editField:""),title,body,options.ToArray(),input);
         }
     }
-    public async Task Open(){wifiOpen=false;Closed=false;view="list";notice="";await Refresh();}
+    public async Task Open(){wifiOpen=false;Closed=false;Completed=false;view="list";notice="";await Refresh();}
     public async Task Refresh()
     {
         if(wifiOpen){await wifi.Refresh();return;} // Complete a pending scan without reordering existing choices.
@@ -66,6 +68,14 @@ public sealed class ConsoleNetwork(HttpClient client,bool local=false)
     }
     public async Task Select(char key)
     {
+        if(setup&&key=='c'&&Screen.Options.Any(o=>o.Key=='c'&&o.Enabled))
+        {
+            // Recheck pending changes before leaving this step.
+            try{status=await client.GetFromJsonAsync<NetworkSettingsStatus>(Prefix+"/network/settings");}catch{status=null;}
+            if(status==null){wifiOpen=false;notice="Could not read network status. Refresh before continuing.";return;}
+            if(status.Pending?.Stage is "Applying" or "Confirm"){wifiOpen=false;notice="Keep or revert the pending network change before continuing.";return;}
+            Completed=true;Closed=true;return;
+        }
         if(wifiOpen){await wifi.Select(key);if(wifi.Closed){wifiOpen=false;await Refresh();}return;}
         var option=Screen.Options.FirstOrDefault(o=>o.Key==key);if(option?.Enabled!=true)return;notice="";
         if(key=='0')

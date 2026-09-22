@@ -9,14 +9,20 @@ public sealed class ConsoleWifi(HttpClient client,bool local=false)
     WifiStatus? status;WifiAdapter? adapter;WifiNetwork[] networks=[];WifiNetwork? selected;
     string view="adapters",notice="";
     Task<(WifiNetwork[]? Networks,string Error)>? scanTask;
+    public bool Connected {get;private set;}
     public bool Closed {get;private set;}
-    static string Describe(WifiAdapter adapter)=>$"Adapter: {adapter.Interface} · {adapter.Model}\nDriver: {(adapter.Driver.Length>0?adapter.Driver:"Unknown")} · Firmware: {(adapter.FirmwareMissing?"Missing":adapter.Firmware.Length>0?adapter.Firmware:"Unknown")}\nState: {adapter.State}";
+    static string Describe(WifiAdapter adapter)=>$"Adapter: {adapter.Interface} · {adapter.Model}\nDriver: {(adapter.Driver.Length>0?adapter.Driver:"Unknown")} · Firmware: {(adapter.FirmwareMissing?"Missing":adapter.Firmware.Length>0?adapter.Firmware:"Unknown")}\nState: {adapter.State}"+(adapter.Reason.Length>0?"\nNetworkManager reason: "+adapter.Reason:"");
     public ConsoleScreen Screen
     {
         get
         {
             var options=new List<ConsoleOption>();string body;string? input=null;var secret=false;
-            if(view is "scanning" or "scan-error")
+            if(view=="unavailable")
+            {
+                body=Describe(adapter!)+"\n"+adapter!.UnavailableMessage+"\nCheck the Wi-Fi radio switch and NetworkManager/wpa_supplicant messages in Logs. Refresh after the adapter becomes ready, or use Ethernet.";
+                options.AddRange([new('v',"Refresh adapter"),new('0',status?.Adapters.Length>1?"Back to adapters":"Back to network settings")]);
+            }
+            else if(view is "scanning" or "scan-error")
             {
                 body=Describe(adapter!)+"\n"+(view=="scanning"?"Scanning for Wi-Fi networks… This can take up to 30 seconds.\nYou can go back while the scan runs.":"The scan could not be completed. This does not mean there are no networks nearby.\nCheck the adapter state above and the scan error.");
                 if(view=="scan-error")options.Add(new('v',"Scan again"));
@@ -47,7 +53,7 @@ public sealed class ConsoleWifi(HttpClient client,bool local=false)
             return new("wifi-"+view,"Wi-Fi setup",LocalConsole.Clean((notice.Length>0?notice+"\n\n":"")+body),options.ToArray(),input,secret);
         }
     }
-    public async Task Open(){Closed=false;notice="";scanTask=null;view="adapters";await LoadAdapters();}
+    public async Task Open(){Closed=false;Connected=false;notice="";scanTask=null;view="adapters";await LoadAdapters();}
     async Task LoadAdapters()
     {
         try
@@ -59,7 +65,9 @@ public sealed class ConsoleWifi(HttpClient client,bool local=false)
     }
     async Task Scan()
     {
-        notice="";view="scanning";
+        notice="";
+        if(adapter!.UnavailableMessage.Length>0){view="unavailable";scanTask=null;return;}
+        view="scanning";
         scanTask=ReadScan(new WifiScanRequest(adapter!.Interface,adapter.MacAddress));
         await Refresh();
     }
@@ -87,13 +95,26 @@ public sealed class ConsoleWifi(HttpClient client,bool local=false)
         notice="";
         if(key=='0')
         {
+            if(view=="unavailable"){if(status?.Adapters.Length>1)view="adapters";else Closed=true;return;}
             if(view is "scanning" or "scan-error"){scanTask=null;view="adapters";return;}
             if(view=="password"){selected=null;view="networks";}
             else if(view=="networks"&&status?.Adapters.Length>1)view="adapters";
             else Closed=true;
             return;
         }
-        if(view=="scan-error"&&key=='v'){await Scan();return;}
+        if(view is "scan-error" or "unavailable"&&key=='v')
+        {
+            var previous=adapter;
+            try
+            {
+                status=await client.GetFromJsonAsync<WifiStatus>(Prefix+"/network/wifi");
+                adapter=status?.Adapters.FirstOrDefault(a=>a.Interface==previous?.Interface&&a.MacAddress==previous.MacAddress);
+                if(adapter==null||status is not {Enabled:true,HardwareEnabled:true}){view="adapters";return;}
+                await Scan();
+            }
+            catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException){notice="Could not refresh the adapter. Try again.";view="scan-error";adapter=previous;}
+            return;
+        }
         if(view=="adapters")
         {
             if(key=='e'){using var enabled=await Send("/enable",new{});if(enabled!=null)await LoadAdapters();}
@@ -113,7 +134,7 @@ public sealed class ConsoleWifi(HttpClient client,bool local=false)
     {
         using var response=await Send("/connect",new WifiConnectRequest(adapter!.Interface,adapter.MacAddress,selected!.Ssid,selected.Bssid,selected.KeyManagement,password));
         if(response==null)return;
-        notice="Connected to "+LocalConsole.Clean(selected.Ssid)+". Saved for reboot and installation.";view="networks";selected=null;
+        Connected=true;notice="Connected to "+LocalConsole.Clean(selected.Ssid)+". Saved for reboot and installation.";view="networks";selected=null;
     }
     async Task<HttpResponseMessage?> Send(string path,object request)
     {

@@ -33,8 +33,8 @@ public sealed partial class NetworkSettings
             var mac=Regex.Match(hardware,"^s \"([0-9A-Fa-f:]{17})\"$").Groups[1].Value.ToUpperInvariant();
             if(mac.Length==0)continue;
             string[] detail=[];
-            try{detail=(await Nm("--escape","no","-g","GENERAL.PRODUCT,GENERAL.DRIVER,GENERAL.FIRMWARE-VERSION,GENERAL.FIRMWARE-MISSING","device","show",name)).Split('\n');}catch{}
-            adapters.Add(new(name,mac,values[0],Guid.TryParse(values[1],out _)?values[1]:null,values[2],detail.ElementAtOrDefault(0)??"",detail.ElementAtOrDefault(1)??"",detail.ElementAtOrDefault(2)??"",detail.ElementAtOrDefault(3)=="yes"));
+            try{detail=(await Nm("--escape","no","-g","GENERAL.PRODUCT,GENERAL.DRIVER,GENERAL.FIRMWARE-VERSION,GENERAL.FIRMWARE-MISSING,GENERAL.REASON","device","show",name)).Split('\n');}catch{}
+            adapters.Add(new(name,mac,values[0],Guid.TryParse(values[1],out _)?values[1]:null,values[2],detail.ElementAtOrDefault(0)??"",detail.ElementAtOrDefault(1)??"",detail.ElementAtOrDefault(2)??"",detail.ElementAtOrDefault(3)=="yes",detail.ElementAtOrDefault(4)??""));
         }
         return new(radio.ElementAtOrDefault(0)=="enabled",radio.ElementAtOrDefault(1)=="enabled",adapters.ToArray());
     }
@@ -48,7 +48,7 @@ public sealed partial class NetworkSettings
         if(matches.Length!=1)throw new InvalidOperationException("The Wi-Fi adapter changed or was removed. Refresh the adapter list.");
         if(matches[0].FirmwareMissing)throw new InvalidOperationException("Firmware is missing for "+matches[0].Interface+" ("+matches[0].Model+", driver "+matches[0].Driver+"). Use a wired connection or an installer with firmware for this adapter.");
         if(matches[0].State.StartsWith("10 "))throw new InvalidOperationException("This Wi-Fi adapter is unmanaged by NetworkManager. Check its network configuration.");
-        if(matches[0].State.StartsWith("20 "))throw new InvalidOperationException("This Wi-Fi adapter is unavailable. Check the radio switch, driver and firmware in Logs.");
+        if(matches[0].UnavailableMessage.Length>0)throw new InvalidOperationException(matches[0].UnavailableMessage+" NetworkManager reason: "+matches[0].Reason+" Check the radio switch and NetworkManager/wpa_supplicant messages in Logs, then refresh the adapter.");
         return matches[0];
     }
     public static WifiNetwork[] ParseWifiNetworks(string output)

@@ -3,8 +3,10 @@ using Xur.Domain;
 
 namespace Xur.Agent;
 
-public sealed class Storage
+public sealed class Storage(Func<Task<JsonElement[]>>? nodesObserver=null,Func<string,string[],Task<ProcessResult>>? runner=null,string scanDirectory="/run/xur/scan")
 {
+    Task<ProcessResult> Run(string exe,string[] args)=>runner!=null?runner(exe,args):Processes.Run(exe,args);
+    Task<JsonElement[]> ReadNodes()=>nodesObserver!=null?nodesObserver():Nodes();
     public HashSet<string> Leases { get; } = [];
     volatile ScanResult scan = new("Starting", [], [], [], []);
     public ScanResult Scan => scan;
@@ -68,7 +70,7 @@ public sealed class Storage
     }
     public async Task<Inventory> Observe()
     {
-        var roots = await Nodes();
+        var roots = await ReadNodes();
         var commandLine = await File.ReadAllTextAsync("/proc/cmdline");
         var disks = new List<Disk>();
         foreach (var node in roots.Where(n => S(n, "type") is "disk" or "rom"))
@@ -98,27 +100,27 @@ public sealed class Storage
     }
     public async Task DiscoverAnswers()
     {
-        var answers = new List<string>(); var errors = new List<string>();
+        var answers = new List<string>(); var errors = new List<string>();var skipped=new List<string>();
         var configurations = new List<AnswerConfiguration>();
         var readOnlyDevices = new List<string>(); var mounts = new List<ScanMount>();
         try
         {
-            var nodes = (await Nodes()).Where(n => S(n,"type") is "disk" or "rom").Where(n=>!Volatile(n)).SelectMany(Flatten).DistinctBy(n => S(n,"path")).ToArray();
+            var nodes = (await ReadNodes()).Where(n => S(n,"type") is "disk" or "rom").Where(n=>!Volatile(n)).SelectMany(Flatten).DistinctBy(n => S(n,"path")).ToArray();
             // Set all eligible whole devices and their partitions read-only before any mount.
             foreach (var node in nodes)
             {
                 var path = S(node,"path");
                 if (!MountedReadOnly(Mounts(node)))
                 { errors.Add($"{path}: mounted writable storage cannot be scanned safely"); continue; }
-                var before = await Processes.Run("blockdev", ["--getro", path]);
+                var before = await Run("blockdev", ["--getro", path]);
                 if (before.ExitCode != 0) { errors.Add($"{path}: cannot observe block read-only state"); continue; }
                 if (before.Output.Trim() == "0")
                 {
-                    var locked = await Processes.Run("blockdev", ["--setro", path]);
+                    var locked = await Run("blockdev", ["--setro", path]);
                     if (locked.ExitCode != 0) { errors.Add($"{path}: cannot lock block device"); continue; }
                     Leases.Add(path);
                 }
-                var observed = await Processes.Run("blockdev", ["--getro", path]);
+                var observed = await Run("blockdev", ["--getro", path]);
                 if(observed.ExitCode == 0 && observed.Output.Trim() == "1") readOnlyDevices.Add(path);
                 else errors.Add($"{path}: block read-only verification failed");
             }
@@ -127,7 +129,10 @@ public sealed class Storage
             {
                 var fs = S(node,"fstype"); var path = S(node,"path");
                 if (fs.Length == 0 || fs == "swap") continue; // Neither contains a mountable root directory.
-                var readOnly = await Processes.Run("blockdev", ["--getro", path]);
+                // A LUKS header has no filesystem root to search. Never unlock it;
+                // any already-open child filesystem is scanned separately.
+                if(fs=="crypto_LUKS"){skipped.Add(path+": locked encrypted LUKS container; not searched for answer files. Erasing its disk destroys the encrypted data.");continue;}
+                var readOnly = await Run("blockdev", ["--getro", path]);
                 if (readOnly.ExitCode != 0 || readOnly.Output.Trim() != "1") { errors.Add($"{path}: not block read-only"); continue; }
                 var options = fs switch {
                     "ext3" or "ext4" => "ro,noload,nosuid,nodev,noexec",
@@ -136,21 +141,21 @@ public sealed class Storage
                     "ext2" or "vfat" or "exfat" or "ntfs" or "ntfs3" or "iso9660" or "udf" => "ro,nosuid,nodev,noexec",
                     _ => "" };
                 if (options.Length == 0) { errors.Add($"{path}: unsupported or encrypted filesystem {fs}; discovery incomplete"); continue; }
-                var mount = $"/run/xur/scan/{index++}"; Directory.CreateDirectory(mount);
+                var mount = Path.Combine(scanDirectory,(index++).ToString()); Directory.CreateDirectory(mount);
                 // A hybrid USB ISO can hold the parent block device open while exposing
                 // separately scannable child filesystems. A read-only loop avoids the
                 // kernel's exclusive filesystem claim on the original parent/children.
-                var loopResult=await Processes.Run("losetup",["--find","--show","--read-only",path]);
+                var loopResult=await Run("losetup",["--find","--show","--read-only",path]);
                 var loop=loopResult.Output.Trim();
                 if(loopResult.ExitCode!=0 || !System.Text.RegularExpressions.Regex.IsMatch(loop,@"^/dev/loop\d+$"))
                 { errors.Add($"{path}: cannot create read-only scan view"); continue; }
                 var mounted=false;
                 try
                 {
-                    var loopState=await Processes.Run("blockdev",["--getro",loop]);
+                    var loopState=await Run("blockdev",["--getro",loop]);
                     if(loopState.ExitCode!=0 || loopState.Output.Trim()!="1")
                     { errors.Add($"{path}: scan view is not read-only"); continue; }
-                    var result = await Processes.Run("mount", ["-t", fs == "ntfs" ? "ntfs3" : fs, "-o", options, loop, mount]);
+                    var result = await Run("mount", ["-t", fs == "ntfs" ? "ntfs3" : fs, "-o", options, loop, mount]);
                     if (result.ExitCode != 0) { var reason=Redaction.Logs(result.Output); errors.Add($"{path}: read-only mount failed: {reason[..Math.Min(reason.Length,512)]}"); continue; }
                     mounted=true;
                     var answerFiles=AnswerFiles(mount);
@@ -158,7 +163,7 @@ public sealed class Storage
                     {
                         answers.Add(path);
                         if(file.LinkTarget!=null){errors.Add($"{path}: answer file must not be a symlink");continue;}
-                        var kind=await Processes.Run("stat",["-c","%F","--",file.FullName]);
+                        var kind=await Run("stat",["-c","%F","--",file.FullName]);
                         if(kind.ExitCode!=0 || kind.Output.Trim()!="regular file" || file.Length>32768)
                             errors.Add($"{path}: answer must be a regular file of at most 32 KiB");
                         else try{configurations.Add(AnswerConfiguration.Parse(await File.ReadAllTextAsync(file.FullName)));}
@@ -169,14 +174,14 @@ public sealed class Storage
                 }
                 finally
                 {
-                    if (mounted && (await Processes.Run("umount", [mount])).ExitCode != 0) errors.Add($"{path}: scanner unmount failed");
-                    if ((await Processes.Run("losetup", ["--detach",loop])).ExitCode != 0) errors.Add($"{path}: scanner view cleanup failed");
+                    if (mounted && (await Run("umount", [mount])).ExitCode != 0) errors.Add($"{path}: scanner unmount failed");
+                    if ((await Run("losetup", ["--detach",loop])).ExitCode != 0) errors.Add($"{path}: scanner view cleanup failed");
                 }
             }
         }
         catch { errors.Add("Storage discovery failed; installer remains locked"); }
         var completedScan = new ScanResult(answers.Count > 1 ? "Ambiguous" : errors.Count > 0 ? "Incomplete" : answers.Count == 1 ? "AnswerFound" : "NoAnswer",
-            answers.ToArray(), errors.ToArray(), readOnlyDevices.Order().ToArray(), mounts.ToArray());
+            answers.ToArray(), errors.ToArray(), readOnlyDevices.Order().ToArray(), mounts.ToArray(),skipped.ToArray());
         Answer=completedScan.State=="AnswerFound" && configurations.Count==1 ? configurations[0] : null;
         BootstrapToken=Answer?.BootstrapToken;
         NetworkReady=Answer?.Network.Length is null or 0;
@@ -185,7 +190,7 @@ public sealed class Storage
     public async Task RestoreReadOnlyStates()
     {
         foreach (var path in Leases.Reverse())
-            if ((await Processes.Run("blockdev", ["--setrw", path])).ExitCode != 0) throw new IOException("Cannot restore read-only lease");
+            if ((await Run("blockdev", ["--setrw", path])).ExitCode != 0) throw new IOException("Cannot restore read-only lease");
         Leases.Clear();
     }
 }

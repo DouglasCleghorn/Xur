@@ -9,7 +9,8 @@ Choose a whole disk of at least 64 GiB for the Bazzite host and OS deployments.
 1. Boot the ISO using UEFI. For Rufus, choose **GPT**, **UEFI (non CSM)**,
    **FAT32**, and **ISO Image mode (file copy)**. Raw/DD hybrid writing also works.
    See [USB media details](rufus.md).
-2. In **Setup and installation**, save the server name and configure networking.
+2. In **Setup and installation**, save the server name. Setup advances directly
+   to networking; configure a connection and choose **Continue to disk selection**.
    Ethernet uses saved profiles or DHCP. **Network and Wi-Fi** lets you choose
    an adapter, SSID and password. An [answer YAML file](answer-file.md) can supply
    static wired networking. Saved settings, including Wi-Fi credentials and

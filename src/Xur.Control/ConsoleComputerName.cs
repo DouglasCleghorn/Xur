@@ -8,6 +8,7 @@ public sealed class ConsoleComputerName(HttpClient client,bool local=false)
     const string Prompt="Choose the name shown on your network and in Tailscale.\nUse letters, numbers and hyphens. Enter saves; Escape skips for now.";
     string current="xur",message=Prompt;
     bool saved;
+    public bool Saved=>saved;
     public bool Closed {get;private set;}
     public ConsoleScreen Screen=>new("computer-name"+(saved?"-saved":""),"Server name",message,[new('0',saved?"Back to menu":"Skip for now")],saved?null:current);
     public async Task Open()

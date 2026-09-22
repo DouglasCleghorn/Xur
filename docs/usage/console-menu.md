@@ -112,7 +112,10 @@ the status or network screen.
 ## Setup without a browser
 
 On installer media, choose **Setup and installation**. Set the server name,
-configure wired networking or Wi-Fi, then review and approve a disk.
+configure wired networking or Wi-Fi, then review and approve a disk. Saving the
+name opens networking immediately. **Continue to disk selection** advances from
+networking or a successful Wi-Fi connection. Back moves to the previous step;
+reopening setup during installation returns to progress.
 Internet is required for the Bazzite download. There is no live web listener
 or Tailscale enrollment. After reboot, use the console access code in the
 browser to create the required administrator account. This supports Chrome
@@ -124,13 +127,18 @@ unaffected disks, then choose **Yes** at the erase confirmation. **No** is selec
 default; Enter on No, Escape or 0 cancels.
 Cancellation, an expired plan or a changed disk identity requires a new review.
 Progress updates in the console; completion offers a separately confirmed reboot.
-Failures never automatically retry disk erasure.
+Failures never automatically retry disk erasure. Locked LUKS containers are not
+opened to search for answer files; they are listed as skipped and do not block
+selection of an otherwise eligible disk. Erasing that disk destroys its encrypted
+data. Invalid or ambiguous answers and actual discovery errors still block setup.
 
 The installer starts the bundled app without waiting for internet. Update checks
 run separately and report their status without restarting setup. A saved server
 name is required before starting Tailscale enrollment from either console or web.
 
-Wi-Fi pages identify the adapter, driver, firmware and state. Scans show progress
+Wi-Fi pages identify the adapter, driver, firmware, state and NetworkManager
+reason. An unavailable adapter shows **Refresh adapter** and troubleshooting
+details immediately; it does not start a scan until ready. Scans show progress
 and allow Back while waiting. An initial empty result is checked again, and scan
 failures are distinguished from completed scans with no named networks.
 

@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix='xur-local-install-') as temp:
                 assert json.loads(data)=={'id':'plan','digest':'digest'}
                 approvals+=1;operation={'id':'plan','stage':'Installing','message':'Installing fixture disk','updated':'2026-09-21T00:00:00Z'}
             responses={'/computer-name':{'name':name or 'xur','configured':name is not None},
-              '/status':{'scan':{'state':'NoAnswer'},'operation':operation},'/disks':{'generation':'test','disks':[disk]},
+              '/status':{'scan':{'state':'NoAnswer'},'operation':operation},'/network/settings':{'devices':[],'pending':None},'/disks':{'generation':'test','disks':[disk]},
               '/plan':{'id':'plan','digest':'digest','generation':'test','target':disk,'unaffected':[],'actions':['Erase fixture disk'],'expires':'2099-01-01T00:00:00Z'},
               '/approve':operation}
             body=b'Fixture log line' if path=='/logs' else json.dumps(responses.get(path,{})).encode()
@@ -61,15 +61,15 @@ with tempfile.TemporaryDirectory(prefix='xur-local-install-') as temp:
         check(local('/local/setup/account',{'username':'admin','password':'password'})[0]==404,'Live console cannot create administrator credentials')
         check(local('/local/setup/plan',{'path':'/dev/test'})[0]==409,'Server name is required before planning')
         wait(lambda:'Server name' in frame())
-        process.stdin.write(b'living-room\n0\n');process.stdin.flush()
-        wait(lambda:name=='living-room' and 'Choose installation disk' in frame())
-        check('administrator account in the browser after installation' in frame(),'Console explains mandatory post-install browser account')
+        process.stdin.write(b'living-room\n');process.stdin.flush()
+        wait(lambda:name=='living-room' and 'Continue to disk selection' in frame())
+        check('Step 2 of 4' in frame(),'Naming advances to networking without returning to the menu')
         check(local('/local/qr',{})[0]==409,'Tailscale enrollment is rejected even after naming')
         check(json.loads(local('/local/status')[1])['urls']==[],'Installer does not advertise inactive management URLs')
         # The dedicated CLI must use the same local disk review and Yes/No approval.
-        cli=subprocess.run([str(repo/'.build/context/publish/control/Xur.Control'),'setup'],input=b'3\n1\n2\n2\n0\n0\n',env=env,capture_output=True,timeout=15,check=True)
+        cli=subprocess.run([str(repo/'.build/context/publish/control/Xur.Control'),'setup'],input=b'1\n1\n2\n2\n0\n',env=env,capture_output=True,timeout=15,check=True)
         check(approvals==1 and b'TEST-001' in cli.stdout and b'Installing fixture disk' in cli.stdout,'xur setup reviews identity and sends exactly one explicit disk approval')
-        process.stdin.write(b'0\n4\n');process.stdin.flush();wait(lambda:'Scroll logs' in frame())
+        process.stdin.write(b'0\n/cancel\n4\n');process.stdin.flush();wait(lambda:'Scroll logs' in frame())
         process.stdin.write(b'0\n');process.stdin.flush();wait(lambda:'Setup and installation' in frame() and 'Scroll logs' not in frame())
         check(True,'Logs return to the local setup menu')
         check(not (root/'tailscale-called').exists(),'Live installer never invokes Tailscale')

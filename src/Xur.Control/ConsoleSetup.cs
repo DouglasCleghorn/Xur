@@ -6,7 +6,7 @@ namespace Xur.Control;
 // The local setup path uses the agent's expiring plans and exact disk identity approval.
 public sealed class ConsoleSetup(HttpClient client,bool installer=true)
 {
-    readonly ConsoleNetwork network=new(client,true);
+    readonly ConsoleNetwork network=new(client,true,setup:installer);
     readonly ConsoleComputerName name=new(client,true);
     string view="home",notice="";
     ComputerNameStatus? serverName;
@@ -14,6 +14,7 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
     InstallPlan? plan;
     Operation? operation;
     bool disksReady;
+    string skipped="";
     string discovery="Storage discovery is not ready. Refresh shortly.";
     public bool Closed {get;private set;}
     string Disk(Disk d)=>$"{d.Path} · {d.Model} · {d.Bytes/1073741824d:N1} GiB\n  Serial: {d.Serial} · WWN: {d.Wwn}\n  Identity: {d.StablePath}";
@@ -21,14 +22,15 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
     {
         get
         {
-            if(view=="name")return name.Screen;
-            if(view=="network")return network.Screen;
+            if(view=="name")return installer?name.Screen with{Title="Step 1 of 4 · Server name",Body=name.Screen.Body.Replace("Escape skips for now.","Escape returns to the menu."),Options=[new('0',"Back to menu")]}:name.Screen;
+            if(view=="network")return installer?network.Screen with{Title="Step 2 of 4 · "+network.Screen.Title}:network.Screen;
             string title=installer?"Setup and installation":"Local setup",body;string? input=null;bool secret=false;
             var options=new List<ConsoleOption>();
             switch(view)
             {
                 case "disks":
-                    title="Choose installation disk";body="The selected disk will be erased only after you review and confirm.\nInternet is required to download Bazzite.\n\n";
+                    title="Step 3 of 4 · Choose installation disk";body="The selected disk will be erased only after you review and confirm.\nInternet is required to download Bazzite.\n\n";
+                    if(skipped.Length>0)body+=skipped+"\n\n";
                     if(!disksReady)body+=discovery;
                     else if(inventory==null)body+="Could not read disks. Refresh to retry.";
                     else
@@ -42,7 +44,7 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
                     }
                     options.Add(new('v',"Refresh disks"));break;
                 case "review":
-                    title="Review disk installation";
+                    title="Step 4 of 4 · Review disk installation";
                     body="WILL ERASE ALL CONTENTS:\n"+Disk(plan!.Target)+"\n\nPlanned changes:\n"+string.Join('\n',plan.Actions)+
                         "\n\nOther disks (unchanged):\n"+string.Join('\n',plan.Unaffected.Select(Disk))+"\n\nInternet is required. Review expires in five minutes.";
                     options.Add(new('0',"Cancel"));options.Add(new('y',"Continue to erase confirmation",plan.Expires>DateTimeOffset.UtcNow));break;
@@ -51,10 +53,10 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
                     options.AddRange([new('0',"No"),new('y',"Yes")]);break;
                 case "progress":
                     title="Installation progress";body=operation==null?"No installation has started.":operation.Stage+"\n"+operation.Message;
-                    if(operation?.Stage=="Complete"){body+="\nRemove the installer USB when restarting.";options.Add(new('r',"Reboot into installed system"));}
+                    if(operation?.Stage=="Complete"){body+="\nRemove the installer USB when restarting.\nAfter reboot, use the displayed web address and access code to create the required administrator account.";options.Add(new('r',"Reboot into installed system"));}
                     if(operation?.Stage=="Failed")body+="\nNo automatic retry. Review Logs and network settings before restarting setup.";
                     options.Add(new('v',"Refresh progress"));break;
-                case "reboot":title="Confirm reboot";body="Reboot into the installed system. Remove the installer USB when restarting.";options.AddRange([new('0',"Cancel"),new('y',"Reboot now",operation?.Stage=="Complete")]);break;
+                case "reboot":title="Confirm reboot";body="Reboot into the installed system. Remove the installer USB when restarting.\nAfter reboot, use the displayed web address and access code to create the required administrator account.";options.AddRange([new('0',"Cancel"),new('y',"Reboot now",operation?.Stage=="Complete")]);break;
                 default:
                     body=(installer?"Complete device setup here. Web management and Tailscale are available after installation and reboot.\n":"Manage local server settings.\n")+
                         (serverName?.Configured==true?"Server: "+serverName.Name:"Save the server name before installation.")+"\n"+
@@ -64,11 +66,19 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
                         new('v',"Refresh setup status")]);
                     if(installer)options.InsertRange(2,[new('d',"Choose installation disk",serverName?.Configured==true&&operation==null),new('p',"Installation progress")]);break;
             }
-            if(!options.Any(o=>o.Key=='0'))options.Add(new('0',view=="home"?"Back to menu":"Back to setup"));
+            if(!options.Any(o=>o.Key=='0'))options.Add(new('0',!installer||view is "home" or "progress"?"Back to menu":view=="disks"?"Back to networking":"Back"));
             return new("setup-"+view,title,LocalConsole.Clean((notice.Length>0?notice+"\n\n":"")+body),options.ToArray(),input,secret);
         }
     }
-    public async Task Open(){Closed=false;view="home";plan=null;notice="";await Refresh();if(serverName is {Configured:false}){view="name";await name.Open();}}
+    public async Task Open()
+    {
+        Closed=false;view="home";plan=null;notice="";await Refresh();
+        if(installer&&operation!=null){view="progress";return;}
+        if(serverName is {Configured:false}){view="name";await name.Open();}
+        else if(installer&&serverName is {Configured:true})await OpenNetwork();
+    }
+    async Task OpenNetwork(){view="network";await network.Open();}
+    async Task OpenDisks(){view="disks";plan=null;inventory=null;await Refresh();}
     public async Task Refresh()
     {
         try
@@ -78,6 +88,7 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
             serverName=await client.GetFromJsonAsync<ComputerNameStatus>("/local/computer-name");
             if(!installer)return;
             var status=await client.GetFromJsonAsync<JsonElement>("/local/setup/status");
+            skipped=status.TryGetProperty("scan",out var scanned)&&scanned.TryGetProperty("skipped",out var ignored)&&ignored.ValueKind==JsonValueKind.Array?string.Join('\n',ignored.EnumerateArray().Select(e=>e.GetString())):"";
             operation=status.TryGetProperty("operation",out var op)&&op.ValueKind==JsonValueKind.Object?op.Deserialize<Operation>(new JsonSerializerOptions(JsonSerializerDefaults.Web)):null;
             disksReady=status.TryGetProperty("scan",out var scan)&&scan.TryGetProperty("state",out var state)&&state.GetString() is "NoAnswer" or "AnswerFound";
             if(!disksReady)discovery=scan.ValueKind==JsonValueKind.Object&&scan.TryGetProperty("state",out var scanState)&&scanState.GetString()!="Starting"
@@ -104,11 +115,20 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
     {
         try
         {
-            if(view=="name"){name.Select(key);if(name.Closed){view="home";await Refresh();}return;}
-            if(view=="network"){await network.Select(key);if(network.Closed){view="home";await Refresh();}return;}
+            if(view=="name"){name.Select(key);if(name.Closed){if(installer)Closed=true;else{view="home";await Refresh();}}return;}
+            if(view=="network"){await network.Select(key);if(network.Closed){if(!installer){view="home";await Refresh();}else if(network.Completed)await OpenDisks();else{view="name";await name.Open();}}return;}
             if(Screen.Options.FirstOrDefault(o=>o.Key==key)?.Enabled!=true)return;
             notice="";
-            if(key=='0'){plan=null;if(view=="home")Closed=true;else{view="home";await Refresh();}return;}
+            if(key=='0')
+            {
+                plan=null;
+                if(view is "home" or "progress")Closed=true;
+                else if(view=="reboot"){view="progress";await Refresh();}
+                else if(installer&&(view is "review" or "confirm"))await OpenDisks();
+                else if(installer&&view=="disks")await OpenNetwork();
+                else{view="home";await Refresh();}
+                return;
+            }
             if(view=="review"&&key=='y'){view="confirm";return;}
             if(view=="confirm"&&key=='y')
             {
@@ -149,7 +169,7 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
         try
         {
             notice="";
-            if(view=="name"){await name.Submit(text);return;}
+            if(view=="name"){await name.Submit(text);if(installer&&name.Saved)await OpenNetwork();return;}
             if(view=="network"){await network.Submit(text);return;}
         }
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException){notice=e is InvalidOperationException?e.Message:"Connection interrupted. Refresh progress before retrying; installation may already have started.";}
