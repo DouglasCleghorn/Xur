@@ -15,7 +15,7 @@ Choose a whole disk of at least 64 GiB for the Bazzite host and OS deployments.
    static wired networking. Saved settings, including Wi-Fi credentials and
    automatic reconnection, persist into the installed system.
 3. Choose the installation disk. Review its identity and the erase plan, then
-   type `ERASE /dev/<selected-disk>` exactly. Boot/configuration media are protected;
+   choose **Yes** at the erase confirmation (**No** is selected by default). Boot/configuration media are protected;
    Xur rechecks the selected disk before writing. Other disks remain unchanged.
 4. Follow console progress. When complete, confirm reboot and remove the USB.
 5. After reboot, open the displayed HTTPS web-manager address on port **8443**

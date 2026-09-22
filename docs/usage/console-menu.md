@@ -120,7 +120,8 @@ generated passwords without entering them at the console.
 
 **Choose installation disk** lists model, size, device path and disk identity.
 Boot media and other blocked disks cannot be selected. Review the erase plan and
-unaffected disks, then type `ERASE /dev/<selected-disk>` exactly to approve it.
+unaffected disks, then choose **Yes** at the erase confirmation. **No** is selected by
+default; Enter on No, Escape or 0 cancels.
 Cancellation, an expired plan or a changed disk identity requires a new review.
 Progress updates in the console; completion offers a separately confirmed reboot.
 Failures never automatically retry disk erasure.

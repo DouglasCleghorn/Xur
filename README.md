@@ -62,7 +62,7 @@ shared memory pool for every application.
    with a release.
 2. **Install from the console.** Boot the ISO and use **Setup and installation**
    to save the server name, configure Ethernet or Wi-Fi, and review the target
-   disk. Type its erase confirmation. **The selected disk is erased.**
+   disk. Confirm **Yes** to erase it. **The selected disk is erased.**
    Reboot when the Bazzite download and installation finish. Wi-Fi settings persist.
 3. **Create the required account.** After reboot, open the displayed HTTPS address
    on port **8443**, accept the machine's self-signed certificate, and enter the

@@ -8,7 +8,7 @@ Home is the control panel; Monitoring contains resource and network details.
 
 Follow [Installation](install.md) to create and boot UEFI media. The online
 installer requires Internet access and a target disk of at least 64 GiB. Use **Setup and installation** in the console to save the server name, configure
-networking, review a disk and type its erase confirmation. This destroys existing
+networking, review a disk and confirm **Yes** to erase it. This destroys existing
 data on that disk. Reboot when installation completes; saved Wi-Fi persists.
 
 Open the console's `https://<host>:8443` address, accept its self-signed certificate,

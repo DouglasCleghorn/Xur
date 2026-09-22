@@ -66,8 +66,8 @@ with tempfile.TemporaryDirectory(prefix='xur-local-install-') as temp:
         check('administrator account in the browser after installation' in frame(),'Console explains mandatory post-install browser account')
         check(local('/local/qr',{})[0]==409,'Tailscale enrollment is rejected even after naming')
         check(json.loads(local('/local/status')[1])['urls']==[],'Installer does not advertise inactive management URLs')
-        # The dedicated CLI must use the same local disk review and typed approval.
-        cli=subprocess.run([str(repo/'.build/context/publish/control/Xur.Control'),'setup'],input=b'3\n1\n2\nERASE /dev/test\n0\n0\n',env=env,capture_output=True,timeout=15,check=True)
+        # The dedicated CLI must use the same local disk review and Yes/No approval.
+        cli=subprocess.run([str(repo/'.build/context/publish/control/Xur.Control'),'setup'],input=b'3\n1\n2\n2\n0\n0\n',env=env,capture_output=True,timeout=15,check=True)
         check(approvals==1 and b'TEST-001' in cli.stdout and b'Installing fixture disk' in cli.stdout,'xur setup reviews identity and sends exactly one explicit disk approval')
         process.stdin.write(b'0\n4\n');process.stdin.flush();wait(lambda:'Scroll logs' in frame())
         process.stdin.write(b'0\n');process.stdin.flush();wait(lambda:'Setup and installation' in frame() and 'Scroll logs' not in frame())

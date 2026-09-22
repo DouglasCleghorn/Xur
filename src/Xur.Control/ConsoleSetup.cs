@@ -47,7 +47,8 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
                         "\n\nOther disks (unchanged):\n"+string.Join('\n',plan.Unaffected.Select(Disk))+"\n\nInternet is required. Review expires in five minutes.";
                     options.Add(new('0',"Cancel"));options.Add(new('y',"Continue to erase confirmation",plan.Expires>DateTimeOffset.UtcNow));break;
                 case "confirm":
-                    title="Confirm disk erasure";body="ALL CONTENTS WILL BE ERASED:\n"+Disk(plan!.Target)+"\n\nType ERASE "+plan.Target.Path+" and press Enter to install.\nEscape cancels.";input="";break;
+                    title="Confirm disk erasure";body="ALL CONTENTS WILL BE ERASED:\n"+Disk(plan!.Target)+"\n\nErase this disk and install Xur?";
+                    options.AddRange([new('0',"No"),new('y',"Yes")]);break;
                 case "progress":
                     title="Installation progress";body=operation==null?"No installation has started.":operation.Stage+"\n"+operation.Message;
                     if(operation?.Stage=="Complete"){body+="\nRemove the installer USB when restarting.";options.Add(new('r',"Reboot into installed system"));}
@@ -109,6 +110,13 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
             notice="";
             if(key=='0'){plan=null;if(view=="home")Closed=true;else{view="home";await Refresh();}return;}
             if(view=="review"&&key=='y'){view="confirm";return;}
+            if(view=="confirm"&&key=='y')
+            {
+                if(plan==null||plan.Expires<=DateTimeOffset.UtcNow){plan=null;view="disks";await Refresh();notice="The plan expired. Select the disk and review again.";return;}
+                var approval=new Approval(plan.Id,plan.Digest);plan=null;view="progress";
+                // Consume the plan before sending; a timeout must never repeat approval.
+                operation=await Post<Operation>("/local/setup/approve",approval);await Refresh();return;
+            }
             if(view=="progress"&&key=='r'){view="reboot";return;}
             if(view=="reboot"&&key=='y')
             {
@@ -134,7 +142,7 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
             if(view=="disks"&&key=='v')inventory=null;
             await Refresh();
         }
-        catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException){notice=e is InvalidOperationException?e.Message:"Connection interrupted. Refresh before retrying.";}
+        catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException){notice=e is InvalidOperationException?e.Message:"Connection interrupted. Refresh progress before retrying; installation may already have started.";}
     }
     public async Task Submit(string text)
     {
@@ -143,14 +151,6 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
             notice="";
             if(view=="name"){await name.Submit(text);return;}
             if(view=="network"){await network.Submit(text);return;}
-            if(view=="confirm")
-            {
-                if(plan==null||plan.Expires<=DateTimeOffset.UtcNow){plan=null;view="disks";await Refresh();notice="The plan expired. Select the disk and review again.";return;}
-                if(text!="ERASE "+plan.Target.Path){notice="Confirmation did not match. Nothing was erased.";return;}
-                var approval=new Approval(plan.Id,plan.Digest);plan=null;view="progress";
-                // Consume the plan before sending; a timeout must never repeat approval.
-                operation=await Post<Operation>("/local/setup/approve",approval);await Refresh();
-            }
         }
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException){notice=e is InvalidOperationException?e.Message:"Connection interrupted. Refresh progress before retrying; installation may already have started.";}
     }

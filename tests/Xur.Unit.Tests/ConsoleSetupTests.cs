@@ -43,11 +43,12 @@ static class ConsoleSetupTests
             await menu.Select((char)257);check(approvals==0&&menu.Screen.Id=="setup-disks","Blocked disks cannot be selected from the console");
             changed=true;await menu.Select((char)256);check(menu.Screen.Id=="setup-disks"&&menu.Screen.Body.Contains("identity changed"),"A replaced disk invalidates the console selection before review");changed=false;
             await menu.Select((char)256);check(menu.Screen.Body.Contains("TEST-001")&&menu.Screen.Body.Contains("Erase selected disk")&&menu.Screen.Options[0].Key=='0',"Disk review shows identity, destructive actions and cancellation as the default");
-            await menu.Select('y');await menu.Submit("ERASE /dev/wrong");check(approvals==0&&menu.Screen.Id=="setup-confirm","Wrong erase text never sends disk approval");
+            await menu.Select('y');check(menu.Screen.InputValue==null&&menu.Screen.Options.Select(o=>o.Label).SequenceEqual(["No","Yes"])&&menu.Screen.Options[0].Key=='0',"Erase confirmation offers No and Yes with No first and no text input");
+            await menu.Submit("ERASE /dev/test");check(approvals==0&&menu.Screen.Id=="setup-confirm","Text input cannot approve disk erasure");
             await menu.Select('0');check(approvals==0&&menu.Screen.Id=="setup-home","Cancelling erase confirmation leaves disks unchanged");
             expired=true;await menu.Select('d');await menu.Select((char)256);check(!menu.Screen.Options.Single(o=>o.Key=='y').Enabled,"Expired disk plans cannot advance to erase confirmation");
-            await menu.Select('0');expired=false;await menu.Select('d');await menu.Select((char)256);await menu.Select('y');await menu.Submit("ERASE /dev/test");await menu.Submit("ERASE /dev/test");
-            check(approvals==1&&menu.Screen.Id=="setup-progress"&&menu.Screen.Body.Contains("Installing approved disk"),"Typed disk confirmation sends exactly one approval and opens live progress");
+            await menu.Select('0');expired=false;await menu.Select('d');await menu.Select((char)256);await menu.Select('y');await menu.Select('y');await menu.Select('y');
+            check(approvals==1&&menu.Screen.Id=="setup-progress"&&menu.Screen.Body.Contains("Installing approved disk"),"Yes confirmation sends exactly one approval and opens live progress");
             operation=operation! with{Stage="Complete",Message="Installation completed"};await menu.Refresh();check(menu.Screen.Options.Any(o=>o.Key=='r'),"Console installation completion offers an explicit reboot action");
             operation=operation with{Stage="Failed",Message="Download failed"};await menu.Refresh();check(!menu.Screen.Options.Any(o=>o.Key=='r')&&menu.Screen.Body.Contains("No automatic retry"),"Console installation failure remains visible without retrying erasure or rebooting");
         }
