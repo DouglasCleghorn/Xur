@@ -73,6 +73,12 @@ async Task StartHost()
     var apiKeys=new ApiKeys(identityDirectory);
     var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args=Array.Empty<string>(), ContentRootPath=AppContext.BaseDirectory });
     builder.Logging.ClearProviders();
+    var applicationLog = new ApplicationLog("xur-control");
+    builder.Logging.AddProvider(applicationLog);
+    builder.Services.AddSingleton(applicationLog);
+    var diagnosticLogs = new DiagnosticLogs(applicationLog, appliance.Agent);
+    builder.Services.AddSingleton(diagnosticLogs);
+    applicationLog.Write("Startup", LogLevel.Information, "Web manager starting. Bundle: " + ApplicationIdentity.Id);
     builder.Services.AddSingleton(appliance); builder.Services.AddSingleton(auth);builder.Services.AddSingleton(apiKeys);
     var catalog=new RecipeCatalog(Environment.GetEnvironmentVariable("XUR_CATALOG") ?? "/usr/share/xur/catalog",Path.Combine(appliance.StateDirectory,"catalog-selected"));
     var profileStore=new ProfileStore(appliance.Installer?Path.Combine(appliance.StateDirectory,"profiles"):appliance.StateDirectory);
@@ -141,7 +147,7 @@ async Task StartHost()
         if (authorized) ctx.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name,auth.Username ?? "xur")],"bootstrap"));
         var path = ctx.Request.Path.Value ?? "/";
         bool publicPath=ctx.GetEndpoint()?.Metadata.GetMetadata<PublicStaticAsset>()!=null || path is "/login" or "/auth/login" or "/api/bootstrap" or "/api/auth/login" or "/health" or "/api/status" or "/setup.css" or "/login.js" or "/fonts/IBMPlexSans.ttf" or "/manifest.webmanifest" or "/install-app.js" or "/sw.js" or "/icons/xur-icon.svg" or "/icons/xur-icon-180.png" or "/icons/xur-icon-192.png" or "/icons/xur-icon-512.png";
-        bool setupPath=path is "/setup-account" or "/auth/setup" or "/api/auth/setup" or "/account-setup.js";
+        bool setupPath=path is "/setup-account" or "/setup-account/logs" or "/auth/setup" or "/api/auth/setup" or "/account-setup.js";
         if(setupSession!=null && path=="/login") { ctx.Response.Redirect("/setup-account");return; }
         if(!authorized && !publicPath && !(setupSession!=null && setupPath))
         {
@@ -306,9 +312,17 @@ async Task StartHost()
     });
     app.MapPost("/auth/logout",(HttpContext ctx)=> { ctx.Response.Cookies.Delete("xur.session",new CookieOptions {Path="/"});return Results.Redirect("/login"); });
     app.MapGet("/api/diagnostics/display",async()=> {
-        var report=System.Text.Json.Nodes.JsonNode.Parse(await appliance.Agent.GetStringAsync("/diagnostics/display"))!.AsObject();
+        System.Text.Json.Nodes.JsonObject report;
+        try {
+            using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            report=System.Text.Json.Nodes.JsonNode.Parse(await appliance.Agent.GetStringAsync("/diagnostics/display",timeout.Token)) as System.Text.Json.Nodes.JsonObject ?? throw new JsonException("Invalid display diagnostic response");
+        }
+        catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException) {
+            report=new() { ["summary"]="Display information is unavailable. Application logs are included.", ["inventory"]=new System.Text.Json.Nodes.JsonArray(), ["displayError"]=Redaction.Logs(e.Message) };
+        }
         report["controlBundle"]=ApplicationIdentity.Id;
         report["mode"]=appliance.Installer?"Installer":"Installed";
+        report["applicationLogs"]=await diagnosticLogs.Read();
         return Results.Json(report);
     });
     app.MapGet("/api/system",async()=>await appliance.Agent.GetFromJsonAsync<SystemSnapshot>("/system"));
@@ -319,7 +333,8 @@ async Task StartHost()
         return result.IsSuccessStatusCode ? Results.Redirect("/") : Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
     });
     app.MapGet("/api/disks",async()=> await appliance.Agent.GetFromJsonAsync<Inventory>("/disks"));
-    app.MapGet("/api/logs",async()=> Results.Text(await appliance.Agent.GetStringAsync("/logs")));
+    app.MapGet("/api/logs",async()=> Results.Text(await diagnosticLogs.Read()));
+    app.MapGet("/setup-account/logs",async()=> Results.File(System.Text.Encoding.UTF8.GetBytes(await diagnosticLogs.Read()),"text/plain; charset=utf-8","xur-setup-logs.txt"));
     app.MapPost("/tailscale/start",async (HttpContext ctx)=> {
         if(!auth.Authorized(ctx.Request.Cookies["xur.session"])) return Results.StatusCode(403);
         await appliance.StartWebLogin(); return Results.Redirect("/tailscale");
@@ -338,7 +353,7 @@ async Task StartHost()
     app.MapGet("/local/login",()=>Results.Text(appliance.Installer ? "Complete device installation with xur setup. Account creation follows reboot." : auth.AccountConfigured ? "User: "+auth.Username+"\nSign in with your username and password." : "Access code: "+auth.DisplayCode+"\nOpen the web manager to create the required administrator account."));
     app.MapGet("/local/tailscale",()=>Results.Json(new { state=appliance.TailscaleState, url=appliance.TailUrl }));
     app.MapGet("/local/hardware",async()=>Results.Text(await appliance.Agent.GetStringAsync("/hardware")));
-    app.MapGet("/local/logs",async()=>Results.Text(await appliance.Agent.GetStringAsync("/logs")));
+    app.MapGet("/local/logs",async()=>Results.Text(await diagnosticLogs.Read()));
     app.MapPost("/local/qr",async Task<IResult>()=>await appliance.StartQr()?Results.Text("Real QR enrollment started on local and serial consoles"):Results.Conflict(new{error=appliance.EnrollmentError}));
     app.MapGet("/local/update-all",async Task<IResult>()=> {
         if(appliance.Installer)return Results.Conflict();
@@ -447,7 +462,7 @@ async Task StartHost()
                     case 'u': case 'w': case 'j': case 'm': case 'i':
                         await consoleMenu.Open(key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":key=='i'?"setup":"power");ShowConsoleMenu();break;
                     case '5':
-                        LocalConsole.UpdateLogs(await appliance.Agent.GetStringAsync("/console-logs")); LocalConsole.OpenLogs();
+                        LocalConsole.UpdateLogs(await diagnosticLogs.Read(console:true)); LocalConsole.OpenLogs();
                         break;
                     case 'n': LocalConsole.Page(1); break;
                     case 'p': LocalConsole.Page(-1); break;
@@ -488,7 +503,7 @@ async Task StartHost()
                 await consoleMenu.Refresh();
                 LocalConsole.OpenMaintenance(consoleMenu.Screen,refreshOnly:true);
             }}catch{ /* Keep subsequent refreshes alive after a temporary agent failure. */ }
-            try { LocalConsole.UpdateLogs(await appliance.Agent.GetStringAsync("/console-logs")); } catch { }
+            try { LocalConsole.UpdateLogs(await diagnosticLogs.Read(console:true)); } catch { }
         }
     });
     await app.WaitForShutdownAsync();

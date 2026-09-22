@@ -1,6 +1,9 @@
 using Xur.Domain;
 using Xur.Gateway;
 var builder=WebApplication.CreateBuilder(args);builder.Logging.ClearProviders();
+var applicationLog = new ApplicationLog("xur-gateway");
+builder.Logging.AddProvider(applicationLog);
+applicationLog.Write("Startup", Microsoft.Extensions.Logging.LogLevel.Information, "Gateway starting. Bundle: " + ApplicationIdentity.Id);
 var run=Environment.GetEnvironmentVariable("XUR_RUN") ?? "/run/xur";
 var state=Environment.GetEnvironmentVariable("XUR_GATEWAY_STATE") ?? "/var/lib/xur";
 Directory.CreateDirectory(run);File.SetUnixFileMode(run,UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);

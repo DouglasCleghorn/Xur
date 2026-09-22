@@ -4,6 +4,9 @@ using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
+var applicationLog = new ApplicationLog("xur-agent");
+builder.Logging.AddProvider(applicationLog);
+applicationLog.Write("Startup", Microsoft.Extensions.Logging.LogLevel.Information, "Agent starting. Bundle: " + ApplicationIdentity.Id);
 var run = Environment.GetEnvironmentVariable("XUR_RUN") ?? "/run/xur";
 Directory.CreateDirectory(run);
 File.SetUnixFileMode(run, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -71,11 +74,18 @@ app.MapGet("/status", () => Results.Json(new { installer, scan = storage.Scan, o
 app.MapGet("/bootstrap-config", () => Results.Json(new { state=storage.Scan.State, token=storage.BootstrapToken }));
 app.MapGet("/disks", async () => await storage.Observe());
 app.MapGet("/logs",async()=> {
-    var logs=await Processes.Run("journalctl",["--no-pager","-n","400","-u","xur-control.service","-u","xur-agent.service","-u","xur-install.service"],10);
-    var output = logs.Output;
+    var output = "=== Agent (current process) ===\n" + applicationLog.Read() + "\n\n=== Current boot service journal ===\n";
+    try {
+        var logs=await Processes.Run("journalctl",["--boot","--no-pager","-n","800","-u","xur-control.service","-u","xur-agent.service","-u","xur-gateway.service","-u","xur-install.service","-u","xur-installer-app-prepare.service","-u","xur-installer-app-verify.service","-u","xur-installer-app-check.service","-u","xur-network.service"],10);
+        output += logs.Output;
+        if(logs.ExitCode != 0) output += "\nJournal read failed (exit " + logs.ExitCode + ").";
+    } catch(Exception e) when(e is IOException or System.ComponentModel.Win32Exception or OperationCanceledException) {
+        output += "Journal unavailable: " + e.Message;
+    }
     if (installer)
         foreach (var path in new[] { "/tmp/anaconda.log", "/tmp/storage.log", "/tmp/program.log", "/tmp/packaging.log" })
-            if (File.Exists(path)) output += "\n" + Path.GetFileName(path) + "\n" + string.Join('\n', File.ReadLines(path).TakeLast(400));
+            try { if (File.Exists(path)) output += "\n" + Path.GetFileName(path) + "\n" + string.Join('\n', File.ReadLines(path).TakeLast(400)); }
+            catch(Exception e) when(e is IOException or UnauthorizedAccessException) { output += "\n" + Path.GetFileName(path) + " unavailable: " + e.Message; }
     return Results.Text(Redaction.Logs(output));
 });
 app.MapGet("/console-logs",async()=> {

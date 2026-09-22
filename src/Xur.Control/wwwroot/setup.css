@@ -81,3 +81,5 @@ label.inline-option{display:flex;align-items:center;gap:.5rem}label.inline-optio
 #local-update-fields{min-width:0;width:100%;margin:16px 0;padding:16px;border:1px solid var(--rule);border-radius:var(--radius)}#local-update-fields input,#local-update-fields textarea{display:block;width:100%;max-width:100%;margin:6px 0 14px}#local-update-key{font-family:monospace;overflow-wrap:anywhere}
 
 .browser-error{max-width:42rem}.browser-error>p{overflow-wrap:anywhere}.browser-error-details{margin-top:2rem;color:var(--muted);font-size:.875rem}.browser-error-details summary{cursor:pointer}
+
+.password-field{display:flex;min-width:0}.password-field input{flex:1;width:100%;min-width:0}.password-field:has(.password-toggle:not([hidden])) input{border-radius:5px 0 0 5px;border-right:0}.login-shell .password-toggle{flex:none;width:44px;min-height:44px;padding:0;background:#181d24;color:var(--muted);border:1px solid #4b5564;border-left:0;border-radius:0 5px 5px 0}.password-toggle:hover{color:var(--text);background:var(--raised)}.password-field input:focus-visible,.password-toggle:focus-visible{position:relative;z-index:1}

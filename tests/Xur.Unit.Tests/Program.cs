@@ -21,6 +21,7 @@ if(args is ["--control-panel-render",var homeOutput]) { await ControlPanelRender
 if(args is ["--website-render",var websiteOutput]) { await ControlPanelRender.Run(websiteOutput, documentation:true);return; }
 var results = new List<string>();
 void Check(bool value,string name) { if(!value) throw new Exception(name); results.Add(name); }
+await ApplicationLogTests.Run(Check);
 await BrowserErrorTests.Run(Check);
 await FileEndpointTests.Run(Check);
 await FolderSizeCacheTests.Run(Check);

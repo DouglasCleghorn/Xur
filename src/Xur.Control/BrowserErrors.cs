@@ -18,7 +18,7 @@ public static class BrowserErrors
             try {
                 try{await next();}
                 catch(Exception e) when(!context.Response.HasStarted && !context.RequestAborted.IsCancellationRequested) {
-                    app.Logger.LogError(e,"Browser request failed: {Path}",path);
+                    app.Logger.LogError(e,"Browser request failed: {Path}; request {RequestId}",path,context.TraceIdentifier);
                     context.Response.Clear();context.Response.StatusCode=500;
                 }
                 if(context.Response.StatusCode>=400 && !context.Response.HasStarted) {
@@ -35,6 +35,7 @@ public static class BrowserErrors
                         >=500=>("Something went wrong", "Xur could not complete the request. Open Diagnostics to check for a service problem before trying again."),
                         _=>("Request could not complete", "Return to the page to review its status before trying again.")
                     };
+                    if(code>=500 && path=="/auth/setup") message="Xur could not finish creating the account. Download the setup logs, then return to account setup to retry.";
                     // Preserve deliberate validation messages, never raw server errors or HTML.
                     if(code is 400 or 409 && buffer.Length is >0 and <=65536 &&
                         context.Response.ContentType?.Split(';')[0].Trim().Equals("application/json",StringComparison.OrdinalIgnoreCase)==true)
@@ -52,8 +53,10 @@ public static class BrowserErrors
                     context.Response.Body=original;context.Response.ContentLength=null;context.Response.ContentType="text/html; charset=utf-8";context.Response.Headers.CacheControl="no-store";
                     context.Response.Headers["X-Content-Type-Options"]="nosniff";
                     context.Response.Headers.ContentSecurityPolicy="default-src 'none'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+                    var requestId=HtmlEncoder.Default.Encode(context.TraceIdentifier);
+                    var setupLogs=code>=500 && path=="/auth/setup" ? "<p><a href=\"/setup-account/logs\">Download setup logs</a></p>" : "";
                     await context.Response.WriteAsync($"""
-                        <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{HtmlEncoder.Default.Encode(title)} · Xur</title><link rel="stylesheet" href="/setup.css"></head><body><main class="browser-error"><h1>{HtmlEncoder.Default.Encode(title)}</h1><p role="alert">{HtmlEncoder.Default.Encode(message)}</p><div class="actions"><a class="button" href="{href}">{label}</a></div><details class="browser-error-details"><summary>Technical details</summary><p class="secondary-text">HTTP {code}</p></details></main></body></html>
+                        <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{HtmlEncoder.Default.Encode(title)} · Xur</title><link rel="stylesheet" href="/setup.css"></head><body><main class="browser-error"><h1>{HtmlEncoder.Default.Encode(title)}</h1><p role="alert">{HtmlEncoder.Default.Encode(message)}</p><div class="actions"><a class="button" href="{href}">{label}</a></div>{setupLogs}<details class="browser-error-details"><summary>Technical details</summary><p class="secondary-text">HTTP {code} · Request {requestId}</p></details></main></body></html>
                         """);return;
                 }
                 await buffer.DrainBufferAsync(original,context.RequestAborted);
@@ -64,6 +67,7 @@ public static class BrowserErrors
     private static (string Href,string Label) Recovery(PathString path,int code)
     {
         if(code==401)return ("/login","Sign in");
+        if(code>=500 && path.StartsWithSegments("/auth/setup"))return ("/setup-account","Return to account setup");
         if(code>=500 && code!=503)return ("/diagnostics","Open Diagnostics");
         // Fixed GET destinations avoid resubmitting failed forms or trusting a referrer.
         foreach(var section in new[]{"profiles","workstations","storage","settings","network","updates","files","models","containers","gpus","endpoints","monitoring","tailscale"})

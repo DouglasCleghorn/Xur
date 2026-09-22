@@ -29,7 +29,8 @@ Automation:
 3. Later, `POST /api/auth/login` with JSON `username`/`password` returns a manager
    token. Token login is disabled after setup.
 
-Bootstrap sessions can only create the account; they cannot access disks,
+Bootstrap sessions can create the account and download redacted setup logs at
+`GET /setup-account/logs`; they cannot access disks,
 profiles, or other sensitive APIs. Browser forms require CSRF tokens. The LAN manager uses HTTPS on port 8443 with a persistent machine certificate.
 Port 8080 redirects GET requests to HTTPS and rejects plaintext mutations.
 Session and form cookies are Secure. Form-protection keys persist alongside the
@@ -37,5 +38,22 @@ account, so a restart does not invalidate an open
 login form. Stale forms return to sign-in with a retry message.
 Tailscale Serve terminates trusted HTTPS and proxies through its private Unix
 socket; it does not need to trust the LAN certificate.
+
+Account setup has browser/password-manager hints (`username`, `new-password`,
+and length rules) and an accessible eye toggle; Xur does not generate passwords.
+If setup fails, its error page includes a request ID and a protected log download.
+The same setup session can return to the form to retry. Log access expires with
+the setup session and is revoked when the account is created; authenticated
+managers can then use Diagnostics. No anonymous log access is provided.
+
+The web manager, agent and gateway send redacted warnings and exceptions to
+stderr, which their systemd units send to the journal. Request bodies, passwords,
+cookies and authorization headers are not intentionally logged. The current
+manager's bounded in-memory log is included even if the agent/journal is
+unavailable. The console Logs view and web Diagnostics include Xur service logs;
+the downloaded diagnostic JSON includes application logs as well as GPU details.
+The in-memory fallback lasts only until the process restarts; journal retention
+controls older records. These changes cannot recover errors that older builds
+discarded before logging was enabled.
 
 Hashing reference: [ASP.NET Core PasswordHasher](https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.identity.passwordhasher-1?view=aspnetcore-10.0).

@@ -5,12 +5,25 @@
 <p>Create the required administrator account to use the web manager.</p>
 <section class="panel narrow">
     @if(Error!=null) { <p role="alert">@Error</p> }
-    <form method="post" action="/auth/setup">
+    <form method="post" action="/auth/setup" autocomplete="on">
         <AntiforgeryToken />
         <label for="username">Username or email</label><input id="username" name="username" autocomplete="username" maxlength="254" autocapitalize="none" spellcheck="false" autofocus required />
-        <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="256" required />
-        <small>Use Chrome’s suggested strong password, or your password manager, and save it for future sign-ins. At least 8 characters.</small>
+        <label for="password">Password</label>
+        <div class="password-field">
+            <input id="password" name="password" type="password" autocomplete="new-password" passwordrules="minlength: 8; maxlength: 256;" minlength="8" maxlength="256" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="password-hint" required />
+            <button type="button" id="show-password" class="password-toggle" aria-label="Show password" aria-controls="password" title="Show password" hidden>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                    <circle cx="12" cy="12" r="3" />
+                    <path class="password-eye-slash" d="m3 3 18 18" hidden />
+                </svg>
+            </button>
+        </div>
+        <small id="password-hint">At least 8 characters. Your browser or password manager can suggest and save a password.</small>
         <button type="submit">Create account</button>
     </form>
 </section>
+<p><a href="/setup-account/logs">Download setup logs</a> if account setup fails.</p>
+<script src="/account-setup.js" defer></script>
+
 @code { [SupplyParameterFromQuery(Name="error")] public string? Error { get; set; } }
