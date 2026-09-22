@@ -126,6 +126,7 @@ public sealed class Appliance
     public string RunDirectory { get; } = Environment.GetEnvironmentVariable("XUR_RUN") ?? "/run/xur";
     public HttpClient Agent { get; }
     public bool Installer { get; } = File.ReadAllText("/proc/cmdline").Split(' ').Contains("xur.installer=1") || Environment.GetEnvironmentVariable("XUR_MODE") == "Installer";
+    public string StateDirectory=>Installer?RunDirectory:Environment.GetEnvironmentVariable("XUR_STATE")??"/var/lib/xur";
     public string TailscaleState { get; private set; } = "Not connected";
     public string TailUrl { get; private set; } = "";
     public string TailIdentity { get; private set; } = "";
@@ -137,7 +138,6 @@ public sealed class Appliance
     public string? ConfirmedAdministrator { get; private set; }
     public bool QrRunning { get; private set; }
     public string TailLoginUrl { get; private set; } = "";
-    public InstallPlan? Plan { get; set; }
     public int Port { get; } = int.TryParse(Environment.GetEnvironmentVariable("XUR_PORT"),out var p) ? p : 8080;
     public string BootId { get; } = File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim();
     readonly Func<string,string[],int,Task<ProcessResult>>? commandRunner;
@@ -146,7 +146,7 @@ public sealed class Appliance
     {
         this.commandRunner=commandRunner;this.networkObserver=networkObserver;
         Agent = LocalClient.Create(Path.Combine(RunDirectory,"agent.sock"));
-        var adminFile = Path.Combine(Installer ? RunDirectory : "/var/lib/xur", "administrator.json");
+        var adminFile = Path.Combine(StateDirectory, "administrator.json");
         if(File.Exists(adminFile))
             try { using var doc=JsonDocument.Parse(File.ReadAllText(adminFile)); ConfirmedAdministrator=doc.RootElement.GetProperty("login").GetString(); } catch { }
     }
@@ -167,7 +167,7 @@ public sealed class Appliance
         catch(Exception e) when(e is NetworkInformationException or System.Net.Sockets.SocketException or IOException){ /* An adapter may disappear between enumeration and address lookup. */ }
         return adapters.OrderBy(n=>n.Name).ToArray();
     }
-    public string[] Urls()=>Network().Where(n=>n.State=="Up").SelectMany(n=>n.Addresses)
+    public string[] Urls()=>Installer?[]:Network().Where(n=>n.State=="Up").SelectMany(n=>n.Addresses)
         .Select(a=>System.Net.IPAddress.TryParse(a,out var ip)?ip:null).Where(a=>a!=null&&!a.IsIPv6LinkLocal&&!System.Net.IPAddress.IsLoopback(a))
         .Select(a=>$"https://{(a!.AddressFamily==System.Net.Sockets.AddressFamily.InterNetworkV6?"["+a+"]":a.ToString())}:{Port+363}/").Distinct().ToArray();
     public async Task<JsonElement?> AgentStatus()
@@ -176,6 +176,7 @@ public sealed class Appliance
     { try { return await Agent.GetFromJsonAsync<Inventory>("/disks"); } catch { return null; } }
     public async Task RefreshTailscale()
     {
+        if(Installer){TailscaleState="Available after installation";TailUrl="";TailIdentity="";TailServeReady=false;TailServeStatus="Available after installation";return;}
         try
         {
             var result = await Command("tailscale",["status","--json"],10);
@@ -231,12 +232,26 @@ public sealed class Appliance
         await RefreshTailscale();
         if (TailscaleState != "Running" || TailIdentity.Length == 0) throw new InvalidOperationException("No enrolling identity");
         ConfirmedAdministrator = TailIdentity;
-        var path = Path.Combine(Installer ? RunDirectory : "/var/lib/xur","administrator.json");
+        var path = Path.Combine(StateDirectory,"administrator.json");
         await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new { login = TailIdentity, confirmed = DateTimeOffset.UtcNow }));
         File.SetUnixFileMode(path,UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
-    public void StartQr() {if(TailscaleState=="Running"&&TailUrl.Length>0)LocalConsole.OpenQr(true);else StartEnrollment(true); }
-    public void StartWebLogin() => StartEnrollment(false);
+    public string EnrollmentError {get;private set;}="";
+    public async Task<bool> StartQr() {if(!Installer&&TailscaleState=="Running"&&TailUrl.Length>0){LocalConsole.OpenQr(true);return true;}return await PrepareEnrollment(true);}
+    public Task<bool> StartWebLogin() => PrepareEnrollment(false);
+    async Task<bool> PrepareEnrollment(bool console)
+    {
+        if(Installer){EnrollmentError="Tailscale is available after installation. Complete local setup first.";if(console)LocalConsole.Show("Tailscale",EnrollmentError);return false;}
+        ComputerNameStatus? name=null;
+        try{name=await Agent.GetFromJsonAsync<ComputerNameStatus>("/computer-name");}catch{}
+        if(name is not {Configured:true} || string.IsNullOrWhiteSpace(name.Name))
+        {
+            EnrollmentError="Save the server name before setting up Tailscale.";
+            if(console)LocalConsole.Show("Server name required",EnrollmentError+"\nChoose Server name from the console menu, then return to Tailscale.");
+            return false;
+        }
+        EnrollmentError="";StartEnrollment(console,name.Name);return true;
+    }
     public static string? LoginUrl(string line)
     {
         var text=line.Trim();
@@ -244,7 +259,7 @@ public sealed class Appliance
             uri.Host=="login.tailscale.com" && uri.IsDefaultPort && uri.UserInfo.Length==0 &&
             uri.AbsolutePath.StartsWith("/a/",StringComparison.Ordinal) ? uri.AbsoluteUri : null;
     }
-    void StartEnrollment(bool console)
+    void StartEnrollment(bool console,string hostname)
     {
         lock(this) { if(console)LocalConsole.OpenQr(!QrRunning); if (QrRunning) return; QrRunning = true; TailLoginUrl=""; }
         _ = Task.Run(async () => {
@@ -252,8 +267,6 @@ public sealed class Appliance
             {
                 // The claim is kept in memory for the authenticated page and local console only.
                 var info = new ProcessStartInfo("tailscale") { RedirectStandardOutput = true, RedirectStandardError = true };
-                var hostname=Environment.MachineName;
-                try{hostname=(await Agent.GetFromJsonAsync<ComputerNameStatus>("/computer-name"))?.Name??hostname;}catch{}
                 foreach (var arg in new[]{"up","--qr","--qr-format=small","--hostname="+hostname,"--accept-dns=false"}) info.ArgumentList.Add(arg);
                 using var process = Process.Start(info) ?? throw new IOException();
                 using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(15));

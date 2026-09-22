@@ -32,7 +32,9 @@ public sealed partial class NetworkSettings
             var hardware=await Check("busctl",["get-property",Bus,values[2],Bus+".Device.Wireless","PermHwAddress"]);
             var mac=Regex.Match(hardware,"^s \"([0-9A-Fa-f:]{17})\"$").Groups[1].Value.ToUpperInvariant();
             if(mac.Length==0)continue;
-            adapters.Add(new(name,mac,values[0],Guid.TryParse(values[1],out _)?values[1]:null,values[2]));
+            string[] detail=[];
+            try{detail=(await Nm("--escape","no","-g","GENERAL.PRODUCT,GENERAL.DRIVER,GENERAL.FIRMWARE-VERSION,GENERAL.FIRMWARE-MISSING","device","show",name)).Split('\n');}catch{}
+            adapters.Add(new(name,mac,values[0],Guid.TryParse(values[1],out _)?values[1]:null,values[2],detail.ElementAtOrDefault(0)??"",detail.ElementAtOrDefault(1)??"",detail.ElementAtOrDefault(2)??"",detail.ElementAtOrDefault(3)=="yes"));
         }
         return new(radio.ElementAtOrDefault(0)=="enabled",radio.ElementAtOrDefault(1)=="enabled",adapters.ToArray());
     }
@@ -44,6 +46,9 @@ public sealed partial class NetworkSettings
         if(!status.Enabled)throw new InvalidOperationException("Enable Wi-Fi before scanning.");
         var matches=status.Adapters.Where(a=>a.Interface==name && a.MacAddress==mac).ToArray();
         if(matches.Length!=1)throw new InvalidOperationException("The Wi-Fi adapter changed or was removed. Refresh the adapter list.");
+        if(matches[0].FirmwareMissing)throw new InvalidOperationException("Firmware is missing for "+matches[0].Interface+" ("+matches[0].Model+", driver "+matches[0].Driver+"). Use a wired connection or an installer with firmware for this adapter.");
+        if(matches[0].State.StartsWith("10 "))throw new InvalidOperationException("This Wi-Fi adapter is unmanaged by NetworkManager. Check its network configuration.");
+        if(matches[0].State.StartsWith("20 "))throw new InvalidOperationException("This Wi-Fi adapter is unavailable. Check the radio switch, driver and firmware in Logs.");
         return matches[0];
     }
     public static WifiNetwork[] ParseWifiNetworks(string output)
@@ -61,8 +66,27 @@ public sealed partial class NetworkSettings
     }
     public async Task<WifiNetwork[]> ScanWifi(WifiScanRequest request,bool rescan=true)
     {
+        var adapter=await WifiAdapterFor(request.Interface,request.MacAddress);
+        async Task<long?> LastScan()
+        {
+            try{var result=await Check("busctl",["get-property",Bus,adapter.DevicePath,Bus+".Device.Wireless","LastScan"],5);return long.TryParse(result.Split(' ').Last(),out var value)?value:null;}
+            catch{return null;}
+        }
+        var before=rescan?await LastScan():null;
+        for(var attempt=0;attempt<(rescan?3:1);attempt++)
+        {
+            var output=await Check("nmcli",["--wait","20","--colors","no","-t","--escape","yes","-f","BSSID,SSID,SECURITY,SIGNAL","device","wifi","list","ifname",request.Interface,"--rescan",rescan&&attempt==0?"yes":"no"],30);
+            var networks=ParseWifiNetworks(output);
+            if(networks.Length>0)return networks;
+            if(output.Length>0&&!output.Split('\n').Any(line=>WifiFields(line) is {Length:4} fields&&Regex.IsMatch(fields[0],@"^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")))
+                throw new InvalidOperationException("NetworkManager returned an unreadable Wi-Fi list. Check network diagnostics; this is not an empty scan.");
+            if(rescan&&attempt<2)await Task.Delay(1000);
+        }
         await WifiAdapterFor(request.Interface,request.MacAddress);
-        return ParseWifiNetworks(await Check("nmcli",["--wait","20","-t","--escape","yes","-f","BSSID,SSID,SECURITY,SIGNAL","device","wifi","list","ifname",request.Interface,"--rescan",rescan?"yes":"no"],30));
+        var after=rescan?await LastScan():null;
+        if(rescan&&after.HasValue&&(after.Value<0||before.HasValue&&after<=before))
+            throw new InvalidOperationException("The Wi-Fi scan has not completed. Wait a moment and scan again. If this continues, check the adapter driver and firmware in Logs.");
+        return [];
     }
     public async Task<NetworkChange> ConnectWifi(WifiConnectRequest request)
     {

@@ -24,6 +24,11 @@ public static class NetworkEndpoints
             return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
         });
         app.MapPost("/local/computer-name",(ComputerNameRequest request)=>Send("/computer-name",request));
+        app.MapPost("/settings/computer-name",async(HttpContext context)=>{
+            var form=await context.Request.ReadFormAsync();
+            using var response=await device.Agent.PostAsJsonAsync("/computer-name",new ComputerNameRequest(form["name"].ToString()));
+            return response.IsSuccessStatusCode?Results.Redirect("/tailscale"):Results.Content(await response.Content.ReadAsStringAsync(),"application/json",statusCode:(int)response.StatusCode);
+        });
         app.MapGet("/local/network/wifi",async Task<IResult>()=>{
             using var result=await device.Agent.GetAsync("/network/wifi");
             return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);

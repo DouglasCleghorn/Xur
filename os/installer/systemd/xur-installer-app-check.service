@@ -1,0 +1,11 @@
+[Unit]
+Description=Check signed installer updates without interrupting setup
+ConditionKernelCommandLine=xur.installer=1
+ConditionPathExists=!/run/xur/approved.ks
+After=xur-installer-app-verify.service xur-control.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/xur-installer-app check
+TimeoutStartSec=20
+UMask=0077

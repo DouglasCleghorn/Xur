@@ -7,12 +7,15 @@ Home is the control panel; Monitoring contains resource and network details.
 ## Install and sign in
 
 Follow [Installation](install.md) to create and boot UEFI media. The online
-installer requires Internet access and a target disk of at least 64 GiB. Choosing
-**Erase disk and install Xur** destroys existing data on that disk.
+installer requires Internet access and a target disk of at least 64 GiB. Use **Setup and installation** in the console to save the server name, configure
+networking, review a disk and type its erase confirmation. This destroys existing
+data on that disk. Reboot when installation completes; saved Wi-Fi persists.
 
 Open the console's `https://<host>:8443` address, accept its self-signed certificate,
-and enter the setup code. Create a manager account before installing. Afterward,
-use that account to sign in; the setup token is no longer a login method.
+after booting the installed system, and enter the console setup code. Create the
+required administrator account in your browser. Use Chrome's suggested password
+or your password manager and save it. Future logins use this account; the token
+is disabled after signup. Web management and Tailscale are unavailable on live media.
 
 For remote access, open **Tailscale**, authorize the machine, and finish its setup.
 Use the resulting HTTPS Serve address. Keep credentials and setup QR codes out of

@@ -28,7 +28,7 @@ async Task Root()
         var choice=Console.ReadLine()?.Trim();if(choice is null or "0")return;
         if(!int.TryParse(choice,out var selected) || selected<1 || selected>LocalConsole.RootOptions(installer).Length)continue;
         var key=LocalConsole.RootKey(selected-1,installer);
-        if(key is 'u' or 'w' or 'j' or 'm'){await InteractiveMaintenance(menu,key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":"power");continue;}
+        if(key is 'u' or 'w' or 'j' or 'm' or 'i'){await InteractiveMaintenance(menu,key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":key=='i'?"setup":"power");continue;}
         var action=key switch { '1'=>"status", '2'=>"qr", '3'=>"network", '4'=>"hardware", '5'=>"logs", _=>"" };
         if(action.Length>0)await RunCommand(action,false);
         if(key=='1')await RunCommand("login",false);
@@ -46,7 +46,7 @@ async Task InteractiveMaintenance(ConsoleMaintenance menu,string view)
         var frame="\n"+screen.Title+"\n"+screen.Body+"\n"+string.Join('\n',screen.Options.Select((o,i)=>$"{i+1}. {o.Display}"))+"\n0. Back\nSelection: ";
         if(frame!=lastFrame){Console.Write(frame);if(screen.InputValue!=null)Console.Write(screen.Secret?"Password (hidden; Escape cancels): ":"Current: "+screen.InputValue+"\nNew value (blank clears; /cancel goes back): ");lastFrame=frame;}
         read??=Task.Run(()=>screen.Secret?ConsolePassword.Read():Console.ReadLine());
-        if(await Task.WhenAny(read,Task.Delay(5000))!=read){if(screen.InputValue==null)await menu.Refresh();continue;}
+        if(await Task.WhenAny(read,Task.Delay(screen.Id=="wifi-scanning"?250:5000))!=read){if(screen.InputValue==null)await menu.Refresh();continue;}
         var entered=await read;var choice=screen.Secret?entered:entered?.Trim();read=null;lastFrame="";if(choice==null)return;
         if(screen.InputValue!=null){if(choice=="/cancel")await menu.Select('0');else await menu.Submit(choice);continue;}
         if(choice=="0"){await menu.Select('0');continue;}
@@ -59,6 +59,7 @@ async Task RunCommand(string action, bool json)
 {
     var run = Environment.GetEnvironmentVariable("XUR_RUN") ?? "/run/xur";
     using var client = LocalClient.Create(Path.Combine(run,"control.sock"));
+    if(action=="setup"){var status=await client.GetFromJsonAsync<JsonElement>("/local/status");await InteractiveMaintenance(new ConsoleMaintenance(client,status.GetProperty("installer").GetBoolean(),local:true),"setup");return;}
     var result = action is "qr" or "poweroff" or "reboot" or "update-all/start" || (action.StartsWith("updates/",StringComparison.Ordinal) || action.StartsWith("application-updates/",StringComparison.Ordinal))
         ? await client.PostAsync("/local/"+action,null) : await client.GetAsync("/local/"+action);
     Console.WriteLine(await result.Content.ReadAsStringAsync());
@@ -67,14 +68,14 @@ async Task StartHost()
 {
     var appliance = new Appliance();
     _ = appliance.Network(); // Observe hardware/network before identity creation and web host startup.
-    var identityDirectory=appliance.Installer ? appliance.RunDirectory : "/var/lib/xur";
+    var identityDirectory=appliance.StateDirectory;
     var auth = new Bootstrap(signingKey:Bootstrap.LoadSigningKey(identityDirectory),directory:identityDirectory);
     var apiKeys=new ApiKeys(identityDirectory);
     var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args=Array.Empty<string>(), ContentRootPath=AppContext.BaseDirectory });
     builder.Logging.ClearProviders();
     builder.Services.AddSingleton(appliance); builder.Services.AddSingleton(auth);builder.Services.AddSingleton(apiKeys);
-    var catalog=new RecipeCatalog(Environment.GetEnvironmentVariable("XUR_CATALOG") ?? "/usr/share/xur/catalog",Path.Combine(appliance.Installer ? appliance.RunDirectory : "/var/lib/xur","catalog-selected"));
-    var profileStore=new ProfileStore(appliance.Installer ? Path.Combine(appliance.RunDirectory,"profiles") : "/var/lib/xur");
+    var catalog=new RecipeCatalog(Environment.GetEnvironmentVariable("XUR_CATALOG") ?? "/usr/share/xur/catalog",Path.Combine(appliance.StateDirectory,"catalog-selected"));
+    var profileStore=new ProfileStore(appliance.Installer?Path.Combine(appliance.StateDirectory,"profiles"):appliance.StateDirectory);
     var runtimeClient=LocalClient.Create(Path.Combine(appliance.RunDirectory,"agent.sock"));runtimeClient.Timeout=TimeSpan.FromMinutes(45);
     var gatewayClient=LocalClient.Create(Path.Combine(appliance.RunDirectory,"gateway-admin.sock"));
     var profileManager=new ProfileManager(profileStore,new AgentWorkloadRuntime(runtimeClient),new LocalWorkloadGateway(gatewayClient),catalog,async()=>await runtimeClient.GetFromJsonAsync<StationAccount[]>("/station-users") ?? []);
@@ -90,13 +91,18 @@ async Task StartHost()
     var socket = Path.Combine(appliance.RunDirectory,"control.sock"); File.Delete(socket);
     var serveSocket = Path.Combine(appliance.RunDirectory,"serve.sock"); File.Delete(serveSocket);
     builder.WebHost.ConfigureKestrel(k => {
-        k.ListenAnyIP(appliance.Port);
-        k.ListenAnyIP(appliance.Port+363,o=>o.UseHttps(LocalTls.Load(identityDirectory)));
+        if(!appliance.Installer){k.ListenAnyIP(appliance.Port);k.ListenAnyIP(appliance.Port+363,o=>o.UseHttps(LocalTls.Load(identityDirectory)));}
         k.ListenUnixSocket(socket,l=>l.Use(next=>connection=>{connection.Features.Set(new EndpointIdentity("local"));return next(connection);}));
-        k.ListenUnixSocket(serveSocket,l=>l.Use(next=>connection=>{connection.Features.Set(new EndpointIdentity("serve"));return next(connection);}));
+        if(!appliance.Installer)k.ListenUnixSocket(serveSocket,l=>l.Use(next=>connection=>{connection.Features.Set(new EndpointIdentity("serve"));return next(connection);}));
     });
     var app = builder.Build();
     app.UseBrowserErrors(Path.Combine(identityDirectory,"response-spool"));
+    app.Use(async(ctx,next)=>{
+        var path=ctx.Request.Path;
+        if(appliance.Installer&&!path.StartsWithSegments("/local") || path.StartsWithSegments("/install") || path.StartsWithSegments("/api/install") || path=="/api/installer")
+        {ctx.Response.StatusCode=404;return;}
+        await next();
+    });
     var maintenance=new ApplicationMaintenance();
     _=ApplicationIdentity.Id;
     app.Use(async(ctx,next)=> {
@@ -163,7 +169,7 @@ async Task StartHost()
     });
     app.Use(async(ctx,next)=> {
         var path=ctx.Request.Path.Value ?? "";
-        var tracked=!appliance.Installer && (path.StartsWith("/inference/") || ctx.Request.Method!="GET" && !path.Contains("application-updates") && path!="/auth/login" && path!="/api/bootstrap");
+        var tracked=!appliance.Installer && (path.StartsWith("/inference/") || ctx.Request.Method!="GET" && !path.Contains("application-updates") && path!="/auth/login");
         if(!tracked){await next();return;}
         if(!maintenance.Enter()){ctx.Response.StatusCode=503;ctx.Response.Headers.RetryAfter="5";await ctx.Response.WriteAsync("Application update in progress. Retry shortly.");return;}
         try{await next();}finally{maintenance.Exit();}
@@ -274,14 +280,6 @@ async Task StartHost()
         return result.Session is { } session ? Results.Json(new { accessToken=session, tokenType="Bearer", expiresIn=28800, setupRequired=true })
             : Results.Json(new { error=result.Status==503 ? "Setup is starting" : result.Status==429 ? "Wait 30 seconds before retrying" : "Invalid or expired token" },statusCode:result.Status);
     });
-    app.MapPost("/api/install/plan",async (ApiPlanRequest request)=> {
-        var result=await appliance.Agent.PostAsJsonAsync("/plan",new {path=request.Path});
-        return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
-    });
-    app.MapPost("/api/install/approve",async (Approval request)=> {
-        var result=await appliance.Agent.PostAsJsonAsync("/approve",request);
-        return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
-    });
     app.MapPost("/api/power/reboot",async()=>Results.StatusCode((int)(await appliance.Agent.PostAsync("/power/reboot",null)).StatusCode));
     void SetSession(HttpContext ctx,string session)=>ctx.Response.Cookies.Append("xur.session",session,new CookieOptions { HttpOnly=true,SameSite=SameSiteMode.Strict,Secure=true,MaxAge=TimeSpan.FromHours(8),Path="/" });
     app.MapPost("/auth/login",async (HttpContext ctx) => {
@@ -294,12 +292,12 @@ async Task StartHost()
         var form=await ctx.Request.ReadFormAsync();
         var result=auth.CreateAccount(ctx.Items["setupSession"] as string,form["username"].ToString(),form["password"].ToString());
         if(result.Session==null)return Results.Redirect("/setup-account?error="+Uri.EscapeDataString(result.Error ?? "Could not create account."));
-        SetSession(ctx,result.Session);LocalConsole.Refresh();return Results.Redirect("/");
+        File.Delete(Path.Combine(identityDirectory,"bootstrap-token"));SetSession(ctx,result.Session);LocalConsole.Refresh();return Results.Redirect("/");
     });
     app.MapPost("/api/auth/setup",(HttpContext ctx,ApiAccountRequest request)=> {
         var result=auth.CreateAccount(ctx.Items["setupSession"] as string,request.Username ?? "",request.Password ?? "");
         if(result.Session==null)return Results.Json(new {error=result.Error},statusCode:result.Status);
-        LocalConsole.Refresh();return Results.Json(new {accessToken=result.Session,tokenType="Bearer",expiresIn=28800,setupRequired=false});
+        File.Delete(Path.Combine(identityDirectory,"bootstrap-token"));LocalConsole.Refresh();return Results.Json(new {accessToken=result.Session,tokenType="Bearer",expiresIn=28800,setupRequired=false});
     });
     app.MapPost("/api/auth/login",(ApiAccountRequest request)=> {
         var result=auth.PasswordLogin(request.Username ?? "",request.Password ?? "");
@@ -322,25 +320,11 @@ async Task StartHost()
     });
     app.MapGet("/api/disks",async()=> await appliance.Agent.GetFromJsonAsync<Inventory>("/disks"));
     app.MapGet("/api/logs",async()=> Results.Text(await appliance.Agent.GetStringAsync("/logs")));
-    app.MapGet("/api/installer",async()=> Results.Json(await appliance.AgentStatus()));
-    app.MapPost("/tailscale/start",(HttpContext ctx)=> {
+    app.MapPost("/tailscale/start",async (HttpContext ctx)=> {
         if(!auth.Authorized(ctx.Request.Cookies["xur.session"])) return Results.StatusCode(403);
-        appliance.StartWebLogin(); return Results.Redirect("/tailscale");
+        await appliance.StartWebLogin(); return Results.Redirect("/tailscale");
     });
     app.MapPost("/tailscale/confirm",async()=> { await appliance.ConfirmAdmin(); return Results.Redirect("/tailscale"); });
-    app.MapPost("/install/plan",async (HttpContext ctx) => {
-        var form = await ctx.Request.ReadFormAsync();
-        var result = await appliance.Agent.PostAsJsonAsync("/plan",new { path=form["path"].ToString() });
-        if (!result.IsSuccessStatusCode) return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
-        var plan = await result.Content.ReadFromJsonAsync<InstallPlan>();
-        appliance.Plan = plan;
-        return Results.Redirect("/install/review");
-    });
-    app.MapPost("/install/approve",async (HttpContext ctx) => {
-        var f = await ctx.Request.ReadFormAsync();
-        var result = await appliance.Agent.PostAsJsonAsync("/approve",new Approval(f["id"].ToString(),f["digest"].ToString()));
-        return result.IsSuccessStatusCode ? Results.Redirect("/install/progress") : Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
-    });
     app.MapPost("/power/reboot",async()=> {
         var state=await appliance.AgentStatus();
         if(state is not { } s)return Results.StatusCode(503);
@@ -351,11 +335,11 @@ async Task StartHost()
     app.MapGet("/local/console-frame",(int? columns,int? rows)=>Results.Text(LocalConsole.ExportFrame(columns??100,rows??40),"text/plain; charset=utf-8"));
     app.MapGet("/local/status",()=>Results.Text(JsonSerializer.Serialize(new { urls=appliance.Urls(),tailscale=appliance.TailscaleState, diskWrites="ApprovalRequired",installer=appliance.Installer })));
     app.MapGet("/local/network",()=>Results.Json(appliance.Network()));
-    app.MapGet("/local/login",()=>Results.Text(auth.AccountConfigured ? "User: "+auth.Username+"\nSign in with your username and password." : "User: xur\nAccess code: "+auth.DisplayCode));
+    app.MapGet("/local/login",()=>Results.Text(appliance.Installer ? "Complete device installation with xur setup. Account creation follows reboot." : auth.AccountConfigured ? "User: "+auth.Username+"\nSign in with your username and password." : "Access code: "+auth.DisplayCode+"\nOpen the web manager to create the required administrator account."));
     app.MapGet("/local/tailscale",()=>Results.Json(new { state=appliance.TailscaleState, url=appliance.TailUrl }));
     app.MapGet("/local/hardware",async()=>Results.Text(await appliance.Agent.GetStringAsync("/hardware")));
     app.MapGet("/local/logs",async()=>Results.Text(await appliance.Agent.GetStringAsync("/logs")));
-    app.MapPost("/local/qr",()=>{ appliance.StartQr();return Results.Text("Real QR enrollment started on local and serial consoles"); });
+    app.MapPost("/local/qr",async Task<IResult>()=>await appliance.StartQr()?Results.Text("Real QR enrollment started on local and serial consoles"):Results.Conflict(new{error=appliance.EnrollmentError}));
     app.MapGet("/local/update-all",async Task<IResult>()=> {
         if(appliance.Installer)return Results.Conflict();
         using var result=await appliance.Agent.GetAsync("/update-all");
@@ -370,6 +354,7 @@ async Task StartHost()
     app.MapProfiles(appliance,profileManager,catalog);
     app.MapUpdates(appliance);
     app.MapNetworkSettings(appliance);
+    app.MapConsoleSetup(appliance);
     var gatewayData=LocalClient.Create(Path.Combine(appliance.RunDirectory,"gateway.sock"));gatewayData.Timeout=Timeout.InfiniteTimeSpan;
     app.MapModelLab(appliance,profileManager,gatewayData,gatewayClient,maintenance);
     app.Map("/inference/{**path}",async(HttpContext c,string? path)=> {
@@ -377,29 +362,17 @@ async Task StartHost()
         await StreamProxy.Forward(c,gatewayData,"http://localhost/"+(path??"")+c.Request.QueryString);
     });
     app.MapRazorComponents<App>();
+    if(!appliance.Installer){var tokenPath=Path.Combine(identityDirectory,"bootstrap-token");auth.Initialize(!auth.AccountConfigured&&File.Exists(tokenPath)?File.ReadAllText(tokenPath).Trim():null);}
     await app.StartAsync();
     if(!appliance.Installer && !File.Exists(ApplicationMaintenance.Marker))await profileManager.Resume(automatic:true);
     File.SetUnixFileMode(socket,UnixFileMode.UserRead|UnixFileMode.UserWrite);
-    File.SetUnixFileMode(serveSocket,UnixFileMode.UserRead|UnixFileMode.UserWrite);
+    if(!appliance.Installer)File.SetUnixFileMode(serveSocket,UnixFileMode.UserRead|UnixFileMode.UserWrite);
     await LocalConsole.Start(appliance,auth);
-    if(appliance.Installer) _ = Task.Run(async()=> {
-        while(!auth.Configured && !app.Lifetime.ApplicationStopping.IsCancellationRequested)
-        {
-            try {
-                var config=await appliance.Agent.GetFromJsonAsync<BootstrapConfiguration>("/bootstrap-config");
-                if(config!=null && config.State!="Starting") { auth.Initialize(config.Token); LocalConsole.Refresh(); break; }
-            } catch { /* Local login stays available; storage approval remains gated by the agent. */ }
-            await Task.Delay(1000);
-        }
-    });
     app.Lifetime.ApplicationStopping.Register(LocalConsole.Stop);
-    var consoleMenu=new ConsoleMaintenance(appliance.Agent,appliance.Installer);
+    using var setupClient=LocalClient.Create(socket);
+    var consoleMenu=new ConsoleMaintenance(appliance.Agent,appliance.Installer,setupClient:setupClient);
     void ShowConsoleMenu(){if(consoleMenu.Closed)LocalConsole.Status(appliance,auth);else LocalConsole.OpenMaintenance(consoleMenu.Screen);}
-    try
-    {
-        if(await appliance.Agent.GetFromJsonAsync<ComputerNameStatus>("/computer-name") is {Configured:false})
-        {await consoleMenu.Open("computer-name");ShowConsoleMenu();}
-    }catch{ /* Keep boot and LAN management available when the agent is restarting. */ }
+    if(appliance.Installer){await consoleMenu.Open("setup");ShowConsoleMenu();}
     var networkRefreshGate=new SemaphoreSlim(1,1);
     async Task RefreshNetworkConsole()
     {
@@ -427,7 +400,7 @@ async Task StartHost()
         {
             char? key;
             if(Environment.GetEnvironmentVariable("XUR_CONSOLE")=="stdio")
-            { var line=await input.ReadLineAsync(); if(line==null)break;if(LocalConsole.EditingText){if(line=="/cancel")await consoleMenu.Select('0');else await consoleMenu.Submit(line);ShowConsoleMenu();continue;}key=LocalConsole.SelectLine(line); }
+            { var line=await input.ReadLineAsync(); if(line==null)break;if(LocalConsole.Wake())continue;if(LocalConsole.EditingText){if(line=="/cancel")await consoleMenu.Select('0');else await consoleMenu.Submit(line);ShowConsoleMenu();continue;}key=LocalConsole.SelectLine(line); }
             else
             {
                 read??=input.ReadAsync(buffer,0,1);
@@ -439,6 +412,7 @@ async Task StartHost()
                     if(await read==0)break;
                     read=null;var escaped=keys.InEscapeSequence || buffer[0]=='\x1b';action=keys.Read(buffer[0]);if(!escaped)typed=buffer[0];
                 }
+                if((typed.HasValue||action!=ConsoleKeyAction.None)&&LocalConsole.Wake())continue;
                 if(logTerminal)
                 {
                     if(action is ConsoleKeyAction.Enter or ConsoleKeyAction.Back){LocalConsole.Status(appliance,auth);await Processes.Run("chvt",["3"]);}
@@ -468,10 +442,10 @@ async Task StartHost()
                 switch(key.Value)
                 {
                     case '0': case '1': LocalConsole.Status(appliance,auth);break;
-                    case '2': appliance.StartQr();break;
+                    case '2': if(!await appliance.StartQr()){await consoleMenu.Open("computer-name");ShowConsoleMenu();}break;
                     case '4': LocalConsole.Show("Hardware",await appliance.Agent.GetStringAsync("/hardware"));break;
-                    case 'u': case 'w': case 'j': case 'm':
-                        await consoleMenu.Open(key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":"power");ShowConsoleMenu();break;
+                    case 'u': case 'w': case 'j': case 'm': case 'i':
+                        await consoleMenu.Open(key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":key=='i'?"setup":"power");ShowConsoleMenu();break;
                     case '5':
                         LocalConsole.UpdateLogs(await appliance.Agent.GetStringAsync("/console-logs")); LocalConsole.OpenLogs();
                         break;
@@ -479,7 +453,7 @@ async Task StartHost()
                     case 'p': LocalConsole.Page(-1); break;
                 }
             }
-            catch { LocalConsole.Show("Action unavailable","The web setup remains running. Press 0 for the menu."); }
+            catch { LocalConsole.Show("Action unavailable","Press 0 to return to the menu and retry."); }
         }
     }
     if(Environment.GetEnvironmentVariable("XUR_CONSOLE") == "stdio") _ = Task.Run(()=>Input(Console.In,false));
@@ -489,11 +463,15 @@ async Task StartHost()
     _ = Task.Run(async()=>{
         while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {
-            await Task.Delay(500);try{LocalConsole.Refresh();}catch{ /* Retry on the next tick, including during link changes. */ }
+            await Task.Delay(500);try{
+                if(LocalConsole.ViewingMaintenance&&consoleMenu.Screen.Id=="wifi-scanning")
+                {await consoleMenu.Refresh();LocalConsole.OpenMaintenance(consoleMenu.Screen,refreshOnly:true);}
+                LocalConsole.Refresh();
+            }catch{ /* Retry on the next tick, including during link changes. */ }
         }
     });
     // Network enrollment must not wait behind journal or update requests.
-    _ = Task.Run(async()=>{
+    if(!appliance.Installer)_ = Task.Run(async()=>{
         while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {
             await appliance.RefreshTailscale();
@@ -517,7 +495,5 @@ async Task StartHost()
 }
 record EndpointIdentity(string Kind);
 record ApiBootstrapRequest(string? Token);
-record ApiPlanRequest(string Path);
-record BootstrapConfiguration(string State,string? Token);
 
 record ApiAccountRequest(string? Username,string? Password);

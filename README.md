@@ -60,12 +60,15 @@ shared memory pool for every application.
    64 GiB. Internet access is required by the online installer. Build the ISO using
    the [build guide](docs/development/build.md), or use installer media when offered
    with a release.
-2. **Boot and connect.** Boot the ISO, then open the HTTPS address on port **8443**
-   shown by the local console. Accept the host's self-signed certificate and enter
-   the displayed setup code. Create your manager account.
-3. **Install.** Select the target disk and confirm installation. **The selected disk
-   is erased.** The installer downloads Bazzite and attempts a signed Xur refresh
-   when online. Reboot when installation finishes.
+2. **Install from the console.** Boot the ISO and use **Setup and installation**
+   to save the server name, configure Ethernet or Wi-Fi, and review the target
+   disk. Type its erase confirmation. **The selected disk is erased.**
+   Reboot when the Bazzite download and installation finish. Wi-Fi settings persist.
+3. **Create the required account.** After reboot, open the displayed HTTPS address
+   on port **8443**, accept the machine's self-signed certificate, and enter the
+   console token. Create the administrator account in your browser; Chrome or your
+   password manager can suggest and save a strong password. Tailscale is available
+   after installation.
 4. **Create a profile.** Open **Profiles**, add a workstation or model workload,
    select its GPUs, and save. Use the expanded profile picker on **Home** to load it.
    The first model start downloads its pinned engine and model files.

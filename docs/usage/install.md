@@ -1,5 +1,5 @@
-> Online installer: Internet access is required to download Bazzite. Xur first
-> attempts a signed app refresh and falls back to the bundled app if unavailable.
+> Internet is required to download Bazzite. The bundled console starts without
+> waiting for internet; Wi-Fi setup and disk review are local.
 > See [online installation](../architecture/online-installer.md).
 
 # Install Xur
@@ -8,42 +8,50 @@ Choose a whole disk of at least 64 GiB for the Bazzite host and OS deployments.
 
 1. Boot the ISO using UEFI. For Rufus, choose **GPT**, **UEFI (non CSM)**,
    **FAT32**, and **ISO Image mode (file copy)**. Raw/DD hybrid writing also works.
-   Ethernet adapters use saved profiles or request DHCP automatically. To supply
-   static networking before setup, use an [answer YAML file](answer-file.md).
    See [USB media details](rufus.md).
-2. Open the HTTPS console URL on port **8443** (accept the machine’s self-signed certificate) and enter the access code shown as `ABC-DEF`. The form adds the hyphen as you type.
-3. Create your manager username and password. The console token is then disabled
-   and hidden; use the password for future logins.
-4. Select a disk, continue, then click **Erase disk and install Xur**.
-5. Follow the operation box and live logs. When complete, click **Reboot into Xur**.
-   The page waits for the server to return and opens the system dashboard.
-   Your signed-in session remains valid across reboot for its eight-hour lifetime.
+2. In **Setup and installation**, save the server name and configure networking.
+   Ethernet uses saved profiles or DHCP. **Network and Wi-Fi** lets you choose
+   an adapter, SSID and password. An [answer YAML file](answer-file.md) can supply
+   static wired networking. Saved settings, including Wi-Fi credentials and
+   automatic reconnection, persist into the installed system.
+3. Choose the installation disk. Review its identity and the erase plan, then
+   type `ERASE /dev/<selected-disk>` exactly. Boot/configuration media are protected;
+   Xur rechecks the selected disk before writing. Other disks remain unchanged.
+4. Follow console progress. When complete, confirm reboot and remove the USB.
+5. After reboot, open the displayed HTTPS web-manager address on port **8443**
+   and enter the console access code. For LAN HTTPS, accept this machine's
+   self-signed certificate. Create the **required administrator account** in
+   your browser. Use Chrome's suggested strong password or your password manager
+   and save it. Suggestions depend on browser settings and site trust.
+6. Use the administrator username and password for subsequent logins. Creating
+   the account disables the setup code and all setup-only sessions.
 
-The disk list contains available whole disks only. The installer still protects
-boot/configuration media and rechecks disk identity immediately before writing.
-No serial entry is required. The selected disk is erased and receives an EFI
-partition, `/boot` and the root filesystem. Other disks are left unchanged.
-
-Until an account is created, the setup code is reusable and case-insensitive. It expires after 30 minutes;
-five attempts are allowed per 30 seconds. Answer files can supply the code for
-[API account initialization](../architecture/manager-account.md). The signed JWT uses a machine-specific
-key, copied to the installed system with root-only permissions. A fresh live
-boot from the ISO generates a new key.
+There is no web device installer and no Tailscale enrollment on live media.
+The console or `xur setup` handles naming, networking, disk approval and progress.
+Administrator credentials are created only after installation; no password
+must be typed on the physical console. The initial access code expires after
+30 minutes and allows five attempts per 30 seconds; reboot generates a fresh
+code if needed. An answer-supplied code is carried privately into the installed
+system and removed once the account is created.
 
 ## Console
 
 The full-screen menu opens on **Alt+F3**. Use **Up/Down** and **Enter**;
-**0** returns to the menu. **Alt+F2** opens logs. **PgUp/PgDn** scroll content.
-Numeric shortcuts select an item, then Enter opens it. Tailscale QR enrollment
-is available locally. Logs and background status updates use separate views.
-Kernel messages are directed to the boot console on **Alt+F1**, away from the menu.
+Escape or **0** returns to the parent screen. **PgUp/PgDn** scroll content.
+**Logs** has a Back action; the separate **Alt+F2** log terminal also accepts
+Enter or Escape to return. Kernel messages remain on **Alt+F1**.
+
+The display goes black after five minutes without keyboard input, even during
+installation. Installation continues. The first key only wakes the display.
 
 ## Tailscale
 
-Open **Tailscale**, select **Sign in to Tailscale**, then follow **Authorize this
-machine** in your browser. The LAN session remains available. Once connected,
-confirm the account to enable management through the tailnet. Tailscale remains
-in the navigation after installation.
+Tailscale is available after booting the installed system. Use **Tailscale QR**
+on the console, or sign in to the web manager and open **Tailscale**.
+The saved server name is required before enrollment. Authorize this machine and
+use its HTTPS Serve address. The console token is still required to create the
+administrator account; Tailscale identity alone cannot bypass that step.
+The account form uses `autocomplete="new-password"` for browser password managers.
 
 ## Installed system
 
@@ -55,11 +63,10 @@ Settings lists all non-loopback IPv4 and IPv6 addresses.
 
 ## Logs and CLI
 
-Installation logs update without reloading the page. Scrolling upward pauses
-following new log output until you return to the bottom. Operational messages
+Installation progress and logs are available in the console. Operational messages
 are retained; authentication secrets are omitted.
 
-`xur` opens the console menu. Commands include `xur status --json`,
+`xur` opens the console menu. Commands include `xur setup`, `xur status --json`,
 `xur network show`, `xur login show`, `xur tailscale status`, `xur tailscale qr`,
 `xur hardware show --json`, `xur logs show`, `xur reboot`, and `xur shutdown`.
 
@@ -84,8 +91,8 @@ audio. Physical multiseat acceptance is still in progress; see
 The console keeps a five-percent margin for TV overscan. Use Up/Down and Enter
 to select the highlighted menu row. The Tailscale QR screen has a highlighted
 **Back to menu** option; Enter, Escape or `0` returns while enrollment continues.
-The initial access code is available immediately, even while storage discovery
-is still running. Installation remains locked until storage checks finish.
+Installation remains locked until storage checks finish. The access code is
+displayed after booting the installed system, until the account is created.
 
 ## OS updates
 

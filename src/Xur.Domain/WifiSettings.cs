@@ -1,5 +1,5 @@
 namespace Xur.Domain;
-public record WifiAdapter(string Interface,string MacAddress,string State,string? Connection,string DevicePath);
+public record WifiAdapter(string Interface,string MacAddress,string State,string? Connection,string DevicePath,string Model="",string Driver="",string Firmware="",bool FirmwareMissing=false);
 public record WifiStatus(bool Enabled,bool HardwareEnabled,WifiAdapter[] Adapters);
 public record WifiNetwork(string Ssid,string Bssid,string Security,int Signal,string KeyManagement)
 {

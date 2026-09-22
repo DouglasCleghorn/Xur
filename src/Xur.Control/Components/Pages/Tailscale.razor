@@ -4,6 +4,12 @@
 <script src="/page-poll.js" data-path="/api/page-state/tailscale" data-version="@PagePolling.Tailscale(Device)" defer></script>
 <h1>Tailscale</h1>
 <section class="panel">
+    @if(Device.EnrollmentError.Length>0&&serverName is not {Configured:true}) { <p role="alert">@Device.EnrollmentError</p> }
+    @if(serverName is not {Configured:true})
+    {
+        <p>Choose and save this server's name before setting up Tailscale.</p>
+        <form method="post" action="/settings/computer-name"><AntiforgeryToken /><label>Server name <input name="name" value="@serverName?.Name" maxlength="63" required /></label><button>Save server name</button></form>
+    }
     <p>@Device.TailscaleState</p>
     <p role="status">@Device.TailServeStatus</p>
     @if(Device.TailscaleState=="Running"&&!Device.TailServeReady) { <p><a href="https://login.tailscale.com/admin/dns" target="_blank" rel="noopener noreferrer">Open Tailscale DNS / HTTPS settings</a>. Xur retries the HTTPS proxy automatically.</p> }
@@ -17,7 +23,7 @@
         {
             <p>Preparing Tailscale login…</p>
         }
-        else
+        else if(serverName?.Configured==true)
         {
             <form method="post" action="/tailscale/start"><AntiforgeryToken /><button>Sign in to Tailscale</button></form>
         }
@@ -30,4 +36,7 @@
     }
     @if(Device.ConfirmedAdministrator != null) { <p>@Device.ConfirmedAdministrator</p> }
 </section>
-@code { protected override async Task OnInitializedAsync() => await Device.RefreshTailscale(); }
+@code {
+    ComputerNameStatus? serverName;
+    protected override async Task OnInitializedAsync(){await Device.RefreshTailscale();try{serverName=await Device.Agent.GetFromJsonAsync<ComputerNameStatus>("/computer-name");}catch{}}
+}

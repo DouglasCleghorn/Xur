@@ -5,7 +5,7 @@ public static class ModelLabEndpoints
 {
     public static void MapModelLab(this WebApplication app,Appliance device,ProfileManager profiles,HttpClient gateway,HttpClient admin,ApplicationMaintenance maintenance)
     {
-        var lab=new ModelLab(Path.Combine(device.Installer?device.RunDirectory:"/var/lib/xur","benchmarks"),profiles.State,
+        var lab=new ModelLab(Path.Combine(device.StateDirectory,"benchmarks"),profiles.State,
             async()=>await admin.GetFromJsonAsync<BackendRoute[]>("/routes")??[],
             async ct=>await device.Agent.GetFromJsonAsync<GpuTelemetrySnapshot>("/gpu-telemetry/sample",ct)??new(null,[],"GPU telemetry unavailable."),new(gateway),maintenance,app.Lifetime.ApplicationStopping);
         app.MapModelLab(lab,device.Installer);

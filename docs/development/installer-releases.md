@@ -108,5 +108,7 @@ JSON. Never write an individual part to USB.
 
 Local builds still use `./eng/build-iso.sh`; `XUR_INSTALLER_CHANNEL=nightly` selects
 Nightly, otherwise they default to Stable. Use `xur.app-update=off` at installer
-boot to test the embedded app without the public refresh. This does not disable
-signature checking or turn the installer into offline media.
+boot to disable background public update checks. Normal boot uses the embedded
+app immediately; `xur.app-update=on` explicitly enables the older pre-start signed
+refresh and its potential two-minute wait. Neither option disables signature
+checking or turns the installer into offline media.

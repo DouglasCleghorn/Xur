@@ -11,11 +11,12 @@ public record ConsoleOption(char Key,string Label,bool Enabled=true)
 public record ConsoleScreen(string Id,string Title,string Body,ConsoleOption[] Options,string? InputValue=null,bool Secret=false);
 
 // Shared by the physical/serial console and the interactive `xur` command.
-public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bool local=false)
+public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bool local=false,HttpClient? setupClient=null)
 {
     readonly SemaphoreSlim gate=new(1,1);
     readonly ConsoleNetwork network=new(client,local);
     readonly ConsoleComputerName computerName=new(client,local);
+    readonly ConsoleSetup setup=new(setupClient??client,installer);
     string view="updates",notice="",power="",returnView="power";
     ApplicationUpdateStatus? application;
     OsUpdateStatus? os;
@@ -30,6 +31,7 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
         get
         {
             if(view=="computer-name")return computerName.Screen;
+            if(view=="setup")return setup.Screen;
             if(view=="network")return network.Screen;
             var options=new List<ConsoleOption>();string title,body;
             switch(view)
@@ -99,15 +101,16 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
         {
             view=target;Closed=false;notice="";
             if(view=="computer-name"){await computerName.Open();return;}
+            if(view=="setup"){await setup.Open();return;}
             if(view=="network"){await network.Open();return;}
             await ReadStatus();
         }finally{gate.Release();}
     }
     public async Task Refresh()
     {
-        await gate.WaitAsync();try{if(view=="computer-name")return;if(view=="network")await network.Refresh();else await ReadStatus();}finally{gate.Release();}
+        await gate.WaitAsync();try{if(view=="computer-name")return;if(view=="setup")await setup.Refresh();else if(view=="network")await network.Refresh();else await ReadStatus();}finally{gate.Release();}
     }
-    public async Task Submit(string text){await gate.WaitAsync();try{if(view=="computer-name")await computerName.Submit(text);else if(view=="network")await network.Submit(text);}finally{gate.Release();}}
+    public async Task Submit(string text){await gate.WaitAsync();try{if(view=="setup")await setup.Submit(text);else if(view=="computer-name")await computerName.Submit(text);else if(view=="network")await network.Submit(text);}finally{gate.Release();}}
     async Task ReadStatus()
     {
         if(installer)return;
@@ -129,6 +132,7 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
         await gate.WaitAsync();try
         {
             if(Closed)return;
+            if(view=="setup"){await setup.Select(key);Closed=setup.Closed;return;}
             if(view=="computer-name"){computerName.Select(key);Closed=computerName.Closed;return;}
             if(view=="network"){await network.Select(key);Closed=network.Closed;return;}
             var option=Screen.Options.FirstOrDefault(o=>o.Key==key);

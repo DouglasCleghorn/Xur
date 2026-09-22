@@ -1,7 +1,9 @@
 # Console menu
 
 The installed console offers **Status and login**, **Tailscale QR**, **Network settings**,
-**Hardware**, **Logs**, **Updates**, **Power**, and **Server name**. The installer omits Updates.
+**Hardware**, **Logs**, **Updates**, **Power**, **Server name**, and **Local setup**.
+The installer offers **Setup and installation**, **Network settings**, **Hardware**,
+**Logs**, and **Power**. Web management and Tailscale begin after installation.
 The physical/serial console and the interactive `xur` command share the update
 and power screens.
 
@@ -57,7 +59,7 @@ two-minute keep/revert window. See [networking and answer YAML](answer-file.md).
 The initial setup boot prompts for the **server name**. Enter a hostname using
 letters, numbers and hyphens, then save. It persists through installation and
 later boots. Escape skips the prompt for now; **Server name** lets you set or
-change it later. New Tailscale enrollment uses the saved name, and renaming an
+change it later. Saving the name is required before disk approval. New Tailscale enrollment uses the saved name, and renaming an
 already-enrolled server updates its advertised Tailscale name when available.
 Disk installation still requires its own explicit approval.
 
@@ -106,3 +108,36 @@ Network addresses update in place when a cable is connected, DHCP supplies an
 address, or an adapter disappears. Link/address notifications trigger an immediate
 refresh, with periodic refresh as a fallback. You do not need to leave and reopen
 the status or network screen.
+
+## Setup without a browser
+
+On installer media, choose **Setup and installation**. Set the server name,
+configure wired networking or Wi-Fi, then review and approve a disk.
+Internet is required for the Bazzite download. There is no live web listener
+or Tailscale enrollment. After reboot, use the console access code in the
+browser to create the required administrator account. This supports Chrome
+generated passwords without entering them at the console.
+
+**Choose installation disk** lists model, size, device path and disk identity.
+Boot media and other blocked disks cannot be selected. Review the erase plan and
+unaffected disks, then type `ERASE /dev/<selected-disk>` exactly to approve it.
+Cancellation, an expired plan or a changed disk identity requires a new review.
+Progress updates in the console; completion offers a separately confirmed reboot.
+Failures never automatically retry disk erasure.
+
+The installer starts the bundled app without waiting for internet. Update checks
+run separately and report their status without restarting setup. A saved server
+name is required before starting Tailscale enrollment from either console or web.
+
+Wi-Fi pages identify the adapter, driver, firmware and state. Scans show progress
+and allow Back while waiting. An initial empty result is checked again, and scan
+failures are distinguished from completed scans with no named networks.
+
+## Idle screen
+
+The setup console goes completely black after five minutes without keyboard
+input, including while logs or installation progress are changing. The server
+and installation continue running. The first key only wakes the display; press
+again to operate the menu. The black screen retains the HDMI signal instead of
+putting the monitor into power-save. Workstation desktops keep their own idle
+settings.

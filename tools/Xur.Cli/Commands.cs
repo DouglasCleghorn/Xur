@@ -13,6 +13,7 @@ public static class Commands
             c.SetAction(async (p, _) => await command(action, (json || redacted) && p.GetValue(option)));
             parent.Subcommands.Add(c);
         }
+        Add(root,"setup","setup");
         Add(root,"status","status",json:true);
         foreach (var name in new[]{"network","login","hardware","logs","tailscale"})
         {

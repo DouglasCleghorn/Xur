@@ -17,11 +17,7 @@ test -d "$target/var"
 mkdir -p "$target/var/lib/xur" "$target/var/lib/tailscale"
 chmod 700 "$target/var/lib/xur" "$target/var/lib/tailscale"
 cp /run/xur/install-operation.json "$target/var/lib/xur/install-operation.json"
-if test -d /run/xur/form-keys; then cp -a /run/xur/form-keys "$target/var/lib/xur/form-keys"; chmod 700 "$target/var/lib/xur/form-keys"; fi
-install -m 600 /run/xur/session-signing.key "$target/var/lib/xur/session-signing.key"
-if test -f /run/xur/manager-account.json; then install -m 600 /run/xur/manager-account.json "$target/var/lib/xur/manager-account.json"; fi
-if test -f /run/xur/administrator.json; then cp /run/xur/administrator.json "$target/var/lib/xur/administrator.json"; fi
-if test -f /var/lib/tailscale/tailscaled.state; then cp /var/lib/tailscale/tailscaled.state "$target/var/lib/tailscale/tailscaled.state"; fi
+if test -f /run/xur/bootstrap-token; then install -m 600 /run/xur/bootstrap-token "$target/var/lib/xur/bootstrap-token"; fi
 if test -f /run/xur/timezone; then
   zone=$(cat /run/xur/timezone)
   test -f "/usr/share/zoneinfo/$zone"

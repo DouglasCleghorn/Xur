@@ -1,10 +1,21 @@
 #!/usr/bin/python3
-"""Best-effort, signed live-app refresh before any disk operation is accepted."""
+"""Start bundled Xur locally; check signed updates without interrupting setup."""
 import hashlib,importlib.machinery,importlib.util,json,os,pathlib,shutil,signal,sys,tempfile
 ROOT=pathlib.Path('/run/xur/app')
 BUNDLED=pathlib.Path('/usr/share/xur/app-bundle')
 READY=pathlib.Path('/run/xur/installer-app-ready')
 CHANNEL=pathlib.Path('/usr/share/xur/installer-channel')
+CMDLINE=pathlib.Path('/proc/cmdline')
+APPROVED=pathlib.Path('/run/xur/approved.ks')
+CHECK_SECONDS=15
+def mode():
+    args=CMDLINE.read_text().split()
+    if 'xur.app-update=off' in args:return 'off'
+    return 'on' if 'xur.app-update=on' in args else 'background'
+def status(state):
+    ROOT.mkdir(parents=True,exist_ok=True)
+    target=ROOT/'check.json';temp=ROOT/'check.json.tmp'
+    temp.write_text(json.dumps({'state':state})+'\n');temp.replace(target)
 def select(path):
     ROOT.mkdir(parents=True,exist_ok=True)
     link=ROOT/'next';link.unlink(missing_ok=True);link.symlink_to(path);link.replace(ROOT/'current')
@@ -17,16 +28,40 @@ def updater():
     return u
 def prepare():
     select(BUNDLED);READY.unlink(missing_ok=True)
-    if 'xur.app-update=off' in pathlib.Path('/proc/cmdline').read_text().split():return
+    selected=mode();status('disabled' if selected=='off' else 'pending')
+    # Default boot has no network calls. Service health, not internet access,
+    # controls disk approval. Never replace the running setup in the background.
+    if selected!='on':return
+    status('refreshing')
+    refresh()
+def initialize(u):
+    floor=max(u.read(BUNDLED/'bundle.json').get('buildSequence',0),u.read(ROOT/'current/bundle.json').get('buildSequence',0),u.read(ROOT/'highest-sequence.json',0))
+    u.atomic(ROOT/'highest-sequence.json',floor)
+    sequences=u.read(ROOT/'channel-sequences.json',{});sequences[u.channel()]=max(sequences.get(u.channel(),0),floor)
+    u.atomic(ROOT/'channel-sequences.json',sequences)
+def check():
+    if mode()=='off':status('disabled');return
+    if APPROVED.exists():return
+    def expired(*args):raise TimeoutError('Installer update check timed out')
+    previous=signal.signal(signal.SIGALRM,expired);signal.alarm(CHECK_SECONDS)
+    try:
+        status('checking');u=updater();initialize(u)
+        with tempfile.TemporaryDirectory(prefix='check-',dir=ROOT) as directory:
+            entry=u.check(pathlib.Path(directory))
+            identity=u.read(ROOT/'current/bundle.json')['id']
+            status('current' if entry['id']==identity else 'available')
+    except Exception:
+        status('unavailable')
+    finally:signal.alarm(0);signal.signal(signal.SIGALRM,previous)
+def refresh():
     u=updater()
-    u.atomic(ROOT/'highest-sequence.json',u.read(BUNDLED/'bundle.json').get('buildSequence',0))
-    u.atomic(ROOT/'channel-sequences.json',{u.channel():u.read(BUNDLED/'bundle.json').get('buildSequence',0)})
+    initialize(u)
     def expired(*args):raise TimeoutError('Installer refresh deadline exceeded')
     signal.signal(signal.SIGALRM,expired);signal.alarm(120)
     try:
         with tempfile.TemporaryDirectory(prefix='download-',dir=ROOT) as directory:
             stage=pathlib.Path(directory);entry=u.check(stage)
-            if entry['id']==u.read(BUNDLED/'bundle.json')['id']:return
+            if entry['id']==u.read(BUNDLED/'bundle.json')['id']:status('current');return
             # This contract covers the live paths, approval API and installer hooks.
             # Older signed releases without it must not replace an installer app.
             archive=stage/'bundle.tar.gz';u.fetch((stage/'source').read_text()+'/'+entry['file'],archive,entry['bytes'])
@@ -39,18 +74,20 @@ def prepare():
             u.call(['restorecon','-RF',str(target)],30)
             u.atomic(ROOT/('release-'+entry['id']+'.json'),entry)
             select(target)
+            status('current')
             print('Using signed Xur release '+entry['version'],flush=True)
     except Exception as error:
-        select(BUNDLED);print('Keeping bundled Xur: '+str(error),flush=True)
+        select(BUNDLED);status('unavailable');print('Keeping bundled Xur: '+str(error),flush=True)
     finally:signal.alarm(0)
 def verify():
     u=updater();identity=u.read(ROOT/'current/bundle.json')['id']
     if not u.healthy(identity,45):
-        if pathlib.Path('/run/xur/approved.ks').exists():raise RuntimeError('Installation already approved; refusing app replacement')
+        if APPROVED.exists():raise RuntimeError('Installation already approved; refusing app replacement')
         u.call(['systemctl','stop',*u.SERVICES],60);select(BUNDLED)
         u.call(['systemctl','start','xur-gateway','xur-agent','xur-control'],60)
         if not u.healthy(u.read(BUNDLED/'bundle.json')['id'],45):raise RuntimeError('Bundled installer app health check failed')
+        status('fallback')
     READY.touch(mode=0o600)
 if __name__=='__main__':
     os.umask(0o077)
-    {'prepare':prepare,'verify':verify}[sys.argv[1]]()
+    {'prepare':prepare,'verify':verify,'check':check}[sys.argv[1]]()

@@ -4,10 +4,11 @@ const http=require('http'),fs=require('fs'),os=require('os'),path=require('path'
 const assert=require('assert/strict');
 (async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'xur-https-'));
+ fs.mkdirSync(path.join(root,"bin"));fs.writeFileSync(path.join(root,"bin/tailscale"),"#!/bin/sh\necho '{\"BackendState\":\"NeedsLogin\"}'\n",{mode:0o700});
  let process,browser,agent;const tls='https://127.0.0.1:19063',plain='http://127.0.0.1:18700';
  const local=(socket,url,headers={})=>new Promise((resolve,reject)=>{http.get({socketPath:path.join(root,socket),path:url,headers},r=>{let body='';r.on('data',x=>body+=x);r.on('end',()=>resolve({status:r.statusCode,body,headers:r.headers}));}).on('error',reject);});
  const start=async(request)=>{
-  process=spawn(path.resolve('.build/context/publish/control/Xur.Control'),[],{env:{...global.process.env,XUR_MODE:'Installer',XUR_RUN:root,XUR_PORT:'18700',XUR_CONSOLE:'stdio'},stdio:['pipe','ignore','ignore'],detached:true});
+  process=spawn(path.resolve('.build/context/publish/control/Xur.Control'),[],{env:{...global.process.env,XUR_MODE:'Installed',XUR_STATE:root,PATH:path.join(root,'bin')+':'+global.process.env.PATH,XUR_RUN:root,XUR_PORT:'18700',XUR_CONSOLE:'stdio'},stdio:['pipe','ignore','ignore'],detached:true});
   for(let n=0;n<100;n++){try{if((await request.get(tls+'/health')).ok())return;}catch{}await new Promise(r=>setTimeout(r,100));}
   throw Error('HTTPS host did not start');
  };
@@ -34,9 +35,17 @@ const assert=require('assert/strict');
   const qrPage=await context.newPage();await qrPage.goto(tls+'/login#code='+encodeURIComponent(code));assert.equal(await qrPage.locator('#code').inputValue(),code);assert.equal(new URL(qrPage.url()).hash,'');assert.equal(await qrPage.locator('link[rel=manifest]').count(),1);await qrPage.close();
   const phone=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:390,height:844},isMobile:true,hasTouch:true,userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'});
   const mobile=await phone.newPage();await mobile.goto(tls+'/login');await mobile.getByRole('button',{name:'How to add',exact:true}).click();await mobile.getByText('Tap Share → Add to Home Screen → Add.').waitFor();await mobile.getByRole('button',{name:'Dismiss home screen suggestion'}).click();await mobile.reload();assert.equal(await mobile.locator('.install-suggestion').count(),0);await phone.close();
-  const exchange=await request.post(tls+'/api/bootstrap',{data:{token:code}});const session=(await exchange.json()).accessToken;
   const password=crypto.randomBytes(24).toString('base64url');
-  assert((await request.post(tls+'/api/auth/setup',{headers:{Authorization:'Bearer '+session},data:{username:'owner@example.test',password}})).ok());
+  const signup=await context.newPage();await signup.goto(tls+'/login');
+  await signup.locator('#code').fill(code);await signup.getByRole('button',{name:'Sign in',exact:true}).click();await signup.waitForURL(tls+'/setup-account');
+  assert.equal(await signup.locator('[name=password]').getAttribute('autocomplete'),'new-password');
+  assert.equal(await signup.locator('[name=username]').getAttribute('autocomplete'),'username');
+  assert.equal(await signup.locator('#generate-password').count(),0);
+  await signup.locator('[name=username]').fill('owner@example.test');await signup.locator('[name=password]').fill(password);
+  await signup.getByRole('button',{name:'Create account',exact:true}).click();await signup.waitForURL(tls+'/');
+  assert.equal((await request.post(tls+'/api/bootstrap',{data:{token:code}})).status(),401);
+  const logoutToken=await signup.locator('meta[name=xur-csrf]').getAttribute('content');
+  await request.post(tls+'/auth/logout',{headers:{RequestVerificationToken:logoutToken}});await signup.close();
   const page=await context.newPage();await page.goto(tls+'/login#code=ABC-DEF');assert.equal(await page.locator('#code').count(),0);assert.equal(new URL(page.url()).hash,'');await page.locator('[name=username]').fill('owner@example.test');await page.locator('[name=password]').fill(password);
   // Submit a form rendered by the previous manager process, using its cookie.
   await stop();await start(request);

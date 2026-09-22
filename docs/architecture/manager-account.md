@@ -1,8 +1,11 @@
 # Manager account
 
-Before an account exists, the console displays a six-character access code. Enter
+After installation, before an account exists, the console displays a six-character
+access code. Enter
 it on the web login page to reach **Create your account**. Choose a username and
-password, then continue to the installer or installed dashboard. This account is
+password, then continue to the installed dashboard. Account creation is required;
+the token grants access only to this step. Chrome can offer a generated password
+through the standard username and new-password fields. This account is
 for the Xur web manager; workstation Linux users remain separate selections.
 
 After creation the console shows the username and web addresses without an access
@@ -12,9 +15,8 @@ least eight characters, with no character-class rules. Both login methods retain
 the existing rate limit.
 
 The account stores a salted ASP.NET Core Identity password hash in
-`/var/lib/xur/manager-account.json`, with owner-only permissions. The installer
-uses `/run/xur/manager-account.json` and copies it alongside the signing key during
-installation. Account sessions use the existing eight-hour signed cookie and
+`/var/lib/xur/manager-account.json`, with owner-only permissions. The live installer has no web listener or administrator-account form. The
+installed system generates its signing and form-protection keys on first start. Account sessions use the existing eight-hour signed cookie and
 survive application updates and reboots. Corrupt account state fails closed.
 Updates refuse older bundles that cannot understand manager accounts.
 
@@ -31,7 +33,7 @@ Bootstrap sessions can only create the account; they cannot access disks,
 profiles, or other sensitive APIs. Browser forms require CSRF tokens. The LAN manager uses HTTPS on port 8443 with a persistent machine certificate.
 Port 8080 redirects GET requests to HTTPS and rejects plaintext mutations.
 Session and form cookies are Secure. Form-protection keys persist alongside the
-account, including installation handoff, so a restart does not invalidate an open
+account, so a restart does not invalidate an open
 login form. Stale forms return to sign-in with a retry message.
 Tailscale Serve terminates trusted HTTPS and proxies through its private Unix
 socket; it does not need to trust the LAN certificate.

@@ -1,62 +1,39 @@
-# Automated initialization
+# Account initialization after installation
 
-Use `https://<machine>:8443` or the Tailscale HTTPS URL. Trust the machine certificate
-for automation; plaintext POST requests are rejected.
+Device setup runs locally through **Setup and installation** or `xur setup`.
+The live installer has no HTTP/HTTPS listener or Tailscale enrollment.
+Web disk-plan, disk-approval and installation-progress endpoints have been removed.
 
-The JSON API uses the same reusable six-character setup token as the browser.
-On private test networks, put this token-only answer file at the root of a
-separate configuration disk as `xur.yaml` or `xur.yml`:
+After rebooting into the installed system, open the displayed HTTPS address and
+enter the console access code. Create the required administrator account there;
+Chrome and other password managers can generate and save its password.
+
+An optional answer YAML can supply wired networking and a predefined access code:
 
 ```yaml
 schemaVersion: 1
 bootstrapToken: A7K-2M9
 ```
 
-Choose your own token. Characters use Crockford Base32: `0123456789ABCDEFGHJKMNPQRSTVWXYZ`.
-Login is case-insensitive and accepts the code with or without its middle hyphen. A random local code works immediately while the read-only scanner runs. Once discovery completes, the configured token replaces it; existing browser/API sessions remain valid. The default 30-minute expiry and five attempts per
-30 seconds also apply to configured tokens. The initial setup token is reset
-on reboot. Signed API sessions survive installation and reboot until their eight-hour expiry. The token file is read only by the live installer and is not copied
-to the installed system.
+Choose your own code. Use six Crockford Base32 characters, optionally separated
+by a middle hyphen. The answer is discovered read-only; ambiguous answers block
+installation. It never grants disk approval. See [networking and answers](../usage/answer-file.md).
 
-The scanner checks all eligible storage read-only. Multiple answers are
-ambiguous; none is selected. The answer enables explicit browser/API disk
-review while its parent disk remains protected. It can also supply
-[static networking](../usage/answer-file.md); the bootstrap token is optional
-when networking is specified. Unknown provisioning fields are rejected, and
-no answer field authorizes disk erasure.
+The optional code is carried into the installed system with root-only permissions.
+It expires 30 minutes after manager startup. Creating an account deletes the
+staged code and invalidates every setup session. Without an answer-supplied code,
+the installed manager generates a fresh code at startup.
 
-1. `POST /api/bootstrap` with `Content-Type: application/json` and
-   `{"token":"A7K2M9"}`. A successful response contains `accessToken`,
-   `tokenType: "Bearer"`, and `expiresIn: 28800`. The configured token may not be active until answer discovery finishes; retry
-   after 30 seconds during startup. HTTP 401 rejects invalid/expired tokens;
-   HTTP 429 asks the client to wait 30 seconds.
-2. Create the manager account with `POST /api/auth/setup`, JSON username/password,
-   and the setup bearer token. Use the returned manager `accessToken` as
-   `Authorization: Bearer <accessToken>` for subsequent API requests.
-   `GET /api/disks` returns real whole-disk inventory. `GET /api/installer`
-   returns discovery and operation state; neither returns the setup token.
-3. `POST /api/install/plan` with `{"path":"<observed whole-disk path>"}`.
-   Review the returned target identity, unaffected disks, actions, expiry,
-   plan `id`, and `digest`.
-4. `POST /api/install/approve` with the reviewed `id` and `digest`.
-   No serial confirmation field is required.
-   This uses the same privileged approval and revalidation operation as the UI.
-5. Poll `GET /api/installer` and `GET /api/logs`. After completion,
-   `POST /api/power/reboot` with `{}` reboots into the installed deployment.
+For account automation after installation:
 
-API mutations authenticate with an explicit bearer header. Browser cookie
-mutations retain their CSRF checks. No endpoint accepts an unattended erase
-instruction from the answer file.
+1. `POST /api/bootstrap` with JSON `{"token":"<console code>"}` returns a
+   setup-only bearer token. It cannot manage the machine.
+2. `POST /api/auth/setup` with that bearer and JSON `username`/`password`
+   creates the required account and returns a manager bearer token.
+3. Use `POST /api/auth/login` with username/password on subsequent logins.
 
-Run the complete API-only installation test with:
-
-```bash
-python3 tests/Xur.Media.Tests/check-api-initialization.py \
-  dist/xur-installer-x86_64.iso --name api-test-1
-```
-
-Use a new VM name per test. This creates a private random token and file-backed
-configuration disk, initializes through JSON without reading the live console
-secret, approves only the disposable target without serial entry, installs, and reboots with media
-attached. It verifies both configuration and data disk hashes and that the bearer session remains valid. The private
-token, disk contents, raw console, and sessions remain under `.build/`.
+Use HTTPS on port 8443 or the installed Tailscale Serve URL. Browser mutations
+require CSRF protection; JSON automation uses explicit bearer headers.
+The live installer exposes installation controls only on its root-private
+Unix socket, used by the local console. Disk approval always requires a reviewed
+plan with the exact target identity and digest.

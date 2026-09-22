@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Exercise the real interactive CLI against a root-socket fixture; never power the host."""
-import http.server,json,os,pathlib,socketserver,subprocess,tempfile,threading
+import select,time,http.server,json,os,pathlib,socketserver,subprocess,tempfile,threading
 
 repo=pathlib.Path(__file__).resolve().parents[2]
 sdk=os.environ.get('XUR_DOTNET',str(pathlib.Path.home()/'.local/share/xur-build/dotnet/dotnet'))
@@ -69,6 +69,19 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
             log.write(f'Arguments: {args!r}; input: {'<hidden>' if sensitive else lines!r}; exit: {result.returncode}\n{result.stdout}\n{result.stderr}\n')
         assert result.returncode==0,result.stderr
         return result.stdout
+    def wifi_run(open_lines,finish_lines):
+        process=subprocess.Popen([sdk,str(binary)],env=dict(os.environ,XUR_RUN=temp),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        output=b''
+        try:
+            process.stdin.write(open_lines.encode());process.stdin.flush();deadline=time.monotonic()+12
+            while b'Choose a network.' not in output and time.monotonic()<deadline:
+                if select.select([process.stdout],[],[],.1)[0]:output+=os.read(process.stdout.fileno(),65536)
+            assert b'Choose a network.' in output,'Wi-Fi scan did not finish'
+            rest,error=process.communicate(finish_lines.encode(),timeout=15)
+            assert process.returncode==0,error.decode()
+            return (output+rest).decode()
+        finally:
+            if process.poll() is None:process.kill();process.communicate()
     try:
         output=run('6\n1\n0\n7\n1\n0\n2\n2\n0\n0\n')
         assert 'Update All' in output and 'nightly' in output and 'Update checks finished.' in output, output
@@ -98,17 +111,17 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
         assert network_payload['ipv4']['addresses']==['192.0.2.20/24'] and network_payload['ipv6']['method']=='auto'
         assert 'Keep settings' in output, output
         posts.clear()
-        output=run('3\n2\n1\n  fixture wifi password \n0\n0\n0\n',sensitive=True)
+        output=wifi_run('3\n2\n','1\n  fixture wifi password \n0\n0\n0\n')
         assert posts==['/local/network/wifi/scan','/local/network/wifi/connect'],posts
         assert wifi_payload['interface']=='wlan0' and wifi_payload['password']=='  fixture wifi password '
         assert 'fixture wifi password' not in output and 'Connected to Home' in output
         wifi_status['adapters'].append(wifi_status['adapters'][0]|{'interface':'wlan1'})
-        output=run('3\n2\n2\n1\nfixture wifi password\n0\n0\n0\n0\n',sensitive=True)
+        output=wifi_run('3\n2\n2\n','1\nfixture wifi password\n0\n0\n0\n0\n')
         assert wifi_payload['interface']=='wlan1' and 'Choose a Wi-Fi adapter' in output
         output=run('8\nliving-room\n0\n0\n')
         assert server_name=='living-room' and 'Server name saved' in output
         installer=True;posts.clear()
-        output=run('6\n1\n0\n0\n0\n')
-        assert '6. Power' in output and 'Updates' not in output and 'Confirm reboot' in output and not posts, output
+        output=run('5\n1\n0\n0\n0\n')
+        assert '5. Power' in output and 'Updates' not in output and 'Confirm reboot' in output and not posts, output
     finally:server.shutdown();server.server_close()
 print(json.dumps({'suite':'ConsoleMenu','realCli':True,'updateAll':True,'powerConfirmationAndCancellation':True,'failureFeedback':True,'backgroundRefreshWhileReadingInput':True,'installerMode':True,'staticNetworkTextEntryAndKeep':True,'wifiAdapterSsidAndPassword':True,'serverName':True}))

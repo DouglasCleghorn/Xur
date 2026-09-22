@@ -23,5 +23,6 @@ RUN (test -x /sbin/modprobe || ln -s /usr/bin/modprobe /usr/sbin/modprobe) && \
     ln -s /usr/lib/xur/control/Xur.Control /usr/bin/xur-control && \
     ln -s /usr/lib/xur/agent/Xur.Agent /usr/bin/xur-agent && \
     ln -s /usr/lib/xur/gateway/Xur.Gateway /usr/bin/xur-gateway && \
-    systemctl enable xur-installer-app-prepare.service xur-installer-app-verify.service xur-gateway.service xur-agent.service xur-control.service xur-network.service tailscaled.service && \
+    systemctl enable xur-installer-app-prepare.service xur-installer-app-verify.service xur-installer-app-check.timer xur-gateway.service xur-agent.service xur-control.service xur-network.service && \
+    systemctl mask tailscaled.service && \
     systemctl mask autovt@.service autovt@tty1.service autovt@tty2.service autovt@tty3.service getty@tty1.service getty@tty2.service getty@tty3.service serial-getty@ttyS0.service

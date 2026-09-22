@@ -47,3 +47,18 @@ steps preserve at least 45 rows on larger screens, using 32 pixels at 1440p and
 48 pixels at 4K. Cloned outputs use the smallest connected mode. A changed font
 size restarts only the affected unassigned display console. Serial terminals
 continue to use their own font settings.
+
+Console reconciliation also compares the connected outputs, complete mode list
+and a hash of EDID. A late mode list or monitor replacement restarts only the
+affected unassigned GPU's console, even when font size is unchanged. If all
+connected outputs remain disabled while the console service is active, recovery
+waits 15 seconds and permits at most three restart attempts, at least 30 seconds
+apart. An enabled output resets that budget. Workstation-owned and handoff GPUs
+are excluded. This does not diagnose every HDMI cable, firmware or driver fault;
+physical AMD HDMI recovery still requires hardware testing.
+
+After five minutes without local keyboard activity, shared console frames become
+solid black with no cursor. Frame polling, log updates and network changes never
+count as input. The wake key is consumed before menu handling, including disk
+approval. This retains the existing HDMI mode and does not suspend the server or
+change workstation display ownership.

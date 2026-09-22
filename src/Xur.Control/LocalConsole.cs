@@ -11,6 +11,9 @@ namespace Xur.Control;
 public static class LocalConsole
 {
     static readonly object Sync = new();
+    static readonly ConsoleIdle Idle=new();
+    // Returns true when the key must be consumed solely to wake the display.
+    public static bool Wake(){lock(Sync){var wasBlank=Idle.Touch();if(wasBlank)Render();return wasBlank;}}
     static readonly Dictionary<string,string> LastFrames = [];
     static readonly Dictionary<string,FileStream> Devices = [];
     static Appliance? appliance;
@@ -37,14 +40,14 @@ public static class LocalConsole
         }
     }
     public static string[] RootOptions(bool installer=false) => installer
-        ? ["Status and login", "Tailscale QR", "Network settings", "Hardware", "Logs", "Power", "Server name"]
-        : ["Status and login", "Tailscale QR", "Network settings", "Hardware", "Logs", "Updates", "Power", "Server name"];
+        ? ["Setup and installation", "Network settings", "Hardware", "Logs", "Power"]
+        : ["Status and login", "Tailscale QR", "Network settings", "Hardware", "Logs", "Updates", "Power", "Server name", "Local setup"];
     static string[] Options => RootOptions(appliance?.Installer==true);
     static string[] CurrentOptions => view=="maintenance" ? maintenance!.Options.Select(o=>o.Display).ToArray() : Options;
     public static bool ViewingMaintenance { get {lock(Sync)return view=="maintenance";} }
     static bool Plain => Environment.GetEnvironmentVariable("XUR_CONSOLE") == "stdio";
     public static string Menu(bool installer=false) => "\n"+string.Join('\n',RootOptions(installer).Select((label,i)=>$"{i+1}. {label}"))+"\n0. Exit\nSelection: ";
-    public static char RootKey(int index,bool installer=false) => (installer ? "12j45wm" : "12j45uwm")[index];
+    public static char RootKey(int index,bool installer=false) => (installer ? "ij45w" : "12j45uwmi")[index];
 
     public static async Task Start(Appliance app, Bootstrap auth)
     {
@@ -67,10 +70,12 @@ public static class LocalConsole
         } catch { }
     }
     static string StatusText() => appliance==null || bootstrap==null ? "Starting" :
+        appliance.Installer?"Set up this server locally. Choose Setup and installation, or run xur setup.\n\nWeb management and Tailscale become available after installation and reboot.\n\n"+InstallerAppStatus.Message(appliance.RunDirectory):
         "Server: "+Environment.MachineName+"\n\n"+
-        (bootstrap.AccountConfigured ? "Sign in:\n  User: "+bootstrap.Username+"\n  Use your password in the web manager." : "Initial login:\n  User: xur\n  Access code: "+bootstrap.DisplayCode)+
+        (bootstrap.AccountConfigured ? "Sign in:\n  User: "+bootstrap.Username+"\n  Use your password in the web manager." : "Create the administrator account in the web manager.\n  Access code: "+bootstrap.DisplayCode)+
         "\n\nWeb manager:\n"+WebAddresses(appliance.Urls())+
-        "\n\nTailscale: "+appliance.TailscaleState+(appliance.TailUrl.Length>0?"\n  "+appliance.TailUrl:"")+"\n"+appliance.TailServeStatus;
+        "\n\nTailscale: "+appliance.TailscaleState+(appliance.TailUrl.Length>0?"\n  "+appliance.TailUrl:"")+"\n"+appliance.TailServeStatus+
+        (appliance.Installer?"\n\n"+InstallerAppStatus.Message(appliance.RunDirectory):"");
     public static string WebAddresses(string[] urls) => urls.Length==0 ? "  Waiting for network addresses (DHCP / Tailscale)..." : string.Join('\n',urls.Select(u=>"  "+u));
     static string lastQrUrl="";static string[] serveQr=[];
     static string[] ServeQr()
@@ -259,6 +264,7 @@ public static class LocalConsole
     static readonly Dictionary<(int,int,bool),(string Key,string Frame)> FrameCache=[];
     static string CachedFrame(bool logWindow,string content,int columns,int rows)
     {
+        if(Idle.IsBlank)return BlankFrame(columns,rows);
         columns=Math.Clamp(columns,40,240);rows=Math.Clamp(rows,12,120);
         var options=CurrentOptions;var code=!logWindow&&view=="status"?ServeQr():null;
         var key=System.Text.Json.JsonSerializer.Serialize(new{title,content,page,view,selection,options,code});
@@ -267,6 +273,21 @@ public static class LocalConsole
         var frame=Frame(logWindow?"Logs":title,content,columns,rows,page,!logWindow&&view=="qr",logWindow,selection,options,code);
         if(FrameCache.Count>=16)FrameCache.Clear();
         FrameCache[size]=(key,frame);return frame;
+    }
+    static readonly Dictionary<(int,int),string> BlankFrames=[];
+    public static string BlankFrame(int columns,int rows)
+    {
+        lock(Sync)
+        {
+            columns=Math.Clamp(columns,40,240);rows=Math.Clamp(rows,12,120);
+            if(BlankFrames.TryGetValue((columns,rows),out var cached))return cached;
+            var frame=new StringBuilder("\x1b[?25l");
+            // Preserve the HDMI mode/link. Black pixels avoid static OLED content
+            // without entering monitor power-save and retriggering link negotiation.
+            for(var row=1;row<=rows;row++)frame.Append($"\x1b[{row};1H\x1b[0;30;40m").Append(' ',columns).Append("\x1b[0m");
+            if(BlankFrames.Count>=16)BlankFrames.Clear();
+            return BlankFrames[(columns,rows)]=frame.ToString();
+        }
     }
     static void Render()
     {

@@ -1,8 +1,7 @@
 [Unit]
-Description=Check for a signed installer application update
+Description=Select the bundled installer application
 ConditionKernelCommandLine=xur.installer=1
-Wants=network-online.target
-After=network-online.target xur-network.service
+After=local-fs.target
 Before=xur-gateway.service xur-agent.service xur-control.service
 
 [Service]

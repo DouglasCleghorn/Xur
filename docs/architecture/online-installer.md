@@ -13,19 +13,30 @@ network failure during the subsequent image download can still interrupt an
 approved installation; the ISO is not an offline recovery image. Registry images
 are downloaded directly from GHCR, without an Xur-hosted duplicate.
 
-At boot, before starting the manager/agent/gateway, the live environment tries a
-signed GitHub app refresh. The complete attempt is bounded to two minutes. It
-requires the normal signature/hash/ABI/schema checks and `online-installer-v1`
-compatibility. A release older than the bundled build is rejected. The bundled
-application stays on the read-only ISO; refreshed files are in `/run/xur/app`.
-The three services are health-checked together; failure restores the bundled app.
-Disk approval stays locked until those checks finish. Once installation can be
-approved, no background application updater runs. The installer copies the
-selected, healthy app bundle into the installed host.
+Normal boot starts the bundled Xur application without waiting for internet or
+`network-online.target`. The console and Wi-Fi setup become available
+as the local services start. Disk approval waits for local application health
+checks, never for the online update check.
 
-Use `xur.app-update=off` on the kernel command line when testing a locally built
-ISO. This only skips the boot-time app download; it does not disable any signature
-checks or make OS installation offline. Installed systems expose **Settings → Update channel → Local build testing** for signed local application updates. GitHub release assets are published by the approved release workflow.
+A separate service checks the signed GitHub release metadata in the background.
+Each attempt is bounded to 15 seconds and retries after 60 seconds, including when
+a cable is plugged in or Wi-Fi is configured later. Console status shows
+checking, unavailable, current or update-available messages. Checks never block
+local setup. The live installer listens only on its root-private control socket;
+web management and Tailscale are available after reboot into the installed system.
+
+Background checks never download an app bundle, replace the active app, restart
+services or change disk approval. When a newer app is available, use Update All
+after installation or boot a newer ISO. The installer copies the selected,
+healthy app bundle into the installed host. Checks stop once installation has
+been approved.
+
+Use `xur.app-update=off` to disable online app checks for a boot. For recovery or
+explicit testing, `xur.app-update=on` retains the pre-start signed app refresh,
+which can delay startup by up to two minutes. That opt-in path retains signature,
+hash, ABI, schema, anti-downgrade and `online-installer-v1` checks, and restores
+the bundled app if the download or new app health check fails. Neither option
+makes Bazzite installation offline or bypasses disk approval.
 
 The source implementation is covered by digest-pinning, manifest, signed-update,
 network-failure and unhealthy-app fallback tests. Actual online Anaconda

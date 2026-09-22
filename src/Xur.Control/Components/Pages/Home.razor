@@ -1,12 +1,3 @@
 @page "/"
-@inject Appliance Device
 <PageTitle>Xur</PageTitle>
-@if(Device.Installer)
-{
-    <h1>Install Xur</h1>
-    <Xur.Control.Components.DiskSelection />
-}
-else
-{
-    <ControlPanel />
-}
+<ControlPanel />

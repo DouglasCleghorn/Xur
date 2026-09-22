@@ -2,18 +2,15 @@
 @layout Xur.Control.Components.Layout.LoginLayout
 <PageTitle>Create account · Xur</PageTitle>
 <h1>Create your account</h1>
-<p>Use this account to sign in to the web manager.</p>
+<p>Create the required administrator account to use the web manager.</p>
 <section class="panel narrow">
     @if(Error!=null) { <p role="alert">@Error</p> }
     <form method="post" action="/auth/setup">
         <AntiforgeryToken />
         <label for="username">Username or email</label><input id="username" name="username" autocomplete="username" maxlength="254" autocapitalize="none" spellcheck="false" autofocus required />
         <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="256" required />
-        <small>At least 8 characters.</small>
-        <div class="actions"><button type="button" class="quiet" id="generate-password">Generate password</button><button type="button" class="quiet" id="show-password">Show password</button></div>
-        <p id="password-feedback" role="status"></p>
+        <small>Use Chrome’s suggested strong password, or your password manager, and save it for future sign-ins. At least 8 characters.</small>
         <button type="submit">Create account</button>
     </form>
 </section>
-<script src="/account-setup.js" defer></script>
 @code { [SupplyParameterFromQuery(Name="error")] public string? Error { get; set; } }

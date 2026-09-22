@@ -1,0 +1,12 @@
+[Unit]
+Description=Retry installer update checks after late network connections
+ConditionKernelCommandLine=xur.installer=1
+After=xur-installer-app-verify.service
+
+[Timer]
+OnActiveSec=1s
+OnUnitInactiveSec=60s
+AccuracySec=1s
+
+[Install]
+WantedBy=multi-user.target

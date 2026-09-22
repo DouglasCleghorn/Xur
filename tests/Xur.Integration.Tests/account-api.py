@@ -3,7 +3,9 @@
 import ssl,concurrent.futures,http.client,json,os,pathlib,secrets,signal,socket,subprocess,tempfile,time,urllib.request,urllib.error
 repo=pathlib.Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix='xur-account-api-') as tmp:
- root=pathlib.Path(tmp);env=dict(os.environ,XUR_RUN=tmp,XUR_PORT='18089',XUR_MODE='Installer',XUR_CONSOLE='stdio')
+ root=pathlib.Path(tmp);(root/'bin').mkdir();stub=root/'bin/tailscale';stub.write_text('#!/bin/sh\necho \'{"BackendState":"NeedsLogin"}\'\n');stub.chmod(0o700)
+ fixed="".join(secrets.choice("0123456789ABCDEFGHJKMNPQRSTVWXYZ") for _ in range(6));(root/"bootstrap-token").write_text(fixed);(root/"bootstrap-token").chmod(0o600)
+ env=dict(os.environ,XUR_RUN=tmp,XUR_PORT='18089',XUR_MODE='Installed',XUR_STATE=tmp,PATH=str(root/'bin')+':'+os.environ['PATH'],XUR_CONSOLE='stdio')
  process=subprocess.Popen([str(repo/'.build/context/publish/control/Xur.Control')],env=env,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
  def request(path,body=None,token=None):
   headers={'Content-Type':'application/json'}
@@ -19,7 +21,8 @@ with tempfile.TemporaryDirectory(prefix='xur-account-api-') as tmp:
    except OSError:pass
    time.sleep(.1)
   else:raise AssertionError('Host did not start')
-  c=http.client.HTTPConnection('localhost');c.sock=socket.socket(socket.AF_UNIX);c.sock.connect(str(root/'control.sock'));c.request('GET','/local/login');code=c.getresponse().read().decode().split('Access code: ')[1].strip();c.close()
+  c=http.client.HTTPConnection('localhost');c.sock=socket.socket(socket.AF_UNIX);c.sock.connect(str(root/'control.sock'));c.request('GET','/local/login');code=c.getresponse().read().decode().split('Access code: ')[1].splitlines()[0].strip();c.close()
+  assert code.replace('-','')==fixed
   for path in ('/api/benchmarks','/api/model-lab/targets','/api/benchmarks/not-an-id/export'):
    assert request(path)[0]==401
   status,data=request('/api/bootstrap',{'token':code});assert status==200 and data['setupRequired'];setup=data['accessToken']
@@ -30,6 +33,7 @@ with tempfile.TemporaryDirectory(prefix='xur-account-api-') as tmp:
   with concurrent.futures.ThreadPoolExecutor(2) as pool:
    results=list(pool.map(lambda _:request('/api/auth/setup',account,setup),range(2)))
   assert sorted(r[0] for r in results) in ([200,401],[200,409])
+  assert not (root/'bootstrap-token').exists()
   manager=next(r[1]['accessToken'] for r in results if r[0]==200)
   status,created=request('/api/api-keys',{'name':'Diagnostics assistant','scope':'diagnostics','days':30},manager)
   assert status==201

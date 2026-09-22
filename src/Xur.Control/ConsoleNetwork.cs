@@ -60,7 +60,7 @@ public sealed class ConsoleNetwork(HttpClient client,bool local=false)
     public async Task Open(){wifiOpen=false;Closed=false;view="list";notice="";await Refresh();}
     public async Task Refresh()
     {
-        if(wifiOpen)return; // Keep adapter/network choices stable until an explicit rescan.
+        if(wifiOpen){await wifi.Refresh();return;} // Complete a pending scan without reordering existing choices.
         try{status=await client.GetFromJsonAsync<NetworkSettingsStatus>(Prefix+"/network/settings");}
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException){status=null;}
     }

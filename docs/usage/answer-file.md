@@ -1,9 +1,9 @@
 # Answer YAML and static networking
 
-An answer file can configure wired networking and optionally set the bootstrap
-login code. **It does not approve disk installation.** You still create the
-manager account, select the exact target disk, review it, and approve installation
-through the browser or authenticated API.
+An answer file can configure wired networking and optionally set the post-install bootstrap
+login code. **It does not approve disk installation.** Select the exact target disk, review it, and approve installation in the
+console. After reboot, use the code in the browser to create the required
+administrator account.
 
 Download or copy [the example xur.yml](../examples/xur.yml). Replace every example
 MAC address, IP address, gateway, DNS server and bootstrap code with values for
@@ -33,8 +33,8 @@ symlink, at most 32 KiB, with one YAML document. Unknown fields and malformed
 configuration are rejected rather than ignored.
 
 The bundled installer can apply the answer's networking without first
-downloading an application update. Its initial best-effort app refresh may use
-the default DHCP connection or time out before answer discovery completes.
+downloading an application update. Signed update checks run in the background
+and retry when a connection becomes available.
 Once discovery and network configuration succeed, the console shows the current
 addresses and the installer can download Bazzite using the configured network.
 Internet access is still required for that OS download.
@@ -44,7 +44,7 @@ Internet access is still required for that OS download.
 | Field | Meaning |
 | --- | --- |
 | `schemaVersion` | `1` |
-| `bootstrapToken` | Optional six-character Crockford Base32 code; the middle hyphen is optional. Omit to keep the random local code. |
+| `bootstrapToken` | Optional six-character Crockford Base32 code; the middle hyphen is optional. Carried privately into the installed system for account creation, then deleted. Omit for a random code on the installed console. |
 | `network.interfaces` | One to sixteen wired-adapter configurations. Omit `network` to use the normal saved-profile/DHCP startup. |
 | `macAddress` | Adapter MAC, preferably used for stable matching across installer and installed interface names. |
 | `interface` | Optional observed interface name, such as `enp3s0`. At least a MAC or interface name is required. If both are given, both must match. |
@@ -77,8 +77,9 @@ network:
 Answer-file networking is explicit boot configuration and is kept automatically
 after successful activation. If activation fails, Xur restores the preceding
 connection and leaves installation locked. Review the console or installer
-status, correct the answer, and reboot to rescan. The answer file and bootstrap
-code are not copied to the installed machine. Confirmed NetworkManager profiles
+status, correct the answer, and reboot to rescan. The answer file is not copied.
+Its optional bootstrap code is staged privately for post-install account creation
+and deleted after signup. Confirmed NetworkManager profiles
 are copied, bound to the adapter's MAC, and persist across reboot and OS updates.
 
 ## Change networking after boot
@@ -108,5 +109,5 @@ protection. Local equivalents are under `/local/network/` on the root-private
 control socket.
 
 See [API initialization](../architecture/api-initialization.md) for the account,
-disk-plan and approval steps. Network rollback uses NetworkManager's
+post-install account steps. Disk review and approval take place in the console. Network rollback uses NetworkManager's
 [checkpoint API](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.html).

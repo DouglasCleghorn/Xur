@@ -14,7 +14,7 @@ _=ApplicationIdentity.Id;
 var storage = new Storage();
 bool installer = File.ReadAllText("/proc/cmdline").Split(' ').Contains("xur.installer=1");
 var stateDir = installer ? run : "/var/lib/xur";
-_=Task.Run(async()=>{try{if((await Processes.Run("systemctl",["is-active","firewalld"],5)).ExitCode==0)await Processes.Run("firewall-cmd",["--add-port=8443/tcp"],10);}catch{}});
+if(!installer)_=Task.Run(async()=>{try{if((await Processes.Run("systemctl",["is-active","firewalld"],5)).ExitCode==0)await Processes.Run("firewall-cmd",["--add-port=8443/tcp"],10);}catch{}});
 Directory.CreateDirectory(stateDir);
 RegistryMirror.Ensure();
 var displayConsoles=new DisplayConsoles(Path.Combine(stateDir,"workloads"),run);
@@ -39,7 +39,7 @@ app.MapGet("/power/status",async()=>Results.Json(await serverPower.Status()));
 var hfCredentials=new HuggingFaceCredentials(stateDir);
 app.MapGet("/huggingface",()=>new {configured=hfCredentials.Configured});
 app.MapPost("/huggingface",IResult(HuggingFaceTokenRequest request)=>{try{hfCredentials.Save(request.Token);return Results.Ok(new{configured=hfCredentials.Configured});}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});
-var computerName=new ComputerNameSettings();
+var computerName=new ComputerNameSettings(updateTailscale:!installer);
 app.MapGet("/computer-name",()=>computerName.Read());
 app.MapPost("/computer-name",async Task<IResult>(ComputerNameRequest request)=>{try{return Results.Json(await computerName.Set(request.Name));}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});
 var networkSettings=new NetworkSettings(run);
@@ -271,6 +271,11 @@ File.SetUnixFileMode(socket, UnixFileMode.UserRead | UnixFileMode.UserWrite);
 if (installer)
 {
     await storage.DiscoverAnswers();
+    if(storage.BootstrapToken is { } bootstrapToken)
+    {
+        using var tokenFile=new FileStream(Path.Combine(run,"bootstrap-token"),new FileStreamOptions {Mode=FileMode.Create,Access=FileAccess.Write,UnixCreateMode=UnixFileMode.UserRead|UnixFileMode.UserWrite});
+        using var writer=new StreamWriter(tokenFile);await writer.WriteAsync(bootstrapToken);
+    }
     if(storage.Answer is {Network.Length:>0} answer)
     {
         try

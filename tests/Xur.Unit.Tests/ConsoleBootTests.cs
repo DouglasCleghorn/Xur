@@ -8,6 +8,13 @@ static class ConsoleBootTests
         var root=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../../.build/evidence/name-"+Guid.NewGuid().ToString("N")));Directory.CreateDirectory(root);
         try
         {
+            var statusDirectory=Path.Combine(root,"app");Directory.CreateDirectory(statusDirectory);
+            File.WriteAllText(Path.Combine(statusDirectory,"check.json"),"{\"state\":\"unavailable\"}");
+            check(InstallerAppStatus.Message(root).Contains("Setup remains available"),"Offline update checks clearly retain local setup availability");
+            File.WriteAllText(Path.Combine(statusDirectory,"check.json"),"{\"state\":\"available\"}");
+            check(InstallerAppStatus.Message(root).Contains("after installation"),"Available installer updates do not imply an automatic setup restart");
+            File.WriteAllText(Path.Combine(statusDirectory,"check.json"),"{");
+            check(InstallerAppStatus.Message(root).Contains("do not delay"),"An incomplete update status file cannot break the console");
             var calls=new List<string>();
             Task<ProcessResult> Run(string exe,string[] args,int timeout){calls.Add(exe+" "+string.Join(' ',args));return Task.FromResult(new ProcessResult(0,exe=="tailscale"&&args[0]=="status"?"{\"BackendState\":\"Running\"}":""));}
             var name=new ComputerNameSettings(Path.Combine(root,"computer-name"),Run);
@@ -15,6 +22,8 @@ static class ConsoleBootTests
             var result=await name.Set("Living-Room");
             check(result.Name=="living-room"&&name.Read().Configured&&new ComputerNameSettings(Path.Combine(root,"computer-name"),Run).Read().Name=="living-room","Computer name persists across agent restarts");
             check(calls.Contains("hostnamectl set-hostname living-room")&&calls.Contains("tailscale set --hostname=living-room"),"Computer name updates the host and an enrolled Tailscale node");
+            calls.Clear();await new ComputerNameSettings(Path.Combine(root,"installer-name"),Run,updateTailscale:false).Set("setup-server");
+            check(!calls.Any(c=>c.StartsWith("tailscale")),"Naming the live installer never starts Tailscale");
             foreach(var bad in new[]{"", "-bad", "bad-", "two words", "bad;reboot", "localhost",new string('x',64),"1234"})
             {var rejected=false;try{ComputerNameSettings.Validate(bad);}catch(InvalidOperationException){rejected=true;}check(rejected,"Invalid computer name is rejected before a host mutation");}
         }

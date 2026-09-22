@@ -8,20 +8,28 @@ public sealed class ConsoleWifi(HttpClient client,bool local=false)
     string Prefix=>local?"/local":"";
     WifiStatus? status;WifiAdapter? adapter;WifiNetwork[] networks=[];WifiNetwork? selected;
     string view="adapters",notice="";
+    Task<(WifiNetwork[]? Networks,string Error)>? scanTask;
     public bool Closed {get;private set;}
+    static string Describe(WifiAdapter adapter)=>$"Adapter: {adapter.Interface} · {adapter.Model}\nDriver: {(adapter.Driver.Length>0?adapter.Driver:"Unknown")} · Firmware: {(adapter.FirmwareMissing?"Missing":adapter.Firmware.Length>0?adapter.Firmware:"Unknown")}\nState: {adapter.State}";
     public ConsoleScreen Screen
     {
         get
         {
             var options=new List<ConsoleOption>();string body;string? input=null;var secret=false;
-            if(view=="password")
+            if(view is "scanning" or "scan-error")
+            {
+                body=Describe(adapter!)+"\n"+(view=="scanning"?"Scanning for Wi-Fi networks… This can take up to 30 seconds.\nYou can go back while the scan runs.":"The scan could not be completed. This does not mean there are no networks nearby.\nCheck the adapter state above and the scan error.");
+                if(view=="scan-error")options.Add(new('v',"Scan again"));
+                options.Add(new('0',"Back to adapters"));
+            }
+            else if(view=="password")
             {
                 body=$"{adapter!.Interface} · {LocalConsole.Clean(selected!.Ssid)}\nEnter the Wi-Fi password. It will be saved for automatic reconnection.\nEnter: Connect | Escape: Cancel";
                 input="";secret=true;options.Add(new('0',"Cancel"));
             }
             else if(view=="networks")
             {
-                body=$"Adapter: {adapter!.Interface}\nChoose a network. Secured networks prompt for a password.\n"+(networks.Length==0?"No visible networks found. Move closer or scan again. Hidden networks require separate configuration.":"");
+                body=Describe(adapter!)+"\nChoose a network. Secured networks prompt for a password.\n"+(networks.Length==0?"The adapter returned no named networks after scanning and retrying.\nScan again; if nearby networks remain missing, check driver and firmware messages in Logs. Hidden networks require separate configuration.":"");
                 for(var i=0;i<networks.Length;i++)
                 {
                     var n=networks[i];options.Add(new((char)(256+i),$"{LocalConsole.Clean(n.Ssid)} · {n.Signal}% · {(n.KeyManagement=="open"?"Open":n.Security)}",n.Supported));
@@ -33,13 +41,13 @@ public sealed class ConsoleWifi(HttpClient client,bool local=false)
             {
                 body=status==null?"Could not read Wi-Fi adapters. Refresh to retry.":status.Adapters.Length==0?"No Wi-Fi adapters found. Check the adapter and driver.":!status.HardwareEnabled?"Wi-Fi is blocked by a hardware switch or airplane mode. Unblock it and refresh.":!status.Enabled?"Wi-Fi is turned off.":"Choose a Wi-Fi adapter.";
                 if(status is {HardwareEnabled:true,Enabled:false})options.Add(new('e',"Enable Wi-Fi"));
-                if(status!=null)for(var i=0;i<status.Adapters.Length;i++)options.Add(new((char)(256+i),$"{status.Adapters[i].Interface} · {status.Adapters[i].MacAddress} · {status.Adapters[i].State}",status.Enabled&&status.HardwareEnabled));
+                if(status!=null)for(var i=0;i<status.Adapters.Length;i++)options.Add(new((char)(256+i),$"{status.Adapters[i].Interface} · {status.Adapters[i].Model} · {status.Adapters[i].Driver} · {status.Adapters[i].State}",status.Enabled&&status.HardwareEnabled));
                 options.AddRange([new('v',"Refresh adapters"),new('0',"Back to network settings")]);
             }
             return new("wifi-"+view,"Wi-Fi setup",LocalConsole.Clean((notice.Length>0?notice+"\n\n":"")+body),options.ToArray(),input,secret);
         }
     }
-    public async Task Open(){Closed=false;notice="";view="adapters";await LoadAdapters();}
+    public async Task Open(){Closed=false;notice="";scanTask=null;view="adapters";await LoadAdapters();}
     async Task LoadAdapters()
     {
         try
@@ -51,12 +59,27 @@ public sealed class ConsoleWifi(HttpClient client,bool local=false)
     }
     async Task Scan()
     {
-        var response=await Send("/scan",new WifiScanRequest(adapter!.Interface,adapter.MacAddress));
-        if(response==null)return;
-        using(response)
+        notice="";view="scanning";
+        scanTask=ReadScan(new WifiScanRequest(adapter!.Interface,adapter.MacAddress));
+        await Refresh();
+    }
+    async Task<(WifiNetwork[]? Networks,string Error)> ReadScan(WifiScanRequest request)
+    {
+        try
         {
-            networks=(await response.Content.ReadFromJsonAsync<WifiNetwork[]>()??[]).GroupBy(n=>(n.Ssid,n.KeyManagement)).Select(g=>g.OrderByDescending(n=>n.Signal).First()).Take(200).ToArray();view="networks";
+            using var response=await client.PostAsJsonAsync(Prefix+"/network/wifi/scan",request);
+            if(response.IsSuccessStatusCode)return (await response.Content.ReadFromJsonAsync<WifiNetwork[]>()??[],"");
+            var json=await response.Content.ReadFromJsonAsync<JsonElement>();
+            return (null,json.TryGetProperty("error",out var error)?error.GetString()??"Scan failed.":"Scan failed. Retry or check Logs.");
         }
+        catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException){return (null,"Wi-Fi scan interrupted. Retry or check the adapter in Logs.");}
+    }
+    public async Task Refresh()
+    {
+        if(view!="scanning"||scanTask is not {IsCompleted:true})return;
+        var result=await scanTask;scanTask=null;
+        if(result.Networks==null){notice=result.Error;view="scan-error";return;}
+        networks=result.Networks.GroupBy(n=>(n.Ssid,n.KeyManagement)).Select(g=>g.OrderByDescending(n=>n.Signal).First()).Take(200).ToArray();view="networks";
     }
     public async Task Select(char key)
     {
@@ -64,11 +87,13 @@ public sealed class ConsoleWifi(HttpClient client,bool local=false)
         notice="";
         if(key=='0')
         {
+            if(view is "scanning" or "scan-error"){scanTask=null;view="adapters";return;}
             if(view=="password"){selected=null;view="networks";}
             else if(view=="networks"&&status?.Adapters.Length>1)view="adapters";
             else Closed=true;
             return;
         }
+        if(view=="scan-error"&&key=='v'){await Scan();return;}
         if(view=="adapters")
         {
             if(key=='e'){using var enabled=await Send("/enable",new{});if(enabled!=null)await LoadAdapters();}

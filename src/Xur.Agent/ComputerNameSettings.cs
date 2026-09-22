@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using Xur.Domain;
 namespace Xur.Agent;
-public sealed class ComputerNameSettings(string filename="/etc/xur/computer-name",Func<string,string[],int,Task<ProcessResult>>? runner=null)
+public sealed class ComputerNameSettings(string filename="/etc/xur/computer-name",Func<string,string[],int,Task<ProcessResult>>? runner=null,bool updateTailscale=true)
 {
     readonly SemaphoreSlim gate=new(1,1);
     Task<ProcessResult> Run(string exe,string[] args)=>runner!=null?runner(exe,args,15):Processes.Run(exe,args,15);
@@ -27,6 +27,7 @@ public sealed class ComputerNameSettings(string filename="/etc/xur/computer-name
             Directory.CreateDirectory(Path.GetDirectoryName(filename)!);
             await File.WriteAllTextAsync(filename+".tmp",name+"\n");File.SetUnixFileMode(filename+".tmp",UnixFileMode.UserRead|UnixFileMode.UserWrite);File.Move(filename+".tmp",filename,true);
             var message="Server name saved. It will be kept after reboot and installation.";
+            if(!updateTailscale)return new(name,true,message);
             // An already-enrolled node keeps its identity while updating its advertised name.
             try
             {
