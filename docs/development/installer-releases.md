@@ -28,6 +28,29 @@ migration entry point, not the newest Stable version; use Xur's channel selector
 or the website download page. Do not manually move that designation or delete a
 migration release. The channel alias's `migration` asset records its fixed tag.
 
+## Release versions
+
+Stable uses `YY.MM.z` (for example `26.09.1`); Nightly uses `YY.MM.zzz`
+(`26.09.001`). Each channel has its own monthly counter, starting at 1 in a
+new UTC calendar month. `eng/release-version.py` selects one more than the
+highest existing tag number for that channel and month. Gaps are not reused;
+failed or cancelled builds that did not publish a tag do not consume a number.
+Nightly numbers have at least three digits, so the counter continues past 999.
+Keep release tags even when cleaning up old assets to preserve the counter.
+
+Tags remain `v26.09.1` and `nightly-26.09.001`. ISO names include both the
+channel and version: `xur-stable-26.09.1-x86_64.iso` and
+`xur-nightly-26.09.001-x86_64.iso`. Existing long-version releases and migration
+pointers remain valid. Updater ordering uses the signed publication sequence,
+not a numeric comparison of the displayed version, so shortening the year
+does not block upgrades. Local contributor builds may still set their own version.
+
+Version lookup fails if the remote cannot be read. It never invents a fallback
+number. Per-branch workflow concurrency and the publication check for a
+superseded commit remain in effect; an existing release tag is never overwritten.
+
+## Migration and validation
+
 There is one transition generation per channel because old clients reject signed
 metadata for the other channel. Each bridge is created by that channel's approved
 workflow; publishing Nightly does not silently promote it to Stable.

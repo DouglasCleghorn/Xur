@@ -29,7 +29,8 @@ jobs:
         run: |
           if [[ "$GITHUB_REF_NAME" == main ]]; then channel=nightly; else channel=stable; fi
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
-          echo "version=$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          version=$(python3 eng/release-version.py --channel "$channel")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Prepare native build tools and browser
         run: |
           python3 eng/ci-native.py
