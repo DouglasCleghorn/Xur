@@ -59,7 +59,14 @@ completed offline installation with 8 GiB and the external OCI payload; see the 
 the executed configuration. These are test configurations, not minimum requirements.
 
 `eng/toolchain-lock.json`, `global.json` and NuGet lock files record selected
-inputs. The live Fedora bootc base is pinned in `os/bootc/Containerfile`; the installed
+inputs. The live Fedora bootc base tracks the release tag
+`quay.io/fedora/fedora-bootc:44` in `os/bootc/Containerfile`. Each build resolves
+that tag once, builds from the resulting digest, and includes the digest, image
+version and kernel in the ISO's `.embedded.json` inspection receipt. This avoids
+depending on an old upstream manifest remaining available while keeping each
+build's selected image identifiable. Rebuilding the same source can pick up new
+Fedora 44 updates; changing the Fedora major version is an explicit source change.
+The installed
 Bazzite image is resolved from its stable channel at install time and pinned
 to a digest for that operation. `os/bootc/upstream-lock.json` retains historical
 reference information; it no longer selects the online installation version. Live installer

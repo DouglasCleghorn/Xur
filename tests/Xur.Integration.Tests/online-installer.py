@@ -15,6 +15,25 @@ for bad in ['sha256:bad','sha256:'+'b'*64+'\nclearpart --all']:
  try:source.resolve(ks,lambda *args,**kw:bad)
  except ValueError:pass
  else:raise AssertionError('Untrusted digest became kickstart instructions')
+# The live Fedora base follows a major-version tag, resolved once per build.
+base=load('base','os/bootc/resolve-base.py');base_calls=[]
+containerfile=(repo/'os/bootc/Containerfile').read_text()
+base_info={'Digest':'sha256:'+'c'*64,'Architecture':'amd64','Os':'linux','Labels':{'org.opencontainers.image.version':'44.20260923.0','ostree.linux':'fixture-kernel'}}
+def inspect_base(args,**kwargs):
+ base_calls.append(args);assert kwargs['timeout']==90
+ return json.dumps(base_info)
+receipt=base.resolve(containerfile,inspect_base)
+assert base_calls==[['skopeo','inspect','--override-arch','amd64','docker://quay.io/fedora/fedora-bootc:44']]
+assert receipt['resolvedReference']=='quay.io/fedora/fedora-bootc@sha256:'+'c'*64
+assert receipt['kernel']=='fixture-kernel' and receipt['version']=='44.20260923.0'
+assert json.loads((repo/'eng/toolchain-lock.json').read_text())['liveInstallerBase']['reference']==receipt['reference']
+for update in [{'Digest':'sha256:bad'},{'Architecture':'arm64'},{'Os':'windows'},{'Labels':{'org.opencontainers.image.version':'45.0'}},{'Labels':{}}]:
+ try:base.resolve(containerfile,lambda *a,**kw:json.dumps(base_info|update))
+ except ValueError:pass
+ else:raise AssertionError('Invalid Fedora base identity was accepted: '+str(update))
+try:base.resolve(containerfile.replace(':44',':latest'),inspect_base)
+except ValueError:pass
+else:raise AssertionError('An unbounded latest tag was accepted')
 with tempfile.TemporaryDirectory() as directory:
  root=pathlib.Path(directory);app.ROOT=root/'app';app.BUNDLED=root/'bundled';app.BUNDLED.mkdir();app.READY=root/'ready';app.APPROVED=root/'approved.ks';app.CMDLINE=root/'cmdline';app.CMDLINE.write_text('xur.installer=1')
  (app.BUNDLED/'bundle.json').write_text('{"id":"bundled"}')

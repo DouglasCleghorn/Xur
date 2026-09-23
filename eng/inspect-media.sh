@@ -56,6 +56,6 @@ largest=max(files,key=lambda p:p.stat().st_size)
 assert largest.stat().st_size <= 2**32-1, 'ISO contains a file too large for FAT32: '+str(largest)
 assert 'registry:ghcr.io/ublue-os/bazzite-nvidia-open:stable' in ks
 assert not (out/'media/xur/payload').exists(), 'Online ISO embeds an OS payload'
-(out/'embedded-verification.json').write_text(json.dumps({'verifiedFiles':checks,'safeKickstartTemplate':True,'uefiAndBiosLayout':True,'enforcementNotDisabled':True,'fat32Compatible':True,'largestFile':str(largest.relative_to(out/'media')),'largestFileBytes':largest.stat().st_size,'isoFilesChecked':len(files),'suppliedEfiLoaderSha256':sha(out/'removable-grub.efi'),'onlineInstaller':True,'deduplicatedBootInitrd':True,'osChannel':'ghcr.io/ublue-os/bazzite-nvidia-open:stable'},indent=2)+'\n')
+(out/'embedded-verification.json').write_text(json.dumps({'verifiedFiles':checks,'safeKickstartTemplate':True,'uefiAndBiosLayout':True,'enforcementNotDisabled':True,'fat32Compatible':True,'largestFile':str(largest.relative_to(out/'media')),'largestFileBytes':largest.stat().st_size,'isoFilesChecked':len(files),'suppliedEfiLoaderSha256':sha(out/'removable-grub.efi'),'onlineInstaller':True,'deduplicatedBootInitrd':True,'osChannel':'ghcr.io/ublue-os/bazzite-nvidia-open:stable','liveInstallerBase':json.loads(pathlib.Path('/home/builder/xur-output/installer-base.json').read_text())},indent=2)+'\n')
 print(json.dumps({'embeddedFilesVerified':len(checks),'safeKickstartTemplate':True,'uefiAndBiosLayout':True}))
 PY

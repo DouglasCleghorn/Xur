@@ -60,9 +60,7 @@
     "amd64Image": "ghcr.io/ggml-org/llama.cpp@sha256:e33f80e54fc3f403118ab92b24f21dc1a3125ffd0c7725532028eca8128b548d"
   },
   "liveInstallerBase": {
-    "reference": "quay.io/fedora/fedora-bootc@sha256:2bf2d0403ed546aa4ae90bb8ba684986cce183868d2f3adb7de69f1d0cf86b2d",
-    "kernel": "7.2.7-200.fc44.x86_64",
-    "version": "44.20260923.0",
-    "resolvedAt": "2026-09-23"
+    "reference": "quay.io/fedora/fedora-bootc:44",
+    "resolution": "Resolved once per build; exact image recorded in the installer inspection receipt"
   }
 }

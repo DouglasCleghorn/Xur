@@ -1,4 +1,5 @@
-FROM quay.io/fedora/fedora-bootc@sha256:2bf2d0403ed546aa4ae90bb8ba684986cce183868d2f3adb7de69f1d0cf86b2d AS common
+ARG XUR_INSTALLER_BASE=quay.io/fedora/fedora-bootc:44
+FROM ${XUR_INSTALLER_BASE} AS common
 RUN dnf install -y podman pciutils usbutils util-linux NetworkManager NetworkManager-wifi wpa_supplicant linux-firmware iproute libicu openssl-libs firewalld && \
     firewall-offline-cmd --add-port=8080/tcp --add-port=8443/tcp && dnf clean all
 # The installed host is the signed upstream image in upstream-lock.json.
