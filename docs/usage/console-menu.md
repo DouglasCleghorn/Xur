@@ -127,7 +127,12 @@ unaffected disks, then choose **Yes** at the erase confirmation. **No** is selec
 default; Enter on No, Escape or 0 cancels.
 Cancellation, an expired plan or a changed disk identity requires a new review.
 Progress updates in the console; completion offers a separately confirmed reboot.
-Failures never automatically retry disk erasure. Locked LUKS containers are not
+Failures never automatically retry disk erasure. Choose **Installation logs** on
+the progress screen to read Anaconda, storage, download and Xur configuration
+errors. **More lines** / **Previous lines** navigate the report; **Back to progress**
+returns without restarting installation. Capture the error before rebooting:
+live logs are temporary. Retrying requires rebooting the installer and reviewing
+and approving the disk again. Locked LUKS containers are not
 opened to search for answer files; they are listed as skipped and do not block
 selection of an otherwise eligible disk. Erasing that disk destroys its encrypted
 data. Invalid or ambiguous answers and actual discovery errors still block setup.
@@ -150,3 +155,21 @@ and installation continue running. The first key only wakes the display; press
 again to operate the menu. The black screen retains the HDMI signal instead of
 putting the monitor into power-save. Workstation desktops keep their own idle
 settings.
+
+The display console selects the monitor's preferred mode instead of inheriting
+firmware timing. Connected outputs that stay disabled or in display power-save
+receive bounded recovery attempts, including when another output is healthy.
+Workstation-owned GPUs are excluded from console recovery.
+
+On installation failure, Xur tries to save a new `xur-diagnostics-*.txt` report
+to a writable installer USB filesystem. Progress shows whether saving succeeded.
+**Save logs to USB** also lets you select a writable USB volume after installation
+stops. Reports contain Anaconda and configuration log tails, the bundle identity,
+and display/kernel diagnostics; credentials are redacted. Files are flushed to
+the drive, and drives mounted only for export are unmounted afterward. Existing
+files are kept, and the approved installation disk is excluded.
+
+Read-only media (including raw/DD ISO filesystems) cannot store reports. Insert
+a second FAT32 or exFAT USB drive and choose **Refresh USB drives**. Xur does not
+format drives or change their read-only protection to save logs. Save before
+rebooting, which clears live logs.

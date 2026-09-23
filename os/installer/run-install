@@ -1,8 +1,26 @@
 #!/usr/bin/bash
 set -eEu
+umask 077
+phase=preflight
+failed() {
+    result=$?
+    trap - ERR
+    printf 'Installer failed during %s (exit %s). See installation logs.\n' "$phase" "$result" >&2
+    touch /run/xur/install-failed
+    exit "$result"
+}
+trap failed ERR
+# Never repeat a previously started installation, even if the service is restarted.
+test ! -e /run/xur/install-started
+touch /run/xur/install-started
 test -f /run/xur/approved.ks
 test -f /run/xur/install-operation.json
-trap 'touch /run/xur/install-failed' ERR
+phase=source
+printf '%s\n' "$phase" > /run/xur/install-phase
 /usr/libexec/xur-resolve-install-source
+phase=anaconda
+printf '%s\n' "$phase" > /run/xur/install-phase
 /usr/bin/anaconda --kickstart=/run/xur/online.ks --cmdline
+# Anaconda's %onerror is authoritative even if the process returns zero.
+test ! -e /run/xur/install-failed
 touch /run/xur/install-complete

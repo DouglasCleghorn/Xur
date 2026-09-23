@@ -10,11 +10,11 @@ with tempfile.TemporaryDirectory(prefix='xur-local-install-') as temp:
     root=pathlib.Path(temp);(root/'bin').mkdir()
     stub=root/'bin/tailscale';stub.write_text('#!/bin/sh\ntouch "'+str(root/'tailscale-called')+'"\nexit 1\n');stub.chmod(0o700)
     env=dict(os.environ,XUR_RUN=temp,XUR_STATE=temp,XUR_PORT='18070',XUR_MODE='Installer',XUR_CONSOLE='stdio',PATH=str(root/'bin')+':'+os.environ['PATH'])
-    name=None;operation=None;approvals=0
+    name=None;operation=None;approvals=0;exports=0
     disk={'path':'/dev/test','stablePath':'/dev/disk/by-id/test','serial':'TEST-001','wwn':'test','model':'Fixture SSD','bytes':68719476736,'layout':'test','mounts':[],'blocked':[]}
     class Handler(socketserver.StreamRequestHandler):
         def handle(self):
-            global name,operation,approvals
+            global name,operation,approvals,exports
             method,path,_=self.rfile.readline().decode().split()
             headers={}
             while line:=self.rfile.readline().strip():
@@ -28,11 +28,13 @@ with tempfile.TemporaryDirectory(prefix='xur-local-install-') as temp:
             if path=='/approve':
                 assert json.loads(data)=={'id':'plan','digest':'digest'}
                 approvals+=1;operation={'id':'plan','stage':'Installing','message':'Installing fixture disk','updated':'2026-09-21T00:00:00Z'}
-            responses={'/computer-name':{'name':name or 'xur','configured':name is not None},
+            if path=='/installation-logs/usb' and method=='POST':
+                assert json.loads(data)=={'id':'usb-id'};exports+=1
+            responses={'/installation-logs/usb':{'message':'Saved fixture report on USB.'} if method=='POST' else [{'id':'usb-id','path':'/dev/usb1','label':'Logs','model':'Fixture USB','installerMedia':False}],'/computer-name':{'name':name or 'xur','configured':name is not None},
               '/status':{'scan':{'state':'NoAnswer'},'operation':operation},'/network/settings':{'devices':[],'pending':None},'/disks':{'generation':'test','disks':[disk]},
               '/plan':{'id':'plan','digest':'digest','generation':'test','target':disk,'unaffected':[],'actions':['Erase fixture disk'],'expires':'2099-01-01T00:00:00Z'},
               '/approve':operation}
-            body=b'Fixture log line' if path=='/logs' else json.dumps(responses.get(path,{})).encode()
+            body=b'Fixture log line' if path in ('/logs','/installation-logs') else json.dumps(responses.get(path,{})).encode()
             self.wfile.write(b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: '+str(len(body)).encode()+b'\r\nConnection: close\r\n\r\n'+body)
     server=socketserver.UnixStreamServer(str(root/'agent.sock'),Handler);threading.Thread(target=server.serve_forever,daemon=True).start()
     process=subprocess.Popen([str(repo/'.build/context/publish/control/Xur.Control')],env=env,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
@@ -69,6 +71,9 @@ with tempfile.TemporaryDirectory(prefix='xur-local-install-') as temp:
         # The dedicated CLI must use the same local disk review and Yes/No approval.
         cli=subprocess.run([str(repo/'.build/context/publish/control/Xur.Control'),'setup'],input=b'1\n1\n2\n2\n0\n',env=env,capture_output=True,timeout=15,check=True)
         check(approvals==1 and b'TEST-001' in cli.stdout and b'Installing fixture disk' in cli.stdout,'xur setup reviews identity and sends exactly one explicit disk approval')
+        operation=operation|{'stage':'Failed','message':'Fixture installation failure'}
+        cli=subprocess.run([str(repo/'.build/context/publish/control/Xur.Control'),'setup'],input=b'1\n0\n2\n1\n0\n0\n',env=env,capture_output=True,timeout=15,check=True)
+        check(exports==1 and approvals==1 and b'Fixture log line' in cli.stdout and b'Saved fixture report' in cli.stdout,'Failed installation exposes logs and USB export without another disk approval')
         process.stdin.write(b'0\n/cancel\n4\n');process.stdin.flush();wait(lambda:'Scroll logs' in frame())
         process.stdin.write(b'0\n');process.stdin.flush();wait(lambda:'Setup and installation' in frame() and 'Scroll logs' not in frame())
         check(True,'Logs return to the local setup menu')

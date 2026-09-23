@@ -134,6 +134,8 @@ await NetworkSettingsTests.Run(Check);
 await WifiTests.Run(Check);
 await ConsoleBootTests.Run(Check);
 await ConsoleSetupTests.Run(Check);
+InstallationDiagnosticsTests.Run(Check);
+await UsbLogExportTests.Run(Check);
 await StorageDiscoveryTests.Run(Check);
 await DisplayRecoveryTests.Run(Check);
 ConsoleIdleTests.Run(Check);

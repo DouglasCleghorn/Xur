@@ -20,6 +20,9 @@ static class ConsoleSetupTests
         var disk=new Disk("/dev/test","/dev/disk/by-id/test","TEST-001","wwn-test","Test SSD",64L<<30,"old layout",[],[]);
         var blocked=disk with{Path="/dev/usb",Serial="USB",Blocked=["Boot media"]};
         Operation? operation=null;int approvals=0;bool changed=false,expired=false;var savedName=new ComputerNameStatus("xur",false);NetworkChange? pending=null;
+        int exports=0;agent.MapGet("/installation-logs/usb",()=>new[]{new UsbLogVolume("usb-id","/dev/usb1","Logs","Test USB",false)});
+        agent.MapPost("/installation-logs/usb",(UsbLogRequest request)=>{if(request.Id!="usb-id")return Results.BadRequest();exports++;return Results.Json(new UsbLogReceipt("Saved report on USB."));});
+        agent.MapGet("/installation-logs",()=>Results.Text("anaconda.log\nError: installation fixture\npassword=private-fixture\n"+string.Join('\n',Enumerable.Range(0,30).Select(n=>"Log line "+n))));
         agent.MapGet("/status",()=>new{scan=new{state="NoAnswer"},operation});
         agent.MapGet("/network/settings",()=>new NetworkSettingsStatus([],pending));
         agent.MapGet("/disks",()=>new Inventory("generation",[disk,blocked]));
@@ -59,6 +62,12 @@ static class ConsoleSetupTests
             await menu.Select('0');await menu.Open("setup");check(menu.Screen.Id=="setup-progress","Reopening setup resumes an existing installation");
             operation=operation! with{Stage="Complete",Message="Installation completed"};await menu.Refresh();check(menu.Screen.Options.Any(o=>o.Key=='r'),"Console installation completion offers an explicit reboot action");
             operation=operation with{Stage="Failed",Message="Download failed"};await menu.Refresh();check(!menu.Screen.Options.Any(o=>o.Key=='r')&&menu.Screen.Body.Contains("No automatic retry"),"Console installation failure remains visible without retrying erasure or rebooting");
+            await menu.Select('s');check(menu.Screen.Id=="setup-usb"&&menu.Screen.Options.Any(o=>o.Label.Contains("/dev/usb1")),"Failed installation offers eligible USB log destinations");
+            await menu.Select((char)256);check(exports==1&&menu.Screen.Body.Contains("Saved report"),"Selecting a USB destination exports logs and shows the receipt");await menu.Select('0');
+            await menu.Select('l');check(menu.Screen.Id=="setup-logs"&&menu.Screen.Body.Contains("Error: installation fixture")&&!menu.Screen.Body.Contains("private-fixture"),"Failure details open installation logs directly and redact credentials");
+            await menu.Select('f');var logPage=menu.Screen.Body;await menu.Refresh();check(menu.Screen.Body==logPage&&logPage.Contains("Page 2"),"Polling leaves the selected installation log page stable");
+            await menu.Select('b');check(menu.Screen.Body.Contains("Page 1"),"Installation logs can navigate back to the initial error lines");
+            await menu.Select('0');check(menu.Screen.Id=="setup-progress"&&approvals==1,"Back from installation logs preserves failure without repeating approval");
         }
         finally{await control.StopAsync();await agent.StopAsync();Environment.SetEnvironmentVariable("XUR_RUN",oldRun);Environment.SetEnvironmentVariable("XUR_MODE",oldMode);Directory.Delete(root,true);}
     }

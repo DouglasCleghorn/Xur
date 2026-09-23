@@ -14,7 +14,7 @@ static class DisplayRecoveryTests
             var active=false;var starts=0;var stops=0;var environment="";var clock=new Clock();
             Task<ProcessResult> Run(string exe,string[] args,int timeout)
             {
-                if(exe=="systemd-run"){starts++;active=true;environment=string.Join(' ',args.Where(a=>a.StartsWith("--setenv=")).Select(a=>a[9..]))+" ";return Task.FromResult(new ProcessResult(0,""));}
+                if(exe=="systemd-run"){check(args.Contains("--no-use-original-mode"),"Display startup selects the monitor mode instead of inheriting firmware timing");starts++;active=true;environment=string.Join(' ',args.Where(a=>a.StartsWith("--setenv=")).Select(a=>a[9..]))+" ";return Task.FromResult(new ProcessResult(0,""));}
                 if(args[0]=="stop"){active=false;stops++;}
                 return Task.FromResult(args[0]=="is-active"?new ProcessResult(active?0:3,""):new ProcessResult(0,args.Contains("--property=Environment")?environment:""));
             }
@@ -27,7 +27,12 @@ static class DisplayRecoveryTests
             for(var i=0;i<4;i++){clock.Now=clock.Now.AddSeconds(31);await console.Refresh();}
             check(starts==6&&console.Error!=null,"An active console with inactive HDMI output gets at most three recovery attempts");
             File.WriteAllText(connector+"/enabled","enabled");await console.Refresh();check(console.Error==null&&starts==6,"Healthy HDMI output clears the recovery error without another restart");
-            await console.Release(gpu.Pci);await console.Refresh();check(starts==6,"Display recovery never restarts a console on a GPU being handed to a workstation");
+            var second=root+"/sys/class/drm/card0-HDMI-A-2";Directory.CreateDirectory(second);File.WriteAllText(second+"/enabled","disabled");File.WriteAllText(second+"/modes","1920x1080\n");
+            gpu=gpu with{Displays=["card0-HDMI-A-1","card0-HDMI-A-2"]};await console.Refresh();var before=starts;
+            clock.Now=clock.Now.AddSeconds(16);await console.Refresh();check(starts==before+1,"One healthy connector does not prevent recovery of another inactive output");
+            File.WriteAllText(second+"/enabled","enabled");await console.Refresh();before=starts;
+            File.WriteAllText(connector+"/dpms","Off");await console.Refresh();clock.Now=clock.Now.AddSeconds(16);await console.Refresh();check(starts==before+1,"An enabled connector left in DPMS Off gets bounded recovery");
+            before=starts;await console.Release(gpu.Pci);await console.Refresh();check(starts==before,"Display recovery never restarts a console on a GPU being handed to a workstation");
         }
         finally{Directory.Delete(root,true);}
     }

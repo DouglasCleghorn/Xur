@@ -24,6 +24,7 @@ var displayConsoles=new DisplayConsoles(Path.Combine(stateDir,"workloads"),run);
 var operationFile = Path.Combine(stateDir,"install-operation.json");
 Operation? operation = File.Exists(operationFile) ? JsonSerializer.Deserialize<Operation>(File.ReadAllText(operationFile)) : null;
 var gate = new SemaphoreSlim(1, 1);
+string logExport="";
 var plans = new Dictionary<string, InstallPlan>();
 var layout = new PlainRootLayout();
 void SaveOperation(Operation value)
@@ -69,7 +70,7 @@ app.MapGet("/configuration/export",async Task<IResult>()=>{
     try{var zone=await timezoneSettings.Read();var ntp=await ntpSettings.Read();return Results.Json(new{timezone=new{zone.Current,zone.Automatic},ntp=new{ntp.Enabled,ntp.Servers},files=ConfigExport.Read(stateDir),workstationUsers=StationAccounts.Read(includeTemporary:true)});}
     catch(Exception e) when(e is InvalidOperationException or IOException or JsonException){return Results.Conflict(new{error="Configuration export could not read all settings. Retry after resolving the settings error."});}
 });
-app.MapGet("/status", () => Results.Json(new { installer, scan = storage.Scan, operation }));
+app.MapGet("/status", () => Results.Json(new { installer, scan = storage.Scan, operation, logExport }));
 // Root-private Unix socket only; the token never appears in public status or logs.
 app.MapGet("/bootstrap-config", () => Results.Json(new { state=storage.Scan.State, token=storage.BootstrapToken }));
 app.MapGet("/disks", async () => await storage.Observe());
@@ -82,13 +83,36 @@ app.MapGet("/logs",async()=> {
     } catch(Exception e) when(e is IOException or System.ComponentModel.Win32Exception or OperationCanceledException) {
         output += "Journal unavailable: " + e.Message;
     }
-    if (installer)
-        foreach (var path in new[] { "/tmp/anaconda.log", "/tmp/storage.log", "/tmp/program.log", "/tmp/packaging.log" })
-            try { if (File.Exists(path)) output += "\n" + Path.GetFileName(path) + "\n" + string.Join('\n', File.ReadLines(path).TakeLast(400)); }
-            catch(Exception e) when(e is IOException or UnauthorizedAccessException) { output += "\n" + Path.GetFileName(path) + " unavailable: " + e.Message; }
+    if (installer) output += InstallationDiagnostics.FileLogs(lines:400);
     return Results.Text(Redaction.Logs(output));
 });
+var usbLogs=new UsbLogExport(run);
+async Task<string> InstallationReport()
+{
+    var report=$"Xur installation diagnostics\nBundle: {ApplicationIdentity.Id}\nCaptured: {DateTimeOffset.UtcNow:O}\n"+
+        JsonSerializer.Serialize(operation)+"\n"+await InstallationDiagnostics.Read(400);
+    report+="\n=== Display diagnostics ===\n"+(await DisplayDiagnostics.Collect(runCommands:false)).ToJsonString();
+    foreach(var (title,args) in new[]{("Kernel journal",new[]{"--boot","--no-pager","--dmesg","-n","200"}),("Display-console journal",new[]{"--boot","--no-pager","-n","200","-u","xur-console-*.service"})})
+    {
+        try{report+="\n=== "+title+" ===\n"+(await Processes.Run("journalctl",args,10)).Output;}
+        catch(Exception e) when(e is IOException or System.ComponentModel.Win32Exception or OperationCanceledException){report+="\n"+title+" unavailable: "+e.Message;}
+    }
+    return Redaction.Logs(report);
+}
+app.MapGet("/installation-logs/usb",async Task<IResult>()=>installer?Results.Json(await usbLogs.List()):Results.Conflict());
+app.MapPost("/installation-logs/usb",async Task<IResult>(UsbLogRequest request)=> {
+    await gate.WaitAsync();
+    try
+    {
+        if(!installer||operation?.Stage is "Installing" or "Approved")return Results.Conflict(new{error="USB export is available when installation has stopped."});
+        var receipt=await usbLogs.Save(request.Id,await InstallationReport());logExport=receipt.Message;return Results.Json(receipt);
+    }
+    catch(Exception e) when(e is IOException or InvalidOperationException or UnauthorizedAccessException or OperationCanceledException or JsonException or System.ComponentModel.Win32Exception){return Results.Conflict(new{error=Redaction.Logs(e.Message)});}
+    finally{gate.Release();}
+});
+app.MapGet("/installation-logs",async()=>Results.Text(await InstallationDiagnostics.Read()));
 app.MapGet("/console-logs",async()=> {
+    if(installer)return Results.Text(await InstallationDiagnostics.Read());
     var result=await Processes.Run("journalctl",["--boot","--no-pager","-n","100"],10);
     return Results.Text(Redaction.Logs(result.Output));
 });
@@ -307,9 +331,24 @@ _ = Task.Run(async () => {
         try
         {
             var result = await Processes.Run("systemctl", ["show", "xur-install.service", "--property=ActiveState,Result"]);
-            if (result.Output.Contains("ActiveState=failed")) SaveOperation(operation with { Stage = "Failed", Message = "Anaconda failed; no automatic retry", Updated = DateTimeOffset.UtcNow });
-            if (File.Exists("/run/xur/install-failed")) SaveOperation(operation with { Stage = "Failed", Message = "Anaconda reported an installation error; no automatic retry", Updated = DateTimeOffset.UtcNow });
-            if (File.Exists("/run/xur/install-complete")) SaveOperation(operation with { Stage = "Complete", Message = "Installation completed. Reboot from the installed disk.", Updated = DateTimeOffset.UtcNow });
+            var observed=InstallationDiagnostics.Observe(operation,run,result.Output);
+            if(observed!=operation)
+            {
+                SaveOperation(observed);
+                if(observed.Stage=="Failed")
+                {
+                    logExport="Saving diagnostic logs to the installer USB…";
+                    _=Task.Run(async()=> {
+                        try
+                        {
+                            var media=(await usbLogs.List()).Where(v=>v.InstallerMedia).ToArray();
+                            logExport=media.Length==1?(await usbLogs.Save(media[0].Id,await InstallationReport())).Message:
+                                "Automatic log export unavailable: no single writable installer USB volume. Use Save logs to USB with another flash drive.";
+                        }
+                        catch(Exception e) when(e is IOException or InvalidOperationException or UnauthorizedAccessException or OperationCanceledException or JsonException or System.ComponentModel.Win32Exception){logExport="Automatic USB log export failed: "+Redaction.Logs(e.Message)+" Use Save logs to USB to retry.";}
+                    });
+                }
+            }
         }
         catch { /* Poll failure is not installation success. */ }
     }

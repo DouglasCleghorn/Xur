@@ -25,7 +25,7 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
     {
         var now=(clock??TimeProvider.System).GetUtcNow();
         var outputs=(gpu.Displays??[]).Where(d=>d.StartsWith(Path.GetFileName(card)+"-",StringComparison.Ordinal)).ToArray();
-        if(outputs.Length==0 || outputs.Any(d=>Read(Path.Combine(sysRoot,"class/drm",d,"enabled"))!="disabled"))
+        if(outputs.Length==0 || !outputs.Any(d=>Read(Path.Combine(sysRoot,"class/drm",d,"enabled"))=="disabled" || Read(Path.Combine(sysRoot,"class/drm",d,"dpms")) is "Off" or "Standby" or "Suspend"))
         {recovery.Remove(gpu.Pci);return false;}
         if(!recovery.TryGetValue(gpu.Pci,out var state)){recovery[gpu.Pci]=(now.AddSeconds(15),0);return false;}
         if(state.Attempts>=3){Error="A connected display is still inactive after console recovery. Check display diagnostics.";return false;}
@@ -107,7 +107,8 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
                     "--property=DevicePolicy=closed","--property=DeviceAllow="+card+" rw","--property=DeviceAllow=char-pts rw",
                     "--property=UMask=0077","--setenv=LANG=C.UTF-8","--setenv=LD_LIBRARY_PATH="+root+"/lib",
                     "--setenv=XUR_CONSOLE_OUTPUTS="+outputs,"--setenv=XUR_CONSOLE_FONT="+fontSize,"--setenv=XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id,"--setenv=XUR_CONSOLE_CARD="+card,"--setenv=XUR_CONSOLE_MODULES="+root+"/lib",
-                    root+"/kmscon","--vt=/dev/null","--no-libseat","--no-hwaccel","--font-engine=unifont","--font-size="+fontSize,
+                    // Select the monitor's preferred mode instead of inheriting a stale or absent firmware mode.
+                    root+"/kmscon","--no-use-original-mode","--vt=/dev/null","--no-libseat","--no-hwaccel","--font-engine=unifont","--font-size="+fontSize,
                     "--no-mouse","--no-blink","--dpms-timeout=0","--multi-monitor=clone","--session-max=1","--no-session-control","--no-issue",
                     "--login","--",root+"/client",Path.Combine(runDirectory,"control.sock")],15);
                 if(r.ExitCode!=0)Error="Display console start failed: "+r.Output.Trim();

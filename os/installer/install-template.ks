@@ -10,8 +10,10 @@ bootc --source-imgref registry:ghcr.io/ublue-os/bazzite-nvidia-open:stable --tar
 %onerror
 touch /run/xur/install-failed
 %end
-%post --nochroot --erroronfail
+%post --nochroot --erroronfail --log=/tmp/xur-post.log
 set -eu
+umask 077
+printf 'post\n' > /run/xur/install-phase
 target=/mnt/sysroot
 test -d "$target/var"
 mkdir -p "$target/var/lib/xur" "$target/var/lib/tailscale"
@@ -26,6 +28,6 @@ if test -f /run/xur/timezone; then
   install -m 600 /run/xur/timezone "$target/var/lib/xur/timezone"
   if test -f /run/xur/timezone-mode; then install -m 600 /run/xur/timezone-mode "$target/var/lib/xur/timezone-mode"; fi
 fi
-touch "$target/var/lib/xur/installed"
 /usr/bin/bash /usr/libexec/xur-install-manager "$target"
+touch "$target/var/lib/xur/installed"
 %end

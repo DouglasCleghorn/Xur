@@ -21,7 +21,7 @@ public static partial class Redaction
     private static partial Regex Code();
     [GeneratedRegex(@"https://(?:login|controlplane)\.tailscale\.com/\S+")]
     private static partial Regex Claim();
-    [GeneratedRegex("""(?i)\b(token|auth[-_]?key|api[-_]?key|password|secret)\s*[=:]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|\S+)""")]
+    [GeneratedRegex("""(?i)\b(token|bootstrap[-_]?token|auth[-_]?key|api[-_]?key|password|secret|psk|wpa[-_]?key|passphrase)\s*[=:]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|\S+)""")]
     private static partial Regex Credential();
     [GeneratedRegex(@"(?i)\bBearer\s+[^\s,;]+")]
     private static partial Regex Bearer();
