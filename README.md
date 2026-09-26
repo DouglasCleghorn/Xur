@@ -111,8 +111,8 @@ Google's mirror as described in [repository rules](AGENTS.md).
 
 The public project site and short guides live in [`website/`](website/README.md),
 configured for Cloudflare Workers Static Assets at **xur.app**, without a Worker script. Release candidates build on every push
-to `main` (Nightly) or `release` (Stable) and require maintainer approval in GitHub
-before publication. See [release channels](docs/usage/application-updates.md).
+to `main` (Nightly) or `release` (Stable). Nightlies publish automatically after
+all checks and builds pass; Stable requires maintainer approval in GitHub. See [release channels](docs/usage/application-updates.md).
 
 ## License
 

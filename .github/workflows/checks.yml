@@ -1,7 +1,6 @@
 name: Source checks
 on:
-  push:
-    branches: [main, release]
+  workflow_call:
   pull_request:
 permissions:
   contents: read

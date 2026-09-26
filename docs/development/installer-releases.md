@@ -1,8 +1,10 @@
 # Installer release automation
 
-A push to `main` (Nightly) or `release` (Stable) runs **Build and approve release**:
+A push to `main` (Nightly) or `release` (Stable) runs **Build and publish release**:
 
-1. Build and run the app's fast and browser checks.
+1. Run the reusable **Source checks** workflow for this exact commit, then build
+   and run the app's fast and browser checks. Pull requests run the same source
+   checks without release permissions or signing secrets.
 2. Call `installer.yml` to build the online ISO in an isolated Fedora VM on a
    disposable GitHub-hosted Ubuntu runner. Inspect embedded files against the
    build context, BIOS/UEFI layout, SELinux settings and absence of a Bazzite
@@ -10,9 +12,12 @@ A push to `main` (Nightly) or `release` (Stable) runs **Build and approve releas
    refresh and the installed system. Bazzite itself still uses its stable channel.
 3. Retain unsigned app and installer candidates for seven days, pruning older
    candidates for that channel. The signing key is unavailable to both build jobs.
-4. Wait for the maintainer's GitHub Environment approval (`nightly` or `stable`).
-   Review both builds before approving. The publication job rejects superseded
-   commits and verifies both candidates' hashes and commit/channel receipts.
+4. Nightly publishes automatically after every required check and build passes.
+   Stable waits for the maintainer's `stable` GitHub Environment approval after
+   hardware testing. Both environments retain their branch restrictions (`main`
+   for Nightly, `release` for Stable) and signing secrets. The publication job
+   depends on source checks, the app build and installer inspection; it rejects
+   superseded commits and verifies both candidates' hashes and commit/channel receipts.
 5. Sign a self-contained JSON descriptor containing the app archive manifest and
    installer hash/inspection receipt. Publish it with the app archive and ISO, then advance the channel's
    `current` pointer and remove the Actions candidates. No source tarball is
@@ -52,7 +57,7 @@ superseded commit remain in effect; an existing release tag is never overwritten
 ## Migration and validation
 
 There is one transition generation per channel because old clients reject signed
-metadata for the other channel. Each bridge is created by that channel's approved
+metadata for the other channel. Each bridge is created by that channel's release
 workflow; publishing Nightly does not silently promote it to Stable.
 
 This workflow does **not** assert that boot/install, GPU or physical USB tests
@@ -86,12 +91,13 @@ Google's mirror, as required by `AGENTS.md`.
   visible; fatal failures and malformed or unfinished state block the build.
   See [builder readiness](build.md) for details.
 - **No ISO in Releases:** the installer may have failed, been superseded by a new
-  commit, or be waiting for approval. Candidates are Actions artifacts until the
-  approved publication job attaches them to a versioned release. Earlier app-only
+  commit, or (for Stable) be waiting for approval. Candidates are Actions artifacts
+  until the publication job attaches them to a versioned release. Earlier app-only
   releases do not acquire media retroactively.
 
-A new push supersedes the branch's previous release workflow. Review and approve
-the newest successful candidate, not a cancelled or superseded run. These
+A new push supersedes the branch's previous release workflow. For Stable, review
+and approve only the newest successful candidate. Nightly has no manual approval
+step. These
 instructions never require disabling signature or media inspection checks.
 
 GitHub documents 14 GB guaranteed storage for standard public Linux runners;

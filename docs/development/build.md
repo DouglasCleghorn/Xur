@@ -263,8 +263,10 @@ non-target-disk checks separate from this short iteration loop.
 ## GitHub release builds
 
 Pushes to `main` build Nightly candidates; pushes to `release` build Stable
-candidates. The hosted workflow builds the app, then the online installer, and
-requires GitHub Environment approval before signing or publishing either.
+candidates. The hosted workflow requires source checks, the app build and its
+checks, then the online installer build and inspection. Nightlies sign and publish
+automatically after these succeed. Stable requires GitHub Environment approval
+after hardware testing. Branch restrictions and signing remain enabled for both.
 Hosted build/inspection success is not an install/reboot test. The local commands
 above remain available independently of CI. See
 [installer release automation](installer-releases.md) for candidate retention,

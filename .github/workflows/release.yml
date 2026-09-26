@@ -1,4 +1,4 @@
-name: Build and approve release
+name: Build and publish release
 on:
   push:
     branches: [main, release]
@@ -9,7 +9,11 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  checks:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release'
+    uses: ./.github/workflows/checks.yml
   build:
+    needs: checks
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -87,7 +91,7 @@ jobs:
     with:
       channel: ${{ needs.build.outputs.channel }}
   publish:
-    needs: [build, installer]
+    needs: [checks, build, installer]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment:
@@ -104,7 +108,7 @@ jobs:
         run: |
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-candidate-$RELEASE_CHANNEL-$GITHUB_SHA" --dir .build/ci-artifact
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "installer-candidate-$RELEASE_CHANNEL-$GITHUB_SHA" --dir .build/ci-installer
-      - name: Sign and publish approved build
+      - name: Sign and publish checked build
         env:
           GH_TOKEN: ${{ github.token }}
           XUR_UPDATE_SIGNING_KEY_PEM: ${{ secrets.XUR_UPDATE_SIGNING_KEY_PEM }}
