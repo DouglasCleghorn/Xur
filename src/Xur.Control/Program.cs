@@ -378,17 +378,31 @@ async Task StartHost()
     });
     app.MapRazorComponents<App>();
     if(!appliance.Installer){var tokenPath=Path.Combine(identityDirectory,"bootstrap-token");auth.Initialize(!auth.AccountConfigured&&File.Exists(tokenPath)?File.ReadAllText(tokenPath).Trim():null);}
+    using var setupClient=LocalClient.Create(socket);
+    var consoleMenu=new ConsoleMaintenance(appliance.Agent,appliance.Installer,setupClient:setupClient);
+    void ShowConsoleMenu(){if(consoleMenu.Closed)LocalConsole.Status(appliance,auth);else LocalConsole.OpenMaintenance(consoleMenu.Screen);}
+    var networkRefreshGate=new SemaphoreSlim(1,1);
+    bool consoleReady=false;
+    app.MapGet("/local/diagnostics/console",async Task<IResult>()=>{
+        if(!appliance.Installer || !consoleReady)return Results.StatusCode(503);
+        await networkRefreshGate.WaitAsync();
+        try{return Results.Json(LocalConsole.DiagnosticSnapshot());}finally{networkRefreshGate.Release();}
+    });
+    app.MapPost("/local/diagnostics/console/action",async Task<IResult>(ConsoleDiagnosticAction action)=>{
+        if(!appliance.Installer || !consoleReady)return Results.StatusCode(503);
+        await networkRefreshGate.WaitAsync();
+        try{return await ConsoleDiagnosticSession.Act(action,LocalConsole.DiagnosticSnapshot,LocalConsole.ConsumeDiagnosticRevision,
+            option=>DispatchConsoleKey((char)option),async text=>{LocalConsole.ClearText();await consoleMenu.Submit(text);ShowConsoleMenu();});}
+        finally{networkRefreshGate.Release();}
+    });
     await app.StartAsync();
     if(!appliance.Installer && !File.Exists(ApplicationMaintenance.Marker))await profileManager.Resume(automatic:true);
     File.SetUnixFileMode(socket,UnixFileMode.UserRead|UnixFileMode.UserWrite);
     if(!appliance.Installer)File.SetUnixFileMode(serveSocket,UnixFileMode.UserRead|UnixFileMode.UserWrite);
     await LocalConsole.Start(appliance,auth);
     app.Lifetime.ApplicationStopping.Register(LocalConsole.Stop);
-    using var setupClient=LocalClient.Create(socket);
-    var consoleMenu=new ConsoleMaintenance(appliance.Agent,appliance.Installer,setupClient:setupClient);
-    void ShowConsoleMenu(){if(consoleMenu.Closed)LocalConsole.Status(appliance,auth);else LocalConsole.OpenMaintenance(consoleMenu.Screen);}
     if(appliance.Installer){await consoleMenu.Open("setup");ShowConsoleMenu();}
-    var networkRefreshGate=new SemaphoreSlim(1,1);
+    consoleReady=true;
     async Task RefreshNetworkConsole()
     {
         if(!await networkRefreshGate.WaitAsync(0))return;
@@ -408,67 +422,74 @@ async Task StartHost()
         System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged-=addressChanged;
         System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged-=availabilityChanged;
     });
+    async Task DispatchConsoleKey(char key)
+    {
+        if(LocalConsole.ViewingMaintenance && key is not ('n' or 'p'))
+        {await consoleMenu.Select(key);ShowConsoleMenu();return;}
+        switch(key)
+        {
+            case '0': case '1':LocalConsole.Status(appliance,auth);break;
+            case '2':if(!await appliance.StartQr()){await consoleMenu.Open("computer-name");ShowConsoleMenu();}break;
+            case '4':LocalConsole.Show("Hardware",await appliance.Agent.GetStringAsync("/hardware"));break;
+            case 'u':case 'w':case 'j':case 'm':case 'i':
+                await consoleMenu.Open(key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":key=='i'?"setup":"power");ShowConsoleMenu();break;
+            case '5':LocalConsole.UpdateLogs(await diagnosticLogs.Read(console:true));LocalConsole.OpenLogs();break;
+            case 'n':LocalConsole.Page(1);break;
+            case 'p':LocalConsole.Page(-1);break;
+        }
+    }
     async Task Input(TextReader input, bool logTerminal)
     {
         var keys=new ConsoleKeyReader();var buffer=new char[1];Task<int>? read=null;
-        while (!app.Lifetime.ApplicationStopping.IsCancellationRequested)
+        bool plain=Environment.GetEnvironmentVariable("XUR_CONSOLE")=="stdio";
+        while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {
-            char? key;
-            if(Environment.GetEnvironmentVariable("XUR_CONSOLE")=="stdio")
-            { var line=await input.ReadLineAsync(); if(line==null)break;if(LocalConsole.Wake())continue;if(LocalConsole.EditingText){if(line=="/cancel")await consoleMenu.Select('0');else await consoleMenu.Submit(line);ShowConsoleMenu();continue;}key=LocalConsole.SelectLine(line); }
+            string? line=null;ConsoleKeyAction action=ConsoleKeyAction.None;char? typed=null;
+            // Never hold the console gate while waiting for a physical keystroke.
+            if(plain){line=await input.ReadLineAsync();if(line==null)break;}
             else
             {
                 read??=input.ReadAsync(buffer,0,1);
-                ConsoleKeyAction action;char? typed=null;
-                // Keep the pending read alive while distinguishing Esc from arrow-key sequences.
-                if(keys.AwaitingEscape && await Task.WhenAny(read,Task.Delay(100))!=read)
-                    action=keys.FlushEscape();
-                else {
+                if(keys.AwaitingEscape && await Task.WhenAny(read,Task.Delay(100))!=read)action=keys.FlushEscape();
+                else
+                {
                     if(await read==0)break;
                     read=null;var escaped=keys.InEscapeSequence || buffer[0]=='\x1b';action=keys.Read(buffer[0]);if(!escaped)typed=buffer[0];
                 }
-                if((typed.HasValue||action!=ConsoleKeyAction.None)&&LocalConsole.Wake())continue;
-                if(logTerminal)
-                {
-                    if(action is ConsoleKeyAction.Enter or ConsoleKeyAction.Back){LocalConsole.Status(appliance,auth);await Processes.Run("chvt",["3"]);}
-                    else if(action is ConsoleKeyAction.PageDown or ConsoleKeyAction.PageUp)LocalConsole.Page(action==ConsoleKeyAction.PageDown?1:-1);
-                    continue;
-                }
-                if(LocalConsole.EditingText)
-                {
-                    if(action==ConsoleKeyAction.Enter){var value=LocalConsole.TextValue;LocalConsole.ClearText();await consoleMenu.Submit(value);ShowConsoleMenu();}
-                    else if(action==ConsoleKeyAction.Back && typed==null){await consoleMenu.Select('0');ShowConsoleMenu();}
-                    else if(typed.HasValue)LocalConsole.EditText(typed.Value);
-                    continue;
-                }
-                if(action==ConsoleKeyAction.None)continue;
-                key=LocalConsole.Navigate(action);
             }
-            if(key==null)continue;
+            await networkRefreshGate.WaitAsync();
             try
             {
-                if(LocalConsole.ViewingMaintenance && key is not ('n' or 'p'))
+                if((plain||typed.HasValue||action!=ConsoleKeyAction.None)&&LocalConsole.Wake())continue;
+                LocalConsole.ConsumeDiagnosticRevision();
+                char? key;
+                if(plain)
                 {
-                    await consoleMenu.Select(key.Value);
-                    if(consoleMenu.Closed)LocalConsole.Status(appliance,auth);
-                    else ShowConsoleMenu();
-                    continue;
+                    if(LocalConsole.EditingText){if(line=="/cancel")await consoleMenu.Select('0');else await consoleMenu.Submit(line!);ShowConsoleMenu();continue;}
+                    key=LocalConsole.SelectLine(line!);
                 }
-                switch(key.Value)
+                else
                 {
-                    case '0': case '1': LocalConsole.Status(appliance,auth);break;
-                    case '2': if(!await appliance.StartQr()){await consoleMenu.Open("computer-name");ShowConsoleMenu();}break;
-                    case '4': LocalConsole.Show("Hardware",await appliance.Agent.GetStringAsync("/hardware"));break;
-                    case 'u': case 'w': case 'j': case 'm': case 'i':
-                        await consoleMenu.Open(key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":key=='i'?"setup":"power");ShowConsoleMenu();break;
-                    case '5':
-                        LocalConsole.UpdateLogs(await diagnosticLogs.Read(console:true)); LocalConsole.OpenLogs();
-                        break;
-                    case 'n': LocalConsole.Page(1); break;
-                    case 'p': LocalConsole.Page(-1); break;
+                    if(logTerminal)
+                    {
+                        if(action is ConsoleKeyAction.Enter or ConsoleKeyAction.Back){LocalConsole.Status(appliance,auth);await Processes.Run("chvt",["3"]);}
+                        else if(action is ConsoleKeyAction.PageDown or ConsoleKeyAction.PageUp)LocalConsole.Page(action==ConsoleKeyAction.PageDown?1:-1);
+                        continue;
+                    }
+                    if(LocalConsole.EditingText)
+                    {
+                        if(action==ConsoleKeyAction.Enter){var value=LocalConsole.TextValue;LocalConsole.ClearText();await consoleMenu.Submit(value);ShowConsoleMenu();}
+                        else if(action==ConsoleKeyAction.Back && typed==null){await consoleMenu.Select('0');ShowConsoleMenu();}
+                        else if(typed.HasValue)LocalConsole.EditText(typed.Value);
+                        continue;
+                    }
+                    if(action==ConsoleKeyAction.None)continue;
+                    key=LocalConsole.Navigate(action);
                 }
+                if(key.HasValue)await DispatchConsoleKey(key.Value);
             }
-            catch { LocalConsole.Show("Action unavailable","Press 0 to return to the menu and retry."); }
+            catch{LocalConsole.Show("Action unavailable","Press 0 to return to the menu and retry.");}
+            finally{networkRefreshGate.Release();}
         }
     }
     if(Environment.GetEnvironmentVariable("XUR_CONSOLE") == "stdio") _ = Task.Run(()=>Input(Console.In,false));
@@ -478,11 +499,14 @@ async Task StartHost()
     _ = Task.Run(async()=>{
         while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {
-            await Task.Delay(500);try{
+            await Task.Delay(500);
+            if(!await networkRefreshGate.WaitAsync(0))continue;
+            try{
                 if(LocalConsole.ViewingMaintenance&&consoleMenu.Screen.Id=="wifi-scanning")
                 {await consoleMenu.Refresh();LocalConsole.OpenMaintenance(consoleMenu.Screen,refreshOnly:true);}
                 LocalConsole.Refresh();
             }catch{ /* Retry on the next tick, including during link changes. */ }
+            finally{networkRefreshGate.Release();}
         }
     });
     // Network enrollment must not wait behind journal or update requests.
@@ -498,11 +522,13 @@ async Task StartHost()
         while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {
             await Task.Delay(5000);
+            if(!await networkRefreshGate.WaitAsync(0))continue;
             try{if(LocalConsole.ViewingMaintenance)
             {
                 await consoleMenu.Refresh();
                 LocalConsole.OpenMaintenance(consoleMenu.Screen,refreshOnly:true);
             }}catch{ /* Keep subsequent refreshes alive after a temporary agent failure. */ }
+            finally{networkRefreshGate.Release();}
             try { LocalConsole.UpdateLogs(await diagnosticLogs.Read(console:true)); } catch { }
         }
     });

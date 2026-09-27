@@ -16,6 +16,7 @@ implemented behavior and hardware validation are separate.
 | Configure networking and time | [Network and answer YAML](usage/answer-file.md), [timezone and NTP](usage/timezone.md) |
 | Update, roll back or test a contributor build | [OS updates](usage/updates.md), [application updates](usage/application-updates.md) |
 | Diagnose graphics or streaming | [Diagnostics](usage/diagnostics.md) |
+| Installer troubleshooting | [Boot diagnostics and console automation](usage/installer-diagnostics.md) |
 | Build and release | [Local builds](development/build.md), [installer release automation](development/installer-releases.md), [build cleanup](development/build-cleanup.md) |
 | Maintain the public site | [Website setup and checks](../website/README.md), [screenshot register](screenshots.md) |
 

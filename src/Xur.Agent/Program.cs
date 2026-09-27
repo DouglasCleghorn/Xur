@@ -15,6 +15,8 @@ builder.WebHost.ConfigureKestrel(k => k.ListenUnixSocket(socket));
 var app = builder.Build();
 _=ApplicationIdentity.Id;
 var storage = new Storage();
+var bootDisplayHistory=new BootDisplayHistory();
+app.MapGet("/diagnostics/display-history",()=>Results.Json(bootDisplayHistory.Read()));
 bool installer = File.ReadAllText("/proc/cmdline").Split(' ').Contains("xur.installer=1");
 var stateDir = installer ? run : "/var/lib/xur";
 if(!installer)_=Task.Run(async()=>{try{if((await Processes.Run("systemctl",["is-active","firewalld"],5)).ExitCode==0)await Processes.Run("firewall-cmd",["--add-port=8443/tcp"],10);}catch{}});
@@ -91,6 +93,7 @@ async Task<string> InstallationReport()
 {
     var report=$"Xur installation diagnostics\nBundle: {ApplicationIdentity.Id}\nCaptured: {DateTimeOffset.UtcNow:O}\n"+
         JsonSerializer.Serialize(operation)+"\n"+await InstallationDiagnostics.Read(400);
+    if(storage.Diagnostics!=null)report+="\n=== Boot display history ===\n"+JsonSerializer.Serialize(bootDisplayHistory.Read());
     report+="\n=== Display diagnostics ===\n"+(await DisplayDiagnostics.Collect(runCommands:false)).ToJsonString();
     foreach(var (title,args) in new[]{("Kernel journal",new[]{"--boot","--no-pager","--dmesg","-n","200"}),("Display-console journal",new[]{"--boot","--no-pager","-n","200","-u","xur-console-*.service"})})
     {
@@ -109,6 +112,10 @@ app.MapPost("/installation-logs/usb",async Task<IResult>(UsbLogRequest request)=
     }
     catch(Exception e) when(e is IOException or InvalidOperationException or UnauthorizedAccessException or OperationCanceledException or JsonException or System.ComponentModel.Win32Exception){return Results.Conflict(new{error=Redaction.Logs(e.Message)});}
     finally{gate.Release();}
+});
+app.MapGet("/diagnostics/boot-logs",async()=> {
+    var result=await Processes.Run("journalctl",["--boot","--no-pager","-o","short-monotonic","-n","2000"],10);
+    return Results.Text(Redaction.Logs(result.Output));
 });
 app.MapGet("/installation-logs",async()=>Results.Text(await InstallationDiagnostics.Read()));
 app.MapGet("/console-logs",async()=> {
@@ -302,9 +309,33 @@ app.MapPost("/power/{action}", async (string action) => {
 await app.StartAsync();
 _=Task.Run(()=>displayConsoles.Run(app.Lifetime.ApplicationStopping));
 File.SetUnixFileMode(socket, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+WebApplication? diagnosticsApi=null;
+using var diagnosticAgent=LocalClient.Create(socket);
+using var diagnosticConsole=LocalClient.Create(Path.Combine(run,"control.sock"));
+diagnosticAgent.Timeout=TimeSpan.FromSeconds(90);diagnosticConsole.Timeout=TimeSpan.FromSeconds(90);
+diagnosticAgent.MaxResponseContentBufferSize=2*1024*1024;diagnosticConsole.MaxResponseContentBufferSize=2*1024*1024;
+System.Security.Cryptography.X509Certificates.X509Certificate2? diagnosticCertificate=null;
 if (installer)
 {
     await storage.DiscoverAnswers();
+    if(storage.DiagnosticError.Length>0)Console.Error.WriteLine(storage.DiagnosticError);
+    if(storage.Diagnostics is {} diagnosticConfiguration)
+    {
+        _=Task.Run(()=>bootDisplayHistory.Run(app.Lifetime.ApplicationStopping));
+        try
+        {
+            diagnosticCertificate=InstallerDiagnosticsApi.Certificate(run);
+            diagnosticsApi=InstallerDiagnosticsApi.Create(diagnosticConfiguration,diagnosticCertificate,diagnosticAgent,diagnosticConsole);
+            await diagnosticsApi.StartAsync(app.Lifetime.ApplicationStopping);
+            Console.Error.WriteLine("Installer diagnostics HTTPS port 9443 enabled; certificate SHA256: "+diagnosticCertificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256));
+            if((await Processes.Run("systemctl",["is-active","firewalld"],5)).ExitCode==0)
+            {
+                var firewall=await Processes.Run("firewall-cmd",["--add-port=9443/tcp"],10);
+                if(firewall.ExitCode!=0)Console.Error.WriteLine("Diagnostic firewall port could not be opened.");
+            }
+        }
+        catch(Exception e){Console.Error.WriteLine("Installer diagnostic API could not start: "+e.GetType().Name);}
+    }
     if(storage.BootstrapToken is { } bootstrapToken)
     {
         using var tokenFile=new FileStream(Path.Combine(run,"bootstrap-token"),new FileStreamOptions {Mode=FileMode.Create,Access=FileAccess.Write,UnixCreateMode=UnixFileMode.UserRead|UnixFileMode.UserWrite});
@@ -354,4 +385,6 @@ _ = Task.Run(async () => {
     }
 });
 await app.WaitForShutdownAsync();
+if(diagnosticsApi!=null){await diagnosticsApi.StopAsync();await diagnosticsApi.DisposeAsync();}
+diagnosticCertificate?.Dispose();
 record PlanRequest(string Path);

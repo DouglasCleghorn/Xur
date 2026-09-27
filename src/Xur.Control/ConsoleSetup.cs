@@ -15,9 +15,7 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
     Operation? operation;
     bool disksReady;
     string[] logLines=[];
-    int logPage;
     UsbLogVolume[] usbVolumes=[];
-    const int LogPageSize=12;
     string skipped="",logExport="";
     string discovery="Storage discovery is not ready. Refresh shortly.";
     public bool Closed {get;private set;}
@@ -71,8 +69,8 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
                     options.AddRange([new('v',"Refresh USB drives"),new('0',"Back to progress")]);break;
                 case "logs":
                     title="Installation logs";
-                    body=$"Page {logPage+1} of {Math.Max(1,(logLines.Length+LogPageSize-1)/LogPageSize)} · PgUp/PgDn scroll long lines.\n\n"+string.Join('\n',logLines.Skip(logPage*LogPageSize).Take(LogPageSize));
-                    options.AddRange([new('b',"Previous lines",logPage>0),new('f',"More lines",(logPage+1)*LogPageSize<logLines.Length),new('v',"Refresh logs"),new('0',"Back to progress")]);break;
+                    body=string.Join('\n',logLines);
+                    options.AddRange([new('v',"Refresh logs"),new('0',"Back to progress")]);break;
                 case "reboot":title="Confirm reboot";body="Reboot into the installed system. Remove the installer USB when restarting.\nAfter reboot, use the displayed web address and access code to create the required administrator account.";options.AddRange([new('0',"Cancel"),new('y',"Reboot now",operation?.Stage=="Complete")]);break;
                 default:
                     body=(installer?"Complete device setup here. Web management and Tailscale are available after installation and reboot.\n":"Manage local server settings.\n")+
@@ -126,7 +124,6 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
     {
         try{logLines=LocalConsole.Clean(Redaction.Logs(await client.GetStringAsync("/local/setup/logs"))).Split('\n');}
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException){notice="Could not read installation logs. Refresh to retry.";}
-        logPage=Math.Min(logPage,Math.Max(0,(logLines.Length-1)/LogPageSize));
     }
     async Task<T?> Post<T>(string path,object value)
     {
@@ -165,11 +162,9 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
                 }
                 return;
             }
-            if(view=="progress"&&key=='l'){view="logs";logPage=0;await ReadLogs();return;}
+            if(view=="progress"&&key=='l'){view="logs";await ReadLogs();return;}
             if(view=="logs")
             {
-                if(key=='b')logPage--;
-                if(key=='f')logPage++;
                 if(key=='v')await ReadLogs();
                 return;
             }

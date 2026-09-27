@@ -1,0 +1,5 @@
+# Generate a fresh key with: openssl rand -hex 32
+# This placeholder is deliberately invalid. Never commit a real key.
+schemaVersion: 1
+apiKey: REPLACE_WITH_64_RANDOM_HEXADECIMAL_CHARACTERS
+allowControl: true

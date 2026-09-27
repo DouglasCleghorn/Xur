@@ -46,7 +46,7 @@ public static class DisplayDiagnostics
             try{return Directory.Exists(path)?Directory.GetDirectories(path).Order().Take(256).ToArray():[];}
             catch(Exception e) when(e is IOException or UnauthorizedAccessException){errors.Add(path+": "+e.GetType().Name);return [];}
         }
-        object Device(string path)=>new {name=Path.GetFileName(path),path=Link(path),device=Link(path+"/device"),driver=Link(path+"/device/driver"),subsystem=Link(path+"/device/subsystem"),status=Read(path+"/status"),enabled=Read(path+"/enabled"),modes=Read(path+"/modes"),nodeExists=File.Exists(devRoot+"/dri/"+Path.GetFileName(path))};
+        object Device(string path)=>new {name=Path.GetFileName(path),path=Link(path),device=Link(path+"/device"),driver=Link(path+"/device/driver"),subsystem=Link(path+"/device/subsystem"),status=Read(path+"/status"),enabled=Read(path+"/enabled"),dpms=Read(path+"/dpms"),modes=Read(path+"/modes"),nodeExists=File.Exists(devRoot+"/dri/"+Path.GetFileName(path))};
         GpuDevice[] gpus=[];
         try{gpus=await GpuInventory.Observe(sysRoot,devRoot);}catch(Exception e){errors.Add("GPU inventory: "+e.GetType().Name);}
         var inventory=gpus.Select(g=>new {gpu=g,workstationEligible=g.Cards is {Length:>0},excludedBecause=(g.Cards is {Length:>0}?Array.Empty<string>():["No DRM card node"]).ToArray()}).ToArray();

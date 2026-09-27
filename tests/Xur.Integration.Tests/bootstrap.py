@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Real live-installer host, isolated agent; no disks, network or host state mutated."""
-import http.client,json,os,pathlib,signal,socket,socketserver,subprocess,tempfile,threading,time
+import http.client,json,os,pathlib,signal,socket,socketserver,subprocess,sys,tempfile,threading,time
 repo=pathlib.Path(__file__).resolve().parents[2]
 passed=[]
 def check(value,name):
@@ -63,18 +63,58 @@ with tempfile.TemporaryDirectory(prefix='xur-local-install-') as temp:
         check(local('/local/setup/account',{'username':'admin','password':'password'})[0]==404,'Live console cannot create administrator credentials')
         check(local('/local/setup/plan',{'path':'/dev/test'})[0]==409,'Server name is required before planning')
         wait(lambda:'Server name' in frame())
-        process.stdin.write(b'living-room\n');process.stdin.flush()
+        diagnostic_mode='--diagnostics' in sys.argv
+        def snapshot():
+            status,body=local('/local/diagnostics/console')
+            assert status==200,(status,body)
+            return json.loads(body)
+        def act(option=None,text=None,confirm=False):
+            current=snapshot()
+            body={'revision':current['revision']}
+            if option is not None:body['option']=option
+            if text is not None:body['text']=text
+            if confirm:body['confirmErase']=True
+            status,result=local('/local/diagnostics/console/action',body)
+            assert status==200,(status,result,current)
+            return body,json.loads(result)
+        if diagnostic_mode:
+            current=snapshot()
+            check(current['screen']=='computer-name' and current['acceptsText'],'Diagnostics exposes the real physical naming screen')
+            action,next_screen=act(text='living-room')
+            check(next_screen['screen']=='network-list','Diagnostic name submission advances the visible flow')
+            check(local('/local/diagnostics/console/action',action)[0]==409,'Repeated action revision is rejected')
+        else:
+            process.stdin.write(b'living-room\n');process.stdin.flush()
         wait(lambda:name=='living-room' and 'Continue to disk selection' in frame())
         check('Step 2 of 4' in frame(),'Naming advances to networking without returning to the menu')
         check(local('/local/qr',{})[0]==409,'Tailscale enrollment is rejected even after naming')
         check(json.loads(local('/local/status')[1])['urls']==[],'Installer does not advertise inactive management URLs')
-        # The dedicated CLI must use the same local disk review and Yes/No approval.
-        cli=subprocess.run([str(repo/'.build/context/publish/control/Xur.Control'),'setup'],input=b'1\n1\n2\n2\n0\n',env=env,capture_output=True,timeout=15,check=True)
-        check(approvals==1 and b'TEST-001' in cli.stdout and b'Installing fixture disk' in cli.stdout,'xur setup reviews identity and sends exactly one explicit disk approval')
+        if diagnostic_mode:
+            # The rejected Tailscale probe displays its error; reopen the shared setup screen.
+            act(option=ord('i'))
+            act(option=ord('c'))
+            current=snapshot()
+            check(current['screen']=='setup-disks' and any(o['id']==256 for o in current['options']),'Diagnostics exposes eligible disk choices')
+            act(option=256)
+            check('TEST-001' in snapshot()['body'],'Remote disk review exposes exact disk identity')
+            act(option=ord('y'))
+            body={'revision':snapshot()['revision'],'option':ord('y')}
+            check(local('/local/diagnostics/console/action',body)[0]==409 and approvals==0,'Remote Yes without explicit erase consent is rejected')
+            body['confirmErase']=True
+            check(local('/local/diagnostics/console/action',body)[0]==200,'Explicit remote erase approval starts the fixture installation')
+            check(local('/local/diagnostics/console/action',body)[0]==409 and approvals==1,'Remote approval cannot be replayed')
+        else:
+            # The dedicated CLI must use the same local disk review and Yes/No approval.
+            cli=subprocess.run([str(repo/'.build/context/publish/control/Xur.Control'),'setup'],input=b'1\n1\n2\n2\n0\n',env=env,capture_output=True,timeout=15,check=True)
+            check(approvals==1 and b'TEST-001' in cli.stdout and b'Installing fixture disk' in cli.stdout,'xur setup reviews identity and sends exactly one explicit disk approval')
         operation=operation|{'stage':'Failed','message':'Fixture installation failure'}
         cli=subprocess.run([str(repo/'.build/context/publish/control/Xur.Control'),'setup'],input=b'1\n0\n2\n1\n0\n0\n',env=env,capture_output=True,timeout=15,check=True)
         check(exports==1 and approvals==1 and b'Fixture log line' in cli.stdout and b'Saved fixture report' in cli.stdout,'Failed installation exposes logs and USB export without another disk approval')
-        process.stdin.write(b'0\n/cancel\n4\n');process.stdin.flush();wait(lambda:'Scroll logs' in frame())
+        if diagnostic_mode:
+            act(option=ord('0'))
+            process.stdin.write(b'4\n')
+        else:process.stdin.write(b'0\n/cancel\n4\n')
+        process.stdin.flush();wait(lambda:'Scroll logs' in frame())
         process.stdin.write(b'0\n');process.stdin.flush();wait(lambda:'Setup and installation' in frame() and 'Scroll logs' not in frame())
         check(True,'Logs return to the local setup menu')
         check(not (root/'tailscale-called').exists(),'Live installer never invokes Tailscale')

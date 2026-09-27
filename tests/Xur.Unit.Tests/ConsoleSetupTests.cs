@@ -65,8 +65,10 @@ static class ConsoleSetupTests
             await menu.Select('s');check(menu.Screen.Id=="setup-usb"&&menu.Screen.Options.Any(o=>o.Label.Contains("/dev/usb1")),"Failed installation offers eligible USB log destinations");
             await menu.Select((char)256);check(exports==1&&menu.Screen.Body.Contains("Saved report"),"Selecting a USB destination exports logs and shows the receipt");await menu.Select('0');
             await menu.Select('l');check(menu.Screen.Id=="setup-logs"&&menu.Screen.Body.Contains("Error: installation fixture")&&!menu.Screen.Body.Contains("private-fixture"),"Failure details open installation logs directly and redact credentials");
-            await menu.Select('f');var logPage=menu.Screen.Body;await menu.Refresh();check(menu.Screen.Body==logPage&&logPage.Contains("Page 2"),"Polling leaves the selected installation log page stable");
-            await menu.Select('b');check(menu.Screen.Body.Contains("Page 1"),"Installation logs can navigate back to the initial error lines");
+            var logPage=menu.Screen.Body;await menu.Refresh();check(menu.Screen.Body==logPage&&logPage.Contains("Log line 29"),"Installation logs retain the complete report for terminal-sized pagination");
+            var wide=LocalConsole.Clean(LocalConsole.Frame(menu.Screen.Title,logPage,140,70,optionList:menu.Screen.Options.Select(o=>o.Display).ToArray()));
+            var shortFrame=LocalConsole.Clean(LocalConsole.Frame(menu.Screen.Title,logPage,140,24,optionList:menu.Screen.Options.Select(o=>o.Display).ToArray()));
+            check(wide.Contains("Log line 29")&&wide.Contains("Error: installation fixture")&&!shortFrame.Contains("Log line 29")&&shortFrame.Contains("PgUp/PgDn"),"Log pagination fills a tall display and adapts to shorter terminals");
             await menu.Select('0');check(menu.Screen.Id=="setup-progress"&&approvals==1,"Back from installation logs preserves failure without repeating approval");
         }
         finally{await control.StopAsync();await agent.StopAsync();Environment.SetEnvironmentVariable("XUR_RUN",oldRun);Environment.SetEnvironmentVariable("XUR_MODE",oldMode);Directory.Delete(root,true);}

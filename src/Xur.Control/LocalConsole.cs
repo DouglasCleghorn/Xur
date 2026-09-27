@@ -27,6 +27,24 @@ public static class LocalConsole
     static string textBuffer="";static bool replaceText;
     public static bool EditingText {get{lock(Sync)return view=="maintenance" && maintenance?.InputValue!=null;}}
     public static string TextValue {get{lock(Sync)return textBuffer;}}
+    static long diagnosticGeneration;
+    public static void ConsumeDiagnosticRevision(){lock(Sync)diagnosticGeneration++;}
+    public static ConsoleDiagnosticSnapshot DiagnosticSnapshot()
+    {
+        lock(Sync)
+        {
+            var screen=view=="maintenance"?maintenance:null;
+            var options=screen?.Options ?? Options.Select((label,i)=>new ConsoleOption(RootKey(i,appliance?.Installer==true),label)).ToArray();
+            if(view is "logs" or "qr")options=[new('0',"Back to menu")];
+            var snapshot=new ConsoleDiagnosticSnapshot("",screen?.Id??view,title,
+                Redaction.Logs(screen?.Body??(view=="logs"?logs:body)),
+                options.Select(o=>new ConsoleDiagnosticOption(o.Key,Redaction.Logs(o.Label),o.Enabled)).ToArray(),
+                selection,screen?.InputValue!=null,screen?.Secret==true,
+                screen?.InputValue!=null && screen.Secret==false?textBuffer:null);
+            return snapshot with{Revision=Canonical.Hash(new{snapshot,diagnosticGeneration,instance=DiagnosticInstance})};
+        }
+    }
+    static readonly string DiagnosticInstance=Guid.NewGuid().ToString("N");
     static string DisplayText=>maintenance?.Secret==true?new string('*',textBuffer.Length):textBuffer;
     public static void ClearText(){lock(Sync){textBuffer="";replaceText=true;}}
     public static void EditText(char character)
@@ -34,6 +52,7 @@ public static class LocalConsole
         lock(Sync)
         {
             if(!EditingText)return;
+            diagnosticGeneration++;
             if(character is '\b' or '\x7f'){textBuffer=replaceText?"":textBuffer.Length>0?textBuffer[..^1]:"";replaceText=false;}
             else if(character is >= ' ' and <= '~' && textBuffer.Length<(maintenance?.Secret==true?64:1024)){textBuffer=(replaceText?"":textBuffer)+character;replaceText=false;}
             body=Clean(maintenance!.Body)+"\n> "+DisplayText;Render();
@@ -232,7 +251,7 @@ public static class LocalConsole
         var console=AnsiConsole.Create(new AnsiConsoleSettings { Out=new AnsiConsoleOutput(writer), Ansi=AnsiSupport.No, ColorSystem=ColorSystemSupport.NoColors });
         console.Profile.Width=innerColumns; console.Profile.Height=innerRows; console.Profile.Capabilities.Unicode=true;
         var content=new Panel(new Text(string.Join('\n',lines))).Header("Xur setup | "+Markup.Escape(heading)).RoundedBorder().Expand();
-        var controls=new Panel(new Text(string.Join('\n',footer)+"\n"+(qrView ? "Enter: Open | Esc / 0: Menu | Alt+F2: Logs" : "Up/Down: Select | Enter: Open | Esc / 0: Back"))).RoundedBorder().Expand();
+        var controls=new Panel(new Text(string.Join('\n',footer)+"\n"+(qrView ? "Enter: Open | Esc / 0: Menu | Alt+F2: Logs" : "Up/Down: Select | Enter: Open | Esc / 0: Back"+(pages>1?$" | PgUp/PgDn: {selected+1}/{pages}":"")))).RoundedBorder().Expand();
         console.Write(new Layout("root").SplitRows(new Layout("content").Update(content),new Layout("controls").Size(footer.Length+3).Update(controls)));
         var frame=writer.ToString().Replace("\r","").TrimEnd('\n').Split('\n');
         var output=new StringBuilder("\x1b%G\x1b[0m\x1b[r\x1b[?25l\x1b[?7l\x1b[H");

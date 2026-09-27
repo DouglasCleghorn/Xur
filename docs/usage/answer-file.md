@@ -114,3 +114,8 @@ control socket.
 See [API initialization](../architecture/api-initialization.md) for the account,
 post-install account steps. Disk review and approval take place in the console. Network rollback uses NetworkManager's
 [checkpoint API](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.html).
+
+For opt-in boot diagnostics and remote console testing, put a separate
+[`xur-diagnostics.yml`](installer-diagnostics.md) on the configuration drive.
+Its API key and control permission are deliberately separate from this answer
+schema and are never carried into the installed system.

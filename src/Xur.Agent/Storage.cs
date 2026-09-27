@@ -12,6 +12,9 @@ public sealed class Storage(Func<Task<JsonElement[]>>? nodesObserver=null,Func<s
     public ScanResult Scan => scan;
     public string? BootstrapToken { get; private set; }
     public AnswerConfiguration? Answer { get; private set; }
+    public DiagnosticsConfiguration? Diagnostics {get;private set;}
+    public HashSet<string> DiagnosticMedia {get;}=[];
+    public string DiagnosticError {get;private set;}="";
     public bool NetworkReady {get;private set;}=true;
     public void NetworkConfigured()=>NetworkReady=true;
     public bool CanPlan => NetworkReady && ( Scan.State == "NoAnswer" || Scan.State == "AnswerFound" && (BootstrapToken != null || Answer?.Network.Length>0));
@@ -84,7 +87,7 @@ public sealed class Storage(Func<Task<JsonElement[]>>? nodesObserver=null,Func<s
             if (S(node, "type") != "disk") blocked.Add("Optical/installer media; not an eraseable whole disk");
             if (mounts.Length != 0) blocked.Add("Mounted whole disk or child partition: boot/config/in-use media protected");
             if (IsBootMedia(node, commandLine)) blocked.Add("Installer boot source protected through whole-disk ancestry");
-            if (Flatten(node).Any(n => Scan.Answers.Contains(S(n,"path")))) blocked.Add("Answer/configuration media protected through whole-disk ancestry");
+            if (Flatten(node).Any(n => Scan.Answers.Contains(S(n,"path")) || DiagnosticMedia.Contains(S(n,"path")))) blocked.Add("Answer/configuration media protected through whole-disk ancestry");
             if (serial.Length == 0) blocked.Add("No stable serial");
             if (stable.Length == 0) blocked.Add("No resolvable /dev/disk/by-id identity");
             if (S(node, "ro") == "True" && !Leases.Contains(path)) blocked.Add("Device is read-only");
@@ -102,6 +105,8 @@ public sealed class Storage(Func<Task<JsonElement[]>>? nodesObserver=null,Func<s
     {
         var answers = new List<string>(); var errors = new List<string>();var skipped=new List<string>();
         var configurations = new List<AnswerConfiguration>();
+        var diagnostics=new List<DiagnosticsConfiguration>();int diagnosticFiles=0;bool discoveryCompleted=false;
+        Diagnostics=null;DiagnosticMedia.Clear();DiagnosticError="";
         var readOnlyDevices = new List<string>(); var mounts = new List<ScanMount>();
         try
         {
@@ -169,6 +174,18 @@ public sealed class Storage(Func<Task<JsonElement[]>>? nodesObserver=null,Func<s
                         else try{configurations.Add(AnswerConfiguration.Parse(await File.ReadAllTextAsync(file.FullName)));}
                         catch{errors.Add($"{path}: unsupported or invalid answer; installation locked");}
                     }
+                    foreach(var file in new[]{"xur-diagnostics.yml","xur-diagnostics.yaml"}.Select(name=>new FileInfo(Path.Combine(mount,name))).Where(f=>f.Exists || f.LinkTarget!=null))
+                    {
+                        diagnosticFiles++;DiagnosticMedia.Add(path);
+                        try
+                        {
+                            if(file.LinkTarget!=null || file.Length>32768)throw new FormatException();
+                            var kind=await Run("stat",["-c","%F","--",file.FullName]);
+                            if(kind.ExitCode!=0 || kind.Output.Trim()!="regular file")throw new FormatException();
+                            diagnostics.Add(DiagnosticsConfiguration.Parse(await File.ReadAllTextAsync(file.FullName)));
+                        }
+                        catch{DiagnosticError="Invalid diagnostic configuration; diagnostic API disabled.";}
+                    }
                     mounts.Add(new(path,fs,options,true,answerFiles.Any(f=>f.Exists && f.LinkTarget==null)));
 
                 }
@@ -178,10 +195,13 @@ public sealed class Storage(Func<Task<JsonElement[]>>? nodesObserver=null,Func<s
                     if ((await Run("losetup", ["--detach",loop])).ExitCode != 0) errors.Add($"{path}: scanner view cleanup failed");
                 }
             }
+            discoveryCompleted=true;
         }
         catch { errors.Add("Storage discovery failed; installer remains locked"); }
         var completedScan = new ScanResult(answers.Count > 1 ? "Ambiguous" : errors.Count > 0 ? "Incomplete" : answers.Count == 1 ? "AnswerFound" : "NoAnswer",
             answers.ToArray(), errors.ToArray(), readOnlyDevices.Order().ToArray(), mounts.ToArray(),skipped.ToArray());
+        if(diagnosticFiles>1)DiagnosticError="Multiple diagnostic configurations found; diagnostic API disabled.";
+        if(discoveryCompleted && diagnosticFiles==1 && diagnostics.Count==1 && DiagnosticError.Length==0)Diagnostics=diagnostics[0];
         Answer=completedScan.State=="AnswerFound" && configurations.Count==1 ? configurations[0] : null;
         BootstrapToken=Answer?.BootstrapToken;
         NetworkReady=Answer?.Network.Length is null or 0;
