@@ -1,0 +1,4 @@
+; chronyc inherits install_t inside the live installer. Allow chronyd's reply
+; to that client's Unix datagram socket (captured AVC from the H 255).
+; No additional commands, domains, filesystem access or permissive mode.
+(allow chronyd_t install_t (unix_dgram_socket (sendto)))

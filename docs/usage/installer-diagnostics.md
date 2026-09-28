@@ -87,12 +87,15 @@ available. Boot logs and history are volatile: collect them before rebooting.
 There is no arbitrary shell execution or arbitrary file-download route.
 
 On installer boots, a matching AMD `REG_WAIT timeout` in `disable_crtc` triggers
-one HDMI re-detection and console restart after a 15-second settling period. This
+one HDMI re-detection and console restart after a 15-second settling period. The
+restart selects 1920×1080 when every connected output advertises that mode, with
+a font that fits that resolution. The fallback lasts for the installer boot.
+The earlier re-detection alone did not restore the H 255 display. This
 covers the observed case where HDMI reports connected, enabled and DPMS On while
 the monitor receives no signal. It only affects the GPU named in the kernel
 warning and never takes a GPU from a workstation. The attempt is recorded in the
 journal and `displayRecovery`; a boot-local marker prevents repeated attempts
-across agent restarts. This workaround still needs cold-boot hardware validation.
+across agent restarts. The 1080p fallback still needs cold-boot hardware validation.
 
 Installation progress identifies clock synchronization failures before disk
 erasure and certificate/time errors during download. Capture installation logs

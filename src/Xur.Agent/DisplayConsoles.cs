@@ -95,12 +95,14 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
             {
                 var card=gpu.Cards!.FirstOrDefault(c=>(gpu.Displays??[]).Any(d=>d.StartsWith(Path.GetFileName(c)+"-",StringComparison.Ordinal)))??gpu.Cards[0];
                 var fontSize=DisplayFontSize(card,gpu.Displays??[],sysRoot);var outputs=OutputSignature(card,gpu.Displays??[],sysRoot);
+                var mode=installer?startupRecovery.Mode(gpu,card,sysRoot):"";
+                if(mode.Length>0)fontSize=FontSize([mode]);
                 if((await RunProcess("systemctl",["is-active",Unit(gpu.Pci)],5)).ExitCode==0)
                 {
                     var environment=await RunProcess("systemctl",["show",Unit(gpu.Pci),"--property=Environment","--value"],5);
                     var startup=installer && await startupRecovery.Due(gpu,RunProcess);
                     var recover=NeedsRecovery(gpu,card)||startup;
-                    if(!recover&&environment.Output.Contains("XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id)&&environment.Output.Contains("XUR_CONSOLE_CARD="+card+" ")&&environment.Output.Contains("XUR_CONSOLE_FONT="+fontSize+" ")&&environment.Output.Contains("XUR_CONSOLE_OUTPUTS="+outputs+" "))continue;
+                    if(!recover&&environment.Output.Contains("XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id)&&environment.Output.Contains("XUR_CONSOLE_CARD="+card+" ")&&environment.Output.Contains("XUR_CONSOLE_MODE="+mode+" ")&&environment.Output.Contains("XUR_CONSOLE_FONT="+fontSize+" ")&&environment.Output.Contains("XUR_CONSOLE_OUTPUTS="+outputs+" "))continue;
                     if(startup)startupRecovery.Consume(gpu); // Persist before acting, including across agent restarts.
                     var stopped=await RunProcess("systemctl",["stop",Unit(gpu.Pci)],20);
                     if(stopped.ExitCode!=0){Error="Display console did not stop for recovery.";continue;}
@@ -110,6 +112,8 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
                         catch(Exception e) when(e is IOException or UnauthorizedAccessException){Error="HDMI reprobe failed; restarting the display console once.";}
                         fontSize=DisplayFontSize(card,gpu.Displays??[],sysRoot);
                         outputs=OutputSignature(card,gpu.Displays??[],sysRoot);
+                        mode=startupRecovery.Mode(gpu,card,sysRoot);
+                        if(mode.Length>0)fontSize=FontSize([mode]);
                     }
                 }
                 await RunProcess("systemctl",["reset-failed",Unit(gpu.Pci)],5);
@@ -118,9 +122,9 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
                     "--property=TimeoutStopSec=10","--property=StandardOutput=null","--property=StandardError=journal",
                     "--property=DevicePolicy=closed","--property=DeviceAllow="+card+" rw","--property=DeviceAllow=char-pts rw",
                     "--property=UMask=0077","--setenv=LANG=C.UTF-8","--setenv=LD_LIBRARY_PATH="+root+"/lib",
-                    "--setenv=XUR_CONSOLE_OUTPUTS="+outputs,"--setenv=XUR_CONSOLE_FONT="+fontSize,"--setenv=XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id,"--setenv=XUR_CONSOLE_CARD="+card,"--setenv=XUR_CONSOLE_MODULES="+root+"/lib",
+                    "--setenv=XUR_CONSOLE_MODE="+mode,"--setenv=XUR_CONSOLE_OUTPUTS="+outputs,"--setenv=XUR_CONSOLE_FONT="+fontSize,"--setenv=XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id,"--setenv=XUR_CONSOLE_CARD="+card,"--setenv=XUR_CONSOLE_MODULES="+root+"/lib",
                     // Select the monitor's preferred mode instead of inheriting a stale or absent firmware mode.
-                    root+"/kmscon","--no-use-original-mode","--vt=/dev/null","--no-libseat","--no-hwaccel","--font-engine=unifont","--font-size="+fontSize,
+                    root+"/kmscon","--no-use-original-mode",..(mode.Length>0?new[]{"--mode="+mode}:Array.Empty<string>()),"--vt=/dev/null","--no-libseat","--no-hwaccel","--font-engine=unifont","--font-size="+fontSize,
                     "--no-mouse","--no-blink","--dpms-timeout=0","--multi-monitor=clone","--session-max=1","--no-session-control","--no-issue",
                     "--login","--",root+"/client",Path.Combine(runDirectory,"control.sock")],15);
                 if(r.ExitCode!=0)Error="Display console start failed: "+r.Output.Trim();

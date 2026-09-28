@@ -9,6 +9,13 @@ public sealed class StartupDisplayRecovery(string runDirectory,TimeProvider? clo
     readonly Dictionary<string,(long Started,bool Needed)> observations=[];
     public string? LastAttempt {get;private set;}
     string Marker(string pci)=>Path.Combine(runDirectory,"display-startup-recovery-"+Canonical.Hash(pci)[..16]);
+    public string Mode(GpuDevice gpu,string card,string sysRoot)
+    {
+        if(!File.Exists(Marker(gpu.Pci)))return "";
+        var outputs=(gpu.Displays??[]).Where(d=>d.StartsWith(Path.GetFileName(card)+"-",StringComparison.Ordinal)).ToArray();
+        try{return outputs.Length>0 && outputs.All(d=>File.ReadLines(Path.Combine(sysRoot,"class/drm",d,"modes")).Contains("1920x1080"))?"1920x1080":"";}
+        catch(Exception e) when(e is IOException or UnauthorizedAccessException){return "";}
+    }
     public async Task<bool> Due(GpuDevice gpu,Func<string,string[],int,Task<ProcessResult>> run)
     {
         if(gpu.Driver!="amdgpu" || !(gpu.Displays??[]).Any(d=>d.Contains("-HDMI-A-",StringComparison.Ordinal)) || File.Exists(Marker(gpu.Pci)))return false;
@@ -25,7 +32,7 @@ public sealed class StartupDisplayRecovery(string runDirectory,TimeProvider? clo
     {
         Directory.CreateDirectory(runDirectory);
         using var file=new FileStream(Marker(gpu.Pci),new FileStreamOptions{Mode=FileMode.CreateNew,Access=FileAccess.Write,UnixCreateMode=UnixFileMode.UserRead|UnixFileMode.UserWrite});
-        LastAttempt="One-time HDMI reprobe after AMD startup display timeout on "+gpu.Pci;
+        LastAttempt="One-time HDMI reprobe with 1080p fallback when supported after AMD startup display timeout on "+gpu.Pci;
         using var writer=new StreamWriter(file);writer.WriteLine(LastAttempt);
         Console.Error.WriteLine(LastAttempt);
     }

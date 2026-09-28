@@ -15,6 +15,9 @@ Anaconda. This prevents Anaconda's initial RTC read from restoring stale time an
 breaking TLS during the OS download. Failure stops before disk erasure and appears
 in the console; check network access to the configured NTP servers (UDP 123).
 These checks run only after disk approval, so they do not delay the setup screen.
+The live image includes one SELinux permission allowing chronyd to reply to the
+installer's Unix datagram socket. Enforcement remains enabled; without this
+reply permission, the H 255 preflight timed out even with chronyd synchronized.
 
 Resolution fails before Anaconda starts if the registry cannot be reached. A
 network failure during the subsequent image download can still interrupt an

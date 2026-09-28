@@ -68,6 +68,15 @@ static class WifiTests
         await menu.Select((char)257);check(handler.Request?.Password==""&&menu.Screen.Id=="wifi-networks","Open SSIDs connect without a password prompt");
         handler.Adapters=1;handler.PendingScan=new(TaskCreationOptions.RunContinuationsAsynchronously);await menu.Open("network");await menu.Select('w');
         check(menu.Screen.Id=="wifi-scanning"&&menu.Screen.Body.Contains("wlan0"),"Slow Wi-Fi scans show progress and adapter identity without blocking menu input");
+        foreach(var destination in new[]{"wifi-networks","wifi-scan-error"})
+        {
+            LocalConsole.OpenMaintenance(menu.Screen);
+            LocalConsole.OpenMaintenance(new(destination,"Wi-Fi","Scan finished",[new('v',"Scan again"),new('0',"Back")]),refreshOnly:true);
+            check(LocalConsole.DiagnosticSnapshot().Screen==destination,"Completed Wi-Fi scan renders its new screen in the physical console and diagnostics: "+destination);
+        }
+        LocalConsole.OpenMaintenance(new("network-list","Network","Adapters",[new('0',"Back")]));
+        LocalConsole.OpenMaintenance(new("wifi-networks","Wi-Fi","Late scan",[new('0',"Back")]),refreshOnly:true);
+        check(LocalConsole.DiagnosticSnapshot().Screen=="network-list","Late Wi-Fi results cannot replace another maintenance screen");
         await menu.Select('0');check(menu.Screen.Id=="wifi-adapters","A pending Wi-Fi scan can be left without waiting for its timeout");
         handler.PendingScan.SetResult();handler.PendingScan=null;
         handler.Unavailable=true;handler.Scanned=null;await menu.Open("network");await menu.Select('w');

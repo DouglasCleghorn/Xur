@@ -1,19 +1,18 @@
 FROM localhost/xur-common:x86_64 AS live
 RUN dnf install -y anaconda anaconda-install-img-deps anaconda-dracut dracut-config-generic dracut-network \
     grub2-efi-x64-cdboot grub2-pc-modules grub2-tools-extra shim-x64 \
-    xorriso squashfs-tools isomd5sum python3 plymouth tar jq skopeo openssl chrony openssh-server audit && dnf clean all
+    xorriso squashfs-tools isomd5sum python3 plymouth tar jq skopeo openssl chrony openssh-server audit policycoreutils && dnf clean all
 RUN mkdir -p /boot/efi && cp -ra /usr/lib/efi/*/*/EFI /boot/efi && \
     if test -f /usr/share/anaconda/list-harddrives-stub; then cp /usr/share/anaconda/list-harddrives-stub /usr/bin/list-harddrives; fi && \
     systemctl mask anaconda.service anaconda-direct.service anaconda-shell@.service && \
     systemctl set-default multi-user.target && \
     rm -f /usr/lib/systemd/system-generators/systemd-gpt-auto-generator && \
-    mkdir -p /var/roothome && \
-    kernel=$(find /usr/lib/modules -name vmlinuz -printf '%h\n' | head -n1) && \
-    DRACUT_NO_XATTR=1 dracut --force --zstd --no-hostonly --add "anaconda" "$kernel/initramfs.img" "${kernel##*/}"
+    mkdir -p /var/roothome
 COPY rootfs/ /
 COPY installer-rootfs/ /
 # Never replace /usr/sbin with an overlay directory or patch individual aliases.
 RUN python3 /usr/libexec/xur-check-installer-runtime && \
+    semodule -i /usr/share/xur/xur-installer-clock.cil && \
     chmod 755 /usr/libexec/xur-check-install-clock /usr/libexec/xur-network /usr/libexec/xur-run-install /usr/libexec/xur-installer-app /usr/libexec/xur-live-app /usr/libexec/xur-resolve-install-source && \
     python3 -c 'import pyudev; pyudev.Context()' && \
     printf '/run/xur/app/releases/[^/]+/(control|agent|gateway)(/.*)? system_u:object_r:bin_t:s0\n/usr/share/xur/app-bundle/(control|agent|gateway)(/.*)? system_u:object_r:bin_t:s0\n/usr/lib/xur/control/Xur\\.Control -- system_u:object_r:bin_t:s0\n/usr/lib/xur/agent/Xur\\.Agent -- system_u:object_r:bin_t:s0\n/usr/lib/xur/agent/console(/.*)? system_u:object_r:bin_t:s0\n/usr/lib/xur/gateway/Xur\\.Gateway -- system_u:object_r:bin_t:s0\n' >> /etc/selinux/targeted/contexts/files/file_contexts.local && \
@@ -24,3 +23,6 @@ RUN python3 /usr/libexec/xur-check-installer-runtime && \
     systemctl enable xur-installer-app-prepare.service xur-installer-app-verify.service xur-installer-app-check.timer xur-gateway.service xur-agent.service xur-control.service xur-network.service && \
     systemctl mask tailscaled.service && \
     systemctl mask autovt@.service autovt@tty1.service autovt@tty2.service autovt@tty3.service getty@tty1.service getty@tty2.service getty@tty3.service serial-getty@ttyS0.service
+# Include the final SELinux policy in the boot environment as well as the live root.
+RUN kernel=$(find /usr/lib/modules -name vmlinuz -printf '%h\n' | head -n1) && \
+    DRACUT_NO_XATTR=1 dracut --force --zstd --no-hostonly --add "anaconda" "$kernel/initramfs.img" "${kernel##*/}"

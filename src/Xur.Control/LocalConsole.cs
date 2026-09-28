@@ -161,7 +161,10 @@ public static class LocalConsole
     {
         lock(Sync)
         {
-            if(refreshOnly && (view!="maintenance" || maintenance?.Id!=screen.Id))return;
+            // A completed scan changes screen ID; render that result instead of
+            // leaving the physical console and diagnostic snapshot on Scanning.
+            var scanCompleted=maintenance?.Id=="wifi-scanning" && screen.Id is "wifi-networks" or "wifi-scan-error";
+            if(refreshOnly && (view!="maintenance" || (maintenance?.Id!=screen.Id && !scanCompleted)))return;
             if(view!="maintenance" || maintenance?.Id!=screen.Id){selection=0;page=0;textBuffer=screen.InputValue??"";replaceText=true;}
             else if(maintenance!=null)
             {

@@ -42,10 +42,16 @@ static class DisplayRecoveryTests
             clock.Now=clock.Now.AddYears(-2);clock.Tick+=TimeSpan.FromSeconds(16).Ticks;
             await installer.Refresh();
             check(starts==before+1&&File.ReadAllText(connector+"/status").Trim()=="detect"&&installer.LastRecovery!=null,"AMD timeout triggers HDMI reprobe despite enabled/DPMS On, using monotonic time across clock correction");
+            check(environment.Contains("XUR_CONSOLE_MODE=1920x1080 ")&&environment.Contains("XUR_CONSOLE_FONT=16 "),"AMD recovery selects supported 1080p with a font that fits the fallback mode");
             before=starts;clock.Tick+=TimeSpan.FromSeconds(60).Ticks;await installer.Refresh();
             var restarted=new DisplayConsoles(root+"/workloads",bootRun,Run,()=>Task.FromResult(new[]{gpu}),runtime,root+"/sys",clock,installer:true);
             await restarted.Refresh();clock.Tick+=TimeSpan.FromSeconds(60).Ticks;await restarted.Refresh();
             check(starts==before,"Startup HDMI recovery runs once even across agent restarts");
+            check(environment.Contains("XUR_CONSOLE_MODE=1920x1080 "),"The conservative mode survives agent restarts within the same boot");
+            var fallback=new StartupDisplayRecovery(bootRun,clock);
+            File.WriteAllText(connector+"/modes","1280x720\n");
+            check(fallback.Mode(gpu,"/dev/dri/card0",root+"/sys")=="","A monitor without 1080p support keeps its preferred mode");
+            File.WriteAllText(connector+"/modes","1920x1080\n");
             var healthy=new StartupDisplayRecovery(root+"/healthy",clock);
             kernel=kernel.Replace(gpu.Pci,"0000:02:00.0");await healthy.Due(gpu,Run);clock.Tick+=TimeSpan.FromSeconds(16).Ticks;
             check(!await healthy.Due(gpu,Run),"A different GPU's kernel timeout cannot trigger HDMI recovery");
