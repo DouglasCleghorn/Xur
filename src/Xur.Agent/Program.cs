@@ -22,7 +22,7 @@ var stateDir = installer ? run : "/var/lib/xur";
 if(!installer)_=Task.Run(async()=>{try{if((await Processes.Run("systemctl",["is-active","firewalld"],5)).ExitCode==0)await Processes.Run("firewall-cmd",["--add-port=8443/tcp"],10);}catch{}});
 Directory.CreateDirectory(stateDir);
 RegistryMirror.Ensure();
-var displayConsoles=new DisplayConsoles(Path.Combine(stateDir,"workloads"),run);
+var displayConsoles=new DisplayConsoles(Path.Combine(stateDir,"workloads"),run,installer:installer);
 var operationFile = Path.Combine(stateDir,"install-operation.json");
 Operation? operation = File.Exists(operationFile) ? JsonSerializer.Deserialize<Operation>(File.ReadAllText(operationFile)) : null;
 var gate = new SemaphoreSlim(1, 1);
@@ -123,7 +123,7 @@ app.MapGet("/console-logs",async()=> {
     var result=await Processes.Run("journalctl",["--boot","--no-pager","-n","100"],10);
     return Results.Text(Redaction.Logs(result.Output));
 });
-app.MapGet("/diagnostics/display",async()=>{var report=await DisplayDiagnostics.Collect();report["displayConsoleError"]=displayConsoles.Error;report["stationAllocations"]=JsonSerializer.SerializeToNode(StationSeats.Status(),new JsonSerializerOptions(JsonSerializerDefaults.Web));
+app.MapGet("/diagnostics/display",async()=>{var report=await DisplayDiagnostics.Collect();report["displayConsoleError"]=displayConsoles.Error;report["displayRecovery"]=displayConsoles.LastRecovery;report["stationAllocations"]=JsonSerializer.SerializeToNode(StationSeats.Status(),new JsonSerializerOptions(JsonSerializerDefaults.Web));
     var gpus=await GpuInventory.Observe();var owners=new Dictionary<string,object>();
     foreach(var gpu in gpus)try{owners[gpu.Pci]=await GpuOwnership.Observe(gpu);}catch(Exception e){owners[gpu.Pci]=new{error=e.Message};}
     report["owners"]=JsonSerializer.SerializeToNode(owners,new JsonSerializerOptions(JsonSerializerDefaults.Web));

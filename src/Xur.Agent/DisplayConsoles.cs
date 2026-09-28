@@ -6,11 +6,13 @@ namespace Xur.Agent;
 // is released for a desktop; compute allocations retain their display console.
 public sealed class DisplayConsoles(string directory,string runDirectory,
     Func<string,string[],int,Task<ProcessResult>>? runner=null,Func<Task<GpuDevice[]>>? observer=null,
-    string? runtimePath=null,string sysRoot="/sys",TimeProvider? clock=null)
+    string? runtimePath=null,string sysRoot="/sys",TimeProvider? clock=null,bool installer=false)
 {
     readonly SemaphoreSlim gate=new(1,1);
     readonly HashSet<string> handingOff=[];
     public string? Error {get;private set;}
+    readonly StartupDisplayRecovery startupRecovery=new(runDirectory,clock);
+    public string? LastRecovery=>startupRecovery.LastAttempt;
     static string Unit(string pci)=>"xur-console-"+Canonical.Hash(pci)[..16]+".service";
     static string RuntimePath=>Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"console"));
     readonly Dictionary<string,(DateTimeOffset Next,int Attempts)> recovery=[];
@@ -96,9 +98,19 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
                 if((await RunProcess("systemctl",["is-active",Unit(gpu.Pci)],5)).ExitCode==0)
                 {
                     var environment=await RunProcess("systemctl",["show",Unit(gpu.Pci),"--property=Environment","--value"],5);
-                    var recover=NeedsRecovery(gpu,card);
+                    var startup=installer && await startupRecovery.Due(gpu,RunProcess);
+                    var recover=NeedsRecovery(gpu,card)||startup;
                     if(!recover&&environment.Output.Contains("XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id)&&environment.Output.Contains("XUR_CONSOLE_CARD="+card+" ")&&environment.Output.Contains("XUR_CONSOLE_FONT="+fontSize+" ")&&environment.Output.Contains("XUR_CONSOLE_OUTPUTS="+outputs+" "))continue;
-                    await RunProcess("systemctl",["stop",Unit(gpu.Pci)],20);
+                    if(startup)startupRecovery.Consume(gpu); // Persist before acting, including across agent restarts.
+                    var stopped=await RunProcess("systemctl",["stop",Unit(gpu.Pci)],20);
+                    if(stopped.ExitCode!=0){Error="Display console did not stop for recovery.";continue;}
+                    if(startup)
+                    {
+                        try{StartupDisplayRecovery.Reprobe(card,gpu.Displays??[],sysRoot);}
+                        catch(Exception e) when(e is IOException or UnauthorizedAccessException){Error="HDMI reprobe failed; restarting the display console once.";}
+                        fontSize=DisplayFontSize(card,gpu.Displays??[],sysRoot);
+                        outputs=OutputSignature(card,gpu.Displays??[],sysRoot);
+                    }
                 }
                 await RunProcess("systemctl",["reset-failed",Unit(gpu.Pci)],5);
                 var r=await RunProcess("systemd-run",[

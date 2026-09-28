@@ -11,7 +11,7 @@ def copy(source,target):
     else:shutil.copy2(source,target)
 base=context/'rootfs'
 for source,target in [('publish/control','usr/lib/xur/control'),('publish/agent','usr/lib/xur/agent'),('publish/gateway','usr/lib/xur/gateway'),('catalog','usr/share/xur/catalog'),
-                      ('tailscale/tailscale','usr/bin/tailscale'),('tailscale/tailscaled','usr/sbin/tailscaled')]:
+                      ('tailscale/tailscale','usr/bin/tailscale'),('tailscale/tailscaled','usr/bin/tailscaled')]:
     copy(context/source,base/target)
 copy(repo/'.build/console-runtime',base/'usr/lib/xur/agent/console')
 copy(repo/'.build/virtual-display-runtime',base/'usr/lib/xur/agent/virtual-display')
@@ -47,7 +47,7 @@ installer_channel=os.environ.get('XUR_INSTALLER_CHANNEL','stable')
 if installer_channel not in ('nightly','stable'):raise ValueError('Invalid installer update channel')
 (live/'usr/share/xur').mkdir(parents=True,exist_ok=True)
 (live/'usr/share/xur/installer-channel').write_text(installer_channel+'\n')
-for source,target in [('app-bootstrap','usr/libexec/xur-installer-app'),('live-app','usr/libexec/xur-live-app'),('resolve-source','usr/libexec/xur-resolve-install-source'),('systemd','usr/lib/systemd/system'),('iso.yaml','usr/lib/image-builder/bootc/iso.yaml'),
+for source,target in [('check-runtime','usr/libexec/xur-check-installer-runtime'),('check-clock','usr/libexec/xur-check-install-clock'),('app-bootstrap','usr/libexec/xur-installer-app'),('live-app','usr/libexec/xur-live-app'),('resolve-source','usr/libexec/xur-resolve-install-source'),('systemd','usr/lib/systemd/system'),('iso.yaml','usr/lib/image-builder/bootc/iso.yaml'),
                       ('install-template.ks','usr/share/xur/install-template.ks'),('run-install','usr/libexec/xur-run-install'),('install-manager','usr/libexec/xur-install-manager')]:
     copy(repo/'os/installer'/source,live/target)
 

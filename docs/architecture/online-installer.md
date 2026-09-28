@@ -8,6 +8,14 @@ remains the same stable channel used by `os-update`. Image pulls require the
 Bazzite signing key through containers/image's sigstore policy; TLS stays enabled.
 The digest/channel receipt is copied into `/etc/xur/upstream.json`.
 
+Before source resolution, the approved installation starts chronyd, requests fresh
+time measurements and waits up to 30 seconds for synchronization. It writes UTC to
+the hardware clock, when present, and verifies the readback before starting
+Anaconda. This prevents Anaconda's initial RTC read from restoring stale time and
+breaking TLS during the OS download. Failure stops before disk erasure and appears
+in the console; check network access to the configured NTP servers (UDP 123).
+These checks run only after disk approval, so they do not delay the setup screen.
+
 Resolution fails before Anaconda starts if the registry cannot be reached. A
 network failure during the subsequent image download can still interrupt an
 approved installation; the ISO is not an offline recovery image. Registry images
@@ -38,7 +46,13 @@ hash, ABI, schema, anti-downgrade and `online-installer-v1` checks, and restores
 the bundled app if the download or new app health check fails. Neither option
 makes Bazzite installation offline or bypasses disk approval.
 
-The source implementation is covered by digest-pinning, manifest, signed-update,
+The installer image preserves Fedora's `/usr/sbin` symlink to `/usr/bin`. After
+copying Xur's files, its build checks that the symlink and required networking,
+clock and system executables remain intact. A broken overlay fails the build
+instead of shipping services that cannot start.
+
+The source implementation is covered by clock/RTC preflight, executable-path,
+digest-pinning, manifest, signed-update,
 network-failure and unhealthy-app fallback tests. Actual online Anaconda
 installation, live SELinux transitions and Moonlight GPU switching still need
 validation on newly built media/hardware; historical offline ISO tests do not

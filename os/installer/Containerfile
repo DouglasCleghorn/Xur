@@ -1,7 +1,7 @@
 FROM localhost/xur-common:x86_64 AS live
 RUN dnf install -y anaconda anaconda-install-img-deps anaconda-dracut dracut-config-generic dracut-network \
     grub2-efi-x64-cdboot grub2-pc-modules grub2-tools-extra shim-x64 \
-    xorriso squashfs-tools isomd5sum python3 plymouth tar jq skopeo openssl && dnf clean all
+    xorriso squashfs-tools isomd5sum python3 plymouth tar jq skopeo openssl chrony openssh-server audit && dnf clean all
 RUN mkdir -p /boot/efi && cp -ra /usr/lib/efi/*/*/EFI /boot/efi && \
     if test -f /usr/share/anaconda/list-harddrives-stub; then cp /usr/share/anaconda/list-harddrives-stub /usr/bin/list-harddrives; fi && \
     systemctl mask anaconda.service anaconda-direct.service anaconda-shell@.service && \
@@ -12,11 +12,9 @@ RUN mkdir -p /boot/efi && cp -ra /usr/lib/efi/*/*/EFI /boot/efi && \
     DRACUT_NO_XATTR=1 dracut --force --zstd --no-hostonly --add "anaconda" "$kernel/initramfs.img" "${kernel##*/}"
 COPY rootfs/ /
 COPY installer-rootfs/ /
-RUN (test -x /sbin/modprobe || ln -s /usr/bin/modprobe /usr/sbin/modprobe) && \
-    (test -x /sbin/sysctl || ln -s /usr/bin/sysctl /usr/sbin/sysctl) && \
-    test -x /sbin/modprobe && test -x /sbin/sysctl && \
-    chmod 755 /usr/libexec/xur-network /usr/libexec/xur-run-install /usr/libexec/xur-installer-app /usr/libexec/xur-live-app /usr/libexec/xur-resolve-install-source && \
-    ln -s /usr/bin/ldconfig /usr/sbin/ldconfig && \
+# Never replace /usr/sbin with an overlay directory or patch individual aliases.
+RUN python3 /usr/libexec/xur-check-installer-runtime && \
+    chmod 755 /usr/libexec/xur-check-install-clock /usr/libexec/xur-network /usr/libexec/xur-run-install /usr/libexec/xur-installer-app /usr/libexec/xur-live-app /usr/libexec/xur-resolve-install-source && \
     python3 -c 'import pyudev; pyudev.Context()' && \
     printf '/run/xur/app/releases/[^/]+/(control|agent|gateway)(/.*)? system_u:object_r:bin_t:s0\n/usr/share/xur/app-bundle/(control|agent|gateway)(/.*)? system_u:object_r:bin_t:s0\n/usr/lib/xur/control/Xur\\.Control -- system_u:object_r:bin_t:s0\n/usr/lib/xur/agent/Xur\\.Agent -- system_u:object_r:bin_t:s0\n/usr/lib/xur/agent/console(/.*)? system_u:object_r:bin_t:s0\n/usr/lib/xur/gateway/Xur\\.Gateway -- system_u:object_r:bin_t:s0\n' >> /etc/selinux/targeted/contexts/files/file_contexts.local && \
     ln -s /usr/lib/xur/control/Xur.Control /usr/bin/xur && \

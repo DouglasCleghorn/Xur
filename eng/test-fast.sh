@@ -33,6 +33,8 @@ node tests/Xur.Integration.Tests/cancellation-ui.cjs > .build/fast/cancellation-
 "$sdk" run --project tests/Xur.Profile.Tests -c Release > .build/fast/profiles.log
 python3 tests/Xur.Integration.Tests/application-update.py > .build/fast/application-updates.json
 python3 tests/Xur.Integration.Tests/online-installer.py > .build/fast/online-installer.json
+python3 tests/Xur.Integration.Tests/installer-preflight.py > .build/fast/installer-preflight.json
+python3 tests/Xur.Integration.Tests/install-failure.py > .build/fast/install-failure.json
 python3 tests/Xur.Integration.Tests/compact-update.py > .build/fast/compact-update.json
 python3 tests/Xur.Integration.Tests/compact-release.py > .build/fast/compact-release.json
 python3 tests/Xur.Integration.Tests/release-version.py > .build/fast/release-version.log

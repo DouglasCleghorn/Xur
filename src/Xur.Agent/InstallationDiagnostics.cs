@@ -3,25 +3,50 @@ namespace Xur.Agent;
 
 public static class InstallationDiagnostics
 {
-    public static Operation Observe(Operation operation,string run,string serviceState)
+    public static Operation Observe(Operation operation,string run,string serviceState,string logDirectory="/tmp")
     {
         if(operation.Stage!="Installing")return operation;
         var failed=File.Exists(Path.Combine(run,"install-failed")) || serviceState.Split('\n').Contains("ActiveState=failed");
+        var phase=Read(Path.Combine(run,"install-phase"),128).Trim();
         if(failed)
         {
-            var path=Path.Combine(run,"install-phase");
-            var phase=File.Exists(path)?File.ReadAllText(path).Trim():"";
             var message=phase switch {
+                "clock"=>"Time synchronization failed before disk erasure.",
                 "source"=>"Could not resolve the OS download source before disk installation.",
                 "anaconda"=>"Anaconda failed while installing the approved disk.",
                 "post"=>"Configuration of the installed system failed.",
                 _=>"Installation failed."
             };
+            var detail=Read(Path.Combine(run,"install-error"),1024).Trim();
+            if(detail.Length>0)message=Redaction.Logs(detail);
+            else if(DownloadFailure(FileLogs(logDirectory,150)) is {} download)message=download;
             return operation with {Stage="Failed",Message=message+" Open Installation logs for details. No automatic retry.",Updated=DateTimeOffset.UtcNow};
         }
         if(File.Exists(Path.Combine(run,"install-complete")))
             return operation with {Stage="Complete",Message="Installation completed. Reboot from the installed disk.",Updated=DateTimeOffset.UtcNow};
-        return operation;
+        var progress=phase switch {
+            "clock"=>"Checking network time and saving UTC to the hardware clock before disk erasure…",
+            "source"=>"Checking the OS download source before disk erasure…",
+            "anaconda"=>"Anaconda is installing the approved disk",
+            "post"=>"Configuring the installed system…",
+            _=>operation.Message
+        };
+        return progress==operation.Message?operation:operation with{Message=progress,Updated=DateTimeOffset.UtcNow};
+    }
+    static string Read(string path,int limit)
+    {
+        try{using var file=File.OpenText(path);var buffer=new char[limit];return new string(buffer,0,file.ReadBlock(buffer,0,limit));}
+        catch(Exception e) when(e is IOException or UnauthorizedAccessException){return "";}
+    }
+    public static string? DownloadFailure(string logs)
+    {
+        if(logs.Contains("certificate has expired or is not yet valid",StringComparison.OrdinalIgnoreCase))
+        {
+            var time=System.Text.RegularExpressions.Regex.Match(logs,@"current time ([0-9T:.+Z-]+) is (before|after) ([0-9T:.+Z-]+)");
+            return "OS download blocked by TLS certificate validation: "+(time.Success?"system time "+time.Groups[1].Value+" is "+time.Groups[2].Value+" the certificate validity boundary "+time.Groups[3].Value+". ":"the certificate is outside its validity dates. ")+"Check network time and the hardware clock before retrying.";
+        }
+        if(logs.Contains("tls: failed to verify certificate",StringComparison.OrdinalIgnoreCase))return "OS download failed TLS certificate verification. Check system time and the network certificate chain; verification remains enabled.";
+        return null;
     }
 
     public static string FileLogs(string directory="/tmp",int lines=100)

@@ -71,7 +71,7 @@ do not use it on an untrusted network. Never commit the key or collected reports
 | `/v1/boot-logs` | Last 2,000 journal lines from this boot, with monotonic timestamps |
 | `/v1/logs` | Agent/application/service logs, plus installer file logs |
 | `/v1/installation-logs` | Installation service and Anaconda log tails |
-| `/v1/display` | DRM connectors, enabled/DPMS state, modes, GPU drivers, framebuffer and fixed display probes |
+| `/v1/display` | DRM connectors, enabled/DPMS state, modes, GPU drivers, framebuffer, fixed display probes and the last startup recovery attempt |
 | `/v1/display-history` | Up to 120 in-memory display samples: every 5 seconds initially, then every 15 seconds |
 | `/v1/hardware` | PCI devices and drivers |
 | `/v1/network` | Current network settings and pending changes |
@@ -85,6 +85,18 @@ once diagnostic configuration is discovered and is bounded to the most recent
 A console failure returns 503 for console routes while agent diagnostics remain
 available. Boot logs and history are volatile: collect them before rebooting.
 There is no arbitrary shell execution or arbitrary file-download route.
+
+On installer boots, a matching AMD `REG_WAIT timeout` in `disable_crtc` triggers
+one HDMI re-detection and console restart after a 15-second settling period. This
+covers the observed case where HDMI reports connected, enabled and DPMS On while
+the monitor receives no signal. It only affects the GPU named in the kernel
+warning and never takes a GPU from a workstation. The attempt is recorded in the
+journal and `displayRecovery`; a boot-local marker prevents repeated attempts
+across agent restarts. This workaround still needs cold-boot hardware validation.
+
+Installation progress identifies clock synchronization failures before disk
+erasure and certificate/time errors during download. Capture installation logs
+before rebooting. A failed installation is never retried automatically.
 
 ## Drive the real setup flow
 
