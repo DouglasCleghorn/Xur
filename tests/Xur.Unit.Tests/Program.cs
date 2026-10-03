@@ -28,6 +28,7 @@ await FileEndpointTests.Run(Check);
 await FolderSizeCacheTests.Run(Check);
 await StationIdentityTests.Run(Check);
 await ParallelLoadTests.Run(Check);
+await AgentRuntimeErrorsTests.Run(Check);
 HuggingFaceTests.Run(Check);
 AccountTests.Run(Check);
 WorkstationUpdateTests.Run(Check);

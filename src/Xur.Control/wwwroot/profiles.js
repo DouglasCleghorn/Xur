@@ -99,9 +99,14 @@
  }
  const userDialog=document.querySelector('#add-station-user');let userRow=null;
  userDialog.addEventListener('close',()=>{
-  // Native dialogs restore focus to the user picker. Keep the committed
-  // selection visible without reopening its options over Save profile.
+  // Keep any open user picker closed when focus returns from the dialog.
   userRow?.querySelector('.station-user-choice [role=combobox]')?.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ });
+ form.addEventListener('click',event=>{
+  const button=event.target.closest('.add-profile-user');if(!button)return;
+  userRow=button.closest('.workload-editor');
+  userDialog.querySelector('[name=name]').value='';userDialog.querySelector('[role=alert]').hidden=true;
+  userDialog.showModal();userDialog.querySelector('[name=name]').focus();
  });
  document.querySelector('#cancel-station-user').addEventListener('click',()=>userDialog.close());
  document.querySelector('#add-station-user-form').addEventListener('submit',async event=>{
@@ -110,7 +115,7 @@
    const response=await (window.xurFetch ?? window.fetch)('/api/station-users',{method:'POST',headers:{'Content-Type':'application/json','RequestVerificationToken':csrf},body:JSON.stringify({name:event.target.elements.name.value})});
    const account=await response.json();if(!response.ok)throw Error(account.error||'Could not add the user.');
    for(const select of [...rows.querySelectorAll('[name=stationUser]'),template.querySelector('[name=stationUser]')])select.add(new Option(account.name,account.username));
-   if(userRow?.isConnected){const select=userRow.querySelector('[name=stationUser]');select.value=account.username;select.dataset.previous=account.username;select.dispatchEvent(new CustomEvent('choices-changed'));}userDialog.close();
+   if(userRow?.isConnected){const select=userRow.querySelector('[name=stationUser]');select.value=account.username;select.dispatchEvent(new CustomEvent('choices-changed'));}userDialog.close();
   }catch(e){message.textContent=e.message;message.hidden=false;}finally{submit.disabled=false;}
  });
  const renumber=()=>[...rows.children].forEach((row,i)=>{row.querySelectorAll('.gpu-choices select').forEach(s=>s.name='gpus-'+i);row.querySelectorAll('.station-usb').forEach(s=>s.name='usb-'+i);row.querySelector('.station-primary').name='primary-'+i;});
@@ -146,7 +151,7 @@
   if(station)select.value=[...select.options].find(o=>o.value==='gaming-workstation'&&!o.hidden)?.value??'';
   select.dispatchEvent(new CustomEvent('choices-changed'));
  }
- function initialize(row){row.querySelector('[name=stationUser]').dataset.previous=row.querySelector('[name=stationUser]').value;filterRecipes(row);row.querySelectorAll('select').forEach(enhance);gpus(row);}
+ function initialize(row){filterRecipes(row);row.querySelectorAll('select').forEach(enhance);gpus(row);}
  rows.querySelectorAll('.workload-editor').forEach(initialize);
  async function modelOptions(row,model){
   const select=row.querySelector('[name=recipe]'),engine=row.querySelector('.catalog-engine').value,version=String(++counter);row.dataset.request=version;
@@ -182,12 +187,6 @@
    const user=row.querySelector('[name=stationUser]');const value=option.dataset.user||'temporary';
    if(value==='legacy'&&![...user.options].some(o=>o.value===value))user.add(new Option('Existing workstation user','legacy'));
    user.value=value;user.dispatchEvent(new CustomEvent('choices-changed'));
-  }
-  if(event.target.name==='stationUser'){
-   if(event.target.value==='add-user'){
-    userRow=row;event.target.value=event.target.dataset.previous||'temporary';event.target.dispatchEvent(new CustomEvent('choices-changed'));
-    userDialog.querySelector('[name=name]').value='';userDialog.querySelector('[role=alert]').hidden=true;userDialog.showModal();userDialog.querySelector('[name=name]').focus();
-   }else event.target.dataset.previous=event.target.value;
   }
   if(event.target.matches('.catalog-engine')){
    row.dataset.request=String(++counter);delete row.dataset.resolving;

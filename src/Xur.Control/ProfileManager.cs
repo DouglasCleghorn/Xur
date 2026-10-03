@@ -218,6 +218,7 @@ public sealed class AgentWorkloadRuntime(HttpClient client):IWorkloadRuntime
         {
             var text=await r.Content.ReadAsStringAsync();
             try {using var doc=System.Text.Json.JsonDocument.Parse(text);text=doc.RootElement.GetProperty("error").GetString() ?? text;}catch(System.Text.Json.JsonException){}catch(KeyNotFoundException){}
+            if(string.IsNullOrWhiteSpace(text))text=$"Agent request {r.RequestMessage?.RequestUri?.AbsolutePath ?? "(unknown operation)"} failed (HTTP {(int)r.StatusCode}). Open Diagnostics for the agent error, then resume after resolving it.";
             throw new InvalidOperationException(text);
         }}
 }

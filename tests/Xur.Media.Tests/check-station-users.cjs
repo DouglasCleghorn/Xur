@@ -16,7 +16,7 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{execFileSync}=
   let s=await state();const model=s.active.workloads.find(w=>w.recipe.kind==='Model'),station=s.active.workloads.find(w=>w.recipe.kind==='Workstation');assert(model&&station);const modelPid=s.runtime.instances.find(i=>i.id===model.id).pid;
   const first=s.active.id;
   async function addUser(profileId,label){
-   await page.goto(base+'/profiles/edit?id='+profileId);const user=page.getByRole('combobox',{name:'User',exact:true});await user.click();assert(await page.getByRole('option',{name:'Temporary user',exact:true}).isVisible());await page.getByRole('option',{name:'Add user…',exact:true}).click();
+   await page.goto(base+'/profiles/edit?id='+profileId);const user=page.getByRole('combobox',{name:'User',exact:true});await user.click();assert(await page.getByRole('option',{name:'Temporary user',exact:true}).isVisible());await page.locator('.add-profile-user').first().click();
    const dialog=page.getByRole('dialog');await dialog.getByLabel('Name',{exact:true}).fill(label);await dialog.getByRole('button',{name:'Add user',exact:true}).click();await dialog.waitFor({state:'hidden'});assert.equal(await user.inputValue(),label);
    await page.getByRole('button',{name:'Save profile',exact:true}).click();await page.waitForURL(base+'/profiles');const account=(await state()).profiles.find(p=>p.id===profileId).workloads.find(w=>w.recipe.kind==='Workstation').user;assert(account?.uid>=1000&&!account.temporary);return account;
   }

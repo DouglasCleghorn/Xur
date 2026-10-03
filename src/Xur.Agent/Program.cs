@@ -232,6 +232,11 @@ app.MapPost("/workloads/start",async(RuntimeStart request)=> {
 app.MapPost("/workloads/stop",async(RuntimeStop request)=> {
     if(installer)return Results.Conflict();
     try {await workloads.Stop(request);return Results.Ok();}catch(InvalidOperationException e){return Results.Conflict(new {error=e.Message});}
+    catch(Exception e) when(e is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or OperationCanceledException)
+    {
+        app.Logger.LogError(e,"Workstation or container stop failed for {WorkloadId}",request.Id);
+        return Results.Json(new {error="The agent could not finish stopping the workload. Open Diagnostics for the stop failure. Device ownership is retained until release is verified."},statusCode:500);
+    }
 });
 var appUpdates=new ApplicationUpdates();
 app.MapGet("/application-health",()=>Results.Json(new {id=ApplicationIdentity.Id,busy=containers.Busy}));

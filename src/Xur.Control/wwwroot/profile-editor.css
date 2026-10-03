@@ -32,3 +32,6 @@
  #profile-form .station-new-name input{min-height:44px;font-size:16px}
  #profile-form .station-devices>summary{min-height:44px;padding:10px 0}
 }
+
+.station-user-choice label{display:block}
+.add-profile-user{margin-top:8px}
