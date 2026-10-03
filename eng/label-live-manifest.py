@@ -31,4 +31,14 @@ squashfs=[s for p in manifest['pipelines'] for s in p['stages']
           if s['type']=='org.osbuild.squashfs' and s['options']['filename']=='LiveOS/squashfs.img']
 assert len(squashfs)==1, 'Expected exactly one live filesystem compression stage'
 squashfs[0]['options'].setdefault('exclude_paths',[]).append('usr/lib/modules/.*/initramfs[.]img')
+# Replace configuration, preserving the maintained signed EFI loaders and hybrid layout.
+menus=0
+for pipeline in manifest['pipelines']:
+    for index in range(len(pipeline['stages'])-1,-1,-1):
+        stage=pipeline['stages'][index]['type']
+        if stage not in ('org.osbuild.grub2.iso','org.osbuild.grub2.iso.legacy'):continue
+        destination='/EFI/BOOT/grub.cfg' if stage=='org.osbuild.grub2.iso' else '/boot/grub2/grub.cfg'
+        pipeline['stages'].insert(index+1,{'type':'org.osbuild.copy','inputs':{'xur':{'type':'org.osbuild.tree','origin':'org.osbuild.pipeline','references':['name:os-tree']}},'options':{'paths':[{'from':'input://xur/usr/share/xur/installer-grub.cfg','to':'tree://'+destination}]}})
+        menus+=1
+assert menus==2, 'Expected UEFI and BIOS boot menu stages'
 with open(sys.argv[2],'w') as out:json.dump(manifest,out,indent=2);out.write('\n')

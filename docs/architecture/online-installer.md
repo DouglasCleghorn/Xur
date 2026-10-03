@@ -29,6 +29,21 @@ Normal boot starts the bundled Xur application without waiting for internet or
 as the local services start. Disk approval waits for local application health
 checks, never for the online update check.
 
+The USB boot menu waits ten seconds. A completed Xur installation publishes
+`/xur/installed` on its separate boot filesystem; when that marker and its GRUB
+configuration are found, the default boots the installed system. Select
+**Install or repair Xur** during the countdown to enter setup. Without a completed
+installation marker, setup is the default. Older installations without this
+marker still require removing the USB or choosing the SSD in the firmware menu.
+Both UEFI and BIOS menus use the same configuration and retain the supplied EFI
+loaders. Entering setup never bypasses disk review and Yes/No approval.
+
+Installation progress shows a six-stage bar: time synchronization, source
+resolution, disk preparation, download, deployment and configuration. The bar
+counts completed stages, not elapsed time or downloaded bytes. Download is
+indeterminate until the installer reports deployment; only confirmed completion
+fills the bar. The diagnostic status includes the same structured progress.
+
 A separate service checks the signed GitHub release metadata in the background.
 Each attempt is bounded to 15 seconds and retries after 60 seconds, including when
 a cable is plugged in or Wi-Fi is configured later. Console status shows

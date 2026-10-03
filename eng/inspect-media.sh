@@ -45,6 +45,8 @@ ks=(root/'usr/share/xur/install-template.ks').read_text()
 assert all(x not in ks for x in ['clearpart','ignoredisk','part /'])
 for p in [out/'uefi-grub.cfg',out/'bios-grub.cfg']:
  s=p.read_text();assert 'xur.installer=1' in s
+ assert s==(root/'usr/share/xur/installer-grub.cfg').read_text(), 'Installer boot menu differs from reviewed source'
+ assert 'set timeout=10' in s and '/xur/installed' in s and 'set default=xur-installed' in s
  assert 'enforcing=0' not in s and 'selinux=0' not in s
 layout=(out/'boot-layout.txt').read_text();assert 'UEFI' in layout and 'BIOS' in layout
 initrd=(out/'initrd-files.txt').read_text()

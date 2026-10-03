@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Online-source pinning and live-update failure recovery without disks or root."""
-import importlib.machinery,importlib.util,json,pathlib,subprocess,tempfile,time,types
+import importlib.machinery,importlib.util,json,os,pathlib,subprocess,tempfile,time,types
 repo=pathlib.Path(__file__).resolve().parents[2]
 def load(name,path):
  loader=importlib.machinery.SourceFileLoader(name,str(repo/path));spec=importlib.util.spec_from_loader(name,loader);m=importlib.util.module_from_spec(spec);loader.exec_module(m);return m
@@ -85,14 +85,29 @@ with tempfile.TemporaryDirectory() as directory:
  # Verify the ISO manifest stays payload-free and retains SELinux labeling.
  manifest={'pipelines':[{'name':'os-tree','stages':[{'type':'org.osbuild.container-deploy'}]},{'name':'bootiso-tree','stages':[{'type':'org.osbuild.squashfs','inputs':{'tree':{'origin':'org.osbuild.pipeline','references':['name:os-tree']}},'options':{'filename':'LiveOS/squashfs.img','exclude_paths':['boot/efi/.*'],'compression':{'method':'zstd'}}},{'type':'org.osbuild.xorrisofs','options':{'volid':'fixture'}}]}]}
  before=root/'before';after=root/'after';before.write_text(json.dumps(manifest))
+ manifest['pipelines'].append({'name':'efiboot-tree','stages':[{'type':'org.osbuild.grub2.iso'}]})
+ manifest['pipelines'][1]['stages'].append({'type':'org.osbuild.grub2.iso.legacy'})
+ before.write_text(json.dumps(manifest))
  subprocess.run(['python3',str(repo/'eng/label-live-manifest.py'),str(before),str(after)],check=True)
  result=json.loads(after.read_text());assert result['pipelines'][0]['stages'][-1]['type']=='org.osbuild.selinux'
  expected=json.loads(json.dumps(manifest['pipelines'][1]))
  expected['stages'][0]['options']['exclude_paths'].append('usr/lib/modules/.*/initramfs[.]img')
- assert result['pipelines'][1]==expected, 'Removing the duplicate initramfs must not change source, compression or boot layout'
+ actual=json.loads(json.dumps(result['pipelines'][1]));menu=actual['stages'].pop()
+ assert actual==expected, 'Menu configuration and duplicate initramfs removal must preserve compression and boot layout'
+ assert menu['type']=='org.osbuild.copy' and menu['options']['paths'][0]['to']=='tree:///boot/grub2/grub.cfg'
+ assert result['pipelines'][2]['stages'][1]['options']['paths'][0]['to']=='tree:///EFI/BOOT/grub.cfg'
  manifest['pipelines'][1]['stages']=[];before.write_text(json.dumps(manifest))
  invalid=subprocess.run(['python3',str(repo/'eng/label-live-manifest.py'),str(before),str(after)],capture_output=True,text=True)
  assert invalid.returncode!=0 and 'Expected exactly one' in invalid.stderr
+ # Exercise the post-install marker against fixtures, never a real disk.
+ target=root/'installed';(target/'boot/grub2').mkdir(parents=True);(target/'var/lib/xur').mkdir(parents=True)
+ marker=ks.split('# Publish only after',1)[1].split('%end',1)[0]
+ marker='# Publish only after'+marker
+ result=subprocess.run(['bash','-eu','-c',marker],env={**os.environ,'target':str(target)},capture_output=True)
+ assert result.returncode!=0 and not (target/'boot/xur/installed').exists()
+ (target/'boot/grub2/grub.cfg').write_text('set default=0\n')
+ subprocess.run(['bash','-eu','-c',marker],env={**os.environ,'target':str(target)},check=True)
+ assert (target/'boot/xur/installed').is_file() and (target/'var/lib/xur/installed').is_file()
 # Online readiness must never be a default prerequisite of the visible console.
 prepare_unit=(repo/'os/installer/systemd/xur-installer-app-prepare.service').read_text()
 assert 'network-online.target' not in prepare_unit and 'xur-network.service' not in prepare_unit

@@ -32,6 +32,12 @@ static class InstallationDiagnosticsTests
             File.Delete(root+"/install-complete");File.WriteAllText(root+"/install-phase","clock");
             check(InstallationDiagnostics.Observe(operation,root,"",root).Message.Contains("before disk erasure"),"Clock synchronization progress remains visible before Anaconda starts");
             check(InstallationDiagnostics.DownloadFailure("unrelated error")==null,"Unrelated failures retain their original phase message");
+            check(InstallationDiagnostics.Progress("anaconda","layers needed: 128 (5.6 GB)") is {CompletedSteps:3,CurrentStep:"Download OS image"},"Download progress reports completed stages without inventing a byte percentage");
+            check(InstallationDiagnostics.Progress("anaconda","layers needed: 128\nDeploying container image...done") is {CompletedSteps:4},"Deployment advances the stage bar after the download");
+            check(InstallationDiagnostics.Progress("post","") is {CompletedSteps:5},"Configuration leaves the stage bar incomplete until success is confirmed");
+            File.WriteAllText(root+"/install-phase","anaconda");
+            var deployed=operation with{Progress=new(4,"Deploy OS and bootloader")};
+            check(InstallationDiagnostics.Observe(deployed,root,"",root).Progress?.CompletedSteps==4,"Rotated or truncated logs cannot move the progress bar backwards");
             check(InstallationDiagnostics.FileLogs(root).Contains("No Anaconda log files"),"Pre-Anaconda failure directs users to the service journal");
             File.WriteAllText(root+"/anaconda.log","Older details\nNewest error: fixture\npassword=fixture-secret");
             File.WriteAllText(root+"/xur-post.log","Configuration error: fixture");

@@ -14,7 +14,8 @@ public record ScanResult(string State, string[] Answers, string[] Errors, string
 public record InstallPlan(string Id, string Digest, string Generation, Disk Target, Disk[] Unaffected,
     string[] Actions, DateTimeOffset Expires);
 public record Approval(string Id, string Digest);
-public record Operation(string Id, string Stage, string Message, DateTimeOffset Updated);
+public record InstallationProgress(int CompletedSteps,string CurrentStep,string Detail="");
+public record Operation(string Id, string Stage, string Message, DateTimeOffset Updated,InstallationProgress? Progress=null);
 public record ProcessResult(int ExitCode, string Output);
 
 public static class Canonical

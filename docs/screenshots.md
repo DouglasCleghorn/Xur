@@ -1,5 +1,12 @@
 # Screenshot and artwork register
 
+- 2026-10-02: Reviewed private user attachment `IMG_7968.jpg`
+  (`9a815e3d-21b5-4f73-aaf3-0d5dfb2d06a1-20c5cb12-93ab-4307-b982-d01a1790ce6e.jpg`)
+  for the reported post-install boot problem. Shows Anaconda/dracut waiting for
+  installer media; user subsequently confirmed the SSD reached management.
+  Boot source at capture is unverified. No credentials visible; kept private,
+  not copied into documentation assets. Relevant to installer boot-menu changes.
+
 Review this file before every release. Add an entry whenever a screenshot is
 captured, published, replaced, or removed. Keep raw captures and browser test
 output under ignored `.build/`; only reviewed, sanitized documentation images

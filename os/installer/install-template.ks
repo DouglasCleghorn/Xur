@@ -29,5 +29,10 @@ if test -f /run/xur/timezone; then
   if test -f /run/xur/timezone-mode; then install -m 600 /run/xur/timezone-mode "$target/var/lib/xur/timezone-mode"; fi
 fi
 /usr/bin/bash /usr/libexec/xur-install-manager "$target"
+# Publish only after the installed manager and configuration have been copied.
+# The USB menu searches the separate /boot filesystem for this completion marker.
+test -s "$target/boot/grub2/grub.cfg"
+mkdir -p "$target/boot/xur"
+printf 'Xur installation configured\n' > "$target/boot/xur/installed"
 touch "$target/var/lib/xur/installed"
 %end

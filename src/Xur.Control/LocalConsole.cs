@@ -21,6 +21,7 @@ public static class LocalConsole
     static string title = "Status and login", body = "", logs = "Waiting for logs", qr = "";
     static string view = "status";
     static bool serialLogs;
+    static bool enrollmentView;
     static int page;
     static int selection;
     static ConsoleScreen? maintenance;
@@ -103,7 +104,7 @@ public static class LocalConsole
         if(url!=lastQrUrl){lastQrUrl=url;serveQr=url.Length==0?[]:ConsoleQr.Rows(url);}return serveQr;
     }
     static bool ConnectedQr=>appliance?.TailServeReady==true&&appliance.TailUrl.Length>0;
-    static string QrText()=>ConnectedQr?string.Join('\n',ServeQr()):appliance?.TailscaleState=="Running"?appliance.TailServeStatus+"\nUse the LAN HTTPS address while this reconnects.":qr.Length==0?"Starting real Tailscale enrollment...":qr;
+    static string QrText()=>ConnectedQr?string.Join('\n',ServeQr()):appliance?.TailscaleState=="Running"?appliance.TailServeStatus+"\nUse the LAN HTTPS address while this reconnects.":qr.Length==0?"Connecting to Tailscale…":qr;
     static string NetworkText() => appliance==null ? "Starting" : string.Join("\n\n",appliance.Network().Select(n=>n.Name+" · "+n.State+"\n"+(n.Addresses.Length==0?"  Waiting for an address":string.Join('\n',n.Addresses.Select(a=>"  "+a)))))+"\n\nTailscale: "+appliance.TailscaleState+"\n"+appliance.TailUrl;
     public static void OpenNetwork()
     { lock(Sync) {view="network";title="IP addresses · live";body=NetworkText();serialLogs=false;page=0;Render();} }
@@ -117,11 +118,17 @@ public static class LocalConsole
         if(!Plain)ProtectConsole();
         foreach(var path in new[]{"/dev/tty3","/dev/ttyS0","/dev/tty2"})
             if(Devices.TryGetValue(path,out var device))ConfigureInput(device);
-        if(view=="status") body=StatusText();
-        if(view=="qr"&&ConnectedQr)title="Scan to open Xur";
-        if(view=="network") body=NetworkText();
+        RefreshLiveContent();
         Render();
     } }
+    static void RefreshLiveContent()
+    {
+        if(view=="qr"&&enrollmentView&&appliance?.TailscaleState=="Running")
+        {view="status";title="Status and login";serialLogs=false;page=0;selection=0;enrollmentView=false;qr="";}
+        if(view=="status")body=StatusText();
+        if(view=="network")body=NetworkText();
+        if(view=="qr"&&ConnectedQr)title="Scan to open Xur";
+    }
     static void ProtectConsole()
     {
         // printk defaults to the foreground VT, regardless of which tty the
@@ -197,11 +204,11 @@ public static class LocalConsole
     public static void OpenLogs()
     { lock(Sync) { view="logs";serialLogs=true; page=0; Render(); } }
     public static void OpenQr(bool reset)
-    { lock(Sync) { if(reset)qr=""; view="qr"; title=ConnectedQr?"Scan to open Xur":appliance?.TailscaleState=="Running"?"Tailscale HTTPS":"Tailscale QR enrollment"; serialLogs=false; page=0; Render(); } }
+    { lock(Sync) { if(reset)qr=""; enrollmentView=appliance?.TailscaleState!="Running";view="qr"; title=ConnectedQr?"Scan to open Xur":appliance?.TailscaleState=="Running"?"Tailscale HTTPS":"Tailscale QR enrollment"; serialLogs=false; page=0; Render(); } }
     public static void AppendQr(string text)
-    { lock(Sync) { qr+=text; if(qr.Length>32768)qr=qr[^32768..]; Render(); } }
+    { lock(Sync) { if(!enrollmentView)return;qr+=text; if(qr.Length>32768)qr=qr[^32768..]; if(view=="qr")Render(); } }
     public static void EndQr(string message)
-    { lock(Sync) { if(view!="qr")return; if(appliance?.TailscaleState=="Running"){title=ConnectedQr?"Scan to open Xur":"Tailscale HTTPS";qr="";Render();return;} view="detail"; title="Tailscale"; body=message; qr=""; Render(); } }
+    { lock(Sync) { if(view!="qr")return; if(appliance?.TailscaleState=="Running"){RefreshLiveContent();qr="";Render();return;} view="detail"; title="Tailscale"; body=message; qr=""; Render(); } }
 
     public static char? Command(string line)
     {
@@ -278,6 +285,10 @@ public static class LocalConsole
     public static string ExportFrame(int columns,int rows)
     {
         lock(Sync) {
+            // Native consoles pull frames independently of maintenance requests.
+            // Re-observe addresses here so a busy or missed refresh cannot freeze
+            // the startup "Waiting for network addresses" text.
+            RefreshLiveContent();
             bool logWindow=serialLogs;
             var content=logWindow?logs:view=="qr"?QrText():body;
             return CachedFrame(logWindow,content,columns,rows);

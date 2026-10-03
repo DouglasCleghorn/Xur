@@ -32,7 +32,7 @@ static class ConsoleBootTests
         var hotplug=new Appliance(networkObserver:()=>transient?throw new System.Net.NetworkInformation.NetworkInformationException():[new("eno1",connected?"Up":"Down","Ethernet",connected?["192.0.2.25"]:[])]);
         using var hotplugAgent=hotplug.Agent;var hotplugAuth=new Bootstrap();LocalConsole.Status(hotplug,hotplugAuth);
         check(LocalConsole.ExportFrame(160,45).Contains("Waiting for network"),"Boot without an Ethernet cable shows that it is waiting for an address");
-        connected=true;LocalConsole.Refresh();check(LocalConsole.ExportFrame(160,45).Contains("192.0.2.25:8443"),"Late Ethernet addresses appear on the open status screen without navigation");
+        connected=true;check(LocalConsole.ExportFrame(160,45).Contains("192.0.2.25:8443"),"Native frame requests show late Ethernet addresses even without a background refresh or navigation");
         transient=true;LocalConsole.Refresh();transient=false;LocalConsole.Refresh();
         check(LocalConsole.ExportFrame(160,45).Contains("192.0.2.25:8443"),"A transient adapter observation failure does not stop subsequent address refreshes");
         connected=false;LocalConsole.Refresh();check(!LocalConsole.ExportFrame(160,45).Contains("192.0.2.25:8443"),"Unplugged interfaces stop advertising stale management addresses");
@@ -53,7 +53,8 @@ static class ConsoleBootTests
         running=true;await appliance.RefreshTailscale();LocalConsole.EndQr("Serve ready");LocalConsole.EndQr("Enrollment finished");
         check(appliance.TailServeReady&&serveStarts==1,"An enrolled node repairs missing HTTPS Serve configuration without enrolling again");
         var frame=LocalConsole.ExportFrame(160,45);
-        check(frame.Contains("Scan to open Xur")&&frame.Contains('█')&&!frame.Contains("Enrollment finished"),"Enrollment completion immediately replaces the enrollment QR with the Serve login QR");
+        check(frame.Contains("Status and login")&&frame.Contains('█')&&!frame.Contains("Enrollment finished"),"Successful enrollment returns home with management information instead of remaining on the QR screen");
+        LocalConsole.OpenQr(true);LocalConsole.Refresh();check(LocalConsole.ExportFrame(160,45).Contains("Scan to open Xur"),"Opening the login QR after enrollment stays on the explicitly selected QR screen");
         running=false;await appliance.RefreshTailscale();LocalConsole.Status(appliance,auth);var before=LocalConsole.ExportFrame(160,45);
         running=true;await appliance.RefreshTailscale();LocalConsole.Refresh();var after=LocalConsole.ExportFrame(160,45);
         check(after!=before&&after.Contains('█'),"Serve QR appears on an already-open status screen when the address arrives");

@@ -59,8 +59,11 @@ static class ConsoleSetupTests
             expired=true;await menu.Select((char)256);check(!menu.Screen.Options.Single(o=>o.Key=='y').Enabled,"Expired disk plans cannot advance to erase confirmation");
             await menu.Select('0');expired=false;await menu.Select((char)256);await menu.Select('y');await menu.Select('y');await menu.Select('y');
             check(approvals==1&&menu.Screen.Id=="setup-progress"&&menu.Screen.Body.Contains("Installing approved disk"),"Yes confirmation sends exactly one approval and opens live progress");
+            operation=operation! with{Progress=new(3,"Download OS image","Download in progress; byte percentage unavailable.")};await menu.Refresh();
+            check(menu.Screen.Body.Contains("[############------------] 3/6 stages complete")&&menu.Screen.Body.Contains("byte percentage unavailable"),"Console shows an honest stage progress bar while download bytes are unavailable");
             await menu.Select('0');await menu.Open("setup");check(menu.Screen.Id=="setup-progress","Reopening setup resumes an existing installation");
             operation=operation! with{Stage="Complete",Message="Installation completed"};await menu.Refresh();check(menu.Screen.Options.Any(o=>o.Key=='r'),"Console installation completion offers an explicit reboot action");
+            check(menu.Screen.Body.Contains("[########################] 6/6 stages complete"),"Only confirmed installation success fills the progress bar");
             operation=operation with{Stage="Failed",Message="Download failed"};await menu.Refresh();check(!menu.Screen.Options.Any(o=>o.Key=='r')&&menu.Screen.Body.Contains("No automatic retry"),"Console installation failure remains visible without retrying erasure or rebooting");
             await menu.Select('s');check(menu.Screen.Id=="setup-usb"&&menu.Screen.Options.Any(o=>o.Label.Contains("/dev/usb1")),"Failed installation offers eligible USB log destinations");
             await menu.Select((char)256);check(exports==1&&menu.Screen.Body.Contains("Saved report"),"Selecting a USB destination exports logs and shows the receipt");await menu.Select('0');

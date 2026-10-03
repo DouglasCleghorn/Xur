@@ -23,7 +23,7 @@ public static class InstallationDiagnostics
             return operation with {Stage="Failed",Message=message+" Open Installation logs for details. No automatic retry.",Updated=DateTimeOffset.UtcNow};
         }
         if(File.Exists(Path.Combine(run,"install-complete")))
-            return operation with {Stage="Complete",Message="Installation completed. Reboot from the installed disk.",Updated=DateTimeOffset.UtcNow};
+            return operation with {Stage="Complete",Message="Installation completed. Reboot from the installed disk.",Progress=new(6,"Complete"),Updated=DateTimeOffset.UtcNow};
         var progress=phase switch {
             "clock"=>"Checking network time and saving UTC to the hardware clock before disk erasure…",
             "source"=>"Checking the OS download source before disk erasure…",
@@ -31,7 +31,23 @@ public static class InstallationDiagnostics
             "post"=>"Configuring the installed system…",
             _=>operation.Message
         };
-        return progress==operation.Message?operation:operation with{Message=progress,Updated=DateTimeOffset.UtcNow};
+        var steps=phase.Length==0?operation.Progress:Progress(phase,Tail(Path.Combine(logDirectory,"packaging.log")));
+        if(steps!=null&&operation.Progress?.CompletedSteps>steps.CompletedSteps)steps=operation.Progress;
+        return progress==operation.Message&&steps==operation.Progress?operation:operation with{Message=progress,Progress=steps,Updated=DateTimeOffset.UtcNow};
+    }
+    public static InstallationProgress Progress(string phase,string logs)=>phase switch {
+        "clock"=>new(0,"Synchronize system and hardware clocks"),
+        "source"=>new(1,"Resolve and verify OS source"),
+        "post"=>new(5,"Configure installed system and verify boot files"),
+        "anaconda" when logs.Contains("Deploying container image",StringComparison.OrdinalIgnoreCase)=>new(4,"Deploy OS and bootloader"),
+        "anaconda" when logs.Contains("layers needed:",StringComparison.OrdinalIgnoreCase)=>new(3,"Download OS image","Download in progress; byte percentage unavailable."),
+        "anaconda"=>new(2,"Prepare approved disk"),
+        _=>new(0,"Preparing installation")
+    };
+    static string Tail(string path)
+    {
+        try{using var file=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite);file.Seek(Math.Max(0,file.Length-65536),SeekOrigin.Begin);using var reader=new StreamReader(file);return reader.ReadToEnd();}
+        catch(Exception e) when(e is IOException or UnauthorizedAccessException){return "";}
     }
     static string Read(string path,int limit)
     {

@@ -48,6 +48,7 @@ if installer_channel not in ('nightly','stable'):raise ValueError('Invalid insta
 (live/'usr/share/xur').mkdir(parents=True,exist_ok=True)
 (live/'usr/share/xur/installer-channel').write_text(installer_channel+'\n')
 copy(repo/'os/installer/xur-installer-clock.cil',live/'usr/share/xur/xur-installer-clock.cil')
+copy(repo/'os/installer/installer-grub.cfg',live/'usr/share/xur/installer-grub.cfg')
 for source,target in [('check-runtime','usr/libexec/xur-check-installer-runtime'),('check-clock','usr/libexec/xur-check-install-clock'),('app-bootstrap','usr/libexec/xur-installer-app'),('live-app','usr/libexec/xur-live-app'),('resolve-source','usr/libexec/xur-resolve-install-source'),('systemd','usr/lib/systemd/system'),('iso.yaml','usr/lib/image-builder/bootc/iso.yaml'),
                       ('install-template.ks','usr/share/xur/install-template.ks'),('run-install','usr/libexec/xur-run-install'),('install-manager','usr/libexec/xur-install-manager')]:
     copy(repo/'os/installer'/source,live/target)
