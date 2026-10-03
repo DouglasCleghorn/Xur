@@ -11,9 +11,19 @@ namespace Xur.Control;
 public static class LocalConsole
 {
     static readonly object Sync = new();
-    static readonly ConsoleIdle Idle=new();
+    static ConsoleIdle Idle=new();
     // Returns true when the key must be consumed solely to wake the display.
     public static bool Wake(){lock(Sync){var wasBlank=Idle.Touch();if(wasBlank)Render();return wasBlank;}}
+    public static bool ConsumeWakeInput(bool plain,char? typed,ConsoleKeyAction action)
+        => (plain || typed.HasValue || action!=ConsoleKeyAction.None) && Wake();
+    internal static IDisposable UseIdleClock(TimeProvider clock)
+    {
+        lock(Sync){var previous=Idle;Idle=new(clock);return new IdleClockScope(previous);}
+    }
+    sealed class IdleClockScope(ConsoleIdle previous):IDisposable
+    {
+        public void Dispose(){lock(Sync)Idle=previous;}
+    }
     static readonly Dictionary<string,string> LastFrames = [];
     static readonly Dictionary<string,FileStream> Devices = [];
     static Appliance? appliance;

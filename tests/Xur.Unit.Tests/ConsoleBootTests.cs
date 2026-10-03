@@ -28,24 +28,31 @@ static class ConsoleBootTests
             {var rejected=false;try{ComputerNameSettings.Validate(bad);}catch(InvalidOperationException){rejected=true;}check(rejected,"Invalid computer name is rejected before a host mutation");}
         }
         finally{Directory.Delete(root,true);}
-        var connected=false;var transient=false;
-        var hotplug=new Appliance(networkObserver:()=>transient?throw new System.Net.NetworkInformation.NetworkInformationException():[new("eno1",connected?"Up":"Down","Ethernet",connected?["192.0.2.25"]:[])]);
+        var connected=false;var transient=false;var lanAddress="192.0.2.25";
+        var hotplug=new Appliance(networkObserver:()=>transient?throw new System.Net.NetworkInformation.NetworkInformationException():[new("eno1",connected?"Up":"Down","Ethernet",connected?[lanAddress]:[])]);
         using var hotplugAgent=hotplug.Agent;var hotplugAuth=new Bootstrap();LocalConsole.Status(hotplug,hotplugAuth);
         check(LocalConsole.ExportFrame(160,45).Contains("Waiting for network"),"Boot without an Ethernet cable shows that it is waiting for an address");
         connected=true;check(LocalConsole.ExportFrame(160,45).Contains("192.0.2.25:8443"),"Native frame requests show late Ethernet addresses even without a background refresh or navigation");
         transient=true;LocalConsole.Refresh();transient=false;LocalConsole.Refresh();
         check(LocalConsole.ExportFrame(160,45).Contains("192.0.2.25:8443"),"A transient adapter observation failure does not stop subsequent address refreshes");
         connected=false;LocalConsole.Refresh();check(!LocalConsole.ExportFrame(160,45).Contains("192.0.2.25:8443"),"Unplugged interfaces stop advertising stale management addresses");
-        var running=false;var configured=false;var serveStarts=0;
+        connected=true;LocalConsole.OpenNetwork();LocalConsole.Navigate(ConsoleKeyAction.Down);
+        var networkSelection=LocalConsole.DiagnosticSnapshot().Selected;
+        lanAddress="192.0.2.26";
+        var liveNetwork=LocalConsole.ExportFrame(160,45);
+        check(liveNetwork.Contains("192.0.2.26")&&!liveNetwork.Contains("192.0.2.25")&&LocalConsole.DiagnosticSnapshot().Screen=="network"&&LocalConsole.DiagnosticSnapshot().Selected==networkSelection,"A pulled network frame replaces the address without navigation or resetting selection");
+        LocalConsole.UpdateLogs("Background log while reading network");LocalConsole.Refresh();
+        check(LocalConsole.DiagnosticSnapshot().Screen=="network"&&LocalConsole.ExportFrame(160,45).Contains("192.0.2.26"),"Background log and refresh updates keep the current network screen open");
+        var running=false;var configured=false;var serveStarts=0;var tailHost="console.example.ts.net";
         Task<ProcessResult> Tailscale(string exe,string[] args,int timeout)
         {
             if(args[0]=="serve")
             {
                 if(args[1]!="status"){configured=true;serveStarts++;return Task.FromResult(new ProcessResult(0,""));}
-                var configuration=new{TCP=new Dictionary<string,object>{{"443",new{HTTPS=true}}},Web=new Dictionary<string,object>{{"console.example.ts.net:443",new{Handlers=new Dictionary<string,object>{{"/",new{Proxy="unix:"+Path.Combine(Environment.GetEnvironmentVariable("XUR_RUN")??"/run/xur","serve.sock")}}}}}}};
+                var configuration=new{TCP=new Dictionary<string,object>{{"443",new{HTTPS=true}}},Web=new Dictionary<string,object>{{tailHost+":443",new{Handlers=new Dictionary<string,object>{{"/",new{Proxy="unix:"+Path.Combine(Environment.GetEnvironmentVariable("XUR_RUN")??"/run/xur","serve.sock")}}}}}}};
                 return Task.FromResult(new ProcessResult(0,configured?System.Text.Json.JsonSerializer.Serialize(configuration):"{}"));
             }
-            return Task.FromResult(new ProcessResult(0,running?"{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"console.example.ts.net.\"}}":"{\"BackendState\":\"NeedsLogin\"}"));
+            return Task.FromResult(new ProcessResult(0,running?System.Text.Json.JsonSerializer.Serialize(new{BackendState="Running",Self=new{DNSName=tailHost+"."}}):"{\"BackendState\":\"NeedsLogin\"}"));
         }
         var appliance=new Appliance(Tailscale);
         using var agent=appliance.Agent;var auth=new Bootstrap();
@@ -58,6 +65,14 @@ static class ConsoleBootTests
         running=false;await appliance.RefreshTailscale();LocalConsole.Status(appliance,auth);var before=LocalConsole.ExportFrame(160,45);
         running=true;await appliance.RefreshTailscale();LocalConsole.Refresh();var after=LocalConsole.ExportFrame(160,45);
         check(after!=before&&after.Contains('█'),"Serve QR appears on an already-open status screen when the address arrives");
+        LocalConsole.OpenQr(true);var originalQr=LocalConsole.ExportFrame(160,45);
+        tailHost="renamed.example.ts.net";await appliance.RefreshTailscale();
+        var replacedQr=LocalConsole.ExportFrame(160,45);
+        check(replacedQr!=originalQr&&replacedQr.Contains('█')&&LocalConsole.DiagnosticSnapshot().Screen=="qr","A changed Serve login URL replaces the QR on the already-open QR screen");
+        running=false;await appliance.RefreshTailscale();
+        check(!LocalConsole.ExportFrame(160,45).Contains('█')&&LocalConsole.DiagnosticSnapshot().Screen=="qr","Losing the Serve address removes the stale QR without navigating away");
+        running=true;await appliance.RefreshTailscale();
+        check(LocalConsole.ExportFrame(160,45).Contains('█')&&LocalConsole.DiagnosticSnapshot().Screen=="qr","The QR returns on the same screen when Serve reconnects");
         LocalConsole.OpenLogs();var logs=LocalConsole.ExportFrame(160,45);
         check(logs.Contains("> Back to menu")&&LocalConsole.Navigate(ConsoleKeyAction.Enter)=='0'&&LocalConsole.Navigate(ConsoleKeyAction.Back)=='0',"Logs retain a visible Back action and accept Enter or Escape without switching VTs");
         LocalConsole.Status(appliance,auth);check(LocalConsole.ExportFrame(160,45).Contains("Status and login"),"Leaving logs restores the menu and management addresses");

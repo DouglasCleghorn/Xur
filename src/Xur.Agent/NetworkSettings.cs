@@ -137,11 +137,26 @@ public sealed partial class NetworkSettings(string directory="/run/xur",Func<str
             Save(change with {Stage="Failed",Message="Could not save the connection for boot. The previous profile was retained."});throw;
         }
         Save(change with {Stage="Kept",Message="Network settings saved for this machine and future boots."});
-        // Retire only the previously active Xur-created candidate; preserve external profiles.
+        // Keeping the new profile is complete. Superseded-profile cleanup is optional:
+        // a timeout here must not make Wi-Fi callers remove the newly saved keyfile.
         if(change.Previous!=null)
         {
-            var previous=await Run("nmcli",["-g","connection.id","connection","show","uuid",change.Previous]);
-            if(previous.ExitCode==0 && Regex.IsMatch(previous.Output.Trim(),@"^xur-network-[a-f0-9]{32}$"))await Run("nmcli",["connection","delete","uuid",change.Previous]);
+            try
+            {
+                var previous=await Run("nmcli",["-g","connection.id","connection","show","uuid",change.Previous]);
+                if(previous.ExitCode==0 && Regex.IsMatch(previous.Output.Trim(),@"^xur-network-[a-f0-9]{32}$"))
+                {
+                    var retired=await Run("nmcli",["connection","delete","uuid",change.Previous]);
+                    if(retired.ExitCode!=0)RetirementWarning(change.Previous);
+                }
+                else if(previous.ExitCode!=0 && previous.ExitCode!=10)RetirementWarning(change.Previous);
+            }
+            catch(Exception){RetirementWarning(change.Previous);}
         }
+    }
+    static void RetirementWarning(string previous)
+    {
+        try{Console.Error.WriteLine("Network settings saved. Could not clean up superseded profile "+previous+". Review saved connections; the newly saved profile was retained.");}
+        catch(Exception){ /* A diagnostic write cannot invalidate a kept connection. */ }
     }
 }

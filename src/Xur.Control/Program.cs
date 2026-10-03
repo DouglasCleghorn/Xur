@@ -459,7 +459,7 @@ async Task StartHost()
             await networkRefreshGate.WaitAsync();
             try
             {
-                if((plain||typed.HasValue||action!=ConsoleKeyAction.None)&&LocalConsole.Wake())continue;
+                if(LocalConsole.ConsumeWakeInput(plain,typed,action))continue;
                 LocalConsole.ConsumeDiagnosticRevision();
                 char? key;
                 if(plain)

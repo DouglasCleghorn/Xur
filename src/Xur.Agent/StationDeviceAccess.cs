@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using Xur.Domain;
 namespace Xur.Agent;
@@ -71,7 +72,17 @@ public sealed class StationDeviceAccess(string root="/var/lib/xur/station-device
         if(receipt.Boot==File.ReadAllText(bootFile).Trim())foreach(var grant in receipt.Grants)
         {
             var stat=await Run("stat",["--format=%t:%T:%i",grant.Device]);
-            if(stat.ExitCode!=0||stat.Output.Trim()!=grant.Identity)continue;
+            if(stat.ExitCode!=0)
+            {
+                // Linux access(F_OK) checks the target without opening the device.
+                // Only errno ENOENT/ENOTDIR prove absence; permission/I/O failures
+                // and an existing target leave ownership uncertain and retryable.
+                if(ConfirmedMissing(grant.Device,Redaction.Logs(stat.Output)))continue;
+                throw new InvalidOperationException("Could not verify workstation device "+grant.Device+
+                    " during cleanup: stat failed. "+Redaction.Logs(stat.Output)+
+                    " Device access receipt retained; check Diagnostics and device permissions, then retry stop.");
+            }
+            if(stat.Output.Trim()!=grant.Identity)continue;
             var entries=Entries(await Checked("getfacl",["--numeric","--omit-header",grant.Device]));
             var mask=entries.FirstOrDefault(l=>l.StartsWith("mask::"))?[6..];
             // Restore our mask change only when it is still ours and doing so
@@ -89,4 +100,15 @@ public sealed class StationDeviceAccess(string root="/var/lib/xur/station-device
         }
         File.Delete(path);
     }
+    static bool ConfirmedMissing(string device,string statOutput)
+    {
+        if(Access(device,0)==0)return false;
+        var error=Marshal.GetLastPInvokeError();
+        if(error is 2 or 20)return true; // Linux ENOENT / ENOTDIR.
+        throw new InvalidOperationException("Could not confirm whether workstation device "+device+
+            " is missing during cleanup (errno "+error+"). "+statOutput+" Device access receipt retained; check Diagnostics and device permissions, then retry stop.");
+    }
+    [DllImport("libc",EntryPoint="access",SetLastError=true)]
+    static extern int Access(string path,int mode);
+
 }
