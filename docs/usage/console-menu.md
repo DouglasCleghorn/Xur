@@ -149,12 +149,13 @@ failures are distinguished from completed scans with no named networks.
 
 ## Idle screen
 
-The setup console goes completely black after five minutes without keyboard
-input, including while logs or installation progress are changing. The server
+After ten minutes without keyboard input, the setup console puts its monitors
+into power-save, including while logs or installation progress are changing.
+Displays without power-save support show a completely black screen. The server
 and installation continue running. The first key only wakes the display; press
-again to operate the menu. The black screen retains the HDMI signal instead of
-putting the monitor into power-save. Workstation desktops keep their own idle
-settings.
+again to operate the menu. Waking can take a few seconds while the monitor
+restores its HDMI or DisplayPort connection. Workstation desktops keep their
+own idle settings.
 
 The display console selects the monitor's preferred mode instead of inheriting
 firmware timing. Connected outputs that stay disabled or in display power-save

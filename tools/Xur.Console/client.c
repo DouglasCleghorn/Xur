@@ -6,14 +6,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <signal.h>
 static volatile sig_atomic_t running=1;
 static void stop(int sig){(void)sig;running=0;}
-struct frame {char data[524288];size_t length;};
+struct frame {char data[524288];size_t length;int power;};
 static size_t receive(char *ptr,size_t size,size_t count,void *user){
     struct frame *f=user;size_t n=size*count;
     if(n>sizeof(f->data)-f->length)return 0;
     memcpy(f->data+f->length,ptr,n);f->length+=n;return n;
+}
+static size_t header(char *ptr,size_t size,size_t count,void *user){
+    struct frame *f=user;size_t n=size*count;
+    const char key[]="X-Xur-Console-Power:";size_t k=sizeof(key)-1;
+    if(n>=5&&!strncasecmp(ptr,"HTTP/",5))f->power=-1;
+    if(n>=k&&!strncasecmp(ptr,key,k)){
+        size_t end=n;
+        while(k<end&&(ptr[k]==' '||ptr[k]=='\t'))k++;
+        while(end>k&&(ptr[end-1]=='\r'||ptr[end-1]=='\n'||ptr[end-1]==' '||ptr[end-1]=='\t'))end--;
+        f->power=end-k==2&&!memcmp(ptr+k,"on",2)?1:end-k==3&&!memcmp(ptr+k,"off",3)?0:-1;
+    }
+    return n;
 }
 /* Xur frames contain absolute row positions. Send only changed rows so a
  * cursor movement does not repaint the entire 4K framebuffer. */
@@ -44,7 +57,9 @@ int main(int argc,char **argv){
     curl_global_init(CURL_GLOBAL_DEFAULT);CURL *c=curl_easy_init();if(!c)return 1;
     curl_easy_setopt(c,CURLOPT_UNIX_SOCKET_PATH,argv[1]);curl_easy_setopt(c,CURLOPT_TIMEOUT_MS,2000L);
     curl_easy_setopt(c,CURLOPT_PROXY,"");curl_easy_setopt(c,CURLOPT_WRITEFUNCTION,receive);
+    curl_easy_setopt(c,CURLOPT_HEADERFUNCTION,header);
     struct frame current={0},previous={0};
+    int power=-1;
     struct winsize last_size={0};
     fputs("\033[?1049h\033[2J\033[?25l",stdout);fflush(stdout);
     while(running){
@@ -52,11 +67,18 @@ int main(int argc,char **argv){
         if(ws.ws_col!=last_size.ws_col||ws.ws_row!=last_size.ws_row)previous.length=0;
         last_size=ws;
         char url[128];snprintf(url,sizeof(url),"http://localhost/local/console-frame?columns=%u&rows=%u",ws.ws_col?ws.ws_col:100,ws.ws_row?ws.ws_row:40);
-        current.length=0;curl_easy_setopt(c,CURLOPT_URL,url);curl_easy_setopt(c,CURLOPT_WRITEDATA,&current);
+        current.length=0;current.power=-1;curl_easy_setopt(c,CURLOPT_URL,url);curl_easy_setopt(c,CURLOPT_WRITEDATA,&current);curl_easy_setopt(c,CURLOPT_HEADERDATA,&current);
         CURLcode result=curl_easy_perform(c);long status=0;curl_easy_getinfo(c,CURLINFO_RESPONSE_CODE,&status);
-        if(result==CURLE_OK&&status==200 && (current.length!=previous.length||memcmp(current.data,previous.data,current.length))){
-            if(!draw(&current,&previous))break;
-            fflush(stdout);previous=current;
+        if(result==CURLE_OK&&status==200){
+            // The shared keyboard timer owns DPMS; frame polling never wakes it.
+            if(current.power==1&&power!=1){fputs("\033]xurDpmsOn\007",stdout);previous.length=0;}
+            if(current.length!=previous.length||memcmp(current.data,previous.data,current.length)){
+                if(!draw(&current,&previous))break;
+                previous=current;
+            }
+            if(current.power==0&&power!=0)fputs("\033]xurDpmsOff\007",stdout);
+            if(current.power>=0)power=current.power;
+            fflush(stdout);
         }
         // Keep the last complete QR visible during manager restart/reconnection.
         usleep(100000);

@@ -8,6 +8,9 @@ meson setup kmscon/build kmscon --buildtype=release --prefix=/usr --libdir=lib \
   -Drenderer_gltex=disabled -Dfont_psf=disabled -Dfont_unifont=enabled \
   -Dfont_freetype=disabled -Dfont_pango=disabled --wrap-mode=nofallback
 meson compile -C kmscon/build
+cc -O2 -Wall -Wextra -Werror -Wno-unused-parameter -I. -Ikmscon/src \
+  test-power.c -o test-power $(pkg-config --cflags --libs libtsm)
+./test-power
 mkdir -p output/lib output/licenses
 install -m755 kmscon/build/src/kmscon output/kmscon
 install -m755 kmscon/build/src/font/mod-unifont.so output/lib/
