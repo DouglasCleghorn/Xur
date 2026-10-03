@@ -46,6 +46,7 @@ python3 tests/Xur.Integration.Tests/builder-ready.py > .build/fast/builder-ready
 python3 tests/Xur.Integration.Tests/terminal.py > .build/fast/terminal.json
 python3 tests/Xur.Integration.Tests/console-menu.py > .build/fast/console-menu.json
 XUR_CONSOLE_CLIENT="$PWD/.build/console-runtime/client" python3 tests/Xur.Integration.Tests/console-responsive.py > .build/fast/console-responsive.json
+XUR_CONSOLE_CLIENT="$PWD/.build/console-runtime/client" python3 tests/Xur.Integration.Tests/console-power.py > .build/fast/console-power.json
 python3 tests/Xur.Integration.Tests/network-startup.py > .build/fast/network-startup.json
 node tests/Xur.Integration.Tests/network-settings-ui.cjs > .build/fast/network-settings-ui.json
 printf 'Fast checks passed in %ss. Logs: .build/fast/\n' "$((SECONDS-start))"

@@ -72,6 +72,7 @@ public static class LocalConsole
     public static async Task Start(Appliance app, Bootstrap auth)
     {
         appliance=app; bootstrap=auth;
+        Idle.ConfigureState(Path.Combine(app.RunDirectory,"console-sleep"));
         if(!Plain)
         {
             // Linux VTs can reset termios after their last descriptor closes.
@@ -283,21 +284,24 @@ public static class LocalConsole
         for(var i=0;i<line.Length;i+=width)yield return line.Substring(i,Math.Min(width,line.Length-i));
     }
     public static string ExportFrame(int columns,int rows)
+        =>ExportFrame(columns,rows,out _);
+    public static string ExportFrame(int columns,int rows,out bool sleeping)
     {
         lock(Sync) {
+            sleeping=Idle.IsBlank;
             // Native consoles pull frames independently of maintenance requests.
             // Re-observe addresses here so a busy or missed refresh cannot freeze
             // the startup "Waiting for network addresses" text.
             RefreshLiveContent();
             bool logWindow=serialLogs;
             var content=logWindow?logs:view=="qr"?QrText():body;
-            return CachedFrame(logWindow,content,columns,rows);
+            return CachedFrame(logWindow,content,columns,rows,sleeping);
         }
     }
     static readonly Dictionary<(int,int,bool),(string Key,string Frame)> FrameCache=[];
-    static string CachedFrame(bool logWindow,string content,int columns,int rows)
+    static string CachedFrame(bool logWindow,string content,int columns,int rows,bool? sleeping=null)
     {
-        if(Idle.IsBlank)return BlankFrame(columns,rows);
+        if(sleeping??Idle.IsBlank)return BlankFrame(columns,rows);
         columns=Math.Clamp(columns,40,240);rows=Math.Clamp(rows,12,120);
         var options=CurrentOptions;var code=!logWindow&&view=="status"?ServeQr():null;
         var key=System.Text.Json.JsonSerializer.Serialize(new{title,content,page,view,selection,options,code});
@@ -315,8 +319,7 @@ public static class LocalConsole
             columns=Math.Clamp(columns,40,240);rows=Math.Clamp(rows,12,120);
             if(BlankFrames.TryGetValue((columns,rows),out var cached))return cached;
             var frame=new StringBuilder("\x1b[?25l");
-            // Preserve the HDMI mode/link. Black pixels avoid static OLED content
-            // without entering monitor power-save and retriggering link negotiation.
+            // Also paint black for serial terminals and displays without DPMS support.
             for(var row=1;row<=rows;row++)frame.Append($"\x1b[{row};1H\x1b[0;30;40m").Append(' ',columns).Append("\x1b[0m");
             if(BlankFrames.Count>=16)BlankFrames.Clear();
             return BlankFrames[(columns,rows)]=frame.ToString();

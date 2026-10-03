@@ -42,8 +42,10 @@ Escape or **0** returns to the parent screen. **PgUp/PgDn** scroll content.
 **Logs** has a Back action; the separate **Alt+F2** log terminal also accepts
 Enter or Escape to return. Kernel messages remain on **Alt+F1**.
 
-The display goes black after five minutes without keyboard input, even during
-installation. Installation continues. The first key only wakes the display.
+The monitor enters power-save after ten minutes without keyboard input, even
+during installation. Displays without power-save support show a black screen.
+Installation continues. The first key only wakes the display; the monitor may
+take a few seconds to restore its connection.
 
 ## Tailscale
 
