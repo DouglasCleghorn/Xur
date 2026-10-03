@@ -44,7 +44,7 @@ public static class StationSeats
     {
         await gate.WaitAsync();try
         {
-            File.Delete(Root+"/"+id+".json");File.Delete(Root+"/"+id+".status");applied.Remove(id);
+            FileCleanup.DeleteIfPresent(Root+"/"+id+".json");FileCleanup.DeleteIfPresent(Root+"/"+id+".status");applied.Remove(id);
             await new StationDeviceAccess(root:"/var/lib/xur/station-peripheral-access").Revoke(id);
             await ReconcileLocked();
         }finally{gate.Release();}
@@ -103,7 +103,7 @@ public static class StationSeats
             {
                 // udev retains properties in its database after a rule disappears.
                 await File.WriteAllTextAsync(Rules,"ENV{ID_SEAT}==\"seat-xur-*\", ENV{ID_SEAT}=\"\"\n");
-                await ReloadDevices();File.Delete(Rules);await Run("udevadm",["control","--reload"]);
+                await ReloadDevices();FileCleanup.DeleteIfPresent(Rules);await Run("udevadm",["control","--reload"]);
             }
             return;
         }

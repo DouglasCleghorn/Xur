@@ -81,7 +81,7 @@ public static class StationStreaming
         if(!File.Exists(path+"/manager.json"))
         {await File.WriteAllTextAsync(path+"/manager.json",JsonSerializer.Serialize(new Credentials(Convert.ToHexString(RandomNumberGenerator.GetBytes(32)))));File.SetUnixFileMode(path+"/manager.json",(UnixFileMode)384);}
         await File.WriteAllTextAsync(path+"/sunshine.conf",Configuration(w,gpu,path,port));
-        if(gpu.Displays is not {Length:>0})await File.WriteAllTextAsync(path+"/headless","");else File.Delete(path+"/headless");
+        if(gpu.Displays is not {Length:>0})await File.WriteAllTextAsync(path+"/headless","");else FileCleanup.DeleteIfPresent(path+"/headless");
         StationDisplay.Install();
         await File.WriteAllTextAsync(path+"/apps.json",Applications(gpu.Displays is not {Length:>0},StationDisplay.ScriptPath));
         foreach(var file in new[]{"sunshine.conf","apps.json","cert.pem"})File.SetUnixFileMode(path+"/"+file,(UnixFileMode)420);
@@ -92,7 +92,7 @@ public static class StationStreaming
         var environment=await Processes.Run("runuser",["-u",user,"--","env","XDG_RUNTIME_DIR=/run/user/"+uid,"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"+uid+"/bus","systemctl","--user","show-environment"],10);
         var wayland=environment.Output.Split('\n').FirstOrDefault(l=>l.StartsWith("WAYLAND_DISPLAY="))?[16..]??"wayland-0";
         if(!Regex.IsMatch(wayland,@"^[a-zA-Z0-9_-]+$"))throw new InvalidOperationException("Invalid workstation display socket.");
-        File.Delete(path+"/startup-error");
+        FileCleanup.DeleteIfPresent(path+"/startup-error");
         // Check actual opens inside the same user/device boundary as Sunshine.
         // An ACL alone does not prove that cgroups or SELinux permit the device.
         var probeUnit="xur-stream-access-"+Guid.NewGuid().ToString("N");
@@ -182,7 +182,7 @@ public static class StationStreaming
     {
         await new StationUnits().Retire(Unit(id),stopActive:true);
         await Firewall(id,false);
-        File.Delete(Folder(id)+"/startup-error");
+        FileCleanup.DeleteIfPresent(Folder(id)+"/startup-error");
         await new StationDeviceAccess(root:"/var/lib/xur/stream-input-access").Revoke(id);
     }
     public static async Task<StationStreamStatus> Status(Workload w)

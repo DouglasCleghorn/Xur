@@ -48,6 +48,7 @@
   input.setAttribute('aria-autocomplete','list');input.setAttribute('aria-expanded','false');
   input.setAttribute('aria-label',select.parentElement.firstChild.textContent.trim());
   const list=document.createElement('div');list.className='search-options';list.id='choices-'+(++counter);
+  input.id=list.id+'-input';select.closest('label').htmlFor=input.id;
   list.setAttribute('role','listbox');list.hidden=true;input.setAttribute('aria-controls',list.id);
   box.append(input,list);select.after(box);
   let choices=[],active=-1,request=0,timer;
@@ -63,8 +64,12 @@
    if(filter.startsWith('https://huggingface.co/'))filter=filter.slice('https://huggingface.co/'.length).split('/').slice(0,2).join('/');
    list.replaceChildren();choices=[...select.options].filter(o=>!o.disabled&&!o.hidden&&o.textContent.toLowerCase().includes(filter.toLowerCase()));
    choices.forEach((option,i)=>{
-    const item=document.createElement('div');item.id=list.id+'-'+i;item.setAttribute('role','option');item.textContent=option.textContent;
-    item.addEventListener('pointerdown',event=>event.preventDefault());item.addEventListener('click',()=>choose(option));list.append(item);
+    // A native button prevents Safari forwarding the label's click back to the
+    // search input (whose focus handler selects its text) instead of choosing.
+    const item=document.createElement('button');item.type='button';item.tabIndex=-1;item.id=list.id+'-'+i;item.setAttribute('role','option');item.textContent=option.textContent;
+    item.addEventListener('pointerdown',event=>event.preventDefault());
+    item.addEventListener('mousedown',event=>event.preventDefault());
+    item.addEventListener('click',event=>{event.preventDefault();choose(option);});list.append(item);
    });
    if(!choices.length){const empty=document.createElement('p');empty.textContent='No matches';list.append(empty);}
    list.hidden=false;input.setAttribute('aria-expanded','true');highlight(-1);

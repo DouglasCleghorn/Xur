@@ -28,5 +28,5 @@ public sealed class StationNetworkPolicy(string directory="/etc/polkit-1/rules.d
         File.SetUnixFileMode(path+".tmp",UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.GroupRead|UnixFileMode.OtherRead);
         File.Move(path+".tmp",path,true);
     }
-    public void Remove(string id)=>File.Delete(PathFor(id));
+    public void Remove(string id)=>FileCleanup.DeleteIfPresent(PathFor(id));
 }

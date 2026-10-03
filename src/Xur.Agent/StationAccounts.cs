@@ -39,11 +39,11 @@ public sealed class StationAccounts(string directory="/var/lib/xur/station-users
     {if(w.User?.Temporary!=true)return;await gate.WaitAsync();try{await RemoveTemporaryUnlocked(Username(w),Path.Combine(directory,Username(w)+".json"));}finally{gate.Release();}}
     static async Task RemoveTemporaryUnlocked(string user,string path)
     {
-        var actual=Find(user);if(actual==null){File.Delete(path);return;}
+        var actual=Find(user);if(actual==null){FileCleanup.DeleteIfPresent(path);return;}
         var saved=File.Exists(path)?JsonSerializer.Deserialize<StationAccount>(File.ReadAllText(path)):null;
         if(saved==null||saved.Username!=user||saved.Uid!=actual.Uid||actual.Uid<1000||actual.Home!="/var/home/"+user||!user.StartsWith("xurtmp"))throw new InvalidOperationException("Temporary account identity changed; its files were kept.");
         if((await Processes.Run("pgrep",["-u",user],10)).ExitCode!=1)throw new InvalidOperationException("Temporary user processes are still running.");
-        await Run("userdel",["--remove",user]);File.Delete(path);
+        await Run("userdel",["--remove",user]);FileCleanup.DeleteIfPresent(path);
     }
     public static void ValidateForStop(Workload w)
     {

@@ -98,13 +98,13 @@ public sealed class StationRuntime(DisplayConsoles? consoles=null)
         new StationNetworkPolicy().Remove(w.Id);
         await StationSeats.Remove(w.Id);
         const string legacy="/etc/plasmalogin.conf.d/90-xur-workstation.conf";
-        if(File.Exists(legacy)&&File.ReadAllText(legacy).Contains("User="+user+"\n"))File.Delete(legacy);
+        if(File.Exists(legacy)&&File.ReadAllText(legacy).Contains("User="+user+"\n"))FileCleanup.DeleteIfPresent(legacy);
         var uid=await Run("id",["-u",user]);
-        File.Delete("/run/systemd/system/user-"+uid+".slice.d/50-xur.conf");
+        FileCleanup.DeleteIfPresent("/run/systemd/system/user-"+uid+".slice.d/50-xur.conf");
         // set-property persists its live cgroup updates in this higher-priority
         // runtime directory. Remove only the two properties managed by Xur.
         foreach(var property in new[]{"DeviceAllow","DevicePolicy"})
-            File.Delete("/run/systemd/system.control/user-"+uid+".slice.d/50-"+property+".conf");
+            FileCleanup.DeleteIfPresent("/run/systemd/system.control/user-"+uid+".slice.d/50-"+property+".conf");
         await Processes.Run("systemctl",["daemon-reload"],10);
         await Run("runuser",["-u",user,"--","/bin/bash","-c","rm -f -- \"$HOME/.config/systemd/user/plasma-kwin_wayland.service.d/90-xur-headless.conf\" \"$HOME/.config/environment.d/90-xur-gpu.conf\""]);
         await new StationDeviceAccess().Revoke(w.Id);
