@@ -100,6 +100,10 @@ template enters the cache. Warm builds verify its checksum and use a fresh overl
 cloud-init seed and SSH identity. Weekly refreshes update provisioned RPMs.
 Container layers and OSBuild output currently remain local to each disposable run;
 this cache saves toolchain preparation only.
+The hosted runner verifies its transient KVM ACL after package preparation and
+again immediately before the ISO build. This covers device access being lost
+between the cold template VM's shutdown and the next VM startup; the helper
+refuses to run on developer or self-hosted machines.
 There is no paid-runner or alternate-registry fallback. All Docker Hub pulls use
 Google's mirror, as required by `AGENTS.md`.
 

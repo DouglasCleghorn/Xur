@@ -10,8 +10,7 @@ sudo rm -rf /usr/local/lib/android /usr/share/swift /usr/local/.ghcup /opt/hoste
 sudo apt-get update -qq
 sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf genisoimage openssh-client iproute2 acl
 sudo apt-get clean
-[[ -c /dev/kvm ]]
-sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+bash eng/ci-kvm-access.sh
 mkdir -p "$XUR_BUILD_ROOT/qemu"
 ln -s /usr "$XUR_BUILD_ROOT/qemu/usr"
 python3 - <<'PY'
