@@ -32,6 +32,7 @@ python3 tests/Xur.Integration.Tests/os-update.py > .build/fast/os-update.log
 python3 tests/Xur.Integration.Tests/update-all.py > .build/fast/update-all.json
 node tests/Xur.Integration.Tests/cancellation-ui.cjs > .build/fast/cancellation-ui.json
 "$sdk" run --project tests/Xur.Profile.Tests -c Release > .build/fast/profiles.log
+python3 tests/Xur.Integration.Tests/host-service-migration.py > .build/fast/host-service-migration.json
 python3 tests/Xur.Integration.Tests/application-update.py > .build/fast/application-updates.json
 python3 tests/Xur.Integration.Tests/online-installer.py > .build/fast/online-installer.json
 python3 tests/Xur.Integration.Tests/installer-preflight.py > .build/fast/installer-preflight.json
