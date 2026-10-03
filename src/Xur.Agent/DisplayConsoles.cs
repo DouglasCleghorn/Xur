@@ -100,8 +100,10 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
                 if((await RunProcess("systemctl",["is-active",Unit(gpu.Pci)],5)).ExitCode==0)
                 {
                     var environment=await RunProcess("systemctl",["show",Unit(gpu.Pci),"--property=Environment","--value"],5);
-                    var startup=installer && await startupRecovery.Due(gpu,RunProcess);
-                    var recover=NeedsRecovery(gpu,card)||startup;
+                    var sleeping=File.Exists(Path.Combine(runDirectory,"console-sleep"));
+                    if(sleeping)recovery.Remove(gpu.Pci);
+                    var startup=!sleeping && installer && await startupRecovery.Due(gpu,RunProcess);
+                    var recover=(!sleeping && NeedsRecovery(gpu,card))||startup;
                     if(!recover&&environment.Output.Contains("XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id)&&environment.Output.Contains("XUR_CONSOLE_CARD="+card+" ")&&environment.Output.Contains("XUR_CONSOLE_MODE="+mode+" ")&&environment.Output.Contains("XUR_CONSOLE_FONT="+fontSize+" ")&&environment.Output.Contains("XUR_CONSOLE_OUTPUTS="+outputs+" "))continue;
                     if(startup)startupRecovery.Consume(gpu); // Persist before acting, including across agent restarts.
                     var stopped=await RunProcess("systemctl",["stop",Unit(gpu.Pci)],20);

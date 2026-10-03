@@ -44,6 +44,18 @@ counts completed stages, not elapsed time or downloaded bytes. Download is
 indeterminate until the installer reports deployment; only confirmed completion
 fills the bar. The diagnostic status includes the same structured progress.
 
+Local agent startup is ordered after NetworkManager startup, so answer-file
+networking can be applied, but does not require successful network activation.
+The optional wired activation helper runs independently. Its commands have
+timeouts; adapter and profile errors are logged without preventing other
+adapters or local setup from working. If a saved profile cannot be inspected,
+the helper leaves that adapter alone rather than replacing its settings with DHCP.
+
+New media and installations include this service ordering. Application updates
+replace the helper on existing installations, but do not replace their copied
+systemd units; changing that ordering on an existing installation requires a
+separate unit migration.
+
 A separate service checks the signed GitHub release metadata in the background.
 Each attempt is bounded to 15 seconds and retries after 60 seconds, including when
 a cable is plugged in or Wi-Fi is configured later. Console status shows

@@ -31,8 +31,8 @@ existing installed executable labels. Each child receives only its assigned DRM
 card through its systemd device policy, and no input devices. App updates restart
 console children on the new bundle without taking over a running desktop.
 
-Build with `python3 eng/build-console.py`. The pinned kmscon source, two small
-integration changes, native frame client, dependency versions and file checksums
+Build with `python3 eng/build-console.py`. The pinned kmscon source, local
+integration patches, native frame client, dependency versions and file checksums
 are recorded in the cached runtime receipt. The build runs in the disposable
 Fedora builder and is reused by `eng/publish.sh` when its inputs match.
 
@@ -57,8 +57,17 @@ apart. An enabled output resets that budget. Workstation-owned and handoff GPUs
 are excluded. This does not diagnose every HDMI cable, firmware or driver fault;
 physical AMD HDMI recovery still requires hardware testing.
 
-After five minutes without local keyboard activity, shared console frames become
-solid black with no cursor. Frame polling, log updates and network changes never
-count as input. The wake key is consumed before menu handling, including disk
-approval. This retains the existing HDMI mode and does not suspend the server or
-change workstation display ownership.
+After ten minutes without local keyboard activity, the control service returns
+a black frame with an explicit power-save header over its root-private socket.
+The native client sends the corresponding OSC to its kmscon child, which sets
+DPMS Off on its assigned displays. Displays without DPMS support retain the
+black frame. The renderer continues reading its PTY while asleep so the next
+keyboard input can restore DPMS On and repaint the menu. Newly connected
+outputs inherit the sleep state.
+
+The control service maintains a root-private `console-sleep` marker in its run
+directory. Display recovery excludes deliberate sleep and resets its recovery
+budget; the wake key removes the marker before menu handling, including disk
+approval. Control startup clears stale sleep state. Frame polling, log updates
+and network changes never count as input. The server and installation continue
+running, and workstation desktops retain their own display power settings.

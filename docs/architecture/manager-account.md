@@ -42,7 +42,12 @@ socket; it does not need to trust the LAN certificate.
 Account setup has browser/password-manager hints (`username`, `new-password`,
 and length rules) and an accessible eye toggle; Xur does not generate passwords.
 If setup fails, its error page includes a request ID and a protected log download.
-The same setup session can return to the form to retry. Log access expires with
+If the account has not been published, the same setup session can return to the
+form to retry. Once the account file is published, bootstrap access is disabled
+even if syncing its directory fails. Sign in with the saved username and password
+to retry the sync; a manager session is issued only after it succeeds. Loading a
+saved account also requires a successful directory sync and fails closed otherwise.
+Log access expires with
 the setup session and is revoked when the account is created; authenticated
 managers can then use Diagnostics. No anonymous log access is provided.
 

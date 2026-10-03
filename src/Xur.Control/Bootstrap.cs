@@ -34,7 +34,8 @@ public sealed class Bootstrap
         }
         configured=true;
     } }
-    public Bootstrap(TimeProvider? clock = null, byte[]? signingKey = null, string? directory = null) { accounts=new(directory); this.signingKey=signingKey ?? RandomNumberGenerator.GetBytes(32); this.clock = clock ?? TimeProvider.System; window=this.clock.GetUtcNow(); expires=window.AddMinutes(30); }
+    public Bootstrap(TimeProvider? clock = null, byte[]? signingKey = null, string? directory = null) : this(new ManagerAccountStore(directory),clock,signingKey) { }
+    internal Bootstrap(ManagerAccountStore accounts,TimeProvider? clock = null,byte[]? signingKey = null) { this.accounts=accounts; this.signingKey=signingKey ?? RandomNumberGenerator.GetBytes(32); this.clock = clock ?? TimeProvider.System; window=this.clock.GetUtcNow(); expires=window.AddMinutes(30); }
     public static byte[] LoadSigningKey(string directory)
     {
         Directory.CreateDirectory(directory);

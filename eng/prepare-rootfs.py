@@ -36,7 +36,7 @@ for name in ('LICENSE','docs/licensing.md'):
 copy(repo/'os/bootc/application-update-key.pem',base/'usr/share/xur/application-update-key.pem')
 copy(repo/'os/bootc/application-update-key.pem',bundle/'host/application-update-key.pem')
 copy(repo/'os/bootc/application-features.json',bundle/'host/application-features.json')
-for name in ('os-update','app-update','update-all','xur-network','hardware-hooks/reboot'):
+for name in ('os-update','app-update','update-all','xur-network','host-service-migrate','hardware-hooks/reboot'):
     copy(repo/'os/bootc'/name,bundle/'host'/name)
     (bundle/'host'/name).chmod(0o755)
 files={str(p.relative_to(bundle)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(bundle.rglob('*')) if p.is_file()}

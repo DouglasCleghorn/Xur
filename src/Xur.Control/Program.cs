@@ -342,7 +342,11 @@ async Task StartHost()
     });
     app.MapPost("/tailscale/confirm",async()=> { await appliance.ConfirmAdmin(); return Results.Redirect("/tailscale"); });
     app.MapReboot(appliance.Agent,appliance.BootId);
-    app.MapGet("/local/console-frame",(int? columns,int? rows)=>Results.Text(LocalConsole.ExportFrame(columns??100,rows??40),"text/plain; charset=utf-8"));
+    app.MapGet("/local/console-frame",(HttpContext ctx,int? columns,int? rows)=>{
+        var frame=LocalConsole.ExportFrame(columns??100,rows??40,out var sleeping);
+        ctx.Response.Headers["X-Xur-Console-Power"]=sleeping?"off":"on";
+        return Results.Text(frame,"text/plain; charset=utf-8");
+    });
     app.MapGet("/local/status",()=>Results.Text(JsonSerializer.Serialize(new { urls=appliance.Urls(),tailscale=appliance.TailscaleState, diskWrites="ApprovalRequired",installer=appliance.Installer })));
     app.MapGet("/local/network",()=>Results.Json(appliance.Network()));
     app.MapGet("/local/login",()=>Results.Text(appliance.Installer ? "Complete device installation with xur setup. Account creation follows reboot." : auth.AccountConfigured ? "User: "+auth.Username+"\nSign in with your username and password." : "Access code: "+auth.DisplayCode+"\nOpen the web manager to create the required administrator account."));

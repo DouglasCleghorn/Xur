@@ -58,7 +58,7 @@ Xur services and are not stopped by an app update.
 
 A root-owned updater runs outside those services. It verifies an Ed25519 signed
 release descriptor, archive hash, individual file hashes, host ABI and data
-schema before changing the active symlink. Only application releases beneath
+schema before changing the active symlink. Application releases beneath
 `/var/lib/xur/app/releases` are replaced; profiles, models, homes, credentials
 and Tailscale state stay in their existing persistent locations. Releases with
 an unsupported data schema are rejected. This implementation supports schema 1;
@@ -69,6 +69,26 @@ it automatically. A durable transaction and a separate boot recovery unit
 recover interrupted activation. The recovery implementation is installed at
 `/var/lib/xur/updater/app-update`, outside the replaceable app, so a broken app
 cannot replace its own recovery path. Normal updates execute the current bundle’s updater as a separate systemd job; the independent recovery copy retains the transaction recovery contract.
+The new agent also repairs the exact legacy installer-owned
+`/etc/systemd/system/xur-agent.service` startup dependencies before reporting
+health. This runs on the first upgrade even when the preceding updater has no
+migration hook. The agent waits for NetworkManager, while optional wired network
+activation can fail or time out without blocking local setup. The repair preserves
+unrelated unit settings, permissions and administrator drop-ins; custom dependency
+lines, custom executables, symlinks and masks are skipped with a migration log
+message. Administrator drop-ins remain authoritative and may retain their own
+network dependency. A durable, root-owned completion marker is bound to the repaired unit bytes;
+completed boots do not run SELinux or systemd commands again. Interrupted repairs
+without a matching marker retry the bounded label and configuration reload.
+No service restart or reboot is requested by the repair.
+
+The dependency repair remains in place through application rollback and recovery:
+older agents support these relaxed startup dependencies. A failed repair restores
+the original unit unless an administrator has since changed it, and withholds
+new-agent health so update recovery can run. An
+installation whose existing dependency already prevents the new agent from
+starting cannot execute this migration and still needs local recovery first.
+
 Manual recovery, when the web manager cannot start, is:
 
 ```bash

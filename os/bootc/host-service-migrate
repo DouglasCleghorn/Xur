@@ -1,0 +1,124 @@
+#!/usr/bin/python3
+"""Forward-compatible repair of the installer-owned agent startup dependencies."""
+import hashlib,os,pathlib,stat,subprocess,tempfile,types
+
+UNIT=pathlib.Path('/etc/systemd/system/xur-agent.service')
+
+def call(argv):
+    subprocess.run(argv,check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=10)
+
+def replace(path,content,metadata,on_publish=None):
+    fd,name=tempfile.mkstemp(prefix='.xur-agent-',dir=path.parent)
+    try:
+        with os.fdopen(fd,'wb') as stream:
+            os.fchmod(stream.fileno(),stat.S_IMODE(metadata.st_mode))
+            os.fchown(stream.fileno(),metadata.st_uid,metadata.st_gid)
+            stream.write(content);stream.flush();os.fsync(stream.fileno())
+            publication=os.fstat(stream.fileno())
+        os.replace(name,path)
+        if on_publish:on_publish(publication)
+        directory=os.open(path.parent,os.O_DIRECTORY)
+        try:os.fsync(directory)
+        finally:os.close(directory)
+    finally:
+        pathlib.Path(name).unlink(missing_ok=True)
+
+def migration(content):
+    # Do not clear systemd dependency lists with drop-ins: dependencies are additive.
+    # Recognize the installed Xur executable and exact legacy Unit dependencies.
+    # Unknown/administrator-edited dependencies are left for manual review.
+    try:text=content.decode('utf-8')
+    except UnicodeDecodeError:return None
+    if '\r' in text or '\\\n' in text:return None
+    sections={};section=None
+    for line in text.splitlines():
+        if line.startswith('[') and line.endswith(']'):
+            section=line
+            if section in sections:return None
+            sections[section]=[]
+        elif section and line.strip() and not line.lstrip().startswith(('#',';')):
+            sections[section].append(line)
+    service=sections.get('[Service]',[]);unit=sections.get('[Unit]',[])
+    if [line for line in unit if line.split('=',1)[0].strip()=='Description']!=['Description=Xur privileged typed operations (Unix socket only)']:return None
+    for key,value in [('ExecStart','/var/lib/xur/app/current/agent/Xur.Agent'),('WorkingDirectory','/var/lib/xur/app/current/agent')]:
+        if [line for line in service if line.split('=',1)[0].strip()==key]!=[key+'='+value]:return None
+    after=[line for line in unit if line.split('=',1)[0].strip()=='After']
+    requires=[line for line in unit if line.split('=',1)[0].strip()=='Requires']
+    if after==['After=local-fs.target NetworkManager.service'] and not requires:
+        if any(line.startswith('Wants=') and 'xur-network.service' in line[6:].split() for line in unit):return content
+        return None
+    if after!=['After=local-fs.target xur-network.service'] or requires!=['Requires=xur-network.service']:return None
+    # Preserve all unrelated directives, comments, permissions, and drop-ins.
+    lines=text.splitlines(keepends=True);section=None;result=[]
+    for line in lines:
+        if line.startswith('['):section=line.strip()
+        if section=='[Unit]' and line.rstrip('\n')=='After=local-fs.target xur-network.service':
+            result.append('After=local-fs.target NetworkManager.service\n')
+        elif section=='[Unit]' and line.rstrip('\n')=='Requires=xur-network.service':
+            result.append('Wants=xur-network.service\n')
+        else:result.append(line)
+    return ''.join(result).encode()
+
+
+def completed(marker,digest,owner):
+    try:
+        descriptor=os.open(marker,os.O_RDONLY|os.O_NOFOLLOW)
+    except FileNotFoundError:return False
+    with os.fdopen(descriptor,'rb') as stream:
+        metadata=os.fstat(stream.fileno())
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid!=owner or stat.S_IMODE(metadata.st_mode)!=0o600 or metadata.st_size>65:
+            raise RuntimeError('Unsafe agent migration completion marker')
+        return stream.read(66)==digest
+
+def migrate(path=UNIT,runner=call,owner=0):
+    try:metadata=path.lstat()
+    except FileNotFoundError:return 'absent'
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid!=owner or metadata.st_mode&0o022 or metadata.st_size>65536:
+        print('Xur agent dependency migration skipped: unit is not an owned, protected regular file.',flush=True)
+        return 'custom'
+    try:
+        descriptor=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
+        with os.fdopen(descriptor,'rb') as stream:
+            observed=os.fstat(stream.fileno())
+            if (observed.st_dev,observed.st_ino)!=(metadata.st_dev,metadata.st_ino):raise RuntimeError('Agent unit changed during migration inspection')
+            original=stream.read(65537)
+    except OSError as error:
+        raise RuntimeError('Agent unit could not be safely inspected') from error
+    if len(original)>65536:raise RuntimeError('Agent unit changed during migration inspection')
+    updated=migration(original)
+    if updated is None:
+        print('Xur agent dependency migration skipped: custom unit dependencies require manual review.',flush=True)
+        return 'custom'
+    changed=updated!=original
+    marker=path.with_name('.xur-agent-network-v1.completed')
+    digest=(hashlib.sha256(updated).hexdigest()+'\n').encode()
+    completion=completed(marker,digest,owner)
+    if not changed and completion:return 'current'
+    if changed:
+        latest=path.lstat()
+        if (latest.st_dev,latest.st_ino,latest.st_mtime_ns,latest.st_size)!=(metadata.st_dev,metadata.st_ino,metadata.st_mtime_ns,metadata.st_size):
+            raise RuntimeError('Agent unit changed during migration; refusing to overwrite it')
+    publication={}
+    def published(value):
+        publication.update(device=value.st_dev,inode=value.st_ino,mode=value.st_mode,uid=value.st_uid,gid=value.st_gid)
+    try:
+        # Include post-rename directory fsync in the rollback scope.
+        if changed:replace(path,updated,metadata,published)
+        runner(['restorecon',str(path)])
+        runner(['systemctl','daemon-reload'])
+        # Only successful label/reload and a durable marker complete the repair.
+        # Without a matching marker, interruption retries the label and reload.
+        marker_metadata=types.SimpleNamespace(st_mode=0o600,st_uid=owner,st_gid=metadata.st_gid)
+        replace(marker,digest,marker_metadata)
+    except Exception:
+        latest=path.lstat()
+        still_ours=publication==dict(device=latest.st_dev,inode=latest.st_ino,mode=latest.st_mode,uid=latest.st_uid,gid=latest.st_gid)
+        if changed and still_ours and path.read_bytes()==updated:
+            replace(path,original,metadata)
+            runner(['restorecon',str(path)])
+            runner(['systemctl','daemon-reload'])
+        raise
+    return 'migrated' if changed else 'current'
+
+if __name__=='__main__':
+    print('Xur agent dependency migration: '+migrate(),flush=True)

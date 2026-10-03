@@ -50,6 +50,11 @@ readability; key actions are also described in text.
 
 ## Change log
 
+- 2026-10-02: Regenerated the private profile-editor capture family below for
+  dropdown activation and the adjacent Add user button at all four widths.
+  Chromium mouse and touch checks passed using synthetic fixtures; no live
+  credentials or host details were captured. Native Safari remains unverified.
+
 - 2026-09-20: Profile editor captures in `.build/evidence/profile-editor/`
   (`existing`, `new`, and `devices` at 1440, 900, 390 and 320 px) cover the
   working-tree inline Rename control, conditional workstation name/user fields,

@@ -18,6 +18,16 @@ var storage = new Storage();
 var bootDisplayHistory=new BootDisplayHistory();
 app.MapGet("/diagnostics/display-history",()=>Results.Json(bootDisplayHistory.Read()));
 bool installer = File.ReadAllText("/proc/cmdline").Split(' ').Contains("xur.installer=1");
+// New agent startup is reached by the previous updater on the first upgrade.
+// Keep this repair before health readiness; do not rely on a new updater hook.
+const string hostServiceMigration="/var/lib/xur/app/current/host/host-service-migrate";
+if(!installer && File.Exists(hostServiceMigration))
+{
+    var migrated=await Processes.Run("/usr/bin/python3",[hostServiceMigration],45);
+    applicationLog.Write("HostServiceMigration",migrated.ExitCode==0?Microsoft.Extensions.Logging.LogLevel.Information:Microsoft.Extensions.Logging.LogLevel.Error,Redaction.Logs(migrated.Output).Trim());
+    if(migrated.ExitCode!=0)throw new InvalidOperationException("Installed agent startup dependency migration failed; application health is withheld for update recovery.");
+}
+
 var stateDir = installer ? run : "/var/lib/xur";
 if(!installer)_=Task.Run(async()=>{try{if((await Processes.Run("systemctl",["is-active","firewalld"],5)).ExitCode==0)await Processes.Run("firewall-cmd",["--add-port=8443/tcp"],10);}catch{}});
 Directory.CreateDirectory(stateDir);

@@ -33,6 +33,10 @@ static class DisplayRecoveryTests
             clock.Now=clock.Now.AddSeconds(16);await console.Refresh();check(starts==before+1,"One healthy connector does not prevent recovery of another inactive output");
             File.WriteAllText(second+"/enabled","enabled");await console.Refresh();before=starts;
             File.WriteAllText(connector+"/dpms","Off");await console.Refresh();clock.Now=clock.Now.AddSeconds(16);await console.Refresh();check(starts==before+1,"An enabled connector left in DPMS Off gets bounded recovery");
+            before=starts;File.WriteAllText(root+"/console-sleep","");await console.Refresh();clock.Now=clock.Now.AddSeconds(120);await console.Refresh();
+            check(starts==before&&console.Error==null,"Deliberate monitor sleep is excluded from display recovery even after its grace period");
+            File.Delete(root+"/console-sleep");await console.Refresh();check(starts==before,"Keyboard wake gives the monitor a fresh recovery grace period");
+            clock.Now=clock.Now.AddSeconds(16);await console.Refresh();check(starts==before+1,"A display that fails to wake still receives bounded recovery");
             before=starts;await console.Release(gpu.Pci);await console.Refresh();check(starts==before,"Display recovery never restarts a console on a GPU being handed to a workstation");
             gpu=gpu with{Displays=["card0-HDMI-A-1"]};File.WriteAllText(connector+"/status","connected");File.WriteAllText(connector+"/enabled","enabled");File.WriteAllText(connector+"/dpms","On");
             kernel="amdgpu 0000:01:00.0: [drm] REG_WAIT timeout 1us * 100000 tries - optc314_disable_crtc line:146";
