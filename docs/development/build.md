@@ -263,10 +263,13 @@ non-target-disk checks separate from this short iteration loop.
 ## GitHub release builds
 
 Pushes to `main` build Nightly candidates; pushes to `release` build Stable
-candidates. The hosted workflow requires source checks, the app build and its
-checks, then the online installer build and inspection. Nightlies sign and publish
-automatically after these succeed. Stable requires GitHub Environment approval
-after hardware testing. Branch restrictions and signing remain enabled for both.
+candidates. Successful application builds always upload an update archive without
+approval. ISO builds run when installer inputs differ from the last published ISO
+for that channel, or when manually forced with `build_iso`. They reuse the tested
+application context and a verified prepared Fedora toolchain template. New pushes
+cancel older runs on the same branch. Nightlies publish after required checks and
+builds pass; Stable publication requires GitHub Environment approval after hardware
+testing. Branch restrictions and signing remain enabled for both.
 Hosted build/inspection success is not an install/reboot test. The local commands
 above remain available independently of CI. See
 [installer release automation](installer-releases.md) for candidate retention,

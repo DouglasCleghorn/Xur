@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory() as directory:
   if action=='create':
    if tag in ('nightly','stable'):aliases[tag]={};return ''
    assert tag not in releases
-   notes=pathlib.Path(args[args.index('--notes-file')+1]).read_text();assert '**Download Xur installer ISO**' in notes
+   notes=pathlib.Path(args[args.index('--notes-file')+1]).read_text();assert '**Download Xur installer ISO**' in notes or 'Installer inputs are unchanged' in notes
    start=args.index('--notes-file')+2;releases[tag]={pathlib.Path(f).name:pathlib.Path(f).read_bytes() for f in args[start:]};return ''
   if action=='upload':
    f=pathlib.Path(args[4]);aliases[tag][f.name]=f.read_text();return ''
@@ -42,6 +42,7 @@ with tempfile.TemporaryDirectory() as directory:
   return real_run(args,**kwargs)
  with patch.dict(os.environ,{'XUR_UPDATE_SIGNING_KEY':str(key)}),patch('subprocess.run',api):
   for channel,prefix in [('nightly','nightly-'),('stable','v')]:
+   (artifact/'build.json').write_text(json.dumps({'commit':commit,'channel':channel,'checks':'eng/test-fast.sh passed','sha256':hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()}))
    (installer/'installer-build.json').write_text(json.dumps({'schema':1,'commit':commit,'channel':channel,'iso':{'file':iso.name,'bytes':iso.stat().st_size,'sha256':hashlib.file_digest(iso.open('rb'),'sha256').hexdigest()},'inspectionSha256':hashlib.file_digest(report.open('rb'),'sha256').hexdigest()}))
    release.publish(channel,'1.0',commit)
    assert len(releases[prefix+'1.0'])==6
@@ -57,6 +58,11 @@ with tempfile.TemporaryDirectory() as directory:
    edits=[c for c in calls if c[:3]==('gh','release','edit') and c[3].startswith(prefix)]
    assert '--latest=false' in edits[-1]
    if channel=='stable':assert '--latest=true' in edits[0]
+   release.publish(channel,'1.2',commit,with_installer=False)
+   assert set(releases[prefix+'1.2'])=={'xur-update-x86_64.tar.gz','xur-update.json'}
+   assert 'installer' not in json.loads(releases[prefix+'1.2']['xur-update.json'])['release']
+   assert aliases[channel]['migration']==frozen['migration']
+   assert aliases[channel]['current']==prefix+'1.2\n'
  # Actual signed bridge descriptors remain readable by the unchanged legacy checker,
  # while the upgraded checker follows the same channel to the three-asset release.
  loader=importlib.machinery.SourceFileLoader('migration_updater',str(repo/'os/bootc/app-update'));spec=importlib.util.spec_from_loader(loader.name,loader);u=importlib.util.module_from_spec(spec);loader.exec_module(u)
@@ -70,6 +76,6 @@ with tempfile.TemporaryDirectory() as directory:
    assert len(data)<=limit;path.write_bytes(data)
   u.fetch=fetch
   assert u.check_legacy(stage)['version']=='1.0'
-  upgraded=u.check(stage);assert upgraded['version']=='1.1'
+  upgraded=u.check(stage);assert upgraded['version']=='1.2'
   downloaded=u.download_bundle(stage,upgraded);assert hashlib.file_digest(downloaded.open('rb'),'sha256').hexdigest()==upgraded['sha256']
-print(json.dumps({'suite':'CompactRelease','result':'Passed','futureAssets':3,'transitionAssets':6,'legacyPointersFrozen':True,'stableAndNightly':True}))
+print(json.dumps({'suite':'CompactRelease','result':'Passed','installerReleaseAssets':3,'appOnlyAssets':2,'transitionAssets':6,'legacyPointersFrozen':True,'stableAndNightly':True}))

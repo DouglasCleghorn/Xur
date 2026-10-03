@@ -28,10 +28,18 @@ qemu = root / "qemu/usr"
 env = dict(os.environ, LD_LIBRARY_PATH=str(qemu / "lib/x86_64-linux-gnu"))
 lock = json.loads((repo / "eng/toolchain-lock.json").read_text())
 base = cache / "fedora-44.qcow2"
-with base.open("rb") as source:
-    actual = hashlib.file_digest(source, "sha256").hexdigest()
-if actual != lock["builderCloudImage"]["sha256"]:
-    raise SystemExit("Builder base checksum mismatch")
+prepared = os.environ.get("XUR_BUILDER_TEMPLATE")
+if prepared:
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('builder_cache', repo / 'eng/ci-builder-cache.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    base = module.verify(Path(prepared)).resolve()
+else:
+    with base.open("rb") as source:
+        actual = hashlib.file_digest(source, "sha256").hexdigest()
+    if actual != lock["builderCloudImage"]["sha256"]:
+        raise SystemExit("Builder base checksum mismatch")
 
 def run(*args):
     subprocess.run([str(a) for a in args], env=env, check=True)
@@ -43,20 +51,7 @@ seed = vm / "seed"
 seed.mkdir(exist_ok=True, mode=0o700)
 (seed / "meta-data").write_text("instance-id: xur-fedora44-builder\n")
 public_key = key.with_suffix(".pub").read_text().strip()
-(seed / "user-data").write_text(f"""#cloud-config
-# The isolated builder is reached through loopback SSH, so keep the image's
-# hostname instead of invoking hostname services during early boot.
-preserve_hostname: true
-users:
-  - name: builder
-    groups: [wheel]
-    sudo: ALL=(ALL) NOPASSWD:ALL
-    shell: /bin/bash
-    ssh_authorized_keys:
-      - {public_key}
-ssh_pwauth: false
-disable_root: true
-packages:
+packages = '' if prepared else '''packages:
   - podman
   - git
   - golang
@@ -70,7 +65,19 @@ packages:
   - squashfs-tools
   - policycoreutils
   - selinux-policy-targeted
-final_message: XUR_BUILD_VM_CLOUD_INIT_FINISHED
+'''
+(seed / "user-data").write_text(f"""#cloud-config
+preserve_hostname: true
+users:
+  - name: builder
+    groups: [wheel]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - {public_key}
+ssh_pwauth: false
+disable_root: true
+{packages}final_message: XUR_BUILD_VM_CLOUD_INIT_FINISHED
 """)
 run(qemu / "bin/genisoimage", "-quiet", "-output", vm / "seed.iso",
     "-volid", "cidata", "-joliet", "-rock", seed)
@@ -87,7 +94,7 @@ run(qemu / "bin/qemu-system-x86_64",
     "-L", qemu / "share/qemu", "-display", "none",
     "-drive", f"if=pflash,format=raw,readonly=on,file={qemu}/share/OVMF/OVMF_CODE_4M.fd",
     "-drive", f"if=pflash,format=raw,file={variables}",
-    "-drive", f"if=virtio,format=qcow2,file={disk}",
+    "-drive", f"if=virtio,format=qcow2,discard=unmap,detect-zeroes=unmap,file={disk}",
     "-drive", f"if=virtio,format=raw,readonly=on,file={vm}/seed.iso",
     "-netdev", "user,id=net0,hostfwd=tcp:127.0.0.1:22220-:22",
     "-device", "virtio-net-pci,netdev=net0",

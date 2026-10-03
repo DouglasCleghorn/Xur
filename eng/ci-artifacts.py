@@ -8,7 +8,7 @@ def selected(artifacts,channel,run_id,published=False,kind="release"):
          (a.get('workflow_run',{}).get('id',0)==run_id if published else 0<a.get('workflow_run',{}).get('id',0)<run_id)]
 
 def main():
- p=argparse.ArgumentParser();p.add_argument('channel',choices=['nightly','stable']);p.add_argument('--published',action='store_true');p.add_argument('--kind',choices=['release','installer'],default='release');a=p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument('channel',choices=['nightly','stable']);p.add_argument('--published',action='store_true');p.add_argument('--kind',choices=['release','installer','context'],default='release');a=p.parse_args()
  repo=os.environ['GITHUB_REPOSITORY'];run_id=int(os.environ['GITHUB_RUN_ID'])
  pages=json.loads(subprocess.check_output(['gh','api','--paginate','--slurp',f'repos/{repo}/actions/artifacts?per_page=100']))
  ids=selected([item for page in pages for item in page['artifacts']],a.channel,run_id,a.published,a.kind)

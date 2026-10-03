@@ -28,13 +28,30 @@ jobs:
           echo "XUR_BUILD_ROOT=$XUR_BUILD_ROOT" >> "$GITHUB_ENV"
           echo "XUR_BUILD_CACHE=$XUR_BUILD_CACHE" >> "$GITHUB_ENV"
           bash eng/ci-iso-prepare.sh
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+      - name: Download this run's tested publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "context-candidate-$XUR_INSTALLER_CHANNEL-$GITHUB_SHA" --dir .build/ci-context
+      - name: Identify Fedora toolchain cache
+        id: toolchain
+        run: echo "key=$(python3 eng/ci-builder-cache.py key)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809
+        id: cache
         with:
-          dotnet-version: 10.0.401
+          path: .build/fedora-toolchain/
+          key: fedora-toolchain-x86_64-${{ steps.toolchain.outputs.key }}
+      - name: Prepare or verify Fedora toolchain template
+        run: python3 eng/ci-builder-cache.py prepare
+      - uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: .build/fedora-toolchain/
+          key: fedora-toolchain-x86_64-${{ steps.toolchain.outputs.key }}
       - name: Build and inspect online installer
         run: |
-          export XUR_DOTNET="$(command -v dotnet)"
-          ./eng/build-iso.sh
+          export XUR_BUILDER_TEMPLATE="$GITHUB_WORKSPACE/.build/fedora-toolchain"
+          ./eng/build-iso.sh --from-tested-context .build/ci-context
           python3 eng/ci-installer.py candidate --commit "$GITHUB_SHA" --channel "$XUR_INSTALLER_CHANNEL"
       - name: Prune superseded installer candidates
         env:

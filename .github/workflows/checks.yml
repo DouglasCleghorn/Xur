@@ -25,5 +25,7 @@ jobs:
           python3 tests/Xur.Integration.Tests/builder-ready.py
           python3 tests/Xur.Integration.Tests/github-release.py
           python3 tests/Xur.Integration.Tests/release-version.py
+          mkdir -p .build
+          python3 tests/Xur.Integration.Tests/ci-build.py
           python3 tests/Xur.Integration.Tests/source-manifest.py
           python3 website/build.py

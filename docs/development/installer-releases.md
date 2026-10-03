@@ -5,25 +5,36 @@ A push to `main` (Nightly) or `release` (Stable) runs **Build and publish releas
 1. Run the reusable **Source checks** workflow for this exact commit, then build
    and run the app's fast and browser checks. Pull requests run the same source
    checks without release permissions or signing secrets.
-2. Call `installer.yml` to build the online ISO in an isolated Fedora VM on a
-   disposable GitHub-hosted Ubuntu runner. Inspect embedded files against the
-   build context, BIOS/UEFI layout, SELinux settings and absence of a Bazzite
-   payload. The ISO carries the selected application channel into boot-time app
-   refresh and the installed system. Bazzite itself still uses its stable channel.
-3. Retain unsigned app and installer candidates for seven days, pruning older
+2. Always create and upload the tested application update archive without an
+   approval gate. Compare installer inputs against the channel's last published
+   ISO, including changes from canceled or unpublished runs. Application-only
+   changes skip the ISO. OS files, build tooling, native helpers, licensing and
+   release/installer workflows select a rebuild. Missing baselines or history and
+   failed lookups select a conservative rebuild. Manual dispatch can force a build
+   with `build_iso` for final release media verification.
+3. When selected, transfer the tested publication context to `installer.yml` with
+   commit, channel and SHA-256 receipts. The installer verifies it instead of
+   repeating publication and application checks. Build and inspect the online ISO
+   in an isolated Fedora VM on a disposable GitHub-hosted runner. Inspect embedded
+   files, BIOS/UEFI layout, SELinux settings and absence of a Bazzite payload. The
+   tested context carries the selected application channel; Bazzite uses Stable.
+4. Retain unsigned app and installer candidates for seven days, pruning older
    candidates for that channel. The signing key is unavailable to both build jobs.
-4. Nightly publishes automatically after every required check and build passes.
+   Transferred build contexts expire after one day and are removed after publication.
+5. Nightly publishes automatically after every required check and build passes.
    Stable waits for the maintainer's `stable` GitHub Environment approval after
    hardware testing. Both environments retain their branch restrictions (`main`
    for Nightly, `release` for Stable) and signing secrets. The publication job
-   depends on source checks, the app build and installer inspection; it rejects
-   superseded commits and verifies both candidates' hashes and commit/channel receipts.
-5. Sign a self-contained JSON descriptor containing the app archive manifest and
-   installer hash/inspection receipt. Publish it with the app archive and ISO, then advance the channel's
+   depends on source checks, the app build and any selected installer inspection.
+   A failed or canceled required ISO blocks publication. It rejects superseded
+   commits and verifies candidate hashes and commit/channel receipts.
+6. Sign a self-contained JSON descriptor containing the app archive manifest and,
+   when rebuilt, the installer hash/inspection receipt. Publish it with the app
+   archive and optional ISO, then advance the channel's
    `current` pointer and remove the Actions candidates. No source tarball is
    uploaded; GitHub provides source archives for each tag.
 
-Normal versioned releases have **three assets**: `xur-<channel>-<version>-x86_64.iso`,
+Installer releases have **three assets**: `xur-<channel>-<version>-x86_64.iso`,
 `xur-update-x86_64.tar.gz`, and `xur-update.json`. The first compact-format release on each channel also has
 the legacy descriptor, detached signature and pointer (reusing the app archive). Those transition releases must remain available. Legacy
 Nightly `nightly/latest` and GitHub's Stable **Latest** designation stay fixed on
@@ -32,6 +43,12 @@ to immutable versioned releases. Consequently GitHub's **Latest** badge is a
 migration entry point, not the newest Stable version; use Xur's channel selector
 or the website download page. Do not manually move that designation or delete a
 migration release. The channel alias's `migration` asset records its fixed tag.
+
+Application-only releases contain the app archive and signed JSON descriptor.
+The last installer release remains available; the website selects releases that
+contain media. The descriptor never claims that an older ISO was built from the
+newer application commit. New pushes cancel older runs on the same branch,
+including runs waiting for Stable approval.
 
 ## Release versions
 
@@ -75,6 +92,14 @@ space are checked before building. The preparation script removes unrelated
 preinstalled Android/Swift/Haskell/CodeQL SDKs **only on disposable GitHub-hosted
 runners**; it refuses to run on a developer or self-hosted machine. Builder disks,
 keys and caches stay in `RUNNER_TEMP`; the builder is stopped even on failure.
+The prepared Fedora disk template is stored under ignored `.build/fedora-toolchain/`
+and cached by toolchain inputs and UTC week. Cold runs provision Fedora and compile
+Image Builder, then remove cloud-init state, login/host SSH keys and logs, trim free
+blocks and shut down before converting the disk. Only this pre-build toolchain
+template enters the cache. Warm builds verify its checksum and use a fresh overlay,
+cloud-init seed and SSH identity. Weekly refreshes update provisioned RPMs.
+Container layers and OSBuild output currently remain local to each disposable run;
+this cache saves toolchain preparation only.
 There is no paid-runner or alternate-registry fallback. All Docker Hub pulls use
 Google's mirror, as required by `AGENTS.md`.
 

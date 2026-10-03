@@ -3,6 +3,11 @@ on:
   push:
     branches: [main, release]
   workflow_dispatch:
+    inputs:
+      build_iso:
+        description: Force an installer build (including final media verification)
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -23,8 +28,11 @@ jobs:
     outputs:
       channel: ${{ steps.identity.outputs.channel }}
       version: ${{ steps.identity.outputs.version }}
+      build_iso: ${{ steps.iso.outputs.build }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
         with:
           dotnet-version: 10.0.401
@@ -35,6 +43,16 @@ jobs:
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
           version=$(python3 eng/release-version.py --channel "$channel")
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Select installer build
+        id: iso
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: ${{ steps.identity.outputs.channel }}
+          FORCE_ISO: ${{ inputs.build_iso || false }}
+        run: |
+          args=()
+          if [[ "$FORCE_ISO" == true ]]; then args+=(--force); fi
+          python3 eng/ci-iso-gate.py --commit "$GITHUB_SHA" --channel "$RELEASE_CHANNEL" "${args[@]}"
       - name: Prepare native build tools and browser
         run: |
           python3 eng/ci-native.py
@@ -49,6 +67,9 @@ jobs:
           assert hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()==lock['sha256']
           PY
       - name: Test and package unsigned build
+        env:
+          RELEASE_CHANNEL: ${{ steps.identity.outputs.channel }}
+          XUR_INSTALLER_CHANNEL: ${{ steps.identity.outputs.channel }}
         run: |
           export XUR_DOTNET="$(command -v dotnet)"
           bash eng/test-fast.sh
@@ -60,13 +81,8 @@ jobs:
           python3 - <<'PY'
           import hashlib,json,os,pathlib
           archive=pathlib.Path('dist/xur-app-x86_64.tar.gz')
-          pathlib.Path('dist/build.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],'sha256':hashlib.file_digest(archive.open('rb'),'sha256').hexdigest(),'checks':'eng/test-fast.sh passed','hardwareTests':'Not run'},indent=2)+'\n')
+          pathlib.Path('dist/build.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],'channel':os.environ['RELEASE_CHANNEL'],'sha256':hashlib.file_digest(archive.open('rb'),'sha256').hexdigest(),'contextSha256':hashlib.file_digest(pathlib.Path('.build/context/publish-receipt.json').open('rb'),'sha256').hexdigest(),'checks':'eng/test-fast.sh passed','hardwareTests':'Not run'},indent=2)+'\n')
           PY
-      - name: Prune superseded channel candidates
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_CHANNEL: ${{ steps.identity.outputs.channel }}
-        run: python3 eng/ci-artifacts.py "$RELEASE_CHANNEL"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: release-candidate-${{ steps.identity.outputs.channel }}-${{ github.sha }}
@@ -75,6 +91,25 @@ jobs:
           path: |
             dist/xur-app-x86_64.tar.gz
             dist/build.json
+      - name: Export tested installer context
+        if: steps.iso.outputs.build == 'true'
+        env:
+          RELEASE_CHANNEL: ${{ steps.identity.outputs.channel }}
+        run: python3 eng/ci-context.py export --commit "$GITHUB_SHA" --channel "$RELEASE_CHANNEL"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: steps.iso.outputs.build == 'true'
+        with:
+          name: context-candidate-${{ steps.identity.outputs.channel }}-${{ github.sha }}
+          compression-level: 0
+          retention-days: 1
+          path: .build/ci-context/
+      - name: Prune superseded channel candidates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: ${{ steps.identity.outputs.channel }}
+        run: |
+          python3 eng/ci-artifacts.py "$RELEASE_CHANNEL"
+          python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --kind context
       - name: Keep failed-check diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -84,6 +119,7 @@ jobs:
           path: .build/fast/
   installer:
     needs: build
+    if: needs.build.outputs.build_iso == 'true'
     uses: ./.github/workflows/installer.yml
     permissions:
       contents: read
@@ -92,6 +128,10 @@ jobs:
       channel: ${{ needs.build.outputs.channel }}
   publish:
     needs: [checks, build, installer]
+    if: >-
+      ${{ !cancelled() && needs.checks.result == 'success' && needs.build.result == 'success' &&
+          (needs.installer.result == 'success' ||
+           (needs.installer.result == 'skipped' && needs.build.outputs.build_iso == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment:
@@ -107,6 +147,12 @@ jobs:
           RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
         run: |
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-candidate-$RELEASE_CHANNEL-$GITHUB_SHA" --dir .build/ci-artifact
+      - name: Download this run's inspected installer
+        if: needs.installer.result == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
+        run: |
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "installer-candidate-$RELEASE_CHANNEL-$GITHUB_SHA" --dir .build/ci-installer
       - name: Sign and publish checked build
         env:
@@ -114,6 +160,7 @@ jobs:
           XUR_UPDATE_SIGNING_KEY_PEM: ${{ secrets.XUR_UPDATE_SIGNING_KEY_PEM }}
           RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          INCLUDE_INSTALLER: ${{ needs.installer.result == 'success' }}
         run: |
           test -n "$XUR_UPDATE_SIGNING_KEY_PEM"
           umask 077
@@ -121,7 +168,9 @@ jobs:
           trap 'rm -f "$XUR_UPDATE_SIGNING_KEY"' EXIT
           printf '%s\n' "$XUR_UPDATE_SIGNING_KEY_PEM" > "$XUR_UPDATE_SIGNING_KEY"
           unset XUR_UPDATE_SIGNING_KEY_PEM
-          python3 eng/ci-release.py --channel "$RELEASE_CHANNEL" --version "$RELEASE_VERSION" --commit "$GITHUB_SHA"
+          args=()
+          if [[ "$INCLUDE_INSTALLER" == true ]]; then args+=(--with-installer); fi
+          python3 eng/ci-release.py --channel "$RELEASE_CHANNEL" --version "$RELEASE_VERSION" --commit "$GITHUB_SHA" "${args[@]}"
       - name: Remove published candidate from Actions storage
         env:
           GH_TOKEN: ${{ github.token }}
@@ -129,3 +178,4 @@ jobs:
         run: |
           python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --published
           python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --kind installer --published
+          python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --kind context --published
