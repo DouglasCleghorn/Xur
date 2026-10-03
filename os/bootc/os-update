@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """Upstream OS operations. Runs without xur-control or xur-agent for automatic updates."""
-import fcntl, json, os, pathlib, subprocess, sys, time
+import contextlib, fcntl, json, os, pathlib, subprocess, sys, time
 
 STATE = pathlib.Path('/var/lib/xur/updates')
 CONFIG = pathlib.Path('/etc/xur/upstream.json')
@@ -36,18 +36,40 @@ def snapshot(raw):
                 available=entry({'image': current.get('cachedUpdate')}),
                 rollbackQueued=raw.get('spec', {}).get('bootOrder') == 'rollback')
 
+@contextlib.contextmanager
+def deployment_guard():
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (STATE / 'power.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
 def stage(log):
     # Persist signature enforcement, including installations imported from an
     # offline image. Switching to an identical spec can return without pulling.
-    subprocess.run(['bootc', 'switch', '--enforce-container-sigpolicy', CHANNEL], stdout=log, stderr=log, check=True, timeout=7200)
-    if not snapshot(boot_status())['pending']:
-        subprocess.run(['bootc', 'upgrade'], stdout=log, stderr=log, check=True, timeout=7200)
+    with deployment_guard():
+        subprocess.run(['bootc', 'switch', '--enforce-container-sigpolicy', CHANNEL], stdout=log, stderr=log, check=True, timeout=7200)
+        if not snapshot(boot_status())['pending']:
+            subprocess.run(['bootc', 'upgrade'], stdout=log, stderr=log, check=True, timeout=7200)
+
+def rollback(log):
+    with deployment_guard():
+        subprocess.run(['bootc', 'rollback'], stdout=log, stderr=log, check=True, timeout=300)
 
 def verify_stage(after):
     if after['pending'] and after['pending']['image'] != CHANNEL:
         raise RuntimeError('Unexpected staged image')
     if not after['pending'] and after['available'] and after['available']['digest'] != after['current']['digest']:
         raise RuntimeError('An OS update is available but no deployment was staged. Review the update log and retry.')
+
+def power_blocked():
+    # Recovery must not depend on bootc status, upstream configuration or stale
+    # operation records. Only a live deployment operation prevents power actions.
+    if not (STATE / 'power.lock').exists(): return False
+    with (STATE / 'power.lock').open('r') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return False
+        except BlockingIOError: return True
 
 def observe():
     busy = False
@@ -69,9 +91,11 @@ def observe():
 
 def main():
     if os.geteuid() != 0: raise RuntimeError('Root is required')
+    action = sys.argv[1] if len(sys.argv) == 2 else ''
+    if action == 'power-status':
+        print(json.dumps({'blocked': power_blocked()})); return
     if not pathlib.Path('/var/lib/xur/installed').exists(): raise RuntimeError('Updates are available after installation')
     if read(CONFIG, {}).get('channel') != CHANNEL: raise RuntimeError('Unsupported upstream update source')
-    action = sys.argv[1] if len(sys.argv) == 2 else ''
     if action == 'status':
         print(json.dumps(observe())); return
     if action not in ('check', 'stage', 'rollback', 'auto', 'enable', 'disable'):
@@ -100,7 +124,7 @@ def main():
                 if action in ('stage', 'auto'):
                     stage(log)
                 if action == 'rollback':
-                    subprocess.run(['bootc', 'rollback'], stdout=log, stderr=log, check=True, timeout=300)
+                    rollback(log)
                 after = snapshot(boot_status())
                 if action == 'rollback' and not after['rollbackQueued']: raise RuntimeError('Boot order did not change')
                 if after['pending'] and after['pending']['image'] != CHANNEL: raise RuntimeError('Unexpected staged image')

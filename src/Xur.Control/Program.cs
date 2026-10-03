@@ -286,7 +286,6 @@ async Task StartHost()
         return result.Session is { } session ? Results.Json(new { accessToken=session, tokenType="Bearer", expiresIn=28800, setupRequired=true })
             : Results.Json(new { error=result.Status==503 ? "Setup is starting" : result.Status==429 ? "Wait 30 seconds before retrying" : "Invalid or expired token" },statusCode:result.Status);
     });
-    app.MapPost("/api/power/reboot",async()=>Results.StatusCode((int)(await appliance.Agent.PostAsync("/power/reboot",null)).StatusCode));
     void SetSession(HttpContext ctx,string session)=>ctx.Response.Cookies.Append("xur.session",session,new CookieOptions { HttpOnly=true,SameSite=SameSiteMode.Strict,Secure=true,MaxAge=TimeSpan.FromHours(8),Path="/" });
     app.MapPost("/auth/login",async (HttpContext ctx) => {
         var form=await ctx.Request.ReadFormAsync();
@@ -342,13 +341,7 @@ async Task StartHost()
         await appliance.StartWebLogin(); return Results.Redirect("/tailscale");
     });
     app.MapPost("/tailscale/confirm",async()=> { await appliance.ConfirmAdmin(); return Results.Redirect("/tailscale"); });
-    app.MapPost("/power/reboot",async()=> {
-        var state=await appliance.AgentStatus();
-        if(state is not { } s)return Results.StatusCode(503);
-        if(s.TryGetProperty("operation",out var operation) && operation.ValueKind==JsonValueKind.Object && operation.GetProperty("stage").GetString()=="Installing")return Results.Conflict();
-        _=Task.Run(async()=> { await Task.Delay(1000);try { await appliance.Agent.PostAsync("/power/reboot",null); } catch { } });
-        return Results.Redirect("/reboot?boot="+appliance.BootId);
-    });
+    app.MapReboot(appliance.Agent,appliance.BootId);
     app.MapGet("/local/console-frame",(HttpContext ctx,int? columns,int? rows)=>{
         var frame=LocalConsole.ExportFrame(columns??100,rows??40,out var sleeping);
         ctx.Response.Headers["X-Xur-Console-Power"]=sleeping?"off":"on";

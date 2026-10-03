@@ -9,6 +9,16 @@ public sealed class OsUpdates
     public OsUpdates(Func<string,IEnumerable<string>,int,Task<ProcessResult>>? run=null)
         =>this.run=run ?? ((exe,args,timeout)=>Processes.Run(exe,args,timeout));
     public static bool Allowed(string action)=>action is "check" or "stage" or "rollback" or "enable" or "disable";
+    public async Task<bool> PowerBlocked()
+    {
+        if(!File.Exists(Program))return false;
+        var result=await run(Program,["power-status"],5);
+        if(result.ExitCode!=0)throw new InvalidOperationException("Could not check for an active OS deployment. Review the system logs and retry.");
+        using var status=JsonDocument.Parse(result.Output);
+        if(status.RootElement.ValueKind!=JsonValueKind.Object || !status.RootElement.TryGetProperty("blocked",out var blocked) || blocked.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            throw new InvalidOperationException("Invalid OS deployment guard status.");
+        return blocked.GetBoolean();
+    }
     public async Task<OsUpdateStatus> Status()
     {
         var result=await run(Program,["status"],35);

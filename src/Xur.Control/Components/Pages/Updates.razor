@@ -41,7 +41,7 @@ else if(state!=null)
         {
             <p><strong>@(state.RollbackQueued ? "Previous version queued" : "Update ready"): @(state.RollbackQueued ? state.Previous?.Version : state.Pending?.Version)</strong></p>
             <p>Rebooting will interrupt all running workstations and AI services.</p>
-            <form method="post" action="/power/reboot"><AntiforgeryToken /><button disabled="@state.Busy">Reboot to finish</button></form>
+            <form method="post" action="/power/reboot"><AntiforgeryToken /><button>Reboot to finish</button></form>
         }
         else
         {

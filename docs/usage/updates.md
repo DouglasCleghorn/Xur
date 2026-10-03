@@ -36,6 +36,12 @@ check occurs 15–45 minutes after startup. Automatic staging is on by default;
 Pause automatic updates disables it. Reboot is always an explicit operator
 operation in this implementation. A scheduled reboot window is not implemented.
 
+Home's Reboot control remains available during profile changes, failed operations
+and unavailable update status. Confirming reboot interrupts running workloads and
+unsaved workstation work. Installation, OS staging and OS rollback temporarily
+block power actions; the manager shows the reason instead of entering the reboot
+waiting page. Update checks and a completed, queued deployment do not block reboot.
+
 Bazzite's hardware-setup service keeps its device fixes. Its service-specific
 PATH defers the pinned script's final reboot command, leaving any staged kernel
 arguments visible in Xur's pending-deployment state. The installer supplies
