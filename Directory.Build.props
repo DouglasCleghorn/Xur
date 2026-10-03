@@ -7,4 +7,11 @@
     <Deterministic>true</Deterministic>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
+  <!-- The services and their process tests require Linux. Keep the domain and
+       CLI libraries portable, and keep platform compatibility analysis enabled. -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Xur.Agent' or '$(MSBuildProjectName)' == 'Xur.Control' or '$(MSBuildProjectName)' == 'Xur.Gateway' or '$(MSBuildProjectName)' == 'Xur.Unit.Tests' or '$(MSBuildProjectName)' == 'Xur.Profile.Tests'">
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+      <_Parameter1>linux</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>

@@ -21,7 +21,7 @@ key=hashlib.sha256(json.dumps(inputs,sort_keys=True).encode()).hexdigest()[:16];
 subprocess.run([*ssh,'mkdir -p '+remote],check=True)
 subprocess.run([*scp,*map(str,[source/'build.sh',source/'patch.py',source/'client.c',source/'test-power.c',archive]),'builder@127.0.0.1:'+remote+'/'],check=True)
 command=f'''set -eu
-sudo dnf install -y gcc meson ninja-build libdrm-devel libxkbcommon-devel systemd-devel zlib-devel libtsm-devel libcurl-devel > {remote}/dependencies.log 2>&1
+sudo dnf install -y gcc meson ninja-build ncurses libdrm-devel libxkbcommon-devel systemd-devel zlib-devel libtsm-devel libcurl-devel > {remote}/dependencies.log 2>&1
 cd {remote}
 rm -rf kmscon output
 mkdir kmscon

@@ -41,9 +41,12 @@ if not key.exists():
     run("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", key)
 seed = vm / "seed"
 seed.mkdir(exist_ok=True, mode=0o700)
-(seed / "meta-data").write_text("instance-id: xur-fedora44-builder\nlocal-hostname: xur-builder\n")
+(seed / "meta-data").write_text("instance-id: xur-fedora44-builder\n")
 public_key = key.with_suffix(".pub").read_text().strip()
 (seed / "user-data").write_text(f"""#cloud-config
+# The isolated builder is reached through loopback SSH, so keep the image's
+# hostname instead of invoking hostname services during early boot.
+preserve_hostname: true
 users:
   - name: builder
     groups: [wheel]
