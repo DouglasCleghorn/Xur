@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Signed metadata and hostile archive checks, without root operations."""
 import hashlib,importlib.machinery,importlib.util,io,json,pathlib,sqlite3,subprocess,tarfile,tempfile
+from unittest.mock import patch
 repo=pathlib.Path(__file__).resolve().parents[2]
 loader=importlib.machinery.SourceFileLoader('updater',str(repo/'os/bootc/app-update'));spec=importlib.util.spec_from_loader(loader.name,loader);u=importlib.util.module_from_spec(spec);loader.exec_module(u)
 assert u.normalized('192.168.0.134')=='http://192.168.0.134:8088'
@@ -67,6 +68,23 @@ with tempfile.TemporaryDirectory() as t:
  except ValueError as error:assert 'multiseat' in str(error)
  else:raise AssertionError('Seat-managed installation could roll back to shared input runtime')
  (target/'application-features.json').write_text('["station-users-v1","manager-account-v1","container-workloads-v1","multiseat-v1"]');u.compatible(entry)
+
+ # New bundles require a physical Btrfs root before maintenance or service stops.
+ (target/'application-features.json').write_text('["station-users-v1","manager-account-v1","container-workloads-v1","multiseat-v1","btrfs-root-v1"]')
+ with patch.object(u,'call',return_value=b'ext4\n'):
+  try:u.activate(entry)
+  except ValueError as error:assert 'Btrfs' in str(error) and 'reinstall' in str(error)
+  else:raise AssertionError('Legacy ext4 host could activate a Btrfs-required version')
+ with patch.object(u,'call',return_value=b'btrfs\n') as call:
+  u.compatible(entry)
+  assert call.call_args.args[0]==['findmnt','--noheadings','--output','FSTYPE','--target','/sysroot']
+ with patch.object(u,'call',side_effect=OSError('probe failed')):
+  try:u.compatible(entry)
+  except ValueError as error:assert 'reinstall' in str(error)
+  else:raise AssertionError('Failed root filesystem probe accepted')
+ original_read_text=pathlib.Path.read_text
+ with patch.object(pathlib.Path,'read_text',autospec=True,side_effect=lambda path,*args,**kw:'quiet xur.installer=1' if str(path)=='/proc/cmdline' else original_read_text(path,*args,**kw)), patch.object(u,'call',side_effect=AssertionError('Installer must not probe installed root')):
+  u.compatible(entry)
 
 print(json.dumps({'suite':'ApplicationUpdateBoundaries' ,'result':'Passed','serverAddressValidation':True,'archiveTraversalLinksDevicesRejected':True,'invalidSignatureRejected':True,'workstationUserRollbackCompatibility':True,'incompatibleActivationDoesNotMutate':True,'managerAccountCompatibility':True,'containerCompatibility':True}))
 

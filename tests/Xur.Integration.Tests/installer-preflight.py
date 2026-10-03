@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory() as temp:
     except RuntimeError as error:assert 'symlink' in str(error)
     else:raise AssertionError('Overlay replacing /usr/sbin was accepted')
     (root/'usr/sbin').rmdir();(root/'usr/sbin').symlink_to('bin')
-    for name in ('wpa_supplicant','chronyd','hwclock'):
+    for name in ('wpa_supplicant','chronyd','hwclock','mkfs.btrfs'):
         path=root/'usr/bin'/name;path.chmod(0o644)
         try:runtime.check(root)
         except RuntimeError as error:assert name in str(error)

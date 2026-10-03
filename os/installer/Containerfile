@@ -1,7 +1,7 @@
 FROM localhost/xur-common:x86_64 AS live
 RUN dnf install -y anaconda anaconda-install-img-deps anaconda-dracut dracut-config-generic dracut-network \
     grub2-efi-x64-cdboot grub2-pc-modules grub2-tools-extra shim-x64 \
-    xorriso squashfs-tools isomd5sum python3 plymouth tar jq skopeo openssl chrony openssh-server audit policycoreutils && dnf clean all
+    xorriso squashfs-tools isomd5sum btrfs-progs python3 plymouth tar jq skopeo openssl chrony openssh-server audit policycoreutils && dnf clean all
 RUN mkdir -p /boot/efi && cp -ra /usr/lib/efi/*/*/EFI /boot/efi && \
     if test -f /usr/share/anaconda/list-harddrives-stub; then cp /usr/share/anaconda/list-harddrives-stub /usr/bin/list-harddrives; fi && \
     systemctl mask anaconda.service anaconda-direct.service anaconda-shell@.service && \

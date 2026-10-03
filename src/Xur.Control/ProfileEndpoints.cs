@@ -22,6 +22,7 @@ public static class ProfileEndpoints
         app.MapPost("/api/container-jobs",(ContainerPrepareRequest request)=>Safe(()=>Relay("/container-jobs",JsonContent.Create(request))));
         app.MapGet("/api/container-volumes",()=>Safe(()=>Relay("/container-volumes")));
         app.MapGet("/api/storage/usage",()=>Safe(()=>Relay("/storage-usage")));
+        app.MapGet("/api/steam-storage",()=>Safe(()=>Relay("/steam-storage")));
         app.MapPost("/api/storage/usage/refresh",()=>Safe(()=>Relay("/storage-usage/refresh",JsonContent.Create(new{}))));
         app.MapPost("/storage/refresh",async()=>await Safe(async()=>{using var r=await appliance.Agent.PostAsJsonAsync("/storage-usage/refresh",new{});r.EnsureSuccessStatusCode();return Results.Redirect("/storage");}));
         app.MapGet("/api/tool-updates",()=>Safe(()=>Relay("/tool-updates")));
