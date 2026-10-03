@@ -93,7 +93,8 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
             }
             foreach(var gpu in wanted)
             {
-                var card=gpu.Cards!.FirstOrDefault(c=>(gpu.Displays??[]).Any(d=>d.StartsWith(Path.GetFileName(c)+"-",StringComparison.Ordinal)))??gpu.Cards[0];
+                var cards=gpu.Cards!;
+                var card=cards.FirstOrDefault(c=>(gpu.Displays??[]).Any(d=>d.StartsWith(Path.GetFileName(c)+"-",StringComparison.Ordinal)))??cards[0];
                 var fontSize=DisplayFontSize(card,gpu.Displays??[],sysRoot);var outputs=OutputSignature(card,gpu.Displays??[],sysRoot);
                 var mode=installer?startupRecovery.Mode(gpu,card,sysRoot):"";
                 if(mode.Length>0)fontSize=FontSize([mode]);

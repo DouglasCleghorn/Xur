@@ -142,6 +142,13 @@ with tempfile.TemporaryDirectory(prefix='xur-test-') as temp:
         check(request('/install/storage')[0]==404 and request('/api/install/approve',{})[0]==404,'Device installation routes are removed from the web manager')
         check(request('/network')[0]==200,'Authenticated network page available')
         settings=request('/settings')[1]
+        # Fail staging before any host configuration is read. The mapped route
+        # must execute its IResult so the browser sees the error redirect.
+        (root/'run/backups').write_text('Blocked backup staging fixture')
+        try:
+            backup_status,backup_page=request('/settings/backup')
+            check(backup_status==200 and 'Backup could not be completed.' in backup_page and 'No incomplete archive was downloaded.' in backup_page,'Backup route writes its error redirect instead of returning an empty response')
+        finally:(root/'run/backups').unlink()
         assigned=json.loads(subprocess.check_output(['ip','-j','address','show']))
         check(all(address['local'] in settings for interface in assigned for address in interface['addr_info'] if not ipaddress.ip_address(address['local']).is_loopback), 'Settings lists every observed non-loopback IPv4 and IPv6 address')
         check('name="zone"' in settings and 'Asia/Kolkata' in settings and 'action="/settings/timezone"' in settings,'Settings renders the available system timezones')

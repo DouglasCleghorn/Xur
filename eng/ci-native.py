@@ -11,10 +11,10 @@ def build():
   work=pathlib.Path(temp);c=work/'console';v=work/'virtual';c.mkdir();v.mkdir()
   archive=c/'kmscon.tar.gz';urllib.request.urlretrieve(lock['url'],archive)
   if sha(archive)!=lock['sha256']:raise ValueError('kmscon checksum mismatch')
-  for name in ['build.sh','patch.py','client.c']:shutil.copy2(console/name,c/name)
+  for name in ['build.sh','patch.py','client.c','test-power.c']:shutil.copy2(console/name,c/name)
   for name in ['client.c','screencast.xml']:shutil.copy2(virtual/name,v/name)
   script='''set -euo pipefail
-  dnf install -y gcc meson ninja-build libdrm-devel libxkbcommon-devel systemd-devel zlib-devel libtsm-devel libcurl-devel wayland-devel python3 tar gzip
+  dnf install -y gcc meson ninja-build ncurses libdrm-devel libxkbcommon-devel systemd-devel zlib-devel libtsm-devel libcurl-devel wayland-devel python3 tar gzip
   cd /work/console
   mkdir kmscon
   tar -xzf kmscon.tar.gz --strip-components=1 -C kmscon
