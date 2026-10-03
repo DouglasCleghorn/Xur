@@ -227,6 +227,11 @@ def recover():
     TX.unlink();BLOCK.unlink(missing_ok=True);progress('RolledBack','Previous application restored')
 def compatible(entry):
     features=read(ROOT/'releases'/entry['id']/'host/application-features.json',[])
+    if 'btrfs-root-v1' in features and 'xur.installer=1' not in pathlib.Path('/proc/cmdline').read_text().split():
+        try:filesystem=call(['findmnt','--noheadings','--output','FSTYPE','--target','/sysroot'],10).decode().strip()
+        except (subprocess.SubprocessError,OSError):filesystem='unknown'
+        if filesystem!='btrfs':
+            raise ValueError('This Xur version requires a Btrfs root filesystem. Ext4 installations are legacy and unsupported; back up your data and reinstall with current Xur media.')
     if (ROOT.parent/'manager-account.json').exists() and 'manager-account-v1' not in features:
         raise ValueError('This version cannot manage your username and password. Select a version with manager account support.')
     if 'container-workloads-v1' not in features:

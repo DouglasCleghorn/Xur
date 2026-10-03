@@ -60,6 +60,8 @@ await RecoveryBackupTests.Run(Check);
 StationDeviceTests.Run(Check);
 ContainerTests.Run(Check);
 BootMediaTests.Run(Check);
+await HostFilesystemTests.Run(Check);
+await SteamStorageTests.Run(Check);
 var clock = new Clock(); var auth = new Bootstrap(clock); var code=auth.DisplayCode;
 Check(code.Length == 7 && code[3] == '-' && code.Replace("-", "").All(c => "0123456789ABCDEFGHJKMNPQRSTVWXYZ".Contains(c)),"Bootstrap code uses six Crockford Base32 characters in 3-3 format (30 bits)");
 Check(auth.Login("xur","wrong").Status == 401,"Wrong bootstrap code rejected");

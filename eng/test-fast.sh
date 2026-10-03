@@ -13,6 +13,7 @@ bash eng/publish.sh > .build/fast/publish.log 2>&1
 python3 tests/Xur.Integration.Tests/station-display.py > .build/fast/station-display.log 2>&1
 python3 tests/Xur.Integration.Tests/storage-explorer.py > .build/fast/storage-explorer.log 2>&1
 python3 tests/Xur.Integration.Tests/station-files.py > .build/fast/station-files.json
+python3 tests/Xur.Integration.Tests/steam-storage.py > .build/fast/steam-storage.json
 python3 tests/Xur.Integration.Tests/bootstrap.py > .build/fast/control.json
 python3 tests/Xur.Integration.Tests/bootstrap.py --diagnostics > .build/fast/installer-diagnostics.json
 python3 tests/Xur.Integration.Tests/installed-management.py > .build/fast/installed-management.json

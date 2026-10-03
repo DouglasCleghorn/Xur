@@ -8,6 +8,10 @@ hubs and audio** to assign peripherals and choose a primary workstation. See
 [multiple workstations](../architecture/multiple-workstations.md) for matching
 rules, supported devices and validation limits.
 
+Steam game copies use automatic [block sharing](steam-storage.md) on Btrfs or
+reflink-enabled XFS storage. User files remain independently writable; Steam
+still downloads each user's installation before sharing runs.
+
 Load the profile, install Moonlight on the client, and add this machine's address.
 Select the computer in Moonlight, then open Connect with Moonlight on the
 Workstations page and approve its pending request using the four-digit PIN.

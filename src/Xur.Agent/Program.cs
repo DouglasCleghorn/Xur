@@ -18,6 +18,7 @@ var storage = new Storage();
 var bootDisplayHistory=new BootDisplayHistory();
 app.MapGet("/diagnostics/display-history",()=>Results.Json(bootDisplayHistory.Read()));
 bool installer = File.ReadAllText("/proc/cmdline").Split(' ').Contains("xur.installer=1");
+if(!installer && File.Exists("/var/lib/xur/installed"))await HostFilesystem.RequireBtrfs();
 // New agent startup is reached by the previous updater on the first upgrade.
 // Keep this repair before health readiness; do not rely on a new updater hook.
 const string hostServiceMigration="/var/lib/xur/app/current/host/host-service-migrate";
@@ -171,7 +172,7 @@ app.MapPost("/approve", async (Approval approval) => {
             return Results.Conflict(new {error="Installer app health check is still running. Retry shortly."});
         if((await networkSettings.Read()).Pending?.Stage is "Applying" or "Confirm")return Results.Conflict(new{error="Keep or revert the network change before approving installation."});
         var template = File.ReadAllText("/usr/share/xur/install-template.ks");
-        if (template.Contains("clearpart") || template.Contains("ignoredisk") || template.Contains("part /"))
+        if (template.Contains("clearpart") || template.Contains("ignoredisk") || template.Contains("part /") || template.Contains("btrfs /"))
             return Results.Conflict(new { error = "Unsafe installer template" });
         var inventory = await storage.Observe();
         if (plan.Expires <= DateTimeOffset.UtcNow || inventory.Generation != plan.Generation || inventory.Disks.SingleOrDefault(d => d.Path == plan.Target.Path) is not { Blocked.Length: 0 })
@@ -216,6 +217,9 @@ app.MapPost("/workstations/{id}/stream/restart",async Task<IResult>(string id)=>
 app.MapGet("/station-allocations",()=>Results.Json(StationSeats.Status()));
 app.MapGet("/station-devices",async Task<IResult>()=>installer?Results.Conflict():Results.Json(StationDeviceInventoryReader.Read(await GpuInventory.Observe())));
 StationFiles.Map(app,installer);
+var steamStorage=new SteamStorage(Path.Combine(stateDir,"steam-storage"));
+app.MapGet("/steam-storage",()=>installer?Results.Conflict():Results.Json(steamStorage.Status()));
+if(!installer)_=Task.Run(()=>steamStorage.Run(app.Lifetime.ApplicationStopping));
 var stationAccounts=new StationAccounts();
 app.MapGet("/station-users",()=>installer?Results.Conflict():Results.Json(StationAccounts.Read()));
 app.MapPost("/station-users",async Task<IResult>(StationUserCreate request)=>{

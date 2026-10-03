@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 PROGRAMS = ('wpa_supplicant', 'chronyd', 'chronyc', 'hwclock', 'modprobe',
-            'sysctl', 'ldconfig', 'sshd', 'auditctl', 'tailscaled')
+            'sysctl', 'ldconfig', 'sshd', 'auditctl', 'tailscaled', 'mkfs.btrfs')
 
 def check(root=Path('/')):
     usr = root / 'usr'

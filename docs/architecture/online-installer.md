@@ -8,6 +8,15 @@ remains the same stable channel used by `os-update`. Image pulls require the
 Bazzite signing key through containers/image's sigstore policy; TLS stays enabled.
 The digest/channel receipt is copied into `/etc/xur/upstream.json`.
 
+Fresh disk plans create a FAT32 EFI partition, an ext4 `/boot`, and a Btrfs root
+volume using the remaining space. User homes under `/var/home` share that Btrfs
+filesystem, enabling automatic Steam game block sharing across users. The disk
+review lists Btrfs explicitly before approval. Older ext4 installations are
+deprecated and unsupported by Btrfs-required releases; back up and reinstall
+with current media. Application updates preserve filesystems and reject
+incompatible hosts. See [Steam storage](../usage/steam-storage.md)
+for sharing limits and validation.
+
 Before source resolution, the approved installation starts chronyd, requests fresh
 time measurements and waits up to 30 seconds for synchronization. It writes UTC to
 the hardware clock, when present, and verifies the readback before starting

@@ -5,6 +5,10 @@
 # Install Xur
 
 Choose a whole disk of at least 64 GiB for the Bazzite host and OS deployments.
+New installations require Btrfs root storage; `/boot` remains ext4 and EFI uses
+FAT32. Older ext4-root Xur installations are deprecated. Back up their user data
+and reinstall from current media before using Btrfs-required releases. See
+[Steam storage](steam-storage.md) for automatic game block sharing and compatibility.
 
 1. Boot the ISO using UEFI. For Rufus, choose **GPT**, **UEFI (non CSM)**,
    **FAT32**, and **ISO Image mode (file copy)**. Raw/DD hybrid writing also works.
