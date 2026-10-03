@@ -23,6 +23,7 @@ node tests/Xur.Integration.Tests/control-panel-ui.cjs > .build/fast/control-pane
 node tests/Xur.Integration.Tests/endpoints-ui.cjs > .build/fast/endpoints-ui.json
 node tests/Xur.Integration.Tests/station-identity-ui.cjs > .build/fast/station-identity-ui.json
 node tests/Xur.Integration.Tests/workstations-ui.cjs > .build/fast/workstations-ui.json
+node tests/Xur.Integration.Tests/station-add-user.cjs > .build/fast/station-add-user.log
 node tests/Xur.Integration.Tests/settings-storage-ui.cjs > .build/fast/settings-storage-ui.json
 node tests/Xur.Integration.Tests/files-ui.cjs > .build/fast/files-ui.json
 node tests/Xur.Integration.Tests/api-keys-ui.cjs > .build/fast/api-keys-ui.json

@@ -298,13 +298,15 @@ async Task StartHost()
         var form=await ctx.Request.ReadFormAsync();
         var result=auth.CreateAccount(ctx.Items["setupSession"] as string,form["username"].ToString(),form["password"].ToString());
         if(result.Session==null)return Results.Redirect("/setup-account?error="+Uri.EscapeDataString(result.Error ?? "Could not create account."));
-        File.Delete(Path.Combine(identityDirectory,"bootstrap-token"));SetSession(ctx,result.Session);LocalConsole.Refresh();return Results.Redirect("/");
+        SetSession(ctx,result.Session);CompleteAccountSetup();return Results.Redirect("/");
     });
     app.MapPost("/api/auth/setup",(HttpContext ctx,ApiAccountRequest request)=> {
         var result=auth.CreateAccount(ctx.Items["setupSession"] as string,request.Username ?? "",request.Password ?? "");
         if(result.Session==null)return Results.Json(new {error=result.Error},statusCode:result.Status);
-        File.Delete(Path.Combine(identityDirectory,"bootstrap-token"));LocalConsole.Refresh();return Results.Json(new {accessToken=result.Session,tokenType="Bearer",expiresIn=28800,setupRequired=false});
+        CompleteAccountSetup();return Results.Json(new {accessToken=result.Session,tokenType="Bearer",expiresIn=28800,setupRequired=false});
     });
+    void CompleteAccountSetup()=>AccountSetupCompletion.Run(identityDirectory,LocalConsole.Refresh,
+        (message,error)=>app.Logger.LogWarning(error,"{Message}",message));
     app.MapPost("/api/auth/login",(ApiAccountRequest request)=> {
         var result=auth.PasswordLogin(request.Username ?? "",request.Password ?? "");
         return result.Session is { } session ? Results.Json(new {accessToken=session,tokenType="Bearer",expiresIn=28800,setupRequired=false})

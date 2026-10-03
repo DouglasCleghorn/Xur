@@ -29,7 +29,18 @@
   });
  }
 
- for(const form of document.querySelectorAll('.station-add-user'))form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('button'),status=form.querySelector('[role=status]');button.disabled=true;try{const r=await (window.xurFetch??window.fetch)('/api/station-users',{method:'POST',headers:{'Content-Type':'application/json','RequestVerificationToken':form.elements.__RequestVerificationToken.value},body:JSON.stringify({name:form.elements.name.value})});if(!r.ok)throw Error((await r.json()).error||'Could not create user.');const account=await r.json(),select=document.querySelector('.station-create-form select[name=user]');select.add(new Option(account.name,account.username,true,true));status.textContent='User added and selected for this workstation.';form.reset();button.disabled=false;}catch(error){status.textContent=error.message;button.disabled=false;}};
+ for(const form of document.querySelectorAll('.station-add-user'))form.onsubmit=async e=>{
+  e.preventDefault();const button=form.querySelector('button'),status=form.querySelector('[role=status]');
+  if(button.disabled)return;button.disabled=true;status.textContent='Creating user…';
+  try{
+   const r=await (window.xurFetch??window.fetch)('/api/station-users',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','RequestVerificationToken':form.elements.__RequestVerificationToken.value},body:JSON.stringify({name:form.elements.namedItem('name').value})});
+   const account=await r.json().catch(()=>null);
+   if(!r.ok)throw Error(account?.error||'Could not create user (HTTP '+r.status+'). Open Diagnostics for details.');
+   if(!account?.username||!account?.name)throw Error('The server returned an incomplete user. Refresh the user list before retrying.');
+   const select=document.querySelector('.station-create-form select[name=user]');select.add(new Option(account.name,account.username,true,true));
+   status.textContent='User added and selected for this workstation.';form.reset();
+  }catch(error){status.textContent=error.message;}finally{button.disabled=false;}
+ };
  for(const card of document.querySelectorAll('.station-card')){
   card.querySelector('.copy-station-address')?.addEventListener('click',async e=>{const text=card.querySelector('.station-address').textContent;try{await navigator.clipboard.writeText(text);e.target.textContent='Copied';}catch{const range=document.createRange();range.selectNodeContents(card.querySelector('.station-address'));getSelection().removeAllRanges();getSelection().addRange(range);}});
   const form=card.querySelector('.station-pair');if(!form)continue;

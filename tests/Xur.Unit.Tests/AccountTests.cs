@@ -14,6 +14,13 @@ public static class AccountTests
             check(auth.CreateAccount(setup,"owner","short").Status==400 && !auth.AccountConfigured,"Invalid password does not consume setup");
             var result=auth.CreateAccount(setup,"Owner","a long test password");
             check(result.Status==200 && auth.Authorized(result.Session),"Account creation returns a manager session");
+            var tokenPath=Path.Combine(directory,"bootstrap-token");Directory.CreateDirectory(tokenPath);
+            var warnings=new List<string>();
+            AccountSetupCompletion.Run(directory,()=>throw new IOException("Console unavailable"),(message,_)=>warnings.Add(message));
+            check(warnings.Count==2 && auth.Authorized(result.Session) && !auth.CanSetup(setup),"Cleanup and console failures preserve the completed account session without reopening setup");
+            Directory.Delete(tokenPath);File.WriteAllText(tokenPath,code);bool refreshed=false;
+            AccountSetupCompletion.Run(directory,()=>refreshed=true,(_,_)=>throw new Exception("Unexpected completion failure"));
+            check(refreshed && !File.Exists(tokenPath),"Successful account completion removes the bootstrap token and refreshes the console");
             check(auth.DisplayCode=="" && auth.Login("xur",code).Status==401 && !auth.CanSetup(setup) && !auth.Authorized(setup),"Configured account removes code and invalidates bootstrap sessions");
             check(auth.CreateAccount(setup,"other","another password").Status==409,"Second setup cannot overwrite the account");
             var file=Path.Combine(directory,"manager-account.json");

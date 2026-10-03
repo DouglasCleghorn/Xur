@@ -24,7 +24,7 @@ else
                 <button disabled="@busy">Create workstation</button>
             </form>
             <p class="secondary-text">After creating a workstation, add it to a profile to assign its GPU and devices.</p>
-            <details class="station-user-create"><summary>Add a user</summary><form class="station-add-user station-inline-form"><AntiforgeryToken /><label>Name<input name="name" required maxlength="60" /></label><button class="secondary" disabled="@busy">Add user</button><p role="status"></p></form></details>
+            <details class="station-user-create"><summary>Add a user</summary><form class="station-add-user station-inline-form"><AntiforgeryToken /><label>Name<input name="name" required maxlength="60" /></label><button class="secondary">Add user</button><p role="status"></p></form></details>
         </div>
     </details>
     @if(!Entries.Any()) { <div class="empty-state"><h2>No workstations yet</h2><p>Create a workstation, then add it to a <a href="/profiles">profile</a> to get started.</p></div> }
