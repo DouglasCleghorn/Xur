@@ -304,13 +304,7 @@ app.MapPost("/runtime/action",async(ServiceAction request)=> {
     var result=await Processes.Run("systemctl",[request.Action,request.Name],60);
     return result.ExitCode==0 ? Results.Ok() : Results.Problem("Service action failed. Check the system logs.");
 });
-app.MapPost("/power/{action}", async (string action) => {
-    if (action is not ("reboot" or "poweroff")) return Results.BadRequest();
-    if (operation?.Stage == "Installing") return Results.Conflict();
-    if(!installer && await UpdateAll.Running())return Results.Conflict();
-    if(!installer && File.Exists("/var/lib/xur/app/current/host/os-update") && (await updates.Status()).Busy)return Results.Conflict();
-    await Processes.Run("systemctl", [action]); return Results.Accepted();
-});
+app.MapPower(()=>operation?.Stage=="Installing",()=>installer?Task.FromResult(false):updates.PowerBlocked());
 await app.StartAsync();
 _=Task.Run(()=>displayConsoles.Run(app.Lifetime.ApplicationStopping));
 File.SetUnixFileMode(socket, UnixFileMode.UserRead | UnixFileMode.UserWrite);

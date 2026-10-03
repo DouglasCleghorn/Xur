@@ -24,6 +24,8 @@ void Check(bool value,string name) { if(!value) throw new Exception(name); resul
 await InstallerDiagnosticsTests.Run(Check);
 await ApplicationLogTests.Run(Check);
 await BrowserErrorTests.Run(Check);
+await RebootTests.Run(Check);
+await RebootAvailabilityTests.Run(Check);
 await FileEndpointTests.Run(Check);
 await FolderSizeCacheTests.Run(Check);
 await StationIdentityTests.Run(Check);

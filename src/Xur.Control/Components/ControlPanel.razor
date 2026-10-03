@@ -2,7 +2,7 @@
 @inject ProfileManager Profiles
 <div class="page-heading control-heading"><h1>Control panel</h1><div class="control-actions">
     <form method="post" action="/updates/all"><AntiforgeryToken /><button disabled="@(Busy||updates==null||updates.Busy)">Update All</button></form>
-    <button class="secondary" type="button" id="home-reboot" disabled="@(Busy||updates==null||updates.Busy)">Reboot</button>
+    <button class="secondary" type="button" id="home-reboot">Reboot</button>
 </div></div>
 @if(osUpdates?.Pending!=null||osUpdates?.RollbackQueued==true) { <p class="reboot-banner" role="status">An update is ready. Reboot to finish applying it. <a href="/updates">Details</a></p> }
 @if(updates?.Busy==true) { <p role="status"><a href="/updates">Update All is running</a></p> }
