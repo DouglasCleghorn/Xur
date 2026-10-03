@@ -42,6 +42,7 @@ python3 tests/Xur.Integration.Tests/compact-release.py > .build/fast/compact-rel
 python3 tests/Xur.Integration.Tests/release-version.py > .build/fast/release-version.log
 python3 tests/Xur.Integration.Tests/github-release.py > .build/fast/github-release.json
 python3 tests/Xur.Integration.Tests/installer-release.py > .build/fast/installer-release.json
+python3 tests/Xur.Integration.Tests/ci-build.py > .build/fast/ci-build.log
 python3 tests/Xur.Integration.Tests/builder-ready.py > .build/fast/builder-ready.json
 python3 tests/Xur.Integration.Tests/terminal.py > .build/fast/terminal.json
 python3 tests/Xur.Integration.Tests/console-menu.py > .build/fast/console-menu.json

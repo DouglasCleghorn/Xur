@@ -5,7 +5,8 @@ Never selects a physical installation disk or changes host security policy.
 import argparse,fcntl,hashlib,json,os,pathlib,shutil,subprocess,tarfile,time,urllib.request
 from builder_ready import wait_for_cloud_init
 repo=pathlib.Path(__file__).resolve().parents[1];os.chdir(repo)
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('--check',action='store_true',help='Check local build prerequisites without changing anything');p.add_argument('--output',default='dist/xur-installer-x86_64.iso',help='Output ISO beneath dist/');p.add_argument('--inspect-existing',action='store_true',help='Inspect and retrieve the completed Fedora build; requires an identical build context');args=p.parse_args()
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('--check',action='store_true',help='Check local build prerequisites without changing anything');p.add_argument('--output',default='dist/xur-installer-x86_64.iso',help='Output ISO beneath dist/');p.add_argument('--inspect-existing',action='store_true',help='Inspect and retrieve the completed Fedora build; requires an identical build context');p.add_argument('--from-tested-context',type=pathlib.Path,help='Import the current CI commit/channel context and reuse its completed application checks');args=p.parse_args()
+if args.inspect_existing and args.from_tested_context:p.error('--inspect-existing cannot import a context')
 root=pathlib.Path(os.environ.get('XUR_BUILD_ROOT',pathlib.Path.home()/'.local/share/xur-build'));vm=root/'vm';cache=pathlib.Path(os.environ.get('XUR_BUILD_CACHE',pathlib.Path.home()/'.cache/xur-build'))
 lock=json.loads(pathlib.Path('eng/toolchain-lock.json').read_text());out=pathlib.Path(args.output).resolve()
 if not out.is_relative_to(repo/'dist') or out.suffix!='.iso':raise SystemExit('Output must be an .iso file beneath this checkout\'s dist/')
@@ -26,13 +27,16 @@ def fetch(entry,path,algorithm='sha256'):
  tmp=path.with_suffix(path.suffix+'.download');urllib.request.urlretrieve(entry['url'],tmp)
  if sha(tmp,algorithm)!=entry[algorithm]:tmp.unlink();raise SystemExit('Download checksum mismatch: '+str(path))
  tmp.replace(path)
-fetch(lock['tailscale'],pathlib.Path('.build/downloads/tailscale.tgz'))
-fetch(lock['builderCloudImage'],cache/'fedora-44.qcow2')
+if args.from_tested_context:
+ run_context=['python3','eng/ci-context.py','import','--directory',str(args.from_tested_context),'--commit',os.environ['GITHUB_SHA'],'--channel',os.environ['XUR_INSTALLER_CHANNEL']]
+ subprocess.run(run_context,check=True)
+else:fetch(lock['tailscale'],pathlib.Path('.build/downloads/tailscale.tgz'))
+if not os.environ.get('XUR_BUILDER_TEMPLATE'):fetch(lock['builderCloudImage'],cache/'fedora-44.qcow2')
 sdk=pathlib.Path(os.environ.get('XUR_DOTNET',root/'dotnet/dotnet'))
-if not sdk.is_file():
+if not args.from_tested_context and not sdk.is_file():
  archive=cache/'dotnet-sdk.tar.gz';fetch(lock['dotnetSdk'],archive,'sha512');sdk.parent.mkdir(parents=True,exist_ok=True)
  with tarfile.open(archive) as tar:tar.extractall(sdk.parent,filter='data')
-if subprocess.check_output([str(sdk),'--version'],text=True).strip()!=lock['dotnetSdk']['version']:raise SystemExit('The SDK does not match the pinned version')
+if not args.from_tested_context and subprocess.check_output([str(sdk),'--version'],text=True).strip()!=lock['dotnetSdk']['version']:raise SystemExit('The SDK does not match the pinned version')
 os.environ['XUR_DOTNET']=str(sdk)
 ssh=['ssh','-o','BatchMode=yes','-o','ConnectTimeout=5','-o','StrictHostKeyChecking=accept-new','-o',f'UserKnownHostsFile={vm}/known_hosts','-i',str(vm/'builder_ed25519'),'-p','22220','builder@127.0.0.1']
 scp=['scp','-q','-o','BatchMode=yes','-o','StrictHostKeyChecking=accept-new','-o',f'UserKnownHostsFile={vm}/known_hosts','-i',str(vm/'builder_ed25519'),'-P','22220']
@@ -49,12 +53,14 @@ if not args.inspect_existing:
  run(scp+['eng/prepare-fedora-builder.sh','eng/toolchain-lock.json','builder@127.0.0.1:.'])
  run(ssh+['sudo bash prepare-fedora-builder.sh toolchain-lock.json'])
  # Use the already pinned Image Builder. Fresh builders can prepare it with prepare-fedora-builder.sh.
- print('Publishing and checking the running control process...',flush=True)
- run(['bash','eng/publish.sh'],stdout=pathlib.Path('.build/build-publish.log').open('w'),stderr=subprocess.STDOUT)
- run(['python3','tests/Xur.Integration.Tests/bootstrap.py'],stdout=pathlib.Path('.build/build-process-tests.json').open('w'))
- run([str(sdk),'run','--project','tests/Xur.Unit.Tests','-c','Release'],stdout=pathlib.Path('.build/build-unit-tests.log').open('w'))
- run([str(sdk),'run','--project','tests/Xur.Profile.Tests','-c','Release'],stdout=pathlib.Path('.build/build-profile-tests.log').open('w'))
- run(['python3','tests/Xur.Integration.Tests/terminal.py'],stdout=pathlib.Path('.build/build-terminal-tests.json').open('w'))
+ if not args.from_tested_context:
+  print('Publishing and checking the running control process...',flush=True)
+  run(['bash','eng/publish.sh'],stdout=pathlib.Path('.build/build-publish.log').open('w'),stderr=subprocess.STDOUT)
+  run(['python3','tests/Xur.Integration.Tests/bootstrap.py'],stdout=pathlib.Path('.build/build-process-tests.json').open('w'))
+  run([str(sdk),'run','--project','tests/Xur.Unit.Tests','-c','Release'],stdout=pathlib.Path('.build/build-unit-tests.log').open('w'))
+  run([str(sdk),'run','--project','tests/Xur.Profile.Tests','-c','Release'],stdout=pathlib.Path('.build/build-profile-tests.log').open('w'))
+  run(['python3','tests/Xur.Integration.Tests/terminal.py'],stdout=pathlib.Path('.build/build-terminal-tests.json').open('w'))
+ else:print('Using the verified application context and checks from this CI run.',flush=True)
  run(['tar','-cf','.build/context.tar','-C','.build/context','.'])
  run(scp+['.build/context.tar','eng/build-in-fedora.sh','eng/label-live-manifest.py','eng/context-receipt.py','eng/inspect-media.sh','builder@127.0.0.1:.'])
  print('Building host, live environment and ISO in Fedora; log: builder:iso-build-script.log',flush=True)
