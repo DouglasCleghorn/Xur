@@ -1,34 +1,91 @@
 #!/usr/bin/bash
-set -eu
-while IFS=: read -r device kind; do
+set -u
+# Activation is optional: local setup must work even when a NIC disappears or NM stalls.
+diagnostic() { printf 'xur-network: %s\n' "$*" >&2; }
+nm() { timeout --kill-after=2s 10s nmcli --wait 5 "$@"; }
+uuid_pattern='[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}'
+if ! devices=$(nm -t -f DEVICE,TYPE device status); then
+    diagnostic "Could not enumerate adapters; local setup remains available."
+    exit 0
+fi
+while IFS=: read -r device kind extra; do
+    test -n "$device$kind$extra" || continue
+    if [[ ! "$device" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,14}$ || -z "$kind" || -n "$extra" ]]; then
+        diagnostic "Ignoring malformed adapter inventory entry."
+        continue
+    fi
     test "$kind" = ethernet || continue
-    nmcli device set "$device" managed yes
-    active=$(nmcli -g GENERAL.CON-UUID device show "$device")
-    if [[ "$active" =~ ^[a-fA-F0-9-]{36}$ ]]; then continue; fi
-    # Use saved autoconnect profiles only. `device connect` can also choose an
-    # unconfirmed profile with autoconnect=no, which must never win at boot.
-    available=$(nmcli --escape no -g CONNECTIONS.AVAILABLE-CONNECTIONS device show "$device")
-    selected=""; best_priority=-1000; best_time=-1
-    while [[ "$available" =~ ([a-fA-F0-9]{8}-[a-fA-F0-9-]{27}) ]]; do
-        uuid=${BASH_REMATCH[1]}; available=${available#*"$uuid"}
-        enabled=$(nmcli -g connection.autoconnect connection show uuid "$uuid") || continue
-        test "$enabled" = yes || continue
-        priority=$(nmcli -g connection.autoconnect-priority connection show uuid "$uuid")
-        timestamp=$(nmcli -g connection.timestamp connection show uuid "$uuid")
-        [[ "$priority" =~ ^-?[0-9]+$ ]] || continue
-        [[ "$timestamp" =~ ^[0-9]+$ ]] || timestamp=0
+    if ! nm device set "$device" managed yes; then
+        diagnostic "$device: could not enable management; skipping adapter."
+        continue
+    fi
+    if ! active=$(nm -g GENERAL.CON-UUID device show "$device"); then
+        diagnostic "$device: could not read active connection; skipping adapter."
+        continue
+    fi
+    if [[ "$active" =~ ^$uuid_pattern$ ]]; then continue; fi
+    if [[ -n "$active" && "$active" != -- ]]; then
+        diagnostic "$device: malformed active connection identity; skipping adapter."
+        continue
+    fi
+    # Only confirmed autoconnect profiles may win. Failed queries never justify DHCP.
+    if ! available=$(nm --escape no -g CONNECTIONS.AVAILABLE-CONNECTIONS device show "$device"); then
+        diagnostic "$device: could not read saved connections; skipping adapter."
+        continue
+    fi
+    selected=""; best_priority=-1000; best_time=-1; uncertain=false; found=false
+    while [[ "$available" =~ ($uuid_pattern) ]]; do
+        uuid=${BASH_REMATCH[1]}; available=${available#*"$uuid"}; found=true
+        if ! enabled=$(nm -g connection.autoconnect connection show uuid "$uuid"); then
+            diagnostic "$device: could not read saved profile $uuid; skipping adapter."
+            uncertain=true; break
+        fi
+        if test "$enabled" = no; then continue; fi
+        if test "$enabled" != yes; then
+            diagnostic "$device: malformed autoconnect setting for $uuid; skipping adapter."
+            uncertain=true; break
+        fi
+        if ! priority=$(nm -g connection.autoconnect-priority connection show uuid "$uuid") ||
+           ! timestamp=$(nm -g connection.timestamp connection show uuid "$uuid"); then
+            diagnostic "$device: could not read saved profile ordering; skipping adapter."
+            uncertain=true; break
+        fi
+        if [[ ! "$priority" =~ ^-?(0|[1-9][0-9]{0,2})$ || ! "$timestamp" =~ ^(0|[1-9][0-9]{0,17})$ ]] ||
+           (( priority < -999 || priority > 999 )); then
+            diagnostic "$device: malformed saved profile ordering; skipping adapter."
+            uncertain=true; break
+        fi
         if test -z "$selected" || (( priority > best_priority || priority == best_priority && timestamp > best_time )); then
             selected=$uuid; best_priority=$priority; best_time=$timestamp
         fi
     done
+    if $uncertain; then continue; fi
+    if ! $found && [[ -n "$available" && "$available" != -- ]]; then
+        diagnostic "$device: malformed saved connection inventory; skipping adapter."
+        continue
+    fi
     if test -n "$selected"; then
-        nmcli --wait 0 connection up uuid "$selected" ifname "$device" || true
+        nm --wait 0 connection up uuid "$selected" ifname "$device" || diagnostic "$device: could not activate saved connection."
     else
         connection="xur-dhcp-$device"
-        if ! nmcli connection show "$connection" >/dev/null 2>&1; then
-            nmcli connection add type ethernet ifname "$device" con-name "$connection" \
-                connection.autoconnect yes connection.autoconnect-priority -999 ipv4.method auto ipv6.method auto
+        nm connection show "$connection" >/dev/null
+        result=$?
+        if test "$result" = 10; then
+            if ! nm connection add type ethernet ifname "$device" con-name "$connection" \
+                connection.autoconnect yes connection.autoconnect-priority -999 ipv4.method auto ipv6.method auto; then
+                diagnostic "$device: could not create DHCP profile; skipping adapter."
+                continue
+            fi
+        elif test "$result" != 0; then
+            diagnostic "$device: could not inspect DHCP profile; skipping adapter."
+            continue
+        else
+            if ! enabled=$(nm -g connection.autoconnect connection show "$connection") || test "$enabled" != yes; then
+                diagnostic "$device: DHCP profile is not confirmed for autoconnect; skipping adapter."
+                continue
+            fi
         fi
-        nmcli --wait 0 connection up "$connection" || true
+        nm --wait 0 connection up "$connection" || diagnostic "$device: could not request DHCP."
     fi
-done < <(nmcli -t -f DEVICE,TYPE device status)
+done <<< "$devices"
+exit 0

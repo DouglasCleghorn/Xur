@@ -1,7 +1,7 @@
 [Unit]
 Description=Xur privileged typed operations (Unix socket only)
-After=local-fs.target xur-network.service
-Requires=xur-network.service
+After=local-fs.target NetworkManager.service
+Wants=xur-network.service
 
 [Service]
 ExecStart=/usr/bin/xur-agent
