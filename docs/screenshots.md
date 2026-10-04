@@ -49,6 +49,15 @@ readability; key actions are also described in text.
 
 ## Change log
 
+- 2026-10-04: Captured the two-stick keyboard overlay in
+  `.build/evidence/console-overlay/` in the `xbox-controller` worktree, based on
+  PR #22 at `32dae01` plus overlay changes. `preview-{100x40,80x25,40x20,40x12}`,
+  `typed-100x40` and `password-100x40` are rasterized from actual ANSI console
+  frames with synthetic `xur` text and masked password input; no live device,
+  credentials, addresses or account data. Private layout and regression evidence,
+  not publication assets or physical-display captures. Reviewed 2026-10-04;
+  regenerate when wheel layout, feedback, masking or terminal sizing changes.
+
 - 2026-10-04: Retired `docs/assets/speech-and-llm.png` and removed its README
   and website uses because the illustrated model-specific runtime preparation
   was removed. User-supplied allocation diagram; privacy reviewed 2026-09-20,

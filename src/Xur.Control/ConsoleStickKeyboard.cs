@@ -6,7 +6,8 @@ internal readonly record struct ConsoleControllerInput(ConsoleKeyAction Action=C
     public static implicit operator ConsoleControllerInput(ConsoleKeyAction action)=>new(action);
 }
 
-internal sealed record ConsoleKeyboardPreview(bool Active,int Set,int? Left,int? Right,char? Character);
+internal sealed record ConsoleKeyboardPreview(bool Active,int Set,int? Left,int? Right,char? Character,
+    double LeftX=0,double LeftY=0,double RightX=0,double RightY=0);
 internal readonly record struct ConsoleGamepadAxis(int Code,int Value,int Minimum,int Maximum,int Flat=0);
 
 // A positional alphabet: left is the high digit, right the low digit. Each set
@@ -75,7 +76,11 @@ internal sealed class ConsoleStickKeyboard
         if(active){left=Slice(0,1,left);right=Slice(3,4,right);}
         else left=right=null;
         var index=left.HasValue && right.HasValue?left.Value*Slices+right.Value:-1;
-        return new(active,set,left,right,index>=0 && index<Alphabets[set].Length?Alphabets[set][index]:null);
+        // Quantize visual positions to terminal-cell precision, independently of
+        // slice hysteresis. Thumb motion can move a dot without changing a letter.
+        double Dot(int code)=>active?Math.Round(Coordinate(code)*10)/10:0;
+        return new(active,set,left,right,index>=0 && index<Alphabets[set].Length?Alphabets[set][index]:null,
+            Dot(0),Dot(1),Dot(3),Dot(4));
     }
 
     public ConsoleControllerInput Read(ushort type,ushort code,int value)
@@ -116,25 +121,4 @@ internal sealed class ConsoleStickKeyboard
         return result;
     }
 
-    internal static string Render(ConsoleKeyboardPreview preview)
-    {
-        var alphabet=Alphabets[preview.Set];var slices=(int)Math.Ceiling(Math.Sqrt(alphabet.Length));
-        string Group(int index)=>index*slices<alphabet.Length?alphabet.Substring(index*slices,Math.Min(slices,alphabet.Length-index*slices)):"·";
-        string Letter(int index)=>preview.Left.HasValue && preview.Left.Value*slices+index<alphabet.Length
-            ?Label(alphabet[preview.Left.Value*slices+index]):"·";
-        string Cell(string value,int index,int? selected)=>selected==index?"["+value+"]":" "+value+" ";
-        var groups=Enumerable.Range(0,slices).Select(i=>Cell(Group(i).Replace(" ","_"),i,preview.Left)).ToArray();
-        var letters=Enumerable.Range(0,slices).Select(i=>Cell(Letter(i),i,preview.Right)).ToArray();
-        string[] Wheel(string[] values)
-        {
-            var size=values.Max(v=>v.Length);string Row(string a,string b,string c)=>a.PadRight(size)+b.PadRight(size)+c.PadRight(size);
-            return slices==4?[Row("",values[0],""),Row(values[3],"",values[1]),Row("",values[2],"")]
-                :[Row("",values[0],""),Row(values[5],"",values[1]),Row(values[4],"",values[2]),Row("",values[3],"")];
-        }
-        var a=Wheel(groups);var b=Wheel(letters);
-        return "Preview: "+(preview.Character.HasValue?Label(preview.Character.Value):"—")+" · "+Names[preview.Set]+"\n"
-            +"Left: group                    Right: character\n"+string.Join('\n',a.Select((line,i)=>line+"  "+b[i]))
-            +"\nRelease trigger: type | Center either stick / B: cancel\nLB/RB: set | X: delete | Y: space | A: submit after release";
-    }
-    static string Label(char character)=>character==' '?"SPACE":character.ToString();
 }

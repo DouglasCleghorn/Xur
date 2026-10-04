@@ -39,6 +39,15 @@ Both wheels show their choices and the selected character is previewed locally.
 release both. Centering either stick or pressing B while holding the trigger
 cancels the character without leaving the text field.
 
+Holding a trigger opens a centered overlay over the dimmed menu. Your current
+text appears above two wheels; highlighted sectors and stick-position dots show
+each selection, with the character preview between them. Each wheel's center
+means cancel. Releasing shows **Typed** feedback for half a second; the overlay
+stays open for 1.2 seconds between gestures. Password text and Typed feedback stay
+masked. Small terminals use compact wheels or a selected-group strip so the
+preview, text and cancellation controls remain visible. Keyboard entry dismisses
+the overlay, and field changes or controller disconnection clear it immediately.
+
 **LB/RB** cycle lowercase, uppercase, numbers and symbols. Letters and symbols
 use six slices per wheel; numbers use four, the minimum needed for ten digits.
 Slices start at up and proceed clockwise. Empty combinations insert nothing.

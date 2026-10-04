@@ -507,8 +507,7 @@ async Task StartHost()
             using var gamepads=new ConsoleGamepadInput(textContext:()=>LocalConsole.GamepadTextContext,clearPreview:()=>LocalConsole.SetControllerPreview(null));
             await gamepads.Run(async(input,logTerminal)=>{
                 if(input.Activity && LocalConsole.Wake()){LocalConsole.SetControllerPreview(null);return true;}
-                if(input.Preview!=null)LocalConsole.SetControllerPreview(input.Preview);
-                if(input.Character.HasValue)LocalConsole.EditText(input.Character.Value);
+                LocalConsole.ApplyControllerInput(input);
                 if(input.Action!=ConsoleKeyAction.None)await HandleConsoleInput(false,null,input.Action,null,logTerminal);
                 return false;
             },networkRefreshGate,app.Lifetime.ApplicationStopping);

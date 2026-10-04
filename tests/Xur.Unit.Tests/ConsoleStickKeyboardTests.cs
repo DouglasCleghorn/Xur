@@ -70,6 +70,8 @@ static class ConsoleStickKeyboardTests
         }
         Angle(29);Report(keys);Angle(31);
         check(Report(keys).IsEmpty,"Angular hysteresis keeps the candidate stable around a slice boundary without repainting");
+        Angle(20);var motion=Report(keys);
+        check(motion.Preview is {Character:'a',Left:0,LeftX:>0} && motion.Character==null,"Stick position dots can move inside a selected sector without typing or changing its letter");
         Angle(36);check(Report(keys).Preview?.Character=='g',"A deliberate move beyond the slice boundary selects the neighboring group");
         Release(keys);Point(keys,0,0);Hold(keys);keys.Read(3,5,0);Point(keys,0,1);
         check(Report(keys).Character=='b',"Release-to-type uses the final stick coordinates in the same input packet");

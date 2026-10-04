@@ -37,7 +37,15 @@ public static class LocalConsole
     static ConsoleScreen? maintenance;
     static string textBuffer="";static bool replaceText;
     static long textGeneration;
-    static ConsoleKeyboardPreview? controllerPreview;
+    static ConsoleKeyboardOverlay keyboardOverlay=new();
+    internal static IDisposable UseKeyboardClock(TimeProvider clock)
+    {
+        lock(Sync){var previous=keyboardOverlay;keyboardOverlay=new(clock);return new KeyboardClockScope(previous);}
+    }
+    sealed class KeyboardClockScope(ConsoleKeyboardOverlay previous):IDisposable
+    {
+        public void Dispose(){lock(Sync)keyboardOverlay=previous;}
+    }
     internal static string? GamepadTextContext {get{lock(Sync)return EditingText?textGeneration.ToString():null;}}
     public static bool EditingText {get{lock(Sync)return view=="maintenance" && maintenance?.InputValue!=null;}}
     public static string TextValue {get{lock(Sync)return textBuffer;}}
@@ -60,30 +68,42 @@ public static class LocalConsole
     }
     static readonly string DiagnosticInstance=Guid.NewGuid().ToString("N");
     static string DisplayText=>maintenance?.Secret==true?new string('*',textBuffer.Length):textBuffer;
-    public static void ClearText(){lock(Sync){textBuffer="";replaceText=true;textGeneration++;controllerPreview=null;}}
+    public static void ClearText(){lock(Sync){textBuffer="";replaceText=true;textGeneration++;keyboardOverlay.Clear();}}
     internal static void SetControllerPreview(ConsoleKeyboardPreview? preview)
     {
         lock(Sync)
         {
-            if(!EditingText){controllerPreview=null;return;}
-            if(controllerPreview==preview)return;
-            controllerPreview=preview;if(preview?.Active==true)page=0;
+            if(!EditingText){keyboardOverlay.Clear();return;}
+            keyboardOverlay.Update(preview);if(preview?.Active==true)page=0;
+            Render();
+        }
+    }
+    internal static void ApplyControllerInput(ConsoleControllerInput input)
+    {
+        lock(Sync)
+        {
+            if(!EditingText)return;
+            if(input.Preview!=null)keyboardOverlay.Update(input.Preview);
+            if(input.Character.HasValue && EditTextCore(input.Character.Value))keyboardOverlay.Edited(input.Character.Value);
             body=InputBody();Render();
         }
     }
-    static string InputBody()=>controllerPreview is {Active:true} preview
-        ? ConsoleStickKeyboard.Render(preview)+"\n> "+DisplayText+"\n\n"+Clean(maintenance!.Body)
-        : Clean(maintenance!.Body)+"\n> "+DisplayText+"\nHold LT/RT: stick keyboard | LB/RB: set | X: delete | Y: space";
+    static string InputBody()=>Clean(maintenance!.Body)+"\n> "+DisplayText+"\nHold LT/RT: stick keyboard | LB/RB: set | X: delete | Y: space";
     public static void EditText(char character)
     {
         lock(Sync)
         {
             if(!EditingText)return;
-            diagnosticGeneration++;
-            if(character is '\b' or '\x7f'){textBuffer=replaceText?"":textBuffer.Length>0?textBuffer[..^1]:"";replaceText=false;}
-            else if(character is >= ' ' and <= '~' && textBuffer.Length<(maintenance?.Secret==true?64:1024)){textBuffer=(replaceText?"":textBuffer)+character;replaceText=false;}
+            keyboardOverlay.Clear();EditTextCore(character);
             body=InputBody();Render();
         }
+    }
+    static bool EditTextCore(char character)
+    {
+        var previous=textBuffer;diagnosticGeneration++;
+        if(character is '\b' or '\x7f'){textBuffer=replaceText?"":textBuffer.Length>0?textBuffer[..^1]:"";replaceText=false;}
+        else if(character is >= ' ' and <= '~' && textBuffer.Length<(maintenance?.Secret==true?64:1024)){textBuffer=(replaceText?"":textBuffer)+character;replaceText=false;return true;}
+        return previous!=textBuffer;
     }
     public static string[] RootOptions(bool installer=false) => installer
         ? ["Setup and installation", "Network settings", "Hardware", "Logs", "Power"]
@@ -199,7 +219,7 @@ public static class LocalConsole
             // leaving the physical console and diagnostic snapshot on Scanning.
             var scanCompleted=maintenance?.Id=="wifi-scanning" && screen.Id is "wifi-networks" or "wifi-scan-error";
             if(refreshOnly && (view!="maintenance" || (maintenance?.Id!=screen.Id && !scanCompleted)))return;
-            if(view!="maintenance" || maintenance?.Id!=screen.Id){selection=0;page=0;textBuffer=screen.InputValue??"";replaceText=true;textGeneration++;controllerPreview=null;}
+            if(view!="maintenance" || maintenance?.Id!=screen.Id){selection=0;page=0;textBuffer=screen.InputValue??"";replaceText=true;textGeneration++;keyboardOverlay.Clear();}
             else if(maintenance!=null)
             {
                 var key=maintenance.Options[Math.Min(selection,maintenance.Options.Length-1)].Key;
@@ -330,10 +350,12 @@ public static class LocalConsole
         if(sleeping??Idle.IsBlank)return BlankFrame(columns,rows);
         columns=Math.Clamp(columns,40,240);rows=Math.Clamp(rows,12,120);
         var options=CurrentOptions;var code=!logWindow&&view=="status"?ServeQr():null;
-        var key=System.Text.Json.JsonSerializer.Serialize(new{title,content,page,view,selection,options,code});
+        var overlay=!logWindow && EditingText?keyboardOverlay.View:null;
+        var key=System.Text.Json.JsonSerializer.Serialize(new{title,content,page,view,selection,options,code,overlay});
         var size=(columns,rows,logWindow);
         if(FrameCache.TryGetValue(size,out var cached)&&cached.Key==key)return cached.Frame;
         var frame=Frame(logWindow?"Logs":title,content,columns,rows,page,!logWindow&&view=="qr",logWindow,selection,options,code);
+        if(overlay!=null)frame=ConsoleKeyboardOverlay.Draw(frame,overlay,DisplayText,maintenance!.Secret,columns,rows);
         if(FrameCache.Count>=16)FrameCache.Clear();
         FrameCache[size]=(key,frame);return frame;
     }

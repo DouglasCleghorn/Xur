@@ -60,6 +60,16 @@ disconnects and overruns cancel pending gestures. Held buttons and triggers in
 state snapshots require release before rearming. The local preview is rendered
 separately from diagnostic snapshots, and entered secret text remains masked.
 
+The keyboard overlay is composed into the shared terminal frame, with a dimmed
+backdrop, highlighted radial sectors, quantized stick-position dots and character
+feedback. Each overlay row remains in the same column-1 chunk as its background
+row so the native client's incremental painting cannot overwrite an unchanged
+overlay. Compact frames retain the selected character and controls. Feedback
+lasts 500 ms and the released overlay lasts 1,200 ms; frame requests observe these
+deadlines without animation tasks, input activity or diagnostic revisions.
+Password feedback is masked, and context changes and disconnection clear the
+overlay instead of retaining a stale candidate.
+
 The signed app bundle includes the renderer under `agent/console`, using the
 existing installed executable labels. Each child receives only its assigned DRM
 card through its systemd device policy, and no input devices. App updates restart
