@@ -36,6 +36,17 @@ public static class LocalConsole
     static int selection;
     static ConsoleScreen? maintenance;
     static string textBuffer="";static bool replaceText;
+    static long textGeneration;
+    static ConsoleKeyboardOverlay keyboardOverlay=new();
+    internal static IDisposable UseKeyboardClock(TimeProvider clock)
+    {
+        lock(Sync){var previous=keyboardOverlay;keyboardOverlay=new(clock);return new KeyboardClockScope(previous);}
+    }
+    sealed class KeyboardClockScope(ConsoleKeyboardOverlay previous):IDisposable
+    {
+        public void Dispose(){lock(Sync)keyboardOverlay=previous;}
+    }
+    internal static string? GamepadTextContext {get{lock(Sync)return EditingText?textGeneration.ToString():null;}}
     public static bool EditingText {get{lock(Sync)return view=="maintenance" && maintenance?.InputValue!=null;}}
     public static string TextValue {get{lock(Sync)return textBuffer;}}
     static long diagnosticGeneration;
@@ -58,17 +69,42 @@ public static class LocalConsole
     }
     static readonly string DiagnosticInstance=Guid.NewGuid().ToString("N");
     static string DisplayText=>maintenance?.Secret==true?new string('*',textBuffer.Length):textBuffer;
-    public static void ClearText(){lock(Sync){textBuffer="";replaceText=true;}}
+    public static void ClearText(){lock(Sync){textBuffer="";replaceText=true;textGeneration++;keyboardOverlay.Clear();}}
+    internal static void SetControllerPreview(ConsoleKeyboardPreview? preview)
+    {
+        lock(Sync)
+        {
+            if(!EditingText){keyboardOverlay.Clear();return;}
+            keyboardOverlay.Update(preview);if(preview?.Active==true)page=0;
+            Render();
+        }
+    }
+    internal static void ApplyControllerInput(ConsoleControllerInput input)
+    {
+        lock(Sync)
+        {
+            if(!EditingText)return;
+            if(input.Preview!=null)keyboardOverlay.Update(input.Preview);
+            if(input.Character.HasValue && EditTextCore(input.Character.Value))keyboardOverlay.Edited(input.Character.Value);
+            body=InputBody();Render();
+        }
+    }
+    static string InputBody()=>Clean(maintenance!.Body)+"\n> "+DisplayText+"\nHold LT/RT: stick keyboard | LB/RB: set | X: delete | Y: space";
     public static void EditText(char character)
     {
         lock(Sync)
         {
             if(!EditingText)return;
-            diagnosticGeneration++;
-            if(character is '\b' or '\x7f'){textBuffer=replaceText?"":textBuffer.Length>0?textBuffer[..^1]:"";replaceText=false;}
-            else if(character is >= ' ' and <= '~' && textBuffer.Length<(maintenance?.Secret==true?64:1024)){textBuffer=(replaceText?"":textBuffer)+character;replaceText=false;}
-            body=Clean(maintenance!.Body)+"\n> "+DisplayText;Render();
+            keyboardOverlay.Clear();EditTextCore(character);
+            body=InputBody();Render();
         }
+    }
+    static bool EditTextCore(char character)
+    {
+        var previous=textBuffer;diagnosticGeneration++;
+        if(character is '\b' or '\x7f'){textBuffer=replaceText?"":textBuffer.Length>0?textBuffer[..^1]:"";replaceText=false;}
+        else if(character is >= ' ' and <= '~' && textBuffer.Length<(maintenance?.Secret==true?64:1024)){textBuffer=(replaceText?"":textBuffer)+character;replaceText=false;return true;}
+        return previous!=textBuffer;
     }
     public static string[] RootOptions(bool installer=false) => installer
         ? ["Setup and installation", "Network settings", "Hardware", "Logs", "Power"]
@@ -184,14 +220,14 @@ public static class LocalConsole
             // leaving the physical console and diagnostic snapshot on Scanning.
             var scanCompleted=maintenance?.Id=="wifi-scanning" && screen.Id is "wifi-networks" or "wifi-scan-error";
             if(refreshOnly && (view!="maintenance" || (maintenance?.Id!=screen.Id && !scanCompleted)))return;
-            if(view!="maintenance" || maintenance?.Id!=screen.Id){selection=0;page=0;textBuffer=screen.InputValue??"";replaceText=true;}
+            if(view!="maintenance" || maintenance?.Id!=screen.Id){selection=0;page=0;textBuffer=screen.InputValue??"";replaceText=true;textGeneration++;keyboardOverlay.Clear();}
             else if(maintenance!=null)
             {
                 var key=maintenance.Options[Math.Min(selection,maintenance.Options.Length-1)].Key;
                 var index=Array.FindIndex(screen.Options,o=>o.Key==key);
                 selection=index<0?0:index;
             }
-            maintenance=screen;view="maintenance";title=screen.Title;body=Clean(screen.Body)+(screen.InputValue!=null?"\n> "+DisplayText:"");serialLogs=false;Render();
+            maintenance=screen;view="maintenance";title=screen.Title;body=screen.InputValue!=null?InputBody():Clean(screen.Body);serialLogs=false;Render();
         }
     }
     public static char? SelectLine(string line)
@@ -249,7 +285,7 @@ public static class LocalConsole
         var optionLimit=Math.Max(1,innerRows-12);
         var optionStart=selectedOption/optionLimit*optionLimit;
         var footer=qrView ? new[]{"> Back to menu"} : logWindow
-            ? new[]{"> Back to menu","PgUp/PgDn: Scroll logs"}
+            ? new[]{"> Back to menu","PgUp/PgDn / LB/RB: Scroll logs"}
             : options.Select((option,index)=>(index==selectedOption ? "> " : "  ")+(index+1)+" "+option).Skip(optionStart).Take(optionLimit).ToArray();
         var height=Math.Max(1,innerRows-footer.Length-5);
         var lines=Clean(text).Split('\n').SelectMany(line=>Wrap(line,width)).ToArray();
@@ -273,7 +309,7 @@ public static class LocalConsole
         var console=AnsiConsole.Create(new AnsiConsoleSettings { Out=new AnsiConsoleOutput(writer), Ansi=AnsiSupport.No, ColorSystem=ColorSystemSupport.NoColors });
         console.Profile.Width=innerColumns; console.Profile.Height=innerRows; console.Profile.Capabilities.Unicode=true;
         var content=new Panel(new Text(string.Join('\n',lines))).Header("Xur setup | "+Markup.Escape(heading)).RoundedBorder().Expand();
-        var controls=new Panel(new Text(string.Join('\n',footer)+"\n"+(qrView ? "Enter: Open | Esc / 0: Menu | Alt+F2: Logs" : "Up/Down: Select | Enter: Open | Esc / 0: Back"+(pages>1?$" | PgUp/PgDn: {selected+1}/{pages}":"")))).RoundedBorder().Expand();
+        var controls=new Panel(new Text(string.Join('\n',footer)+"\n"+(qrView ? "Enter/A: Open | Esc/B/0: Menu | Alt+F2: Logs" : "Up/Down: Select | Enter/A: Open | Esc/B/0: Back"+(pages>1?$" | PgUp/PgDn/LB/RB: {selected+1}/{pages}":"")))).RoundedBorder().Expand();
         console.Write(new Layout("root").SplitRows(new Layout("content").Update(content),new Layout("controls").Size(footer.Length+3).Update(controls)));
         var frame=writer.ToString().Replace("\r","").TrimEnd('\n').Split('\n');
         var output=new StringBuilder("\x1b%G\x1b[0m\x1b[r\x1b[?25l\x1b[?7l\x1b[H");
@@ -317,10 +353,12 @@ public static class LocalConsole
         columns=Math.Clamp(columns,40,240);rows=Math.Clamp(rows,12,120);
         var options=CurrentOptions;var code=!logWindow&&view=="status"?ServeQr():null;
         var diagnosticsActive=DiagnosticsActive;
-        var key=System.Text.Json.JsonSerializer.Serialize(new{title,content,page,view,selection,options,code,diagnosticsActive});
+        var overlay=!logWindow && EditingText?keyboardOverlay.View:null;
+        var key=System.Text.Json.JsonSerializer.Serialize(new{title,content,page,view,selection,options,code,diagnosticsActive,overlay});
         var size=(columns,rows,logWindow);
         if(FrameCache.TryGetValue(size,out var cached)&&cached.Key==key)return cached.Frame;
         var frame=Frame(logWindow?"Logs":title,content,columns,rows,page,!logWindow&&view=="qr",logWindow,selection,options,code,diagnosticsActive);
+        if(overlay!=null)frame=ConsoleKeyboardOverlay.Draw(frame,overlay,DisplayText,maintenance!.Secret,columns,rows,diagnosticsActive);
         if(FrameCache.Count>=16)FrameCache.Clear();
         FrameCache[size]=(key,frame);return frame;
     }
