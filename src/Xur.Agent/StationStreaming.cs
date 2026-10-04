@@ -175,7 +175,10 @@ public static class StationStreaming
             return(false,"Sunshine could not capture the workstation display. Retry streaming to prepare the virtual monitor, or open workstation logs for capture permission errors.");
         if(log.Contains("Permission denied")&&log.Contains("Couldn't open:"))
             return(false,"Sunshine cannot open a DRM card required by the selected CUDA GPU. Check the workstation device mapping and permissions in Diagnostics.");
-        var selectedFailed=log.Contains("Couldn't find any working encoder matching");
+        // In automatic AMD selection a failed candidate is followed by probing
+        // the next encoder. Only an explicitly requested encoder fails here;
+        // automatic selection must reach a successful hardware result or a fatal error.
+        var selectedFailed=expected!=""&&log.Contains("Couldn't find any working encoder matching");
         var fatal=log.Contains("Fatal: Unable to find display or encoder");
         if((selectedFailed||fatal)&&log.Contains("OpenEncodeSessionEx failed"))return(false,"NVIDIA could not open an NVENC session on the assigned GPU. Open workstation logs and download Diagnostics for the driver and device mapping.");
         if(selectedFailed)return(false,"Sunshine could not initialize the selected encoder. Streaming has not become ready; open workstation logs for details.");
