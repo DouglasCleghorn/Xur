@@ -14,7 +14,6 @@ public static class InstallationDiagnostics
         {
             var message=phase switch {
                 "clock"=>"Time synchronization failed before disk erasure.",
-                "source"=>"Could not resolve the OS download source before disk installation.",
                 "anaconda"=>"Anaconda failed while installing the approved disk.",
                 "post"=>"Configuration of the installed system failed.",
                 _=>"Installation failed."
@@ -25,17 +24,16 @@ public static class InstallationDiagnostics
             return operation with {Stage="Failed",Message=message+" Open Installation logs for details. No automatic retry.",Updated=DateTimeOffset.UtcNow};
         }
         if(File.Exists(Path.Combine(run,"install-complete")))
-            return operation with {Stage="Complete",Message="Installation completed. Reboot from the installed disk.",Progress=new(6,"Complete"),Updated=DateTimeOffset.UtcNow};
+            return operation with {Stage="Complete",Message="Installation completed. Reboot from the installed disk.",Progress=new(5,"Complete"),Updated=DateTimeOffset.UtcNow};
         var progress=phase switch {
             "clock"=>"Checking network time and saving UTC to the hardware clock before disk erasure…",
-            "source"=>"Checking the OS download source before disk erasure…",
             "anaconda"=>"Anaconda is installing the approved disk",
             "post"=>"Configuring the installed system…",
             _=>operation.Message
         };
         var steps=phase.Length==0?operation.Progress:Progress(phase,Tail(Path.Combine(logDirectory,"packaging.log")));
-        if(phase=="anaconda"&&steps?.CompletedSteps<=3&&NativeDownloadProgress(Path.Combine(run,"install-download.json")) is {} nativeProgress)
-            steps=new(3,"Download OS image",nativeProgress);
+        if(phase=="anaconda"&&steps?.CompletedSteps<=2&&NativeDownloadProgress(Path.Combine(run,"install-download.json")) is {} nativeProgress)
+            steps=new(2,"Download OS image",nativeProgress);
         if(steps!=null&&operation.Progress?.CompletedSteps>steps.CompletedSteps)steps=operation.Progress;
         if(phase is "anaconda" or "post"&&AnacondaOutput(Path.Combine(run,"anaconda-output.log")) is {} output)
             progress+="\n\nAnaconda:\n"+output;
@@ -43,11 +41,10 @@ public static class InstallationDiagnostics
     }
     public static InstallationProgress Progress(string phase,string logs)=>phase switch {
         "clock"=>new(0,"Synchronize system and hardware clocks"),
-        "source"=>new(1,"Resolve and verify OS source"),
-        "post"=>new(5,"Configure installed system and verify boot files"),
-        "anaconda" when logs.Contains("Deploying container image",StringComparison.OrdinalIgnoreCase)=>new(4,"Deploy OS and bootloader"),
-        "anaconda" when logs.Contains("layers needed:",StringComparison.OrdinalIgnoreCase)=>new(3,"Download OS image",DownloadDetail(logs)),
-        "anaconda"=>new(2,"Prepare approved disk"),
+        "post"=>new(4,"Configure installed system and verify boot files"),
+        "anaconda" when logs.Contains("Deploying container image",StringComparison.OrdinalIgnoreCase)=>new(3,"Deploy OS and bootloader"),
+        "anaconda" when logs.Contains("layers needed:",StringComparison.OrdinalIgnoreCase)=>new(2,"Download OS image",DownloadDetail(logs)),
+        "anaconda"=>new(1,"Prepare approved disk"),
         _=>new(0,"Preparing installation")
     };
     static string DownloadDetail(string logs)

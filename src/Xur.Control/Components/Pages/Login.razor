@@ -5,7 +5,7 @@
 <h1>Sign in</h1>
 @if(!Auth.AccountConfigured) { <p>Use the access code shown on your machine.</p> }
 <section class="panel narrow">
-    @if(Error!=null) { <p role="alert">@(Error=="refresh"?"The sign-in form expired. Please sign in again.":Error=="limited"?"Too many attempts. Wait 30 seconds.":Auth.AccountConfigured?"Invalid username or password.":"Invalid or expired access code.")</p> }
+    @if(Error!=null) { <p role="alert">@(Error=="refresh"?"The sign-in form expired. Please sign in again.":Error=="limited"?"Too many attempts. Wait 30 seconds.":Auth.AccountConfigured?"Invalid username or password.":"Invalid access code.")</p> }
     <form method="post" action="/auth/login">
         <AntiforgeryToken />
         @if(Auth.AccountConfigured)

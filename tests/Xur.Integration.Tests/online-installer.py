@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
-"""Online-source pinning and live-update failure recovery without disks or root."""
-import importlib.machinery,importlib.util,json,os,pathlib,subprocess,tempfile,time,types
+"""Stable-channel installation and live-update failure recovery without disks or root."""
+import importlib.machinery,importlib.util,json,os,pathlib,shlex,subprocess,tempfile,time,types
 repo=pathlib.Path(__file__).resolve().parents[2]
 def load(name,path):
  loader=importlib.machinery.SourceFileLoader(name,str(repo/path));spec=importlib.util.spec_from_loader(name,loader);m=importlib.util.module_from_spec(spec);loader.exec_module(m);return m
-source=load('source','os/installer/resolve-source');app=load('live','os/installer/app-bootstrap')
+app=load('live','os/installer/app-bootstrap');updater=load('os_update','os/bootc/os-update')
 ks=(repo/'os/installer/install-template.ks').read_text();calls=[]
-def inspect(args,**kwargs):calls.append(args);return 'sha256:'+'a'*64+'\n'
-resolved,image=source.resolve(ks,inspect)
-assert 'registry:'+image in resolved and '--target-imgref '+source.CHANNEL in resolved
-assert calls[0][-1]=='docker://'+source.CHANNEL
-assert source.CHANNEL in (repo/'os/bootc/os-update').read_text()
-for bad in ['sha256:bad','sha256:'+'b'*64+'\nclearpart --all']:
- try:source.resolve(ks,lambda *args,**kw:bad)
- except ValueError:pass
- else:raise AssertionError('Untrusted digest became kickstart instructions')
+bootc=shlex.split(next(line for line in ks.splitlines() if line.startswith('bootc ')))
+assert bootc==['bootc','--source-imgref','registry:'+updater.CHANNEL,'--target-imgref',updater.CHANNEL]
+assert updater.CHANNEL=='ghcr.io/ublue-os/bazzite-nvidia-open:stable'
 # The live Fedora base follows a major-version tag, resolved once per build.
 base=load('base','os/bootc/resolve-base.py');base_calls=[]
 containerfile=(repo/'os/bootc/Containerfile').read_text()
@@ -36,6 +30,13 @@ except ValueError:pass
 else:raise AssertionError('An unbounded latest tag was accepted')
 with tempfile.TemporaryDirectory() as directory:
  root=pathlib.Path(directory);app.ROOT=root/'app';app.BUNDLED=root/'bundled';app.BUNDLED.mkdir();app.READY=root/'ready';app.APPROVED=root/'approved.ks';app.CMDLINE=root/'cmdline';app.CMDLINE.write_text('xur.installer=1')
+ # The installed update configuration no longer needs a resolver receipt.
+ target=root/'installed-config';(target/'etc/xur').mkdir(parents=True)
+ manager=(repo/'os/installer/install-manager').read_text()
+ config=manager[manager.index("printf '%s\\n' '{\"channel\":"):manager.index('python3 - "$target"')]
+ subprocess.run(['bash','-eu','-c','umask 077\n'+config],env={**os.environ,'target':str(target)},check=True)
+ upstream=target/'etc/xur/upstream.json'
+ assert updater.read(upstream)['channel']==updater.CHANNEL and upstream.stat().st_mode&0o777==0o644
  (app.BUNDLED/'bundle.json').write_text('{"id":"bundled"}')
  class Updater:
   SERVICES=['xur-control','xur-agent','xur-gateway']
@@ -145,4 +146,4 @@ assert 'network-online.target' not in prepare_unit and 'xur-network.service' not
 timer=(repo/'os/installer/systemd/xur-installer-app-check.timer').read_text()
 assert 'OnUnitInactiveSec=60s' in timer
 assert 'xur-installer-app-check.timer' in (repo/'os/installer/Containerfile').read_text()
-print(json.dumps({'suite':'OnlineInstaller','result':'Passed','digestPinned':True,'sameUpdateChannel':True,'immediateBundledBoot':True,'networkFallback':True,'boundedBackgroundCheck':True,'lateConnection':True,'noBackgroundActivation':True,'approvalIndependentOfInternet':True,'unhealthyAppFallback':True,'noEmbeddedPayload':True,'bootCompletionCases':marker_cases,'liveBootTested':False}))
+print(json.dumps({'suite':'OnlineInstaller','result':'Passed','stableInstallSource':True,'sameUpdateChannel':True,'immediateBundledBoot':True,'networkFallback':True,'boundedBackgroundCheck':True,'lateConnection':True,'noBackgroundActivation':True,'approvalIndependentOfInternet':True,'unhealthyAppFallback':True,'noEmbeddedPayload':True,'bootCompletionCases':marker_cases,'liveBootTested':False}))

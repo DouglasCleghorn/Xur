@@ -16,7 +16,6 @@ public sealed class Bootstrap
     readonly object sync = new();
     const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
     string code = new string(RandomNumberGenerator.GetBytes(6).Select(b => Alphabet[b & 31]).ToArray());
-    DateTimeOffset expires;
     readonly byte[] signingKey;
     readonly ManagerAccountStore accounts;
     public bool AccountConfigured { get { lock(sync)return accounts.Account!=null; } }
@@ -28,14 +27,11 @@ public sealed class Bootstrap
     public void Initialize(string? configuredToken)
     { lock(sync) {
         if(configured || AccountConfigured)return;
-        if(configuredToken!=null) {
-            code=BootstrapCode.Parse(configuredToken);
-            expires=clock.GetUtcNow().AddMinutes(30);
-        }
+        if(configuredToken!=null)code=BootstrapCode.Parse(configuredToken);
         configured=true;
     } }
     public Bootstrap(TimeProvider? clock = null, byte[]? signingKey = null, string? directory = null) : this(new ManagerAccountStore(directory),clock,signingKey) { }
-    internal Bootstrap(ManagerAccountStore accounts,TimeProvider? clock = null,byte[]? signingKey = null) { this.accounts=accounts; this.signingKey=signingKey ?? RandomNumberGenerator.GetBytes(32); this.clock = clock ?? TimeProvider.System; window=this.clock.GetUtcNow(); expires=window.AddMinutes(30); }
+    internal Bootstrap(ManagerAccountStore accounts,TimeProvider? clock = null,byte[]? signingKey = null) { this.accounts=accounts; this.signingKey=signingKey ?? RandomNumberGenerator.GetBytes(32); this.clock = clock ?? TimeProvider.System; window=this.clock.GetUtcNow(); }
     public static byte[] LoadSigningKey(string directory)
     {
         Directory.CreateDirectory(directory);
@@ -49,16 +45,14 @@ public sealed class Bootstrap
         }
         var key=File.ReadAllBytes(path);if(key.Length!=32)throw new IOException("Invalid session signing key");return key;
     }
-    public string DisplayCode { get { lock(sync) return AccountConfigured ? "" : clock.GetUtcNow() >= expires ? "Expired; reboot to generate a new code" : code[..3]+"-"+code[3..]; } }
+    public string DisplayCode { get { lock(sync) return AccountConfigured ? "" : code[..3]+"-"+code[3..]; } }
     public (int Status, string? Session) Login(string user, string candidate)
     {
         lock(sync)
         {
             if(AccountConfigured)return (401,null);
-            var now = clock.GetUtcNow();
             if(Limited())return (429,null);
             try { candidate=BootstrapCode.Parse(candidate); } catch(FormatException) { return (401,null); }
-            if (now >= expires) return (401,null);
             if (user != "xur" || !CryptographicOperations.FixedTimeEquals(SHA256.HashData(Encoding.UTF8.GetBytes(candidate)), SHA256.HashData(Encoding.UTF8.GetBytes(code)))) return (401,null);
             return (200,Issue("xur","bootstrap"));
         }
@@ -93,7 +87,7 @@ public sealed class Bootstrap
             if(!CanSetup(setupSession))return (401,null,"Sign in with the access code first.");
             try { accounts.Create(username,password); }
             catch(ArgumentException e){return (400,null,e.Message);}
-            code="";expires=DateTimeOffset.MinValue;
+            code="";
             return (200,Issue(accounts.Account!.Id,"manager"),null);
         }
     }

@@ -20,7 +20,7 @@ by a middle hyphen. The answer is discovered read-only; ambiguous answers block
 installation. It never grants disk approval. See [networking and answers](../usage/answer-file.md).
 
 The optional code is carried into the installed system with root-only permissions.
-It expires 30 minutes after manager startup. Creating an account deletes the
+It has no time-based expiration. Creating an account deletes the
 staged code and invalidates every setup session. Without an answer-supplied code,
 the installed manager generates a fresh code at startup.
 
