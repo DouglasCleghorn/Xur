@@ -38,6 +38,9 @@ def check(root, config):
                 for field in ('dependencies', 'devDependencies'):
                     if manifest.get(field, {}) != installed.get(field, {}):
                         errors.append(f'{path.relative_to(root)}: npm lock does not match {field}')
+        elif path.name == 'libman.json':
+            if str(path.relative_to(root)) not in (root / 'docs/development/dependencies.md').read_text():
+                errors.append(f'{path.relative_to(root)}: document manual LibMan dependency checks in docs/development/dependencies.md')
         elif path.name in ('requirements.txt', 'requirements.in', 'pyproject.toml', 'Pipfile'):
             require('pip', path)
         elif re.search(r'dockerfile|containerfile', path.name, re.I):
@@ -53,11 +56,11 @@ def check(root, config):
         if (path.name.endswith('lock.json') and path.name not in ('packages.lock.json', 'package-lock.json')) or path.name == 'font-source.json':
             if str(path.relative_to(root)) not in manual:
                 errors.append(f'{path.relative_to(root)}: document custom dependency checks in docs/development/dependencies.md')
-    vendor = root / 'src/Xur.Control/wwwroot/vendor/ag-grid'
-    if (vendor / 'package.json').exists():
-        selected = json.loads((vendor / 'package.json').read_text())['dependencies']['ag-grid-community']
-        if json.loads((vendor / 'upstream.json').read_text())['version'] != selected:
-            errors.append('Refresh AG Grid source assets with python3 eng/update-ag-grid.py')
+    engines = root / 'catalog/engines/Containerfile'
+    if engines.exists():
+        for image, alias in (('vllm-openai', 'vllm'), ('vllm-omni', 'omni')):
+            if not re.search(r'^FROM mirror\.gcr\.io/vllm/' + image + r':latest AS ' + alias + r'$', engines.read_text(), re.M):
+                errors.append(f'{engines.relative_to(root)}: {image} must use the mirrored latest channel')
     sdk = root / 'global.json'
     toolchain = root / 'eng/toolchain-lock.json'
     if sdk.exists() and toolchain.exists():

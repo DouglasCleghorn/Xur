@@ -40,7 +40,6 @@ updates:
   - package-ecosystem: npm
     directories:
       - /eng/browser
-      - /src/Xur.Control/wwwroot/vendor/ag-grid
       - /website
     patterns: ["*"]
     multi-ecosystem-group: weekly-dependencies

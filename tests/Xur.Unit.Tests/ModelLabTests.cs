@@ -11,7 +11,7 @@ static class ModelLabTests
 {
     public static async Task Run(Action<bool,string> check)
     {
-        var recipe=new Recipe("test-model","Test model","registry/model@sha256:"+new string('a',64),["--max-num-seqs","1"],8080,"/health","NVIDIA",1,1,"",Engine:"vLLM",Hub:new("org/test",new string('b',40),"Apache-2.0"));
+        var recipe=new Recipe("test-model","Test model",EngineImages.Image("vllm"),["--max-num-seqs","1"],8080,"/health","NVIDIA",1,1,"",Engine:"vLLM",Hub:new("org/test",new string('b',40),"Apache-2.0"));
         var work=new Workload("1","Test LLM",recipe,["0000:01:00.0"],"test");
         var instance=new RuntimeInstance("1",work.Fingerprint,"instance",123,"boot","http://127.0.0.1:1234","running",work.Gpus);
         var target=new LabTarget(work,instance);string mode="normal";int simultaneous=0,peak=0,calls=0;

@@ -17,6 +17,8 @@ jobs:
           python3 -m pip install --target .build/checks -r eng/requirements.txt
           PYTHONPATH=.build/checks python3 eng/check-dependency-coverage.py
           PYTHONPATH=.build/checks python3 tests/Xur.Integration.Tests/dependency-coverage.py
+          python3 eng/check-web-assets.py
+          python3 tests/Xur.Integration.Tests/web-assets.py
           dotnet run --project tests/Xur.Unit.Tests -c Release
           python3 tests/Xur.Integration.Tests/os-update.py
           XUR_DOTNET="$(command -v dotnet)" python3 tests/Xur.Integration.Tests/console-menu.py

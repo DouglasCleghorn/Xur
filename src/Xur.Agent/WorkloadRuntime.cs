@@ -160,7 +160,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 if(model!=null)args.AddRange(["--volume",model+":/model.gguf:ro,z"]);
                 if(modelFiles!=null)args.AddRange(["--volume",modelFiles+":/models:ro,z"]);
                 if(w.Recipe.Engine is "vLLM" or "vLLM-Omni")args.AddRange(["--entrypoint","vllm"]);
-                args.Add(w.Recipe.Image);args.AddRange(w.Recipe.Command);
+                args.Add(image);args.AddRange(w.Recipe.Command);
                 var created=await Processes.Run("podman",args,60);
                 if(created.ExitCode!=0)throw Failure("Container creation failed",created);
                 instance=await Inspect(w) ?? throw new IOException();

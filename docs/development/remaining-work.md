@@ -140,9 +140,10 @@ from behavior implemented but not yet exercised on the four-3090 machine.
 - Per-model vLLM tuning and Omni stage configurations from reviewed upstream
   recipes; driver/architecture compatibility checks beyond file format and the
   current engine/device checks; gated-model credentials and license acceptance.
-- Clear installed/available/running engine versions and separate llama.cpp,
-  vLLM and vLLM-Omni Update buttons. Images are pinned internally; application
-  updates preserve the selected engine image.
+- Display installed and running engine image identities more clearly. Model
+  starts now refresh the latest upstream channel automatically, including vLLM
+  and vLLM-Omni; failed pulls use the newest compatible local image. Rollback
+  controls remain future work.
 - vLLM ROCm and Intel XPU engine choices. llama.cpp has CPU/CUDA/ROCm/Vulkan image
   choices; vLLM and Omni currently choose NVIDIA images.
 - A managed benchmark recipe with measured GPU baseline return. Sunshine is now

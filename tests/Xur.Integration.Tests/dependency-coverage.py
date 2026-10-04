@@ -27,8 +27,12 @@ with tempfile.TemporaryDirectory(dir=ROOT / '.build') as temporary:
     write('eng/new-project/package.json', '{"dependencies":{"example":"1.0.0"}}')
     write('eng/new-project/package-lock.json', '{"packages":{"":{"dependencies":{"example":"2.0.0"}}}}')
     write('eng/new-lock.json', '{}')
+    write('src/New.Web/libman.json', '{"version":"1.0","libraries":[]}')
+    write('catalog/engines/Containerfile', 'FROM mirror.gcr.io/vllm/vllm-openai:v0.29.0 AS vllm\nFROM mirror.gcr.io/vllm/vllm-omni:v0.28.0 AS omni\n')
     errors = module.check(root, config)
     assert any('new-project' in e and 'missing npm' in e for e in errors)
     assert any('npm lock does not match' in e for e in errors)
     assert any('new-lock.json' in e for e in errors)
+    assert any('libman.json' in e and 'manual LibMan' in e for e in errors)
+    assert len([e for e in errors if 'mirrored latest channel' in e]) == 2
 print('Missing ecosystems, new unmanaged manifests, undocumented locks are rejected.')

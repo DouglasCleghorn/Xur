@@ -88,7 +88,7 @@ Its [Studio documentation](https://unsloth.ai/docs/new/studio) describes local
 llama.cpp/Hugging Face inference and connecting to a vLLM provider, which is
 not by itself a complete managed deployment path for all three engines.
 
-Live Unsloth/Hugging Face search and the pinned vLLM-Omni supported-model list
+Live Unsloth/Hugging Face search and the current upstream vLLM-Omni supported-model list
 are now integrated directly. LocalAI was investigated but is not used. Recipe-
 specific vLLM tuning, Omni deployment configurations, gated downloads, and
 multi-seat device selection remain beyond the current implementation.

@@ -1,7 +1,0 @@
-{
-  "name": "xur-ag-grid",
-  "private": true,
-  "dependencies": {
-    "ag-grid-community": "36.2.0"
-  }
-}

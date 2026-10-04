@@ -15,6 +15,17 @@ legacy saved recipes and user Dockerfiles that still name Docker Hub. Keep this
 mapping enabled for Podman, Buildah and Skopeo. Other builder tools must use the
 explicit mirror references above. Do not bypass this rule to work around a miss.
 
+## Offline web assets
+
+HTML and Razor pages must serve JavaScript, stylesheets, fonts, icons and other
+required assets locally. Do not reference CDNs or other remote asset URLs in
+HTML, CSS or client scripts. The UI must remain usable without internet access.
+Use LibMan (`libman.json`) to manage third-party browser libraries and restore
+them during the build. Ship the restored assets and their license notices with
+the app; keep generated library files under ignored `.build/` paths. External
+navigation links and features that explicitly access online services may retain
+their URLs, but must not be required to render or use the local UI.
+
 ## Generated files and secrets
 
 Keep build output, runtime state, test captures and private credentials in ignored

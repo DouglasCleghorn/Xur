@@ -16,7 +16,6 @@ configured directories and copied version information that needs refreshing.
 | Hosted Fedora native builder | `eng/Containerfile`, read by `eng/ci-native.py` | `docker` |
 | Live installer Fedora base | `os/bootc/Containerfile`; resolved once to a digest in a private build recipe | `docker` |
 | Playwright and axe-core | `eng/browser/package.json` and lock | `npm` |
-| AG Grid | `src/Xur.Control/wwwroot/vendor/ag-grid/package.json` and lock | `npm` |
 | Website deployment CLI | `website/package.json` and lock | `npm` |
 | Source-check YAML parser | `eng/requirements.txt` | `pip` |
 | Private screenshot/QR test tools | `tests/Xur.Media.Tests/requirements.txt` | `pip` |
@@ -26,9 +25,15 @@ Install browser or website tools with `python3 eng/prepare-npm.py browser` or
 `python3 -m pip install --target .build/qr -r tests/Xur.Media.Tests/requirements.txt`.
 All installations, caches and private test evidence remain under `.build/`.
 
-An AG Grid manifest update needs a reviewed refresh of the vendored source assets:
-run `python3 eng/update-ag-grid.py`, review the JavaScript and license changes,
-then run the Files UI checks. Coverage validation rejects a stale vendored version.
+Third-party browser libraries are managed in `src/Xur.Control/libman.json`.
+Normal Control builds restore AG Grid Community and its MIT notice through
+`Microsoft.Web.LibraryManager.Build` into `src/Xur.Control/.build/libman/`, then
+copy them to `wwwroot/vendor/ag-grid/` in build and publish output. There is no
+separate asset refresh command. Provider downloads happen during the build;
+pages serve only local assets and work without internet access. The LibMan build
+package is covered by NuGet Dependabot updates; library versions in `libman.json`
+need the manual review below because Dependabot does not support LibMan.
+
 The default CPU recipe uses `@engine/server`, resolved to the upstream channel
 before validation or saving. Every model-container start pulls the current
 channel, including saved selections with older tags or digests. A stopped
@@ -56,6 +61,7 @@ release; they are deliberately manual checks, with no companion update service.
 
 | Source | Manual review |
 | --- | --- |
+| `src/Xur.Control/libman.json` | Check AG Grid Community releases during the weekly dependency review; update the library version, build Control to restore JavaScript and its MIT notice, and run Files UI checks. LibMan manifests are unsupported by Dependabot. |
 | `eng/toolchain-lock.json` | Refresh the SDK archive URL/checksum whenever `global.json` changes; also review Fedora cloud builder images/checksums, Image Builder source releases, Tailscale archives and recorded toolchain metadata. Historical host/engine version records do not select runtime images. |
 | `tools/Xur.Console/upstream-lock.json` | Check kmscon releases, refresh the source archive/checksum, and exercise console patches and PTY tests. |
 | `tools/Xur.Streaming/upstream-lock.json` | Check Sunshine releases, refresh the AppImage URL/checksum, and verify streaming and input adapters. |

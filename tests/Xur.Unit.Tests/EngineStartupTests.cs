@@ -26,7 +26,6 @@ static class EngineStartupTests
             check(unknown,"Unknown engine aliases cannot become workload image references");
         }
         finally{Directory.Delete(catalog,true);}
-        check(FishEngine.BaseImage==EngineImages.Image("omni"),"Fish dependency layer and discovered Omni models select the same latest engine channel");
         foreach(var image in new[]{"registry.example/model", "model:1.0", "registry.example/model:1.0\n", "registry.example/model:bad tag", "--privileged"})
         {
             bool invalid=false;

@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "defaultProvider": "jsdelivr",
+  "libraries": [
+    {
+      "library": "ag-grid-community@36.2.0",
+      "files": [
+        "dist/ag-grid-community.min.js",
+        "LICENSE.txt"
+      ],
+      "destination": ".build/libman/ag-grid/"
+    }
+  ]
+}

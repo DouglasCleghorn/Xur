@@ -1,6 +1,7 @@
 # Approved source-only repository policy.
 # Generated build/release output and all private build/runtime material.
 /.build/
+**/.build/
 /dist/
 /artifacts/
 /docs/evidence/

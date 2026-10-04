@@ -6,8 +6,7 @@ import pathlib
 import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-PACKAGES = {'browser': 'eng/browser', 'website': 'website',
-            'ag-grid': 'src/Xur.Control/wwwroot/vendor/ag-grid'}
+PACKAGES = {'browser': 'eng/browser', 'website': 'website'}
 
 
 def prepare(name):
