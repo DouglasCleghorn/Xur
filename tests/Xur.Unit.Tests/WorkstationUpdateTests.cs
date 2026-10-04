@@ -18,6 +18,7 @@ public static class WorkstationUpdateTests
         var workload=new Workload("1","Workstation",recipe,[gpu.Pci],"station");var profile=new Profile("1","Profile",1,[workload]);
         ProfilePolicy.Validate(profile,new("1",[gpu],[]));check(true,"Disconnected display-capable GPUs can be saved in workstation profiles");
         var conf=StationStreaming.Configuration(workload,gpu,"/var/lib/xur-streaming/1");check(conf.Contains("lan_encryption_mode = 2")&&conf.Contains("wan_encryption_mode = 2")&&conf.Contains("origin_web_ui_allowed = pc")&&conf.Contains("encoder = nvenc")&&conf.Contains("renderD131"),"Streaming requires encryption and binds the selected NVIDIA encoder device");
+        check(conf.Contains("log_path = /dev/null\n")&&conf.Contains("min_log_level = info\n")&&!conf.Contains("sunshine.log"),"Sunshine discards the duplicate file log while retaining encoder readiness messages in the journal");
         var stations=WorkstationView.Build(new([profile,profile with{Id="2"}],null,new("1",[gpu],[]),null),[]);
         check(stations.Length==1&&stations[0].Profiles.Length==2&&stations[0].State=="Stopped","Workstations page retains disconnected stopped stations and deduplicates shared definitions");
         check(NetworkUsage.Rates(200,400,100,200,2)==(50d,100d)&&NetworkUsage.Rates(1,2,100,200,1)==(null,null),"Network rates use elapsed time and counter resets produce gaps");

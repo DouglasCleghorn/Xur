@@ -35,6 +35,7 @@ static class StationStreamingTests
         check(StationStreaming.EncodingHealth("Found H.264 encoder: h264_vulkan [vulkan]","nvenc") is {Ready:false,Error:not null},"An unexpected encoder is rejected even without the preceding failure log");
         const string warnings="Error: Failed to gain CAP_SYS_ADMIN\nWarning: EGL: context priority set to HIGH but CAP_SYS_NICE capability is missing\n";
         check(StationStreaming.EncodingHealth(warnings+"Found H.264 encoder: h264_nvenc [nvenc]","nvenc") is {Ready:true,Error:null},"Capability warnings alone do not invalidate a successful NVENC startup");
+        check(StationStreaming.EncodingHealth("Failed to rotate log file '/dev/null': Permission denied\nFound H.264 encoder: h264_nvenc [nvenc]","nvenc") is {Ready:true,Error:null},"Discarding Sunshine's duplicate file log preserves successful encoder readiness");
         check(StationStreaming.EncodingHealth("OpenEncodeSessionEx failed: unsupported device (2)","nvenc") is {Ready:false,Error:null},"A single codec probe failure waits for the encoder's final result");
         check(StationStreaming.EncodingHealth("OpenEncodeSessionEx failed: unsupported device (2)\nFound H.264 encoder: h264_nvenc [nvenc]","nvenc") is {Ready:true,Error:null},"Earlier unsuccessful codec probes do not hide a final successful requested encoder");
         check(StationStreaming.EncodingHealth("Found H.264 encoder: libx264 [software]","software") is {Ready:true,Error:null},"The software encoder remains available for a software workstation");
