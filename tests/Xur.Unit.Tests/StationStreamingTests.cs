@@ -39,6 +39,21 @@ static class StationStreamingTests
         check(StationStreaming.EncodingHealth("OpenEncodeSessionEx failed: unsupported device (2)","nvenc") is {Ready:false,Error:null},"A single codec probe failure waits for the encoder's final result");
         check(StationStreaming.EncodingHealth("OpenEncodeSessionEx failed: unsupported device (2)\nFound H.264 encoder: h264_nvenc [nvenc]","nvenc") is {Ready:true,Error:null},"Earlier unsuccessful codec probes do not hide a final successful requested encoder");
         check(StationStreaming.EncodingHealth("Found H.264 encoder: libx264 [software]","software") is {Ready:true,Error:null},"The software encoder remains available for a software workstation");
+        var workload=new Workload("1","Workstation 1",new("desktop","Desktop","",[],0,"","",0,0,"",Kind:"Workstation"),[gpu.Pci],"");
+        var amd=StationStreaming.Configuration(workload,gpu with{Vendor="AMD"},"/var/lib/xur-streaming/1");
+        check(amd.Contains("\nencoder = \n")&&amd.Contains("adapter_name = /dev/dri/renderD128"),"AMD probes hardware encoders on its assigned render device instead of requiring VAAPI");
+        check(StationStreaming.Configuration(workload,gpu with{Vendor="Intel"},"/var/lib/xur-streaming/1").Contains("\nencoder = vaapi\n"),"Intel streaming retains its VAAPI encoder selection");
+        foreach(var hardware in new[]{"vaapi","vulkan"})
+        {
+            check(StationStreaming.EncodingHealth("Found H.264 encoder: h264_"+hardware+" ["+hardware+"]","", "success") is {Ready:true,Error:null},"Automatic AMD selection accepts working hardware encoding through "+hardware);
+            check(StationStreaming.EncodingHealth(failure+"\nFound H.264 encoder: h264_"+hardware+" ["+hardware+"]", "") is {Ready:true,Error:null},"An unsuccessful encoder candidate does not hide automatic AMD hardware selection through "+hardware);
+        }
+        check(StationStreaming.EncodingHealth(failure, "") is {Ready:false,Error:null},"Automatic AMD selection waits while Sunshine probes the next encoder candidate");
+        check(StationStreaming.EncodingHealth(failure+"\nFatal: Unable to find display or encoder", "") is {Ready:false,Error:not null},"Automatic AMD selection still rejects a fatal encoder failure");
+        check(StationStreaming.EncodingHealth("Couldn't open: /dev/dri/card1: Permission denied\nFound H.264 encoder: h264_vulkan [vulkan]", "") is {Ready:false,Error:not null},"Automatic AMD selection retains device permission failures");
+        foreach(var unexpected in new[]{"software","nvenc","unknown"})
+            check(StationStreaming.EncodingHealth("Found H.264 encoder: test ["+unexpected+"]","") is {Ready:false,Error:not null},"Automatic AMD selection rejects an unrelated or software encoder: "+unexpected);
+        check(StationStreaming.EncodingHealth("Found H.264 encoder: h264_vulkan [vulkan]",null) is {Ready:false,Error:not null},"A missing encoder setting cannot authorize automatic hardware selection");
         foreach(var result in new[]{"core-dump","signal","start-limit-hit","exit-code"})
             check(StationStreaming.EncodingHealth("Found H.264 encoder: h264_nvenc [nvenc]","nvenc",result) is {Ready:false,Error:not null},"A terminated Sunshine invocation cannot remain ready: "+result);
     }
