@@ -18,7 +18,7 @@ mount -o loop,ro "$iso" "$out/media"
 trap 'umount "$out/media"' EXIT
 podman run --rm --entrypoint cat localhost/xur-installer:x86_64 /boot/efi/EFI/fedora/gcdx64.efi > "$out/supplied-grub.efi"
 unsquashfs -d "$out/root" "$out/squashfs.img" \
-    usr/lib/xur usr/share/xur etc/containers etc/pki/containers usr/lib/bootc/install usr/lib/systemd/system usr/libexec/xur-run-install usr/libexec/xur-installer-app usr/libexec/xur-live-app usr/libexec/xur-resolve-install-source usr/libexec/xur-check-install-clock usr/libexec/xur-check-installer-runtime usr/libexec/xur-install-manager usr/libexec/xur-network usr/lib/systemd/system/xur-install.service \
+    usr/lib/xur usr/share/xur etc/containers etc/pki/containers usr/lib/bootc/install usr/lib/systemd/system usr/libexec/xur-run-install usr/libexec/xur-installer-app usr/libexec/xur-live-app usr/libexec/xur-check-install-clock usr/libexec/xur-check-installer-runtime usr/libexec/xur-install-manager usr/libexec/xur-network usr/lib/systemd/system/xur-install.service \
     usr/lib/systemd/system/xur-agent.service usr/lib/systemd/system/xur-network.service usr/lib/systemd/system/tailscaled.service \
     usr/lib/systemd/system/xur-os-update.service usr/lib/systemd/system/xur-os-update.timer \
     usr/bin/xur-control usr/bin/xur-agent usr/bin/xur-gateway usr/bin/tailscale usr/bin/tailscaled usr/lib/systemd/system/xur-control.service usr/lib/systemd/system/xur-gateway.service \

@@ -18,13 +18,10 @@ test -f /run/xur/install-operation.json
 phase=clock
 printf '%s\n' "$phase" > /run/xur/install-phase
 /usr/libexec/xur-check-install-clock
-phase=source
-printf '%s\n' "$phase" > /run/xur/install-phase
-/usr/libexec/xur-resolve-install-source
 phase=anaconda
 printf '%s\n' "$phase" > /run/xur/install-phase
 # Mirror native status while preserving Anaconda's result if capture fails.
-PATH="/usr/libexec/xur-install-bin:$PATH" /usr/bin/anaconda --kickstart=/run/xur/online.ks --cmdline > >(tee /run/xur/anaconda-output.log || :) 2>&1
+PATH="/usr/libexec/xur-install-bin:$PATH" /usr/bin/anaconda --kickstart=/run/xur/approved.ks --cmdline > >(tee /run/xur/anaconda-output.log || :) 2>&1
 # Anaconda's %onerror is authoritative even if the process returns zero.
 test ! -e /run/xur/install-failed
 touch /run/xur/install-complete

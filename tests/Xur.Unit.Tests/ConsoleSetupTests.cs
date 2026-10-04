@@ -59,14 +59,14 @@ static class ConsoleSetupTests
             expired=true;await menu.Select((char)256);check(!menu.Screen.Options.Single(o=>o.Key=='y').Enabled,"Expired disk plans cannot advance to erase confirmation");
             await menu.Select('0');expired=false;await menu.Select((char)256);await menu.Select('y');await menu.Select('y');await menu.Select('y');
             check(approvals==1&&menu.Screen.Id=="setup-progress"&&menu.Screen.Body.Contains("Installing approved disk"),"Yes confirmation sends exactly one approval and opens live progress");
-            operation=operation! with{Progress=new(3,"Download OS image","Downloading 128 image layers (5.6 GB).")};await menu.Refresh();
-            check(menu.Screen.Body.Contains("[############------------] 3/6 stages complete")&&menu.Screen.Body.Contains("128 image layers (5.6 GB)")&&!menu.Screen.Body.Contains("percentage unavailable"),"Console shows useful download detail alongside completed installation stages");
+            operation=operation! with{Progress=new(2,"Download OS image","Downloading 128 image layers (5.6 GB).")};await menu.Refresh();
+            check(menu.Screen.Body.Contains("[########------------] 2/5 stages complete")&&menu.Screen.Body.Contains("128 image layers (5.6 GB)")&&!menu.Screen.Body.Contains("percentage unavailable"),"Console shows useful download detail alongside completed installation stages");
             var native="Fetching layers █░ 32/128\n└ Fetching █░ 8.00 MiB/16.00 MiB (2.00 MiB/s) ostree chunk abc";
             operation=operation with{Message="Anaconda is installing the approved disk\n\nAnaconda:\nPreparing transaction\nInstalling software",Progress=operation.Progress! with{Detail=native}};await menu.Refresh();
-            check(menu.Screen.Body.Contains(native)&&menu.Screen.Body.Contains("Anaconda:\nPreparing transaction\nInstalling software")&&menu.Screen.Body.Contains("3/6 stages complete"),"Console embeds native download bars and Anaconda status alongside overall installation stages");
+            check(menu.Screen.Body.Contains(native)&&menu.Screen.Body.Contains("Anaconda:\nPreparing transaction\nInstalling software")&&menu.Screen.Body.Contains("2/5 stages complete"),"Console embeds native download bars and Anaconda status alongside overall installation stages");
             await menu.Select('0');await menu.Open("setup");check(menu.Screen.Id=="setup-progress","Reopening setup resumes an existing installation");
             operation=operation! with{Stage="Complete",Message="Installation completed"};await menu.Refresh();check(menu.Screen.Options.Any(o=>o.Key=='r'),"Console installation completion offers an explicit reboot action");
-            check(menu.Screen.Body.Contains("[########################] 6/6 stages complete"),"Only confirmed installation success fills the progress bar");
+            check(menu.Screen.Body.Contains("[####################] 5/5 stages complete"),"Only confirmed installation success fills the progress bar");
             operation=operation with{Stage="Failed",Message="Download failed"};await menu.Refresh();check(!menu.Screen.Options.Any(o=>o.Key=='r')&&menu.Screen.Body.Contains("No automatic retry"),"Console installation failure remains visible without retrying erasure or rebooting");
             await menu.Select('s');check(menu.Screen.Id=="setup-usb"&&menu.Screen.Options.Any(o=>o.Label.Contains("/dev/usb1")),"Failed installation offers eligible USB log destinations");
             await menu.Select((char)256);check(exports==1&&menu.Screen.Body.Contains("Saved report"),"Selecting a USB destination exports logs and shows the receipt");await menu.Select('0');

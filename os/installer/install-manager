@@ -28,7 +28,8 @@ install -m 700 "$bundle/host/app-update" "$target/var/lib/xur/updater/app-update
 install -m 644 /usr/share/xur/application-update-key.pem "$target/etc/xur/application-update-key.pem"
 install -m 644 /usr/lib/systemd/system/xur-app-recovery.service "$target/etc/systemd/system/"
 systemctl --root="$target" enable xur-app-recovery.service
-install -m 644 /run/xur/installed-upstream.json "$target/etc/xur/upstream.json"
+printf '%s\n' '{"channel":"ghcr.io/ublue-os/bazzite-nvidia-open:stable"}' > "$target/etc/xur/upstream.json"
+chmod 644 "$target/etc/xur/upstream.json"
 python3 - "$target" <<'PYCHANNEL'
 import json,pathlib,sys
 source=pathlib.Path('/usr/share/xur/installer-channel')

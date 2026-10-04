@@ -67,8 +67,9 @@ depending on an old upstream manifest remaining available while keeping each
 build's selected image identifiable. Rebuilding the same source can pick up new
 Fedora 44 updates; changing the Fedora major version is an explicit source change.
 The installed
-Bazzite image is resolved from its stable channel at install time and pinned
-to a digest for that operation. `os/bootc/upstream-lock.json` retains historical
+Bazzite image is downloaded directly from its stable channel by Anaconda/bootc
+at install time. Xur does not resolve or pin an installation digest.
+`os/bootc/upstream-lock.json` retains historical
 reference information; it no longer selects the online installation version. Live installer
 packages are resolved by Fedora DNF during the image build; the accompanying
 RPM inventories and built-image digests identify the delivered versions. This

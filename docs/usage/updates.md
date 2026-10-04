@@ -1,8 +1,8 @@
 # Updates
 
-The online installer resolves the upstream Bazzite KDE Desktop NVIDIA-open
-stable channel at installation time, pins that operation to the resolved digest,
-and enforces the upstream signature policy. The ISO contains a separate Fedora
+The online installer installs the upstream Bazzite KDE Desktop NVIDIA-open image
+directly from `ghcr.io/ublue-os/bazzite-nvidia-open:stable` and enforces the
+upstream signature policy. The ISO contains a separate Fedora
 live environment and Xur, without an embedded Bazzite OS payload. Internet access
 is required. `os/bootc/upstream-lock.json` is a historical reference, not the
 version selector for new online installations.
