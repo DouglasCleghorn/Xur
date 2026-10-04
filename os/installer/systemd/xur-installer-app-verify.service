@@ -6,7 +6,7 @@ After=xur-control.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/libexec/xur-installer-app verify
+ExecStart=/usr/libexec/xurutil installer verify
 TimeoutStartSec=4min
 RemainAfterExit=yes
 UMask=0077

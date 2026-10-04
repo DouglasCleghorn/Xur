@@ -1,20 +1,2 @@
-#!/usr/bin/python3
-"""Fail the image build if an overlay hides Fedora's merged system programs."""
-import os
-from pathlib import Path
-
-PROGRAMS = ('wpa_supplicant', 'chronyd', 'chronyc', 'hwclock', 'modprobe',
-            'sysctl', 'ldconfig', 'sshd', 'auditctl', 'tailscaled', 'mkfs.btrfs')
-
-def check(root=Path('/')):
-    usr = root / 'usr'
-    if not (usr / 'sbin').is_symlink() or os.readlink(usr / 'sbin') not in ('bin', '/usr/bin'):
-        raise RuntimeError('/usr/sbin must remain the Fedora symlink to /usr/bin')
-    for program in PROGRAMS:
-        path = usr / 'bin' / program
-        if not path.is_file() or not os.access(path, os.X_OK):
-            raise RuntimeError('Missing executable: /usr/bin/' + program)
-    print('Installer system executable paths verified.')
-
-if __name__ == '__main__':
-    check()
+#!/bin/sh
+exec /usr/libexec/xurutil installer check-runtime "$@"

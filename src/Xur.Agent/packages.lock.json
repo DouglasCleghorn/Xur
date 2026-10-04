@@ -8,8 +8,30 @@
         "resolved": "18.1.0",
         "contentHash": "5K+9KFg2TdTl7VXv88Qzi/0lqK6JFoNP3lRuImPYGRV7K/QYklDyTrj4+A+KAki1JsQi6qKY+hDyY7d6WRqjrw=="
       },
+      "System.IO.Hashing": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "OzKDcIRkeNJeC8qAsbn8yJXnfTLP1dtkWILe+T56Gf/z+IkAASi7sMqLqJQat08j5z/mRN5xVtoAwbkMNMoBUQ=="
+      },
+      "TeeForge": {
+        "type": "Transitive",
+        "resolved": "0.1.0",
+        "contentHash": "oPV8v1aaPY9AsLyEpFEk+JgmtaF0LZ/2wvjrSujPSzl0WuImC5lT7KnEh8zbNMD/tb03ZH1cd915Fp868yz1Bg==",
+        "dependencies": {
+          "System.IO.Hashing": "10.0.11"
+        }
+      },
       "xur.domain": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Xur.IO": "[1.0.0, )"
+        }
+      },
+      "xur.io": {
+        "type": "Project",
+        "dependencies": {
+          "TeeForge": "[0.1.0, )"
+        }
       }
     }
   }

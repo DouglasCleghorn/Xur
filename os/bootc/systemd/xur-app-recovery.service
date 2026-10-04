@@ -5,7 +5,7 @@ ConditionPathExists=/var/lib/xur/app/maintenance
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /var/lib/xur/updater/app-update recover
+ExecStart=/var/lib/xur/updater/xurutil app-update recover
 TimeoutStartSec=5min
 
 [Install]

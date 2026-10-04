@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Stable-channel installation and live-update failure recovery without disks or root."""
-import importlib.machinery,importlib.util,json,os,pathlib,shlex,subprocess,tempfile,time,types
+"""Stable-channel source, installer layout and disk-free post-install marker fixtures.
+
+Live application startup and fallback are covered by Xur.Util.Tests.
+"""
+import importlib.machinery,importlib.util,json,os,pathlib,shlex,subprocess,tempfile
 repo=pathlib.Path(__file__).resolve().parents[2]
 def load(name,path):
  loader=importlib.machinery.SourceFileLoader(name,str(repo/path));spec=importlib.util.spec_from_loader(name,loader);m=importlib.util.module_from_spec(spec);loader.exec_module(m);return m
-app=load('live','os/installer/app-bootstrap');updater=load('os_update','os/bootc/os-update')
+updater=load('os_update','os/bootc/os-update')
 ks=(repo/'os/installer/install-template.ks').read_text();calls=[]
 bootc=shlex.split(next(line for line in ks.splitlines() if line.startswith('bootc ')))
 assert bootc==['bootc','--source-imgref','registry:'+updater.CHANNEL,'--target-imgref',updater.CHANNEL]
@@ -28,8 +31,9 @@ for update in [{'Digest':'sha256:bad'},{'Architecture':'arm64'},{'Os':'windows'}
 try:base.resolve(containerfile.replace(':44',':latest'),inspect_base)
 except ValueError:pass
 else:raise AssertionError('An unbounded latest tag was accepted')
-with tempfile.TemporaryDirectory() as directory:
- root=pathlib.Path(directory);app.ROOT=root/'app';app.BUNDLED=root/'bundled';app.BUNDLED.mkdir();app.READY=root/'ready';app.APPROVED=root/'approved.ks';app.CMDLINE=root/'cmdline';app.CMDLINE.write_text('xur.installer=1')
+(repo/'.build/evidence').mkdir(parents=True,exist_ok=True)
+with tempfile.TemporaryDirectory(dir=repo/'.build/evidence') as directory:
+ root=pathlib.Path(directory)
  # The installed update configuration no longer needs a resolver receipt.
  target=root/'installed-config';(target/'etc/xur').mkdir(parents=True)
  manager=(repo/'os/installer/install-manager').read_text()
@@ -37,52 +41,6 @@ with tempfile.TemporaryDirectory() as directory:
  subprocess.run(['bash','-eu','-c','umask 077\n'+config],env={**os.environ,'target':str(target)},check=True)
  upstream=target/'etc/xur/upstream.json'
  assert updater.read(upstream)['channel']==updater.CHANNEL and upstream.stat().st_mode&0o777==0o644
- (app.BUNDLED/'bundle.json').write_text('{"id":"bundled"}')
- class Updater:
-  SERVICES=['xur-control','xur-agent','xur-gateway']
-  def atomic(self,path,data):path.write_text(json.dumps(data))
-  def channel(self):return 'stable'
-  def check(self,stage):raise OSError('Network unavailable')
-  def read(self,path,default=None):return json.loads(path.read_text()) if path.exists() else default
-  def healthy(self,identity,seconds):return identity=='bundled'
-  def call(self,args,timeout):calls.append(args)
- def forbidden():raise AssertionError('Default boot must not initialize the online updater')
- app.updater=forbidden
- start=time.monotonic();app.prepare();assert time.monotonic()-start<1
- assert (app.ROOT/'current').resolve()==app.BUNDLED and not app.READY.exists()
- app.updater=lambda:Updater()
- app.verify();assert app.READY.exists()
- # A failed online check must not revoke health approval or touch running services.
- before_calls=list(calls);app.check()
- assert json.loads((app.ROOT/'check.json').read_text())['state']=='unavailable'
- assert app.READY.exists() and (app.ROOT/'current').resolve()==app.BUNDLED and calls==before_calls
- # Late connectivity discovers a signed release, but never activates it mid-setup.
- class Online(Updater):
-  def check(self,stage):return {'id':'new','version':'2'}
- app.updater=lambda:Online();app.check()
- assert json.loads((app.ROOT/'check.json').read_text())['state']=='available'
- assert app.READY.exists() and (app.ROOT/'current').resolve()==app.BUNDLED and calls==before_calls
- class Current(Updater):
-  def check(self,stage):return {'id':'bundled','version':'1'}
- app.updater=lambda:Current();app.check()
- assert json.loads((app.ROOT/'check.json').read_text())['state']=='current'
- # A hung network request is bounded independently of the healthy console.
- class Slow(Updater):
-  def check(self,stage):time.sleep(5);raise AssertionError('Timeout did not interrupt the request')
- app.updater=lambda:Slow();app.CHECK_SECONDS=1;start=time.monotonic();app.check()
- assert time.monotonic()-start<3 and app.READY.exists()
- assert json.loads((app.ROOT/'check.json').read_text())['state']=='unavailable'
- # Stop checking after approval; explicit off also makes no online calls.
- app.updater=forbidden;app.APPROVED.touch();app.check();app.APPROVED.unlink()
- app.CMDLINE.write_text('xur.installer=1 xur.app-update=off');app.prepare();app.check()
- assert json.loads((app.ROOT/'check.json').read_text())['state']=='disabled'
- # Retain the explicitly requested pre-start refresh and offline fallback.
- app.CMDLINE.write_text('xur.installer=1 xur.app-update=on');app.updater=lambda:Updater();app.prepare()
- assert json.loads((app.ROOT/'check.json').read_text())['state']=='unavailable'
- app.verify();assert app.READY.exists()
- # A signed but nonfunctional live app must restore bundled executables before unlock.
- app.READY.unlink();broken=root/'broken';broken.mkdir();(broken/'bundle.json').write_text('{"id":"broken"}');app.select(broken)
- app.verify();assert (app.ROOT/'current').resolve()==app.BUNDLED and app.READY.exists()
  # Verify the ISO manifest stays payload-free and retains SELinux labeling.
  manifest={'pipelines':[{'name':'os-tree','stages':[{'type':'org.osbuild.container-deploy'}]},{'name':'bootiso-tree','stages':[{'type':'org.osbuild.squashfs','inputs':{'tree':{'origin':'org.osbuild.pipeline','references':['name:os-tree']}},'options':{'filename':'LiveOS/squashfs.img','exclude_paths':['boot/efi/.*'],'compression':{'method':'zstd'}}},{'type':'org.osbuild.xorrisofs','options':{'volid':'fixture'}}]}]}
  before=root/'before';after=root/'after';before.write_text(json.dumps(manifest))
@@ -146,4 +104,4 @@ assert 'network-online.target' not in prepare_unit and 'xur-network.service' not
 timer=(repo/'os/installer/systemd/xur-installer-app-check.timer').read_text()
 assert 'OnUnitInactiveSec=60s' in timer
 assert 'xur-installer-app-check.timer' in (repo/'os/installer/Containerfile').read_text()
-print(json.dumps({'suite':'OnlineInstaller','result':'Passed','stableInstallSource':True,'sameUpdateChannel':True,'immediateBundledBoot':True,'networkFallback':True,'boundedBackgroundCheck':True,'lateConnection':True,'noBackgroundActivation':True,'approvalIndependentOfInternet':True,'unhealthyAppFallback':True,'noEmbeddedPayload':True,'bootCompletionCases':marker_cases,'liveBootTested':False}))
+print(json.dumps({'suite':'OnlineInstaller','result':'Passed','stableInstallSource':True,'sameUpdateChannel':True,'noEmbeddedPayload':True,'bootCompletionCases':marker_cases,'liveBootTested':False}))

@@ -9,6 +9,7 @@ if [ "${XUR_PUBLISH_LOCKED:-0}" != 1 ]; then
 fi
 sdk="${XUR_DOTNET:-$HOME/.local/share/xur-build/dotnet/dotnet}"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
+command -v clang >/dev/null || { echo 'xurutil Native AOT publishing requires clang and zlib development headers; see docs/development/build.md.' >&2; exit 1; }
 python3 - <<'PY'
 from pathlib import Path
 import shutil,hashlib
@@ -19,6 +20,7 @@ PY
 "$sdk" publish src/Xur.Control -c Release -r linux-x64 --self-contained true -o .build/context/publish/control
 "$sdk" publish src/Xur.Agent -c Release -r linux-x64 --self-contained true -o .build/context/publish/agent
 "$sdk" publish src/Xur.Gateway -c Release -r linux-x64 --self-contained true -o .build/context/publish/gateway
+"$sdk" publish tools/Xur.Util -c Release -r linux-x64 -o .build/context/publish/util
 cp -a os catalog .build/context/
 mkdir -p .build/context/tailscale
 tar -xzf .build/downloads/tailscale.tgz --strip-components=1 -C .build/context/tailscale

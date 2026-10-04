@@ -4,7 +4,8 @@ import importlib.machinery,contextlib,hashlib,importlib.util,json,os,pathlib,shu
 from unittest.mock import patch
 repo=pathlib.Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('release',repo/'eng/ci-release.py');release=importlib.util.module_from_spec(spec);spec.loader.exec_module(release)
-with tempfile.TemporaryDirectory(dir=repo/'.build') as directory:
+(repo/'.build/evidence').mkdir(parents=True,exist_ok=True)
+with tempfile.TemporaryDirectory(dir=repo/'.build/evidence') as directory:
  root=pathlib.Path(directory);release.ROOT=root
  (root/'eng').mkdir();(root/'os/bootc').mkdir(parents=True);(root/'docs/usage').mkdir(parents=True)
  for name in ['update-repository.py','ci-installer.py','verify-release.py']:shutil.copyfile(repo/'eng'/name,root/'eng'/name)
@@ -12,7 +13,10 @@ with tempfile.TemporaryDirectory(dir=repo/'.build') as directory:
  key=root/'key';subprocess.run(['openssl','genpkey','-algorithm','ED25519','-out',str(key)],check=True,capture_output=True)
  (root/'os/bootc/application-update-key.pem').write_bytes(subprocess.check_output(['openssl','pkey','-in',str(key),'-pubout']))
  artifact=root/'.build/ci-artifact';artifact.mkdir(parents=True);bundle=root/'bundle';bundle.mkdir()
- (bundle/'fixture').write_text('payload');files={'fixture':hashlib.sha256(b'payload').hexdigest()};identity=hashlib.sha256(json.dumps(files,sort_keys=True).encode()).hexdigest()
+ (bundle/'fixture').write_text('payload')
+ for name in ['control/Xur.Control','agent/Xur.Agent','gateway/Xur.Gateway','host/app-update']:
+  path=bundle/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('fixture executable');path.chmod(0o700)
+ files={str(p.relative_to(bundle)):hashlib.file_digest(p.open('rb'),'sha256').hexdigest() for p in bundle.rglob('*') if p.is_file()};identity=hashlib.sha256(json.dumps(files,sort_keys=True).encode()).hexdigest()
  (bundle/'bundle.json').write_text(json.dumps({'id':identity,'files':files,'hostAbi':1}))
  archive=artifact/'xur-app-x86_64.tar.gz'
  with tarfile.open(archive,'w:gz') as tar:tar.add(bundle,arcname='.')
@@ -114,16 +118,13 @@ with tempfile.TemporaryDirectory(dir=repo/'.build') as directory:
     except subprocess.CalledProcessError:pass
     else:raise AssertionError('Failed pointer upload accepted')
    assert aliases[channel]==before
- # The public updater follows each channel to the immutable compact release.
- loader=importlib.machinery.SourceFileLoader('public_updater',str(repo/'os/bootc/app-update'));spec=importlib.util.spec_from_loader(loader.name,loader);u=importlib.util.module_from_spec(spec);loader.exec_module(u)
- u.ROOT=root/'state';u.ROOT.mkdir();u.CONFIG=root/'settings';u.KEY=root/'os/bootc/application-update-key.pem';stage=root/'stage';stage.mkdir()
- for channel,prefix in [('nightly','nightly-'),('stable','v')]:
-  u.select_channel(channel)
-  def fetch(url,path,limit):
-   tail=url.removeprefix(u.GITHUB+'/download/');tag,name=tail.split('/',1)
-   data=aliases[tag][name].encode() if tag in aliases else releases[tag][name]
-   assert len(data)<=limit;path.write_bytes(data)
-  u.fetch=fetch
-  upgraded=u.check(stage);assert upgraded['version']=='1.2'
-  downloaded=u.download_bundle(stage,upgraded);assert hashlib.file_digest(downloaded.open('rb'),'sha256').hexdigest()==upgraded['sha256']
+ # The C# updater consumes the actual CI publication bytes without host activation.
+ for tag,assets in releases.items():
+  for name,data in assets.items():
+   path=root/'repository'/tag/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+ for channel,assets in aliases.items():
+  for name,data in assets.items():
+   path=root/'repository'/channel/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(data)
+ sdk=os.environ.get('XUR_DOTNET') or shutil.which('dotnet') or str(pathlib.Path.home()/'.local/share/xur-build/dotnet/dotnet')
+ subprocess.run([sdk,'run','--project',str(repo/'tests/Xur.Util.Tests'),'-c','Release','--','--release-fixture',str(root)],cwd=repo,check=True)
 print(json.dumps({'suite':'CompactRelease','result':'Passed','installerReleaseAssets':3,'appOnlyAssets':2,'firstReleaseCompact':True,'retiredMarkersRemoved':True,'stableAndNightly':True,'detachedInstallerPreservesLiveUpdate':True}))

@@ -41,6 +41,7 @@ node tests/Xur.Integration.Tests/cancellation-ui.cjs > .build/fast/cancellation-
 python3 tests/Xur.Integration.Tests/host-service-migration.py > .build/fast/host-service-migration.json
 python3 tests/Xur.Integration.Tests/log-compression.py > .build/fast/log-compression.json
 python3 tests/Xur.Integration.Tests/application-update.py > .build/fast/application-updates.json
+bash eng/test-xurutil.sh > .build/fast/xurutil-native.log 2>&1
 python3 tests/Xur.Integration.Tests/online-installer.py > .build/fast/online-installer.json
 python3 tests/Xur.Integration.Tests/installer-preflight.py > .build/fast/installer-preflight.json
 python3 tests/Xur.Integration.Tests/installer-progress.py > .build/fast/installer-progress.json

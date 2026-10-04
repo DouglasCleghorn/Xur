@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>xurutil</AssemblyName>
+    <RootNamespace>Xur.Util</RootNamespace>
+    <PublishAot>true</PublishAot>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/Xur.IO/Xur.IO.csproj" /></ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.12" />
+    <EmbeddedResource Include="../../os/bootc/logging/journald.conf.d/60-xur-log-compression.conf" LogicalName="Xur.Util.JournalConfiguration" />
+    <EmbeddedResource Include="../../os/bootc/logging/system/systemd-journald.service.d/60-xur-log-compression.conf" LogicalName="Xur.Util.JournalService" />
+  </ItemGroup>
+  <Target Name="CopyUtilityLicenses" AfterTargets="Publish" Condition="'$(PublishAot)' == 'true'">
+    <Copy SourceFiles="$(RuntimePackagePath)/THIRD-PARTY-NOTICES.TXT" DestinationFiles="$(PublishDir)licenses/dotnet-THIRD-PARTY-NOTICES.TXT" />
+    <Copy SourceFiles="$(MSBuildSDKsPath)/../../../LICENSE.txt" DestinationFiles="$(PublishDir)licenses/dotnet-LICENSE.txt" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)/third-party/System.CommandLine-LICENSE.txt" DestinationFiles="$(PublishDir)licenses/System.CommandLine-LICENSE.txt" />
+  </Target>
+</Project>

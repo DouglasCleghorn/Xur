@@ -67,7 +67,7 @@ future incompatible migrations require an explicit migration implementation.
 The old release is retained. Failed manager/agent/gateway health checks restore
 it automatically. A durable transaction and a separate boot recovery unit
 recover interrupted activation. The recovery implementation is installed at
-`/var/lib/xur/updater/app-update`, outside the replaceable app, so a broken app
+`/var/lib/xur/updater/xurutil`, outside the replaceable app, so a broken app
 cannot replace its own recovery path. Normal updates execute the current bundle’s updater as a separate systemd job; the independent recovery copy retains the transaction recovery contract.
 The new agent also repairs the exact legacy installer-owned
 `/etc/systemd/system/xur-agent.service` startup dependencies before reporting
@@ -92,7 +92,7 @@ starting cannot execute this migration and still needs local recovery first.
 Manual recovery, when the web manager cannot start, is:
 
 ```bash
-sudo python3 /var/lib/xur/updater/app-update recover
+sudo /var/lib/xur/updater/xurutil app-update recover
 ```
 
 OS updates continue through the separate upstream Bazzite update mechanism.
@@ -159,7 +159,12 @@ establish trust. Keep private keys outside source and the served directory.
 
 # Testing
 
-`tests/Xur.Integration.Tests/application-update.py` checks address parsing,
+`tools/Xur.Util` supplies the Native AOT `xurutil` command, using Microsoft
+`System.CommandLine`. Startup migration, logging, installer bootstrap and signed
+updates run without a .NET runtime or Python interpreter. Small legacy Python
+launchers let previous bundles call the native implementation during upgrades.
+
+`tests/Xur.Util.Tests` checks address parsing,
 hostile archives and invalid signatures without touching the host installation.
 `tests/Xur.Media.Tests/check-application-updates.py NAME` runs actual signed
 updates through the API in an installed disposable VM. Bad releases are served

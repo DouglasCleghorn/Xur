@@ -323,3 +323,108 @@ For local installer application tests, add `xur.app-update=off` to the boot comm
 
 See [dependency updates](dependencies.md) for Dependabot coverage and the manual
 checks for custom source downloads, fonts and model checkpoints.
+## Native startup utility
+
+`tools/Xur.Util` builds `xurutil` with Microsoft `System.CommandLine` 2.0.12 and
+.NET 10 Native AOT. Publishing requires clang and zlib development headers on the
+Linux build host. On Ubuntu, install `clang zlib1g-dev`; the existing Fedora image
+builder receives the compiled executable and needs no .NET SDK or runtime for it.
+
+```bash
+"${XUR_DOTNET:-$HOME/.local/share/xur-build/dotnet/dotnet}" run --project tests/Xur.Util.Tests -c Release
+bash eng/test-xurutil.sh
+```
+
+The first command tests service migration, journal setup, signed metadata,
+archives, compatibility, activation/recovery, installer preflight, Update All,
+virtual display modes and HTTP/stream failures using temporary
+fixtures and mocked system commands. It also runs an authentic frozen previous
+updater to verify the first upgrade reaches the new agent's startup repair. The
+second publishes and exercises the actual native executable, including offline
+configuration, with no SDK in its execution environment. Evidence goes under
+`.build/evidence/xurutil/`; native output and separate debug symbols stay under
+`.build/xurutil/`.
+
+The runtime commands are:
+
+```text
+xurutil host migrate
+xurutil logs configure [--root /absolute/offline/root]
+xurutil installer prepare|verify|check
+xurutil installer check-runtime [--root /absolute/offline/root]
+xurutil installer sync-clock
+xurutil update-all status|run
+xurutil display status
+xurutil display resize <width> <height> <fps>
+xurutil display moonlight
+xurutil app-update status|check|update|rollback|recover
+xurutil app-update configure <server>
+xurutil app-update channel <stable|nightly|local> [server] [-- <public-key-pem>]
+xurutil app-update development <true|false>
+xurutil app-update compatibility <installed-bundle-id>
+```
+
+Installed operations require root. The agent runs host migration before exposing
+health and applies journal defaults afterward; logging failures retry on the next
+start. Fresh installations keep a root-private recovery copy under
+`/var/lib/xur/updater/xurutil`. The first upgrade also migrates the recognized
+legacy recovery unit, installs its executable SELinux label, and retains an
+independent copy with license notices. Recovery works with the application stopped
+or the current bundle link broken. Administrator-customized service units are
+preserved.
+
+Installer preparation selects the bundled application without waiting for the
+network. `xur.app-update=on` explicitly requests a bounded refresh before startup;
+the background timer only reports available updates. Health verification controls
+disk approval and falls back to the bundled application when needed.
+
+`src/Xur.IO` is shared by the utility and application services. It provides bounded
+command execution, Unix-socket HTTP clients, conservative GET/HEAD retries, and
+TeeForge 0.1.0 copy-and-hash streams. Signed downloads verify the receipt from the
+same bytes written to staging, avoiding a second archive read. Read retries use
+bounded backoff for transient connection errors and HTTP 408/429/500/502/503/504;
+they respect short `Retry-After` values and return longer waits to the caller.
+Mutations, TLS failures, authentication failures, missing files, size violations
+and trust/signature failures are not retried. Interrupted download bodies restart
+at most twice in a truncated staging file; cancellation and per-read timeouts
+still apply. The model catalog retains its cached-data fallback and enforces an
+8 MiB byte limit while streaming. The web app's local status reads and Sunshine
+status requests use the same read-only retry policy.
+
+Update All pins the selected bundle for the detached job, stages the OS before
+updating Xur, persists each outcome and continues after an OS failure. It never
+reboots automatically. Installer clock synchronization and RTC verification run
+before Anaconda and disk erasure; image checks verify the merged `/usr/sbin`
+symlink and required executables. Virtual display commands run as the station
+user, force KDE's Wayland backend, and address only `Virtual-Xur-Stream`. A
+versioned executable and license notices are copied into the public station-helper
+directory with root ownership and an executable SELinux label. A rejected
+Moonlight mode keeps streaming the existing desktop.
+
+The `host/app-update`, `host/host-service-migrate`, `host/log-compression` and
+`host/update-all` Python files are small compatibility launchers for older agents
+that explicitly invoke Python. Installer compatibility paths are shell launchers;
+current production callers invoke the native utility directly. `StationDisplay.py`
+is removed. Other agent Python workers, the OS updater and distro Python dependencies
+remain separate migration work.
+Source size comparison against the previous Python implementations (physical
+lines, including comments and blank lines; excludes tests and compatibility
+launchers):
+
+| Previous file | Python lines | C# implementation lines |
+| --- | ---: | ---: |
+| `os/bootc/host-service-migrate` | 124 | 128, plus 89 for independent recovery migration |
+| `os/bootc/log-compression` | 51 | 50 |
+| `os/bootc/app-update` | 327 | 711 across updater, archive, download and compatibility components |
+| `os/installer/app-bootstrap` | 93 | 144 |
+| `os/bootc/update-all` | 74 | 92 |
+| `src/Xur.Agent/StationDisplay.py` | 74 | 53 |
+| `os/installer/check-clock` and `check-runtime` | 50 + 20 | 47 shared in `InstallerPreflight` |
+
+These are source counts, not binary size estimates. Explicit native filesystem
+and SQLite interop, command dispatch and durable-file helpers are additional
+shared code. `Xur.IO` adds about 202 lines reused by the CLI and services. One
+Linux x64 executable contains all commands: the measured Native AOT build is
+8,902,176 bytes (8.49 MiB), up 358,048 bytes from the initial startup-only utility.
+Debug symbols remain separate and do not ship. Tests run without building an
+installer image or deploying the application.

@@ -52,6 +52,7 @@ jobs:
           python3 eng/ci-iso-gate.py "${args[@]}"
       - name: Prepare native build tools and browser
         run: |
+          sudo apt-get install -y clang zlib1g-dev
           python3 eng/ci-native.py
           mkdir -p .build/browser .build/downloads
           python3 eng/prepare-npm.py browser

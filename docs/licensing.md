@@ -39,3 +39,14 @@ third-party notices remain in their component directories.
 - Files grid: AG Grid Community (MIT), selected in `src/Xur.Control/libman.json`.
   LibMan restores its JavaScript and copyright notice during the build; both
   ship under `wwwroot/vendor/ag-grid/`. No Enterprise modules are used.
+
+`xurutil` uses Microsoft's MIT-licensed `System.CommandLine` and the .NET Native
+AOT runtime, plus [TeeForge](https://github.com/DouglasCleghorn/TeeForge) 0.1.0
+(MIT, copyright Doug Cleghorn). The shared `Xur.IO` library also brings TeeForge
+into the application services. Published `licenses/` directories carry the
+TeeForge license and third-party notices (including its .NET/System.IO.Hashing
+notices). The utility additionally carries the command-line library license,
+.NET license and runtime third-party notices. These ship in the
+application bundle under `host/licenses/` and in the installer under
+`/usr/share/licenses/xurutil/`; independent recovery and virtual-display helper
+copies retain their notices too.

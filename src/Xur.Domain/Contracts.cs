@@ -1,5 +1,3 @@
-using System.Diagnostics;
-using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -29,35 +27,14 @@ public static class Processes
     public static async Task<ProcessResult> Run(string executable, IEnumerable<string> args,
         int seconds = 30, CancellationToken cancellation = default)
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-        timeout.CancelAfter(TimeSpan.FromSeconds(seconds));
-        var info = new ProcessStartInfo(executable) { RedirectStandardOutput = true,
-            RedirectStandardError = true, UseShellExecute = false };
-        foreach (var arg in args) info.ArgumentList.Add(arg);
-        using var process = Process.Start(info) ?? throw new IOException("Process did not start");
-        var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
-        var error = process.StandardError.ReadToEndAsync(timeout.Token);
-        try
-        {
-            await process.WaitForExitAsync(timeout.Token);
-            return new(process.ExitCode, (await output) + (await error));
-        }
-        catch { if (!process.HasExited) process.Kill(true); throw; }
+        var result = await Xur.IO.CommandRunner.Run(executable, args, seconds, cancellation);
+        return new(result.ExitCode, Encoding.UTF8.GetString(result.Output) + Encoding.UTF8.GetString(result.Error));
     }
 }
 
 public static class LocalClient
 {
-    public static HttpClient Create(string socket)
-    {
-        var handler = new SocketsHttpHandler { UseProxy=false,AllowAutoRedirect=false,UseCookies=false, ConnectCallback = async (_, ct) => {
-            var connection = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-            try { await connection.ConnectAsync(new UnixDomainSocketEndPoint(socket), ct);
-                return new NetworkStream(connection, ownsSocket: true); }
-            catch { connection.Dispose(); throw; }
-        }};
-        return new HttpClient(handler) { BaseAddress = new Uri("http://localhost"), Timeout = TimeSpan.FromMinutes(3) };
-    }
+    public static HttpClient Create(string socket) => Xur.IO.HttpClients.Unix(socket, TimeSpan.FromMinutes(3));
 }
 
 public interface IStorageLayout

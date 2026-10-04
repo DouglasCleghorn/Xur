@@ -12,7 +12,7 @@ public record ModelSelection(string Model,string Revision,string Variant,string 
 // catalog refresh never edits a profile or changes a running instance.
 public sealed class ModelCatalog(string state)
 {
-    static readonly HttpClient http=new(){Timeout=TimeSpan.FromSeconds(30)};
+    static readonly HttpClient http=Xur.IO.HttpClients.Create(TimeSpan.FromSeconds(30), redirects:true);
     static ModelCatalog(){http.DefaultRequestHeaders.UserAgent.ParseAdd("Xur/1.0");}
     static readonly JsonSerializerOptions json=new(JsonSerializerDefaults.Web);
     readonly SemaphoreSlim gate=new(1,1);
@@ -32,11 +32,16 @@ public sealed class ModelCatalog(string state)
         if(File.Exists(path) && DateTime.UtcNow-File.GetLastWriteTimeUtc(path)<age)return await File.ReadAllTextAsync(path);
         try
         {
-            using var request=new HuggingFaceCredentials(state).Request(url);using var response=await http.SendAsync(request);response.EnsureSuccessStatusCode();var text=await response.Content.ReadAsStringAsync();
-            if(text.Length>8*1024*1024)throw new InvalidOperationException("The catalog response is too large.");
+            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var request=new HuggingFaceCredentials(state).Request(url);using var response=await http.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,deadline.Token);response.EnsureSuccessStatusCode();
+            await using var source=await response.Content.ReadAsStreamAsync(deadline.Token);
+            using var bytes=new MemoryStream();
+            await Xur.IO.StreamTransfer.Copy(source,bytes,8*1024*1024,TimeSpan.FromSeconds(10),deadline.Token);
+            var text=System.Text.Encoding.UTF8.GetString(bytes.ToArray());
             var temp=path+"."+Guid.NewGuid().ToString("N");await File.WriteAllTextAsync(temp,text);File.Move(temp,path,true);return text;
         }
-        catch(Exception e) when(e is HttpRequestException or TaskCanceledException)
+        catch(InvalidDataException){throw new InvalidOperationException("The catalog response is too large.");}
+        catch(Exception e) when(e is HttpRequestException or OperationCanceledException or Xur.IO.SourceReadException)
         {if(File.Exists(path))return await File.ReadAllTextAsync(path);throw new InvalidOperationException("The model catalog could not be reached. Check the network and try again.");}
     }
     async Task<JsonDocument> Metadata(string model,string? revision=null)

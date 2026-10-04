@@ -125,7 +125,7 @@ sys.exit(result.returncode)
         installer = run / 'run-install'
         installer.write_text((repo / 'os/installer/run-install').read_text()
             .replace('/run/xur', str(run))
-            .replace('/usr/libexec/xur-check-install-clock', str(clock))
+            .replace('/usr/libexec/xurutil installer sync-clock', str(clock))
             .replace('/usr/libexec/xur-install-bin', str(root / 'bin'))
             .replace('/usr/bin/anaconda', str(anaconda)))
         result = subprocess.run(['bash', str(installer)], env={**env, 'FIXTURE_EXIT': str(code), 'FIXTURE_INSTALL_ARGS': json.dumps(arguments)}, capture_output=True, text=True, timeout=10)

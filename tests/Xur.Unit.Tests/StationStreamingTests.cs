@@ -5,10 +5,10 @@ static class StationStreamingTests
 {
     public static void Run(Action<bool,string> check)
     {
-        using(var headless=System.Text.Json.JsonDocument.Parse(StationStreaming.Applications(true,"/safe/display.py")))
+        using(var headless=System.Text.Json.JsonDocument.Parse(StationStreaming.Applications(true,"/safe/xurutil")))
         {
             var prep=headless.RootElement.GetProperty("apps")[0].GetProperty("prep-cmd")[0];
-            check(prep.GetProperty("do").GetString()=="/usr/bin/python3 /safe/display.py --moonlight"&&!prep.GetProperty("elevated").GetBoolean(),"Moonlight resolution hook runs as the workstation user");
+            check(prep.GetProperty("do").GetString()=="/safe/xurutil display moonlight"&&!prep.GetProperty("elevated").GetBoolean(),"Native Moonlight resolution hook runs as the workstation user");
         }
         using(var local=System.Text.Json.JsonDocument.Parse(StationStreaming.Applications(false,"/safe/display.py")))
             check(!local.RootElement.GetProperty("apps")[0].TryGetProperty("prep-cmd",out _),"Streaming never resizes an attached physical monitor automatically");

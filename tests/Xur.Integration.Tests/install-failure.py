@@ -29,7 +29,7 @@ for case in ('clock', 'anaconda', 'onerror-zero', 'post', 'success'):
         wrapper = root / 'run-install'
         wrapper.write_text((repo / 'os/installer/run-install').read_text()
             .replace('/run/xur', str(root))
-            .replace('/usr/libexec/xur-check-install-clock', str(clock))
+            .replace('/usr/libexec/xurutil installer sync-clock', str(clock))
             .replace('/usr/bin/anaconda', str(anaconda)))
         result = subprocess.run(['bash', str(wrapper)], capture_output=True, text=True)
         success = case == 'success'

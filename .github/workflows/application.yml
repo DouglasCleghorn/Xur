@@ -13,9 +13,11 @@ jobs:
           global-json-file: global.json
       - name: Build and test application
         run: |
+          sudo apt-get install -y clang zlib1g-dev
           export XUR_DOTNET="$(command -v dotnet)"
           python3 eng/build-app-bundle.py
           dotnet run --project tests/Xur.Unit.Tests -c Release
+          python3 tests/Xur.Integration.Tests/application-update.py
           python3 tests/Xur.Integration.Tests/bootstrap.py
       - uses: actions/upload-artifact@v7
         with:

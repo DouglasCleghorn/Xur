@@ -17,7 +17,7 @@ test -f /run/xur/approved.ks
 test -f /run/xur/install-operation.json
 phase=clock
 printf '%s\n' "$phase" > /run/xur/install-phase
-/usr/libexec/xur-check-install-clock
+/usr/libexec/xurutil installer sync-clock
 phase=anaconda
 printf '%s\n' "$phase" > /run/xur/install-phase
 # Mirror native status while preserving Anaconda's result if capture fails.

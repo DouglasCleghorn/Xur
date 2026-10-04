@@ -1,51 +1,5 @@
 #!/usr/bin/python3
-"""Install Xur's journal compression defaults without rewriting old logs."""
-import argparse,os,pathlib,subprocess,tempfile
-
-SOURCE=pathlib.Path(__file__).resolve().parent/'logging'
-FILES=('journald.conf.d/60-xur-log-compression.conf',
-       'system/systemd-journald.service.d/60-xur-log-compression.conf')
-
-def call(argv):
-    subprocess.run(argv,check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=10)
-
-def sync_directory(path):
-    descriptor=os.open(path,os.O_DIRECTORY)
-    try:os.fsync(descriptor)
-    finally:os.close(descriptor)
-
-def write(path,content):
-    path.parent.mkdir(parents=True,exist_ok=True)
-    descriptor,name=tempfile.mkstemp(prefix='.xur-logging-',dir=path.parent)
-    try:
-        with os.fdopen(descriptor,'wb') as stream:
-            os.fchmod(stream.fileno(),0o644)
-            stream.write(content);stream.flush();os.fsync(stream.fileno())
-        os.replace(name,path);sync_directory(path.parent)
-    finally:pathlib.Path(name).unlink(missing_ok=True)
-
-def ensure(root=pathlib.Path('/'),source=SOURCE,runner=call,activate=True):
-    directory=root/'etc/systemd'
-    configs={directory/name:(source/name).read_bytes() for name in FILES}
-    changed={path:content for path,content in configs.items() if not path.exists() or path.read_bytes()!=content}
-    pending=directory/'journald.conf.d/.xur-log-compression.pending'
-    if not changed and not pending.exists():return 'current'
-    # Record activation before publication so an interrupted update retries it.
-    if not pending.exists():write(pending,b'Journal compression activation pending\n')
-    for path,content in changed.items():write(path,content)
-    if not activate:return 'installed'
-    runner(['restorecon',*[str(path) for path in configs]])
-    runner(['systemctl','daemon-reload'])
-    runner(['systemctl','restart','systemd-journald.service'])
-    # Existing journal files retain their codec. Rotate once, without vacuuming
-    # or recompressing them, so new records use the selected codec immediately.
-    runner(['journalctl','--rotate'])
-    pending.unlink();sync_directory(pending.parent)
-    return 'activated'
-
-if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--root',type=pathlib.Path,default=pathlib.Path('/'))
-    args=parser.parse_args()
-    if not args.root.is_absolute():parser.error('--root must be absolute')
-    print('Journal zstd compression: '+ensure(root=args.root,activate=args.root==pathlib.Path('/')),flush=True)
+"""Compatibility launcher for older Xur bundles; implementation is in xurutil."""
+import os,pathlib,sys
+native=pathlib.Path(__file__).resolve().with_name('xurutil')
+os.execv(str(native),[str(native),'logs','configure',*sys.argv[1:]])

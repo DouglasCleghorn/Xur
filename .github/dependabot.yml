@@ -16,9 +16,11 @@ updates:
     directories:
       - /src/Xur.Agent
       - /src/Xur.Control
+      - /src/Xur.IO
       - /src/Xur.Domain
       - /src/Xur.Gateway
       - /tools/Xur.Cli
+      - /tools/Xur.Util
       - /tests/Xur.Unit.Tests
       - /tests/Xur.Profile.Tests
     patterns: ["*"]
