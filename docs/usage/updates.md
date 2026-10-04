@@ -105,8 +105,10 @@ Engine images show whether the channel has been downloaded locally. Every model
 start checks upstream and pulls the current image, including previously saved
 selections. Changed images recreate stopped containers while preserving their
 model-cache volumes; running models continue until their next start. Download
-failures fail startup instead of using an old cached image. Load or Resume starts
-models after an exit or reboot so the update check can run. Xur update buttons
+failures use the newest compatible locally downloaded image and record a warning
+in workload logs. Models in the loaded profile automatically restart after an
+exit or reboot, checking for latest each time and refreshing their gateway port
+once healthy. An intentional unload keeps them stopped. Xur update buttons
 use the application bundle lifecycle and do not restart running streams.
 
 Tailscale, Podman, Plasma, Mesa, the running kernel and NVIDIA driver report host

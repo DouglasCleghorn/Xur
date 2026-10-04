@@ -35,14 +35,21 @@ The default CPU recipe uses `@engine/server`, resolved to the upstream channel
 before validation or saving. Every model-container start pulls the current
 channel, including saved selections with older tags or digests. A stopped
 container is recreated if its resolved image changes; persistent model-cache
-volumes are reused. A running container is left alone. Failed pulls fail startup
-rather than starting an old cached image. Fish's cache includes the downloaded
+volumes are reused. A running container is left alone. Failed pulls use the
+newest locally downloaded Linux amd64 image for the same engine/variant, or the
+image retained by the stopped container if no named base remains cached. The
+selected image and pull error are recorded in the workload's update log. A pull
+failure with no local engine fails startup. Fish's cache includes the downloaded
 Omni image ID, so its codec layer rebuilds whenever that base changes.
 
-Model containers use `--restart=no`: Podman cannot automatically restart an old
-image and bypass Xur's check. Use Load or Resume after an engine exits or after
-rebooting. Generic prepared containers retain their selected image and restart
-policy; these are user-created environments rather than managed model engines.
+Model containers use `--restart=no`: the control service automatically restores
+models from the committed loaded profile through the same `Start` path after an
+exit or reboot, instead of letting Podman bypass the update check. Recovery
+publishes the current endpoint after health checks, preserves healthy peers, and
+backs off for a minute after startup failures. It waits for manual transitions,
+pauses during application maintenance, and respects intentional unloads. Saved
+profiles alone do not grant automatic startup. Generic prepared containers retain
+their selected image and restart policy.
 
 ## Manual checks
 

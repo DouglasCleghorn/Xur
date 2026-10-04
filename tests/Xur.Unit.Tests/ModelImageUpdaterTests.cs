@@ -10,13 +10,16 @@ static class ModelImageUpdaterTests
         var workload=new Workload("refresh","Refresh",recipe,[],"workload-refresh");
         var stopped=new RuntimeInstance(workload.Id,workload.Fingerprint,"container-id",0,"boot","","exited",[]);
         var calls=new List<string[]>();string current=old,status="exited",identity=stopped.InstanceId,fingerprint=workload.Fingerprint;
-        bool pullFails=false,removeFails=false,invalid=false;
+        bool pullFails=false,removeFails=false,invalid=false,cached=false,timeout=false;
         Task<ProcessResult> Run(string exe,string[] args,int seconds)
         {
             calls.Add(args);
+            if(args[0]=="pull"&&timeout)throw new OperationCanceledException();
             return Task.FromResult(args[0] switch {
                 "pull"=>new ProcessResult(pullFails?1:0,pullFails?"mirror cache miss":invalid?"not an image":latest+"\nWarning: fixture\n"),
                 "container"=>new ProcessResult(0,JsonSerializer.Serialize(new[]{new{Id=identity,Image=current,Config=new{Labels=new Dictionary<string,string>{{"io.xur.fingerprint",fingerprint}}},State=new{Status=status,Pid=status=="running"?123:0}}})),
+                "image" when args[1]=="ls"=>new ProcessResult(0,cached?latest+" mirror.gcr.io/vllm/vllm-omni:latest\n":""),
+                "image"=>new ProcessResult(cached?0:1,cached?JsonSerializer.Serialize(new[]{new{Id=latest,Created="2026-10-01T00:00:00Z",Architecture="amd64",Os="linux"}}):""),
                 "rm"=>new ProcessResult(removeFails?1:0,"fixture removal"),_=>throw new Exception("Unexpected updater command")});
         }
         var updater=new ModelImageUpdater(Run);
@@ -33,7 +36,23 @@ static class ModelImageUpdaterTests
         var fish=await updater.Refresh(workload,stopped,image=>{prepared=image==latest;return Task.FromResult(old);});
         check(prepared&&fish?.Recreate==false&&!calls.Any(a=>a[0]=="rm"),"Fish refresh compares the prepared image after resolving the latest upstream base");
         async Task<bool> Rejected(){try{await updater.Refresh(workload,stopped);return false;}catch(InvalidOperationException){return true;}}
-        pullFails=true;calls.Clear();check(await Rejected()&&calls.Count==1,"Latest download failure cannot start or remove the cached old engine");pullFails=false;
+        pullFails=true;calls.Clear();
+        var offline=await updater.Refresh(workload,stopped);
+        check(offline?.Image==old&&offline.Recreate==false&&offline.Warning?.Contains("mirror cache miss")==true&&!calls.Any(a=>a[0]=="rm"),"Failed pull reuses a stopped engine when its image is the only locally available copy");
+        prepared=false;
+        await updater.Refresh(workload,stopped,image=>{prepared=true;return Task.FromResult(image);});
+        check(!prepared,"Offline reuse of an existing Fish runtime does not build its codec layer twice");
+        bool missing=false;try{await updater.Refresh(workload,null);}catch(InvalidOperationException e){missing=e.Message.Contains("no cached image");}
+        check(missing,"A failed first pull with no local engine produces a clear startup error");
+        cached=true;calls.Clear();offline=await updater.Refresh(workload,stopped);
+        check(offline?.Image==latest&&offline.Recreate&&offline.Warning!=null,"Failed pull uses the newest locally cached upstream image rather than an older stopped container");
+        calls.Clear();offline=await updater.Refresh(workload,stopped,_=>throw new InvalidOperationException("Codec package download unavailable"));
+        check(offline?.Image==old&&offline.Recreate==false&&offline.Warning?.Contains("Codec package download unavailable")==true,"Offline Fish startup can reuse the retained prepared runtime when cached-base preparation needs unavailable packages");
+        calls.Clear();offline=await updater.Refresh(workload,null);
+        check(offline?.Image==latest&&offline.Warning!=null&&!calls.Any(a=>a[0]=="container"),"A fresh offline container starts from a previously downloaded engine");
+        timeout=true;calls.Clear();offline=await updater.Refresh(workload,null);
+        check(offline?.Image==latest&&offline.Warning?.Contains("timed out")==true,"Pull timeouts also use the latest locally available engine");
+        timeout=false;cached=false;pullFails=false;
         invalid=true;calls.Clear();check(await Rejected()&&calls.Count==1,"Invalid pull identity cannot be treated as a usable latest image");invalid=false;
         status="running";calls.Clear();check(await Rejected()&&!calls.Any(a=>a[0]=="rm"),"A stopped engine that starts during the download is not removed");status="exited";
         identity="replacement";calls.Clear();check(await Rejected()&&!calls.Any(a=>a[0]=="rm"),"Engine replacement during the download is rejected");identity=stopped.InstanceId;

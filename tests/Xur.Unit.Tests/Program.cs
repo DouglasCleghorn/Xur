@@ -51,6 +51,8 @@ await StationDeviceAccessTests.Run(Check);
 await StationRecoveryTests.Run(Check);
 await EngineStartupTests.Run(Check);
 await ModelImageUpdaterTests.Run(Check);
+await CachedEngineImagesTests.Run(Check);
+await AutomaticModelsTests.Run(Check);
 await FishEngineTests.Run(Check);
 await EngineRestartPolicyTests.Run(Check);
 await ParallelStopGateTests.Run(Check);

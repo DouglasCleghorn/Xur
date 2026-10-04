@@ -42,13 +42,21 @@ checks and pulls the latest image before every model-container start, including
 restarting a stopped container or loading an older saved selection. If the
 image changed, Xur recreates the stopped container and keeps its model-cache
 volume. Running engines continue using their current image until their next
-start. A failed latest-image download fails startup with a visible error.
+start. If the pull fails, Xur uses the newest downloaded image for the same
+engine and device variant. If no tagged base remains locally, it can reuse the
+image retained by the stopped container, including a prepared Fish runtime.
+The workload logs record the failed pull and cached image identity. Startup
+fails only if no usable image is available locally.
 Model weights and launch settings remain the selected versions.
 
 The Updates page identifies these engines as updating at container start.
-Model containers start through Xur so the update check runs: use Load or Resume
-after an engine exits or after rebooting. User-prepared containers keep their
-selected image and existing restart behavior.
+Models from the loaded profile restart automatically after an exit or reboot.
+Every automatic start follows the same update check and cached-image fallback.
+Once the model is healthy, Xur publishes its current local port to the gateway.
+Recovery leaves healthy peers running and retries failed starts after one minute.
+An intentional unload keeps models stopped; saving a profile does not start it.
+Load selects a profile, and Resume retries a failed manual profile change.
+User-prepared containers keep their selected image and existing restart behavior.
 
 The supported Qwen MTP recipe uses `--max-num-seqs 1`, aligned Mamba cache,
 disabled prefix caching and three MTP speculative tokens. Loading or resuming a

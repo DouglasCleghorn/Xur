@@ -116,13 +116,17 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             {
                 await new EngineRestartPolicy().Set(Name(w.Id),instance.InstanceId,"no");
             }
-            if(w.Recipe.Engine is "vLLM" or "vLLM-Omni")await new ModelCatalog(Path.GetDirectoryName(directory)!).ValidateEngineCheckpoint(w.Recipe);
+            if(instance?.State!="running" && w.Recipe.Engine is "vLLM" or "vLLM-Omni")await new ModelCatalog(Path.GetDirectoryName(directory)!).ValidateEngineCheckpoint(w.Recipe);
             ModelImageSelection? engineImage=null;
             if(w.Recipe.Kind=="Model")
             {
                 Func<string,Task<string>>? prepare=FishEngine.Applies(w.Recipe)?new FishEngine(Path.GetDirectoryName(directory)!).Prepare:null;
                 engineImage=await new ModelImageUpdater().Refresh(w,instance,prepare);
                 if(engineImage?.Recreate==true)instance=null;
+                var updateLog=Path.Combine(directory,w.Id+".update.log");
+                if(engineImage?.Warning is {} warning)
+                {await File.WriteAllTextAsync(updateLog,warning);Console.Error.WriteLine(w.Id+": "+warning);}
+                else if(engineImage!=null)File.Delete(updateLog);
             }
             if(instance==null)
             {
@@ -195,8 +199,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 if(w.Recipe.Kind=="Container" && w.Recipe.Port==0)return instance;
                 try {using var response=await health.GetAsync(instance.Endpoint.TrimEnd('/')+w.Recipe.HealthPath);if(response.IsSuccessStatusCode)
                     {
-                        // Model starts must pass through Xur's update check;
-                        // Podman's automatic restart would bypass it.
+                        // Automatic recovery calls the same checked startup path.
+                        File.Delete(Path.Combine(directory,w.Id+".error.log"));
                         return instance;
                     }}catch(HttpRequestException){}catch(TaskCanceledException){}
                 await Task.Delay(1000);
@@ -307,7 +311,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         if(!ProfilePolicy.EntityIdentifier(id) || !File.Exists(ReceiptPath(id)))throw new InvalidOperationException("Unknown workload.");
         var saved=Definitions().Single(w=>w.Id==id);
         if(saved.Recipe.Kind=="Workstation")return Redaction.Logs(await station.Logs(saved));
-        var r=await Processes.Run("podman",["logs","--tail=200",Name(id)],10);var error=Path.Combine(directory,id+".error.log");return Redaction.Logs((File.Exists(error) ? File.ReadAllText(error)+"\n" : "")+r.Output);
+        var r=await Processes.Run("podman",["logs","--tail=200",Name(id)],10);var error=Path.Combine(directory,id+".error.log");var update=Path.Combine(directory,id+".update.log");return Redaction.Logs((File.Exists(error) ? File.ReadAllText(error)+"\n" : "")+(File.Exists(update)?File.ReadAllText(update)+"\n":"")+r.Output);
     }
     public async Task RestoreStations()
     {

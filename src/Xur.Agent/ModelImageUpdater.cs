@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using Xur.Domain;
 namespace Xur.Agent;
 
-public record ModelImageSelection(string Image,bool Recreate);
+public record ModelImageSelection(string Image,bool Recreate,string? Warning=null);
 
 // A tag update does not change an existing container's image. Resolve the pull
 // to its actual ID, then replace a stopped container only if its image differs.
@@ -14,13 +14,47 @@ public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResul
     {
         if(instance?.State=="running")return null;
         var reference=EngineImages.For(workload.Recipe);
-        var pulled=await run("podman",["pull","--quiet","--policy=always","--arch=amd64",reference],900);
-        if(pulled.ExitCode!=0){var log=Redaction.Logs(pulled.Output);throw new InvalidOperationException("Latest engine image download failed for "+reference+": "+log[^Math.Min(1800,log.Length)..]);}
+        ProcessResult pulled;
+        try{pulled=await run("podman",["pull","--quiet","--policy=always","--arch=amd64",reference],900);}
+        catch(OperationCanceledException){pulled=new(124,"Image pull timed out.");}
+        string? warning=null;string image;bool prepared=false;
+        if(pulled.ExitCode==0)image=Identity(pulled.Output.Split('\n')[0].Trim());
+        else
+        {
+            var log=Redaction.Logs(pulled.Output);log=log[^Math.Min(1800,log.Length)..];
+            var cached=await new CachedEngineImages(run).Newest(workload.Recipe);
+            if(cached==null && instance!=null)
+            {
+                // A stopped container retains its last usable image even if its
+                // tag was removed. Fish's image already contains the codec layer.
+                cached=await StoppedImage(workload,instance);prepared=true;
+            }
+            if(cached==null)throw new InvalidOperationException("Latest engine image download failed for "+reference+" and no cached image is available: "+log);
+            image=Identity(cached);
+            warning="Latest engine image download failed; using the newest locally available image "+image+". "+log;
+        }
         // Use pull's result, rather than re-reading a shared tag that another
         // simultaneous workload could have updated after our download.
-        var image=Identity(pulled.Output.Split('\n')[0].Trim());
-        if(prepare!=null)image=Identity(await prepare(image));
-        if(instance==null)return new(image,false);
+        if(prepare!=null && !prepared)
+        {
+            try{image=Identity(await prepare(image));}
+            catch(InvalidOperationException e) when(warning!=null && instance!=null)
+            {
+                // Offline, a newly assembled codec layer may need uncached
+                // packages. The retained prepared runtime is still usable.
+                image=await StoppedImage(workload,instance);
+                warning+=" Using the retained prepared runtime because preparation of the cached base failed: "+Redaction.Logs(e.Message);
+            }
+        }
+        if(instance==null)return new(image,false,warning);
+        if(await StoppedImage(workload,instance)==image)return new(image,false,warning);
+        // No force flag: a concurrently started container must not be removed.
+        var removed=await run("podman",["rm",instance.InstanceId],20);
+        if(removed.ExitCode!=0)throw new InvalidOperationException("Could not replace the stopped engine with its latest image: "+Redaction.Logs(removed.Output));
+        return new(image,true,warning);
+    }
+    async Task<string> StoppedImage(Workload workload,RuntimeInstance instance)
+    {
         var inspected=await run("podman",["container","inspect",instance.InstanceId],20);
         if(inspected.ExitCode!=0)throw new InvalidOperationException("Could not inspect the stopped engine before updating it.");
         using var doc=JsonDocument.Parse(inspected.Output);var container=doc.RootElement[0];
@@ -28,11 +62,7 @@ public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResul
             throw new InvalidOperationException("The engine instance changed while checking for updates.");
         if(container.GetProperty("State").GetProperty("Status").GetString()=="running" || container.GetProperty("State").GetProperty("Pid").GetInt32()!=0)
             throw new InvalidOperationException("The engine started outside this operation. Retry after stopping it.");
-        if(Identity(container.GetProperty("Image").GetString()!)==image)return new(image,false);
-        // No force flag: a concurrently started container must not be removed.
-        var removed=await run("podman",["rm",instance.InstanceId],20);
-        if(removed.ExitCode!=0)throw new InvalidOperationException("Could not replace the stopped engine with its latest image: "+Redaction.Logs(removed.Output));
-        return new(image,true);
+        return Identity(container.GetProperty("Image").GetString()!);
     }
     static string Identity(string image)
     {
