@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the migration is published once, then legacy discovery stays frozen."""
+"""Verify compact releases and channel pointers without legacy bridge assets."""
 import importlib.machinery,contextlib,hashlib,importlib.util,json,os,pathlib,shutil,subprocess,tarfile,tempfile
 from unittest.mock import patch
 repo=pathlib.Path(__file__).resolve().parents[2]
@@ -36,6 +36,8 @@ with tempfile.TemporaryDirectory(dir=repo/'.build') as directory:
   if action=='download':
    name=args[args.index('--pattern')+1];destination=pathlib.Path(args[args.index('--dir')+1]);destination.mkdir(parents=True,exist_ok=True)
    (destination/name).write_bytes(releases[tag][name]);return ''
+  if action=='delete-asset':
+   del aliases[tag][args[4]];return ''
   if action=='upload':
    f=pathlib.Path(args[4]);aliases[tag][f.name]=f.read_text();return ''
   assert action=='edit';return ''
@@ -50,24 +52,31 @@ with tempfile.TemporaryDirectory(dir=repo/'.build') as directory:
   for channel,prefix in [('nightly','nightly-'),('stable','v')]:
    (artifact/'build.json').write_text(json.dumps({'commit':commit,'channel':channel,'checks':'eng/test-fast.sh passed','sha256':hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()}))
    (installer/'installer-build.json').write_text(json.dumps({'schema':1,'commit':commit,'channel':channel,'iso':{'file':iso.name,'bytes':iso.stat().st_size,'sha256':hashlib.file_digest(iso.open('rb'),'sha256').hexdigest()},'inspectionSha256':hashlib.file_digest(report.open('rb'),'sha256').hexdigest()}))
-   release.publish(channel,'1.0',commit)
-   assert len(releases[prefix+'1.0'])==6
-   metadata=json.loads(releases[prefix+'1.0']['xur-update.json'])['release']['installer']
-   assert metadata['iso']['file']==f'xur-{channel}-1.0-x86_64.iso'
-   assert metadata['parts'][0]['file']==metadata['iso']['file']
-   assert metadata['iso']['file'] in releases[prefix+'1.0']
-   frozen=dict(aliases[channel]);release.publish(channel,'1.1',commit)
+   # A brand-new channel never creates a bridge or legacy discovery assets.
+   release.publish(channel,'1.0',commit,with_installer=False)
+   expected={'xur-update-x86_64.tar.gz','xur-update.json'}
+   assert set(releases[prefix+'1.0'])==expected
+   assert aliases[channel]=={'current':prefix+'1.0\n'}
+   # An existing channel may still have retired markers; delete them after
+   # publishing the new pointer without changing the previous release bytes.
+   aliases[channel].update(migration='retired-ext4\n',latest='retired-ext4\n')
+   original_release=dict(releases[prefix+'1.0'])
+   release.publish(channel,'1.1',commit)
    assert set(releases[prefix+'1.1'])=={f'xur-{channel}-1.1-x86_64.iso','xur-update-x86_64.tar.gz','xur-update.json'}
-   assert aliases[channel]['migration']==frozen['migration']==prefix+'1.0\n'
-   assert aliases[channel]['current']==prefix+'1.1\n'
-   if channel=='nightly':assert aliases[channel]['latest']==frozen['latest']==prefix+'1.0\n'
+   metadata=json.loads(releases[prefix+'1.1']['xur-update.json'])['release']['installer']
+   assert metadata['iso']['file']==f'xur-{channel}-1.1-x86_64.iso'
+   assert metadata['parts'][0]['file']==metadata['iso']['file']
+   assert aliases[channel]=={'current':prefix+'1.1\n'}
+   assert releases[prefix+'1.0']==original_release
+   published=next(i for i,c in enumerate(calls) if c[:4]==('gh','release','create',prefix+'1.1'))
+   upload=next(i for i,c in enumerate(calls) if i>published and c[:4]==('gh','release','upload',channel) and c[4].endswith('/current'))
+   retired=[i for i,c in enumerate(calls) if c[:4]==('gh','release','delete-asset',channel)]
+   assert len(retired)==2 and all(i>upload for i in retired)
    edits=[c for c in calls if c[:3]==('gh','release','edit') and c[3].startswith(prefix)]
-   assert '--latest=false' in edits[-1]
-   if channel=='stable':assert '--latest=true' in edits[0]
+   assert all('--latest='+str(channel=='stable').lower() in c for c in edits)
    release.publish(channel,'1.2',commit,with_installer=False)
    assert set(releases[prefix+'1.2'])=={'xur-update-x86_64.tar.gz','xur-update.json'}
    assert 'installer' not in json.loads(releases[prefix+'1.2']['xur-update.json'])['release']
-   assert aliases[channel]['migration']==frozen['migration']
    assert aliases[channel]['current']==prefix+'1.2\n'
    # Detached installer publication preserves the already-live update bytes,
    # signature, sequence and discovery pointers for both channels.
@@ -95,19 +104,26 @@ with tempfile.TemporaryDirectory(dir=repo/'.build') as directory:
    else:raise AssertionError('Tampered published app archive accepted')
    assert before==len([c for c in calls if c[:3]==('gh','release','create')])
    releases[prefix+'1.2']['xur-update-x86_64.tar.gz']=archive_bytes
- # Actual signed bridge descriptors remain readable by the unchanged legacy checker,
- # while the upgraded checker follows the same channel to the three-asset release.
- loader=importlib.machinery.SourceFileLoader('migration_updater',str(repo/'os/bootc/app-update'));spec=importlib.util.spec_from_loader(loader.name,loader);u=importlib.util.module_from_spec(spec);loader.exec_module(u)
+   # Failed discovery upload must leave the old pointer and bridge markers intact.
+   aliases[channel]['migration']='retired-ext4\n';before=dict(aliases[channel])
+   def fail_pointer(*args):
+    if args[:4]==('gh','release','upload',channel):raise subprocess.CalledProcessError(1,args)
+    return run(*args)
+   with patch.object(release,'run',side_effect=fail_pointer):
+    try:release.publish(channel,'1.3',commit,with_installer=False)
+    except subprocess.CalledProcessError:pass
+    else:raise AssertionError('Failed pointer upload accepted')
+   assert aliases[channel]==before
+ # The public updater follows each channel to the immutable compact release.
+ loader=importlib.machinery.SourceFileLoader('public_updater',str(repo/'os/bootc/app-update'));spec=importlib.util.spec_from_loader(loader.name,loader);u=importlib.util.module_from_spec(spec);loader.exec_module(u)
  u.ROOT=root/'state';u.ROOT.mkdir();u.CONFIG=root/'settings';u.KEY=root/'os/bootc/application-update-key.pem';stage=root/'stage';stage.mkdir()
  for channel,prefix in [('nightly','nightly-'),('stable','v')]:
   u.select_channel(channel)
   def fetch(url,path,limit):
-   if url==u.PUBLIC+'/latest':path.write_bytes(releases['v1.0']['latest']);return u.GITHUB+'/download/v1.0'
    tail=url.removeprefix(u.GITHUB+'/download/');tag,name=tail.split('/',1)
    data=aliases[tag][name].encode() if tag in aliases else releases[tag][name]
    assert len(data)<=limit;path.write_bytes(data)
   u.fetch=fetch
-  assert u.check_legacy(stage)['version']=='1.0'
   upgraded=u.check(stage);assert upgraded['version']=='1.2'
   downloaded=u.download_bundle(stage,upgraded);assert hashlib.file_digest(downloaded.open('rb'),'sha256').hexdigest()==upgraded['sha256']
-print(json.dumps({'suite':'CompactRelease','result':'Passed','installerReleaseAssets':3,'appOnlyAssets':2,'transitionAssets':6,'legacyPointersFrozen':True,'stableAndNightly':True,'detachedInstallerPreservesLiveUpdate':True}))
+print(json.dumps({'suite':'CompactRelease','result':'Passed','installerReleaseAssets':3,'appOnlyAssets':2,'firstReleaseCompact':True,'retiredMarkersRemoved':True,'stableAndNightly':True,'detachedInstallerPreservesLiveUpdate':True}))

@@ -27,4 +27,4 @@ if __name__=='__main__':
     args=parser.parse_args();files=assets(args.version,args.iso)
     print(json.dumps({'tag':'v'+args.version,'assets':[str(p) for p in files],'publish':args.publish}))
     if args.publish:
-        raise SystemExit('Use the approved release workflow. Manual publication could break the frozen legacy migration pointers; local testing remains available through eng/update-repository.py serve.')
+        raise SystemExit('Use the release workflow to publish verified, signed updates and advance the matching channel pointer. Local testing remains available through eng/update-repository.py serve.')

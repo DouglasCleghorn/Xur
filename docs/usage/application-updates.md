@@ -133,7 +133,8 @@ leave the public update unchanged. No ISO is rebuilt. `publish-update.sh` is an
 alias for the same pipeline.
 
 The repository verifies the published bundle and creates a versioned archive,
-a signed descriptor, and an atomic `latest` pointer. Publishing and building
+signed descriptors, and an atomic `current` pointer. It also keeps the older
+`latest` format for existing local test clients. Publishing and building
 share a context lock. The signing key is private at
 `~/.local/share/xur-updates/signing-key.pem` (directory 0700, file 0600); **back it up**.
 `XUR_UPDATE_SIGNING_KEY` selects an official maintainer key and must match the
@@ -178,35 +179,33 @@ and `xur updates …` commands remain available.
 
 ## Release channels and GitHub approval
 
-Every push to `main` builds a Nightly candidate; every push to `release` builds a
-Stable candidate. Nightly describes the development channel, not a daily timer.
-The release workflow runs fast checks, builds and inspects an online installer,
-packages candidates, and retains them for seven days. It then waits for DouglasCleghorn to approve the matching GitHub
-Environment before signing or publishing. Admin bypass is disabled. The owner
-can approve their own commits because this project currently has one maintainer.
+Every push to `main` builds a Nightly application candidate; every push to
+`release` builds a Stable candidate. The **Build and publish release** workflow
+runs source, fast and browser checks. Nightly publishes automatically after the
+required application checks pass. Stable waits for the maintainer's `stable`
+GitHub Environment approval after hardware testing. Signing keys are unavailable
+to build/test jobs, and superseded commits cannot advance a channel.
 
-In GitHub Actions, open **Build and approve release**, inspect the successful
-build and commit, then use **Review deployments** for `nightly` or `stable`.
-The signing key is an environment secret and is unavailable to build/test jobs.
-Never approve a candidate you have not reviewed. A superseded branch build is
-rejected before publication; approve the newest successful candidate instead.
-A new push supersedes the previous workflow on that branch, including a candidate
-waiting for approval, so an unattended approval cannot block subsequent builds.
-Failed checks retain diagnostic artifacts for seven days. Only the newest candidate
-per channel is retained; after publication its Actions artifact is deleted. The
-public release assets stay on GitHub Releases.
+Installer builds are requested separately with **Run workflow → build_iso**.
+They publish inspected media in a separate release after the matching application
+release is available; they never move the application channel pointer. See
+[installer release automation](../development/installer-releases.md) for candidate
+retention, environment restrictions and validation requirements.
 
 Nightly uses a small `nightly` release pointer to an immutable per-build release.
-Stable uses its own small channel pointer. GitHub Latest is reserved for legacy migration. Signed metadata binds each release to
-its channel. Downloads resolve the pointer before fetching metadata and payload,
+Stable uses its own small channel pointer. GitHub **Latest** follows the most
+recent Stable application publication. Signed metadata binds each release to its
+channel. Downloads resolve the pointer before fetching metadata and payload,
 so a concurrent publication cannot mix release assets.
 
 **Settings → Update channel** selects Nightly, Stable or Local build testing. Switching channels does
 not install immediately; check for updates and apply the selected release.
 Moving from a newer Nightly to an older Stable is allowed if its data/features
 remain compatible. Replay protection applies separately within each channel.
-Existing legacy releases retain their previous global replay guard. If a channel
-has not published a release yet, the check fails without changing the running app.
+If a public channel has no `current` pointer, the check reports “No Stable release
+available” or “No Nightly release available,” clears any stale available update,
+and keeps the running app. It does not try retired release paths. Network,
+authorization, missing descriptor and signature failures remain update errors.
 
 ## Local build testing
 
@@ -218,18 +217,18 @@ and configure the local repository and public key. Signatures and compatibility
 checks remain required. Select Stable or Nightly to return to official builds.
 
 The older `eng/publish-github.py` can inspect legacy packages but cannot publish.
-Public releases use the approval-gated CI workflow, protecting the fixed migration
-entry points. Contributor builds can still be served locally without GitHub.
+Public releases use the checked CI workflow and its channel-specific publication
+policy. Contributor builds can still be served locally without GitHub.
 
-## Compact releases and migration
+## Compact releases and retired ext4 downloads
 
-New official releases contain three files: `xur-installer-x86_64.iso`,
-`xur-update-x86_64.tar.gz`, and `xur-update.json`. The updater never downloads the
-ISO. A check fetches a small channel pointer and the JSON descriptor (normally a
-few KiB, bounded at 64 KiB). Installing fetches the app archive once, directly into
-staging. An already-installed bundle requires no archive download. Channel checks
-retain signature, channel, ABI and replay validation; activation and rollback
-retain their health checks.
+Official application releases contain `xur-update-x86_64.tar.gz` and
+`xur-update.json`. Installer releases add `xur-<channel>-<version>-x86_64.iso`.
+The updater never downloads the ISO. A check fetches a small channel pointer
+and the JSON descriptor (normally a few KiB, bounded at 64 KiB). Installing
+fetches the app archive once, directly into staging. An already-installed bundle
+requires no archive download. Channel checks retain signature, channel, ABI and
+replay validation; activation and rollback retain their health checks.
 
 The JSON envelope has `schema: 2`, a `release` object and a base64 Ed25519
 `signature`. The signed bytes are the release object serialized with Python's
@@ -240,19 +239,16 @@ Metadata and downloads are pinned to an immutable release. No archive extraction
 happens before hash verification. `eng/verify-release.py` checks the same signature
 and can verify an ISO without downloading the app archive.
 
-One transition release per legacy channel includes the previous four app assets;
-the tar archive is reused, so there are six assets in a bridge and three thereafter.
-Old clients find that bridge via their unchanged discovery mechanism; after
-installing it they use `nightly/current` or `stable/current`. The old Nightly
-pointer and Stable GitHub Latest designation remain frozen on their bridges.
-`migration` on each channel alias records the permanent bridge tag. Do not delete
-bridges or change the GitHub Latest designation manually. A missing `current`
-(HTTP 404 only) permits legacy repository fallback; invalid signatures or other
-failed requests do not. Each channel gets its bridge through its own approved
-workflow; Nightly publication does not promote a build to Stable.
+Ext4-root releases and their public updater bridges were removed on 2026-10-03.
+Public releases use only the signed compact format and channel `current` pointers;
+no transition release or public legacy fallback is created. Existing ext4-root
+installations require a backup and reinstall with Btrfs media. `/boot` remains
+ext4 by design. See [Steam storage](steam-storage.md) for the filesystem requirement.
 
 Contributor repositories publish `current`, an immutable `<bundle-id>.update.json`,
 and `<bundle-id>.tar.gz`, using the contributor's configured public key. Legacy
-files remain available for older local clients. `eng/package-update.py` still
+files and signed schema-1 fallback remain supported only for local repositories
+that lack `current` (HTTP 404). Invalid metadata and other HTTP failures never
+trigger fallback. `eng/package-update.py` still
 prepares local test updates; public publication goes through GitHub's approval-gated
 release workflow.
