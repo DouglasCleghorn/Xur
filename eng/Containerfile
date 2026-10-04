@@ -1,0 +1,2 @@
+# Hosted native builds consume this image through ci-native.py.
+FROM mirror.gcr.io/library/fedora:44 AS native-builder

@@ -106,5 +106,5 @@ that does not complete this simultaneous-workstation acceptance checklist.
 Separate desktops on outputs of a single GPU are not supported.
 
 References: [systemd device properties](https://github.com/systemd/systemd/blob/main/src/core/dbus-cgroup.c),
-[pinned Sunshine input adapter](https://github.com/LizardByte/Sunshine/blob/63d35f702ee9e362e43263742981836ec0710384/src/platform/linux/input/virtualhid.cpp),
-[pinned libvirtualhid backend](https://github.com/LizardByte/libvirtualhid/blob/53e1a949fc0784af716b782ddfa6c647cafd1f05/src/platform/linux/uhid_backend.cpp).
+[Sunshine v2026.914.233613 input adapter](https://github.com/LizardByte/Sunshine/blob/v2026.914.233613/src/platform/linux/input/virtualhid.cpp),
+[libvirtualhid v2026.914.1218.10 backend](https://github.com/LizardByte/libvirtualhid/blob/v2026.914.1218.10/src/platform/linux/uhid_backend.cpp).

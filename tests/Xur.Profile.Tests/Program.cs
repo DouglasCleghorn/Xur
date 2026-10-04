@@ -59,6 +59,14 @@ try
         var routePlan=await manager.Preview("a");Check(routePlan.Steps.All(s=>s.Kind is "Keep" or "Publish"),"Route-only plan contains no start/stop actions");await Apply("a");
         Check((await data.GetAsync("/chat/pid")).StatusCode==HttpStatusCode.ServiceUnavailable && (await data.GetAsync("/renamed/pid")).IsSuccessStatusCode,"Gateway atomically swaps route names");
         Check((await runtime.Observe()).Instances.Single(i=>i.Id=="keep").Pid==initial.Pid,"Route change preserves backend PID and existing stream");
+        await manager.RestoreModels();await manager.Wait();
+        var crashed=(await runtime.Observe()).Instances.Single(i=>i.Id=="a");
+        await runtime.Crash("a");await manager.RestoreModels();await manager.Wait();
+        var automatic=(await runtime.Observe()).Instances.Single(i=>i.Id=="a");
+        Check(automatic.Pid!=crashed.Pid && automatic.InstanceId!=crashed.InstanceId,"Automatic recovery replaces an externally crashed real child without a Load or Resume action");
+        using(var recoveredResponse=await data.GetAsync("/a/pid"))
+        {recoveredResponse.EnsureSuccessStatusCode();Check((await recoveredResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("pid").GetInt32()==automatic.Pid,"Automatic recovery republishes the real gateway route to the new child port");}
+        Check((await runtime.Observe()).Instances.Single(i=>i.Id=="keep").Pid==initial.Pid,"Automatic child recovery preserves the healthy peer process");
         var conflict=await manager.Preview("b");runtime.GenerationSuffix="external-change";rejected=false;try{await manager.Apply(new(conflict.Id,conflict.Digest));}catch(InvalidOperationException){rejected=true;}Check(rejected,"Observation change invalidates preview");runtime.GenerationSuffix="";
         response.Dispose();
         runtime.FailAfterStart="b";var failed=await manager.Preview("b");await manager.Apply(new(failed.Id,failed.Digest));await manager.Wait();
@@ -133,6 +141,8 @@ try
         Check(unloaded.Active==null && unloaded.Runtime.Instances.Length==0 && unloaded.Operation is {Stage:"Complete",Unload:true},"Unload stops the real child and clears loaded state");
         Check(unloaded.Profiles.Length==2 && unloaded.Profiles.All(p=>p.Workloads.Length==1),"Unload preserves all saved workload definitions");
         Check((await data.GetAsync("/workload-1/pid")).StatusCode==HttpStatusCode.ServiceUnavailable,"Unload removes gateway routes");
+        var unloadedCreated=runtime.Created;await editor.RestoreModels();await editor.Wait();
+        Check(runtime.Created==unloadedCreated && (await runtime.Observe()).Instances.Length==0,"Automatic recovery does not resurrect intentionally unloaded real child engines");
         bool noProfile=false;try{await editor.PreviewUnload();}catch(InvalidOperationException){noProfile=true;}
         Check(noProfile,"Idle unload reports no profile loaded");
         var reload=await editor.Preview(second.Id);await editor.Apply(new(reload.Id,reload.Digest));await editor.Wait();
@@ -181,6 +191,8 @@ sealed class ChildRuntime(string sdk):IWorkloadRuntime,IAsyncDisposable
         if(PauseAfterStart==w.Id){StartReached!.SetResult();await ReleaseStart!.Task;}
         if(FailAfterStart==w.Id){FailAfterStart=null;throw new IOException("Test-only crash after side effect");}return instance;
     }
+    public async Task Crash(string id)
+    {var c=children[id];c.P.Kill(true);await c.P.WaitForExitAsync();c.P.Dispose();children.TryRemove(id,out _);}
     public async Task Stop(RuntimeStop r)
     {if(!children.TryGetValue(r.Id,out var c))return;if(c.I.InstanceId!=r.InstanceId)throw new Exception("Identity changed");c.P.Kill(true);await c.P.WaitForExitAsync();c.P.Dispose();children.TryRemove(r.Id,out _);Interlocked.Increment(ref Stops);if(FailAfterStop==r.Id){FailAfterStop=null;throw new IOException("Test-only crash after stop side effect");}}
     public async ValueTask DisposeAsync(){foreach(var c in children.Values){if(!c.P.HasExited){c.P.Kill(true);await c.P.WaitForExitAsync();}c.P.Dispose();}}

@@ -8,11 +8,17 @@ jobs:
   checks:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.401
+          global-json-file: global.json
       - run: |
+          mkdir -p .build/checks
+          python3 -m pip install --target .build/checks -r eng/requirements.txt
+          PYTHONPATH=.build/checks python3 eng/check-dependency-coverage.py
+          PYTHONPATH=.build/checks python3 tests/Xur.Integration.Tests/dependency-coverage.py
+          python3 eng/check-web-assets.py
+          python3 tests/Xur.Integration.Tests/web-assets.py
           dotnet run --project tests/Xur.Unit.Tests -c Release
           python3 tests/Xur.Integration.Tests/os-update.py
           XUR_DOTNET="$(command -v dotnet)" python3 tests/Xur.Integration.Tests/console-menu.py

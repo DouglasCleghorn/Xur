@@ -5,6 +5,34 @@ static class EngineStartupTests
 {
     public static async Task Run(Action<bool,string> check)
     {
+        var catalog=Path.GetFullPath(Path.Combine(".build","engine-catalog-"+Guid.NewGuid().ToString("N")));
+        Directory.CreateDirectory(catalog);
+        try
+        {
+            var recipe=new Recipe("engine-test","Engine","@engine/server",[],8080,"/health","CPU",0,0,"");
+            var file=Path.Combine(catalog,"model.json");
+            await File.WriteAllTextAsync(file,JsonSerializer.Serialize(recipe,new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            var selected=new RecipeCatalog(catalog).Recipes.Single();
+            check(selected.Image==EngineImages.Image("server")&&!selected.Image.Contains('@'),"Default catalog engine aliases resolve to the channel manifest before validation and saving");
+            {
+                var legacy=selected with{Image="ghcr.io/ggml-org/llama.cpp@sha256:e33f80e54fc3f403118ab92b24f21dc1a3125ffd0c7725532028eca8128b548d"};
+                new RecipeCatalog(catalog).Verify(legacy);
+                check(legacy.Image.Contains("@sha256:"),"Previously saved default CPU recipes stay authorized before resolving their latest engine");
+                bool tampered=false;try{new RecipeCatalog(catalog).Verify(legacy with{Command=["changed"]});}catch(InvalidOperationException){tampered=true;}
+                check(tampered,"Image identity compatibility never authorizes modified recipe commands");
+            }
+            await File.WriteAllTextAsync(file,JsonSerializer.Serialize(recipe with{Image="@engine/missing"},new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            bool unknown=false;try{_ = new RecipeCatalog(catalog);}catch(InvalidOperationException){unknown=true;}
+            check(unknown,"Unknown engine aliases cannot become workload image references");
+        }
+        finally{Directory.Delete(catalog,true);}
+        foreach(var image in new[]{"registry.example/model", "model:1.0", "registry.example/model:1.0\n", "registry.example/model:bad tag", "--privileged"})
+        {
+            bool invalid=false;
+            try{ProfilePolicy.ValidateRecipe(new Recipe("image-test","Image",image,[],8080,"/health","CPU",0,0,""));}
+            catch(InvalidOperationException){invalid=true;}
+            check(invalid,"Model images still reject missing versions and malformed references: "+image.Trim());
+        }
         var mtp=ModelLaunchSettings.Vllm(ModelLaunchSettings.QwenMtp,2);
         check(mtp[Array.IndexOf(mtp,"--max-num-seqs")+1]=="1","Qwen MTP uses bounded single-sequence concurrency, below the reported 115 Mamba blocks");
         check(mtp.Contains("--no-enable-prefix-caching")&&mtp.Contains("--mamba-cache-mode")&&mtp.Contains("--speculative-config"),"Qwen MTP explicitly enables speculation and aligned Mamba caching with prefix reuse disabled");
@@ -34,7 +62,8 @@ static class EngineStartupTests
         }
         var tools=await new ToolUpdateInventory(AppContext.BaseDirectory,Run).Read();
         check(tools.Length==13&&tools.Any(t=>t.Name=="vLLM-Omni")&&tools.Any(t=>t.Name=="Sunshine"),"Updates inventories all engine variants and system tools");
-        check(tools.Where(t=>t.Image!=null).All(t=>t.Downloaded==false&&t.UpdatesWith=="Xur"),"Missing engine images are not misreported as installed");
+        check(tools.Where(t=>t.Image!=null).All(t=>t.Downloaded==false&&t.UpdatesWith=="Container start"),"Missing engine images are not misreported as installed");
+        check(tools.Where(t=>t.Image!=null).All(t=>t.Image==EngineImages.Image(t.Id)&&t.Version==EngineImages.Version(t.Id)),"Tool inventory uses the same latest engine channels as model selection");
         check(tools.Single(t=>t.Id=="tailscale").Version=="1.102.4"&&tools.Single(t=>t.Id=="kernel").Version=="test-kernel","Host tool versions come from running tools rather than build-time defaults");
         check(tools.Single(t=>t.Id=="podman").UpdatesWith=="OS","Podman updates follow the OS lifecycle");
     }

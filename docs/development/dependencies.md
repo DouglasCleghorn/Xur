@@ -1,0 +1,77 @@
+# Dependency updates
+
+Dependabot checks all supported manifests weekly and groups version updates into
+one PR. Rolling model-engine channels are refreshed by the client at startup;
+Dependabot covers their container manifests but does not turn `latest` into a
+version-update PR. Security updates use GitHub's separate scheduling. The source checks run
+`eng/check-dependency-coverage.py` to reject supported manifests outside the
+configured directories and copied version information that needs refreshing.
+
+| Dependencies | Authoritative files | Dependabot ecosystem |
+| --- | --- | --- |
+| NuGet packages | Project files and `packages.lock.json` in all seven configured project directories | `nuget` |
+| .NET SDK | `global.json`; workflows read that file directly | `dotnet-sdk` |
+| GitHub Actions | `.github/workflows/*.yml` | `github-actions` |
+| llama.cpp variants, vLLM and Omni | `catalog/engines/Containerfile`, embedded by `EngineImages`; the client pulls the rolling channels on each start | `docker` |
+| Hosted Fedora native builder | `eng/Containerfile`, read by `eng/ci-native.py` | `docker` |
+| Live installer Fedora base | `os/bootc/Containerfile`; resolved once to a digest in a private build recipe | `docker` |
+| Playwright and axe-core | `eng/browser/package.json` and lock | `npm` |
+| Website deployment CLI | `website/package.json` and lock | `npm` |
+| Source-check YAML parser | `eng/requirements.txt` | `pip` |
+| Private screenshot/QR test tools | `tests/Xur.Media.Tests/requirements.txt` | `pip` |
+
+Install browser or website tools with `python3 eng/prepare-npm.py browser` or
+`python3 eng/prepare-npm.py website`. Install media Python tools with
+`python3 -m pip install --target .build/qr -r tests/Xur.Media.Tests/requirements.txt`.
+All installations, caches and private test evidence remain under `.build/`.
+
+Third-party browser libraries are managed in `src/Xur.Control/libman.json`.
+Normal Control builds restore AG Grid Community and its MIT notice through
+`Microsoft.Web.LibraryManager.Build` into `src/Xur.Control/.build/libman/`, then
+copy them to `wwwroot/vendor/ag-grid/` in build and publish output. There is no
+separate asset refresh command. Provider downloads happen during the build;
+pages serve only local assets and work without internet access. The LibMan build
+package is covered by NuGet Dependabot updates; library versions in `libman.json`
+need the manual review below because Dependabot does not support LibMan.
+
+The default CPU recipe uses `@engine/server`, resolved to the upstream channel
+before validation or saving. Every model-container start pulls the current
+channel, including saved selections with older tags or digests. A stopped
+container is recreated if its resolved image changes; persistent model-cache
+volumes are reused. A running container is left alone. Failed pulls use the
+newest locally downloaded Linux amd64 image for the same engine/variant, or the
+image retained by the stopped container if no named base remains cached. The
+selected image and pull error are recorded in the workload's update log. A pull
+failure with no local engine fails startup.
+
+Model containers use `--restart=no`: the control service automatically restores
+models from the committed loaded profile through the same `Start` path after an
+exit or reboot, instead of letting Podman bypass the update check. Recovery
+publishes the current endpoint after health checks, preserves healthy peers, and
+backs off for a minute after startup failures. It waits for manual transitions,
+pauses during application maintenance, and respects intentional unloads. Saved
+profiles alone do not grant automatic startup. Generic prepared containers retain
+their selected image and restart policy.
+
+## Manual checks
+
+Dependabot cannot interpret the following custom locks or update vendored source
+and model weights. Review these during the weekly dependency PR and before a
+release; they are deliberately manual checks, with no companion update service.
+
+| Source | Manual review |
+| --- | --- |
+| `src/Xur.Control/libman.json` | Check AG Grid Community releases during the weekly dependency review; update the library version, build Control to restore JavaScript and its MIT notice, and run Files UI checks. LibMan manifests are unsupported by Dependabot. |
+| `eng/toolchain-lock.json` | Refresh the SDK archive URL/checksum whenever `global.json` changes; also review Fedora cloud builder images/checksums, Image Builder source releases, Tailscale archives and recorded toolchain metadata. Historical host/engine version records do not select runtime images. |
+| `tools/Xur.Console/upstream-lock.json` | Check kmscon releases, refresh the source archive/checksum, and exercise console patches and PTY tests. |
+| `tools/Xur.Streaming/upstream-lock.json` | Check Sunshine releases, refresh the AppImage URL/checksum, and verify streaming and input adapters. |
+| `tools/Xur.VirtualDisplay/README.md` and vendored `screencast.xml` | Review KDE protocol releases, compare the vendored XML, preserve its license, and test against supported KWin. |
+| `docs/font-source.json` and vendored font/OFL files | Review the selected Google Fonts/IBM Plex source, refresh checksums and the font together with its OFL notice, and review affected screenshots. |
+| `catalog/models/smollm2-135m-cpu.json` | Review Hugging Face checkpoint revisions, file size/checksum and upstream license; the container image is managed through the engine manifest. Model weights have no Dependabot ecosystem. |
+| `os/bootc/upstream-lock.json` | Historical Bazzite reference metadata; online installation and OS updates follow the upstream signed stable channel and record the resolved digest for each operation. |
+| Documentation links to upstream versioned source | Reference snapshots; refresh links when changing the corresponding runtime or source dependency. |
+| OS packages, firmware and drivers; CI runner tools | Managed by Fedora/Bazzite or the hosted runner, rather than package versions in source manifests. Review the selected Fedora/runner release and test new deployments. |
+
+GitHub's [supported ecosystems reference](https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories)
+describes the supported manifest formats. Download/package checksums and signed
+release identities continue to verify artifacts; they are not version selectors.

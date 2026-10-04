@@ -396,6 +396,7 @@ async Task StartHost()
     });
     await app.StartAsync();
     if(!appliance.Installer && !File.Exists(ApplicationMaintenance.Marker))await profileManager.Resume(automatic:true);
+    if(!appliance.Installer)_=Task.Run(()=>profileManager.WatchModels(app.Lifetime.ApplicationStopping));
     File.SetUnixFileMode(socket,UnixFileMode.UserRead|UnixFileMode.UserWrite);
     if(!appliance.Installer)File.SetUnixFileMode(serveSocket,UnixFileMode.UserRead|UnixFileMode.UserWrite);
     await LocalConsole.Start(appliance,auth);

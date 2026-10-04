@@ -138,6 +138,10 @@ view keeps the gate locked.
 
 ## Run the installer VM evidence suite
 
+Prepare browser tools with `python3 eng/prepare-npm.py browser` and install
+Chromium with `.build/browser/node_modules/.bin/playwright install chromium`.
+Install the QR tools with
+`python3 -m pip install --target .build/qr -r tests/Xur.Media.Tests/requirements.txt`.
 After preparing Playwright/Chromium, the pinned zxing-cpp decoder in
 `.build/qr`, and the answer fixtures with `make-answer-fixtures.py`, run:
 
@@ -312,3 +316,6 @@ reuse the verified native cache when source inputs match. See
 [display consoles](../architecture/display-consoles.md) for its pinned source and runtime receipt.
 
 For local installer application tests, add `xur.app-update=off` to the boot command line. The bundled app will run without fetching a newer public app; Bazzite installation still needs the network. See [online installer](../architecture/online-installer.md) for signature checks and fallback behavior.
+
+See [dependency updates](dependencies.md) for Dependabot coverage and the manual
+checks for custom source downloads, fonts and model checkpoints.

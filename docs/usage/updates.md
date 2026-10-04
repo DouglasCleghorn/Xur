@@ -60,8 +60,8 @@ An available update with no staged deployment is reported as a failure, includin
 through Update All.
 
 The OS update includes upstream kernel, NVIDIA driver and desktop components.
-It does not update the selected Xur application bundle or pinned engine/model
-versions. Graphics and compute compatibility can change with upstream driver
+It does not update the selected Xur application bundle or selected model
+weights. Model engines check for their latest image at container start. Graphics and compute compatibility can change with upstream driver
 updates; previous OS deployment rollback remains available. Automatic failed
 boot recovery is not claimed by Xur.
 
@@ -90,8 +90,8 @@ are supported; incompatible schema changes are rejected until an explicit
 migration is supplied. See [Application updates](application-updates.md) for
 server setup, publishing, APIs and tests.
 
-Independent engine Update buttons remain unfinished. Existing workloads retain
-their pinned engine image when the Xur application is updated.
+Model engines update independently at container start. Updating Xur does not
+restart running models.
 
 References:
 - https://docs.bazzite.gg/General/FAQ/
@@ -99,11 +99,17 @@ References:
 
 ## Tools and engines
 
-The web Updates page lists the pinned catalog versions of llama.cpp (CPU, CUDA,
-ROCm and Vulkan), vLLM, vLLM-Omni and bundled Sunshine. Engine images show whether
-that exact digest has been downloaded. Xur update buttons use the application
-bundle lifecycle; they do not rewrite engine pins in saved workloads or restart
-running streams.
+The web Updates page lists the latest upstream channels for llama.cpp (CPU,
+CUDA, ROCm and Vulkan), vLLM and vLLM-Omni, plus the bundled Sunshine version.
+Engine images show whether the channel has been downloaded locally. Every model
+start checks upstream and pulls the current image, including previously saved
+selections. Changed images recreate stopped containers while preserving their
+model-cache volumes; running models continue until their next start. Download
+failures use the newest compatible locally downloaded image and record a warning
+in workload logs. Models in the loaded profile automatically restart after an
+exit or reboot, checking for latest each time and refreshing their gateway port
+once healthy. An intentional unload keeps them stopped. Xur update buttons
+use the application bundle lifecycle and do not restart running streams.
 
 Tailscale, Podman, Plasma, Mesa, the running kernel and NVIDIA driver report host
 versions and use the OS update lifecycle. Their buttons check or stage the whole

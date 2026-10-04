@@ -29,8 +29,30 @@ updates:
     patterns: ["*"]
     multi-ecosystem-group: weekly-dependencies
 
+  - package-ecosystem: docker
+    directories:
+      - /catalog/engines
+      - /eng
+      - /os/bootc
+    patterns: ["*"]
+    multi-ecosystem-group: weekly-dependencies
+
+  - package-ecosystem: npm
+    directories:
+      - /eng/browser
+      - /website
+    patterns: ["*"]
+    multi-ecosystem-group: weekly-dependencies
+
+  - package-ecosystem: pip
+    directories:
+      - /eng
+      - /tests/Xur.Media.Tests
+    patterns: ["*"]
+    multi-ecosystem-group: weekly-dependencies
+
   # SDK PRs also need a reviewed refresh of eng/toolchain-lock.json's download
-  # URL/checksum and workflow SDK pins. Dependabot cannot edit custom lock files.
+  # URL/checksum. Workflows read global.json; Dependabot cannot edit custom locks.
   - package-ecosystem: dotnet-sdk
     directory: /
     patterns: ["*"]

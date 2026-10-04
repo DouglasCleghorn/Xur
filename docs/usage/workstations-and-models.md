@@ -69,7 +69,7 @@ are not treated as a workload.
 Sunshine's DRM adapter and CUDA device selection are set separately. For NVIDIA,
 Xur passes the assigned full GPU UUID through `CUDA_VISIBLE_DEVICES`; the existing
 user-slice device restrictions still apply. The selected card's DRM node remains
-`adapter_name`. See the pinned [Sunshine CUDA initializer](https://github.com/LizardByte/Sunshine/blob/63d35f702ee9e362e43263742981836ec0710384/src/video.cpp)
+`adapter_name`. See the [Sunshine v2026.914.233613 CUDA initializer](https://github.com/LizardByte/Sunshine/blob/v2026.914.233613/src/video.cpp)
 and [NVIDIA's UUID selection documentation](https://docs.nvidia.com/deploy/topics/topic_5_2_1.html).
 
 A failed requested encoder or an unexpected fallback does not become Ready.

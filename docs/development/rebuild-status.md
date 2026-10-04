@@ -25,9 +25,9 @@ exercises browser/API sessions across clock corrections and a manager restart.
 Saved workload profiles now have a browser editor, exact change preview, SQLite
 revision/action journal, typed Podman lifecycle operations and a separate streaming
 gateway. The picker includes a native gaming workstation, live Unsloth GGUF and Hugging
-Face model search, and the pinned upstream vLLM-Omni supported-model list.
-GGUF imports pin revisions, file hashes, engine digests and Unsloth sampling
-settings. A small CPU recipe remains bundled for smoke tests. See
+Face model search, and the upstream vLLM-Omni supported-model list.
+GGUF imports pin revisions, file hashes and Unsloth sampling settings. Model
+engines pull their latest upstream image before each container start. A small CPU recipe remains bundled for smoke tests. See
 `docs/usage/profiles.md` and the matching release acceptance file for executed checks.
 
 The upstream Bazzite NVIDIA driver and container toolkit are included. Reference

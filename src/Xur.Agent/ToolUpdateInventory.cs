@@ -16,13 +16,11 @@ public sealed class ToolUpdateInventory
     public async Task<ToolUpdateInfo[]> Read()
     {
         var result=new List<ToolUpdateInfo>();
-        using var engines=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root,"engine-lock.json")));
-        foreach(var (id,name,repository) in new[]{("server","llama.cpp · CPU","ghcr.io/ggml-org/llama.cpp"),("server-cuda","llama.cpp · NVIDIA","ghcr.io/ggml-org/llama.cpp"),("server-rocm","llama.cpp · AMD","ghcr.io/ggml-org/llama.cpp"),("server-vulkan","llama.cpp · Vulkan","ghcr.io/ggml-org/llama.cpp"),("vllm","vLLM","mirror.gcr.io/vllm/vllm-openai"),("omni","vLLM-Omni","mirror.gcr.io/vllm/vllm-omni")})
+        foreach(var (id,name) in new[]{("server","llama.cpp · CPU"),("server-cuda","llama.cpp · NVIDIA"),("server-rocm","llama.cpp · AMD"),("server-vulkan","llama.cpp · Vulkan"),("vllm","vLLM"),("omni","vLLM-Omni")})
         {
-            var pin=engines.RootElement.GetProperty("engines").GetProperty(id);
-            var image=repository+"@"+pin.GetProperty("manifestDigest").GetString();
+            var image=EngineImages.Image(id);
             var exists=await Probe("podman",["image","exists",image],10);
-            result.Add(new(id,name,pin.GetProperty("version").GetString()!,"Xur","Catalog version. Saved workloads retain their pinned engine image.",image,exists.ExitCode==0?true:exists.ExitCode==1?false:null));
+            result.Add(new(id,name,EngineImages.Version(id),"Container start","Checks upstream for the latest image before each start. Running workloads keep their current image.",image,exists.ExitCode==0?true:exists.ExitCode==1?false:null));
         }
         using var sunshine=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root,"streaming-lock.json")));
         result.Add(new("sunshine","Sunshine",sunshine.RootElement.GetProperty("sunshine").GetProperty("version").GetString()!,"Xur","Bundled version. Running streams keep their current runtime until restarted."));

@@ -20,7 +20,7 @@ const fs=require('fs'),assert=require('assert/strict');
    if(u.pathname.endsWith('/delete'))items=items.filter(i=>i.name!==u.searchParams.get('path'));
    return r.fulfill({json:{ok:true}});
   }
-  const asset=/\.(css|js|ttf|svg)$/.test(u.pathname);return r.fulfill({body:fs.readFileSync(asset?'src/Xur.Control/wwwroot'+u.pathname:'.build/fast/control-panel/files.html'),contentType:u.pathname.endsWith('.js')?'application/javascript':u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.ttf')?'font/ttf':u.pathname.endsWith('.svg')?'image/svg+xml':'text/html'});
+  const asset=/\.(css|js|ttf|svg)$/.test(u.pathname),file=u.pathname==='/vendor/ag-grid/ag-grid-community.min.js'?'src/Xur.Control/.build/libman/ag-grid/dist/ag-grid-community.min.js':asset?'src/Xur.Control/wwwroot'+u.pathname:'.build/fast/control-panel/files.html';return r.fulfill({body:fs.readFileSync(file),contentType:u.pathname.endsWith('.js')?'application/javascript':u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.ttf')?'font/ttf':u.pathname.endsWith('.svg')?'image/svg+xml':'text/html'});
  });
  for(const width of [1440,390]){
   items=structuredClone(initial);await page.setViewportSize({width,height:950});await page.goto('http://files.test/files');

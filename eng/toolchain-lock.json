@@ -27,7 +27,7 @@
     "status": "Archive SHA-256 verified; compiled with vendored dependencies in Fedora 44; version and build CLI executed"
   },
   "installedHostBase": {
-    "reference": "ghcr.io/ublue-os/bazzite-nvidia-open@sha256:7b4e7217bc846a0b15301448eb7149226f932d65ea372614e01d72cf7043dbc1",
+    "reference": "ghcr.io/ublue-os/bazzite-nvidia-open:44.20260908",
     "channel": "ghcr.io/ublue-os/bazzite-nvidia-open:stable",
     "kernel": "7.2.3-ogc3.1.fc44.x86_64",
     "bootc": "1.16.10",
@@ -57,7 +57,7 @@
   "llamaCpp": {
     "version": "b10920",
     "commit": "eafe15a5e3d87dd68ae33acf6a7cbd9415a0ac5e",
-    "amd64Image": "ghcr.io/ggml-org/llama.cpp@sha256:e33f80e54fc3f403118ab92b24f21dc1a3125ffd0c7725532028eca8128b548d"
+    "amd64Image": "ghcr.io/ggml-org/llama.cpp:server-b10920"
   },
   "liveInstallerBase": {
     "reference": "quay.io/fedora/fedora-bootc:44",

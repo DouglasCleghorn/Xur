@@ -4,8 +4,8 @@
 
 Always pull Docker Hub images through Google's `mirror.gcr.io` cache. Use fully
 qualified `mirror.gcr.io/library/<image>` or `mirror.gcr.io/<publisher>/<image>`
-references in new recipes, Dockerfiles, tests and build commands. Preserve pinned
-digests. Never add a silent fallback to Docker Hub: a cache miss must fail with a
+references in new recipes, Dockerfiles, tests and build commands.
+Never add a silent fallback to Docker Hub: a cache miss must fail with a
 clear error or be resolved by choosing an explicitly approved alternate registry.
 Google caches public images; it is not a full clone and does not serve private Hub
 repositories. GHCR, Quay and other explicit registries retain their own addresses.
@@ -14,6 +14,17 @@ The host and Fedora builder install `os/containers/99-xur-docker-hub.conf` to co
 legacy saved recipes and user Dockerfiles that still name Docker Hub. Keep this
 mapping enabled for Podman, Buildah and Skopeo. Other builder tools must use the
 explicit mirror references above. Do not bypass this rule to work around a miss.
+
+## Offline web assets
+
+HTML and Razor pages must serve JavaScript, stylesheets, fonts, icons and other
+required assets locally. Do not reference CDNs or other remote asset URLs in
+HTML, CSS or client scripts. The UI must remain usable without internet access.
+Use LibMan (`libman.json`) to manage third-party browser libraries and restore
+them during the build. Ship the restored assets and their license notices with
+the app; keep generated library files under ignored `.build/` paths. External
+navigation links and features that explicitly access online services may retain
+their URLs, but must not be required to render or use the local UI.
 
 ## Generated files and secrets
 

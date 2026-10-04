@@ -71,7 +71,7 @@ profile continuity, runtime versions and working resource limits.
 Before adopting the runtime, prove that catalog refresh and model installation
 cannot unload unchanged profile workloads. Isolate engine workloads as needed,
 keep model downloads in shared intentional /var storage, retain resolved model
-revisions and engine digests, and avoid hot-updating running deployments merely
+revisions and the image identity used for each start, and avoid hot-updating running deployments merely
 because upstream changed. A downloaded configuration is not permission to run
 arbitrary privileged commands or mount unassigned devices.
 
@@ -88,7 +88,7 @@ Its [Studio documentation](https://unsloth.ai/docs/new/studio) describes local
 llama.cpp/Hugging Face inference and connecting to a vLLM provider, which is
 not by itself a complete managed deployment path for all three engines.
 
-Live Unsloth/Hugging Face search and the pinned vLLM-Omni supported-model list
+Live Unsloth/Hugging Face search and the current upstream vLLM-Omni supported-model list
 are now integrated directly. LocalAI was investigated but is not used. Recipe-
 specific vLLM tuning, Omni deployment configurations, gated downloads, and
 multi-seat device selection remain beyond the current implementation.

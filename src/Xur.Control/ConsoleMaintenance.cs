@@ -78,7 +78,7 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
                         (all==null?"Update All status unavailable. Refresh to retry.\n":
                             $"Update All: {(all.Busy?"Running":all.Operation?.Stage ?? "Idle")}\n{all.Operation?.Message}\n"+
                             string.Join('\n',all.Operation?.Results.Select(r=>$"{r.Name}: {r.Stage} · {r.Message}") ?? []))+
-                        "\nUpdates Xur and the OS; never reboots automatically.\nSaved workloads keep their pinned engine versions.";
+                        "\nUpdates Xur and the OS; never reboots automatically.\nModel engines check for the latest image when started.";
                     if(!installer)
                     {
                         options.AddRange([new('t',"Update All",Ready),new('h',"Xur application"),new('o',"Operating system")]);

@@ -1,7 +1,7 @@
 {
   "id": "smollm2-135m-cpu",
   "name": "SmolLM2 135M \u2014 CPU chat",
-  "image": "ghcr.io/ggml-org/llama.cpp@sha256:e33f80e54fc3f403118ab92b24f21dc1a3125ffd0c7725532028eca8128b548d",
+  "image": "@engine/server",
   "command": [
     "-m",
     "/model.gguf",
