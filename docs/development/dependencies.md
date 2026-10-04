@@ -9,7 +9,7 @@ configured directories and copied version information that needs refreshing.
 
 | Dependencies | Authoritative files | Dependabot ecosystem |
 | --- | --- | --- |
-| NuGet packages | Project files and `packages.lock.json` in all seven configured project directories | `nuget` |
+| NuGet packages | Project files and `packages.lock.json` in all configured project directories | `nuget` |
 | .NET SDK | `global.json`; workflows read that file directly | `dotnet-sdk` |
 | GitHub Actions | `.github/workflows/*.yml` | `github-actions` |
 | llama.cpp variants, vLLM and Omni | `catalog/engines/Containerfile`, embedded by `EngineImages`; the client pulls the rolling channels on each start | `docker` |
@@ -24,6 +24,10 @@ Install browser or website tools with `python3 eng/prepare-npm.py browser` or
 `python3 eng/prepare-npm.py website`. Install media Python tools with
 `python3 -m pip install --target .build/qr -r tests/Xur.Media.Tests/requirements.txt`.
 All installations, caches and private test evidence remain under `.build/`.
+
+`src/Xur.IO` pins TeeForge 0.1.0 and shares its stream, HTTP and process helpers
+with the native utility and the application services. Package locks record its
+System.IO.Hashing dependency; Dependabot covers the library and utility projects.
 
 Third-party browser libraries are managed in `src/Xur.Control/libman.json`.
 Normal Control builds restore AG Grid Community and its MIT notice through

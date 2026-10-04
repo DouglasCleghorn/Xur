@@ -38,7 +38,7 @@ static class LayoutTests
         Verify.That(File.ReadAllBytes(Path.Combine(root, "usr/libexec/xurutil")).SequenceEqual(File.ReadAllBytes(Path.Combine(publish, "xurutil"))), "Live OS contains the same native utility");
         Verify.That((File.GetUnixFileMode(Path.Combine(bundle, "host/xurutil")) & (UnixFileMode.GroupWrite | UnixFileMode.OtherWrite)) == 0, "Bundled native utility is protected before installation");
         Verify.That(!Directory.EnumerateFiles(bundle, "*.dbg", SearchOption.AllDirectories).Any(), "Debug symbols are excluded from the shipped bundle");
-        foreach (var name in new[] { "System.CommandLine-LICENSE.txt", "dotnet-LICENSE.txt", "dotnet-THIRD-PARTY-NOTICES.TXT" })
+        foreach (var name in new[] { "System.CommandLine-LICENSE.txt", "dotnet-LICENSE.txt", "dotnet-THIRD-PARTY-NOTICES.TXT", "TeeForge-LICENSE.txt", "TeeForge-THIRD-PARTY-NOTICES.txt" })
             Verify.That(File.Exists(Path.Combine(bundle, "host/licenses", name)) && File.Exists(Path.Combine(root, "usr/share/licenses/xurutil", name)), "Native dependency notices ship in both layouts");
         Verify.That(File.Exists(Path.Combine(bundle, "LICENSE")) && File.Exists(Path.Combine(bundle, "licensing.md")), "Bundle carries Xur licensing");
         // Match the installed permissions applied by install-manager and archive extraction.

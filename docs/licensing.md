@@ -41,7 +41,12 @@ third-party notices remain in their component directories.
   ship under `wwwroot/vendor/ag-grid/`. No Enterprise modules are used.
 
 `xurutil` uses Microsoft's MIT-licensed `System.CommandLine` and the .NET Native
-AOT runtime. Its published `licenses/` directory carries the command-line library
-license, the .NET license and runtime third-party notices. These ship in the
+AOT runtime, plus [TeeForge](https://github.com/DouglasCleghorn/TeeForge) 0.1.0
+(MIT, copyright Doug Cleghorn). The shared `Xur.IO` library also brings TeeForge
+into the application services. Published `licenses/` directories carry the
+TeeForge license and third-party notices (including its .NET/System.IO.Hashing
+notices). The utility additionally carries the command-line library license,
+.NET license and runtime third-party notices. These ship in the
 application bundle under `host/licenses/` and in the installer under
-`/usr/share/licenses/xurutil/`; the independent recovery copy retains them too.
+`/usr/share/licenses/xurutil/`; independent recovery and virtual-display helper
+copies retain their notices too.

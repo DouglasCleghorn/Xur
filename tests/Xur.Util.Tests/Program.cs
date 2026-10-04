@@ -31,12 +31,20 @@ if (args is ["--migration-fixture", var unit])
 
 if (args is ["--boot"]) await BootTests.Run();
 else if (args is ["--updates"]) await UpdaterTests.Run();
+else if (args is ["--io"]) await IOTests.Run();
+else if (args is ["--preflight"]) await ToolTests.Preflight();
+else if (args is ["--display"]) await ToolTests.Display();
+else if (args is ["--update-all"]) await ToolTests.Updates();
 else
 {
     await BootTests.Run();
     await UpdaterTests.Run();
     await InstallerTests.Run();
     await CliTests.Run();
+    await IOTests.Run();
+    await ToolTests.Preflight();
+    await ToolTests.Display();
+    await ToolTests.Updates();
 }
 var report = new JsonObject
 {

@@ -18,7 +18,7 @@ def call(argv,timeout=60):
     events.append(argv)
     if argv[:2]==['systemctl','start']:
         assert old.current()['id']==new
-        result=subprocess.run([sdk,assembly,'--migration-fixture',str(unit)],check=True,capture_output=True,text=True,timeout=30)
+        result=subprocess.run([sdk,*([assembly] if assembly else []),'--migration-fixture',str(unit)],check=True,capture_output=True,text=True,timeout=30)
         assert json.loads(result.stdout)['result']=='migrated'
     return b''
 old.call=call

@@ -2,6 +2,8 @@ using System.Net;
 
 namespace Xur.Util;
 
+public sealed record DownloadReceipt(string? ReleaseBase, Xur.IO.TransferReceipt Transfer);
+
 public class Downloads
 {
     public const string GitHub = "https://github.com/DouglasCleghorn/Xur/releases";
@@ -16,12 +18,28 @@ public class Downloads
             uri.Host == "github.com" && uri.AbsolutePath.StartsWith("/DouglasCleghorn/Xur/releases/download/", StringComparison.Ordinal);
     }
 
-    public virtual async Task<string?> Fetch(string url, string path, long limit, CancellationToken cancellationToken = default)
+    public virtual async Task<string?> Fetch(string url, string path, long limit, CancellationToken cancellationToken = default) =>
+        (await FetchReceipt(url, path, limit, cancellationToken)).ReleaseBase;
+
+    public virtual async Task<DownloadReceipt> FetchReceipt(string url, string path, long limit, CancellationToken cancellationToken = default)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { return await Copy(url, path, limit, cancellationToken); }
+            catch (Xur.IO.SourceReadException) when (attempt < 2)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(200 * (1 << attempt)), cancellationToken);
+                // A new request and truncated staging file restart the complete
+                // signed resource. Partial bytes never enter an activation.
+            }
+        }
+    }
+
+    async Task<DownloadReceipt> Copy(string url, string path, long limit, CancellationToken cancellationToken)
     {
         var publicSource = url.StartsWith(GitHub + "/", StringComparison.Ordinal);
         string? releaseBase = null;
-        using var handler = new SocketsHttpHandler { AllowAutoRedirect = false };
-        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+        using var client = Xur.IO.HttpClients.Create(TimeSpan.FromSeconds(30));
         client.DefaultRequestHeaders.UserAgent.ParseAdd("XurUtil/1.0");
         for (var redirects = 0; redirects <= 10; redirects++)
         {
@@ -38,24 +56,13 @@ public class Downloads
             }
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength > limit) throw new UserError("Download exceeds allowed size");
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            await using var input = await response.Content.ReadAsStreamAsync(deadline.Token);
+            await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
             await using var output = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
-            var buffer = new byte[65536];
-            long count = 0;
-            while (true)
-            {
-                // Bound stalled reads without limiting the total time of a large bundle download.
-                deadline.CancelAfter(TimeSpan.FromSeconds(30));
-                var length = await input.ReadAsync(buffer, deadline.Token);
-                deadline.CancelAfter(Timeout.InfiniteTimeSpan);
-                if (length == 0) break;
-                count += length;
-                if (count > limit) throw new UserError("Download exceeds allowed size");
-                await output.WriteAsync(buffer.AsMemory(0, length), cancellationToken);
-            }
+            Xur.IO.TransferReceipt receipt;
+            try { receipt = await Xur.IO.StreamTransfer.Copy(input, output, limit, TimeSpan.FromSeconds(30), cancellationToken); }
+            catch (InvalidDataException error) { throw new UserError(error.Message); }
             output.Flush(flushToDisk: true);
-            return releaseBase;
+            return new(releaseBase, receipt);
         }
         throw new UserError("Too many repository redirects");
     }

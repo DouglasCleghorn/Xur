@@ -216,8 +216,8 @@ public class SignedUpdater(UpdatePaths paths, Runtime runtime, DurableFiles file
     {
         var archive = Path.Combine(stage, "bundle.tar.gz");
         var length = JsonValues.Integer(entry["bytes"]) ?? throw new UserError("Invalid release metadata");
-        await downloads.Fetch(File.ReadAllText(Path.Combine(stage, "source")) + "/" + JsonValues.RequiredText(entry["file"]), archive, length, cancellationToken);
-        if (new FileInfo(archive).Length != length || DurableFiles.HashFile(archive) != JsonValues.Text(entry["sha256"])) throw new UserError("Download hash mismatch");
+        var receipt = await downloads.FetchReceipt(File.ReadAllText(Path.Combine(stage, "source")) + "/" + JsonValues.RequiredText(entry["file"]), archive, length, cancellationToken);
+        if (receipt.Transfer.Bytes != length || receipt.Transfer.Sha256 != JsonValues.Text(entry["sha256"])) throw new UserError("Download hash mismatch");
         var bundle = Path.Combine(stage, "bundle");
         BundleArchive.Unpack(archive, bundle, entry);
         return bundle;

@@ -60,7 +60,7 @@ public static class StationStreaming
     public static string Applications(bool headless,string helper)
     {
         var desktop=new Dictionary<string,object>{{"name","Desktop"},{"image-path","desktop.png"}};
-        if(headless)desktop["prep-cmd"]=new[]{new Dictionary<string,object>{{"do","/usr/bin/python3 "+helper+" --moonlight"},{"undo",""},{"elevated",false}}};
+        if(headless)desktop["prep-cmd"]=new[]{new Dictionary<string,object>{{"do",helper+" display moonlight"},{"undo",""},{"elevated",false}}};
         return JsonSerializer.Serialize(new {env=new{},apps=new[]{desktop}});
     }
     public static string[] EncoderEnvironment(GpuDevice gpu)
@@ -105,8 +105,8 @@ public static class StationStreaming
         {await File.WriteAllTextAsync(path+"/manager.json",JsonSerializer.Serialize(new Credentials(Convert.ToHexString(RandomNumberGenerator.GetBytes(32)))));File.SetUnixFileMode(path+"/manager.json",(UnixFileMode)384);}
         await File.WriteAllTextAsync(path+"/sunshine.conf",Configuration(w,gpu,path,port));
         if(gpu.Displays is not {Length:>0})await File.WriteAllTextAsync(path+"/headless","");else FileCleanup.DeleteIfPresent(path+"/headless");
-        StationDisplay.Install();
-        await File.WriteAllTextAsync(path+"/apps.json",Applications(gpu.Displays is not {Length:>0},StationDisplay.ScriptPath));
+        await StationDisplay.Install();
+        await File.WriteAllTextAsync(path+"/apps.json",Applications(gpu.Displays is not {Length:>0},StationDisplay.ExecutablePath));
         foreach(var file in new[]{"sunshine.conf","apps.json","cert.pem"})File.SetUnixFileMode(path+"/"+file,(UnixFileMode)420);
         await Run("modprobe",["uinput"]);
         await Run("modprobe",["uhid"]);
@@ -196,7 +196,7 @@ public static class StationStreaming
     {
         var path=Folder(id);using var expected=X509CertificateLoader.LoadCertificateFromFile(path+"/cert.pem");var thumbprint=expected.GetCertHashString(HashAlgorithmName.SHA256);
         var handler=new HttpClientHandler{AllowAutoRedirect=false,ServerCertificateCustomValidationCallback=(_,cert,_,_)=>cert?.GetCertHashString(HashAlgorithmName.SHA256)==thumbprint};
-        var client=new HttpClient(handler){BaseAddress=new Uri("https://127.0.0.1:"+(ports.Get(id,false)+1)+"/"),Timeout=TimeSpan.FromSeconds(8)};
+        var client=new HttpClient(new Xur.IO.HttpRetryHandler(handler,maximumWait:TimeSpan.FromMilliseconds(500))){BaseAddress=new Uri("https://127.0.0.1:"+(ports.Get(id,false)+1)+"/"),Timeout=TimeSpan.FromSeconds(8)};
         if(authenticate){var secret=JsonSerializer.Deserialize<Credentials>(File.ReadAllText(path+"/manager.json"))!;client.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Basic",Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("xur:"+secret.Password)));}
         return client;
     }

@@ -336,7 +336,8 @@ bash eng/test-xurutil.sh
 ```
 
 The first command tests service migration, journal setup, signed metadata,
-archives, compatibility, activation/recovery and installer startup using temporary
+archives, compatibility, activation/recovery, installer preflight, Update All,
+virtual display modes and HTTP/stream failures using temporary
 fixtures and mocked system commands. It also runs an authentic frozen previous
 updater to verify the first upgrade reaches the new agent's startup repair. The
 second publishes and exercises the actual native executable, including offline
@@ -350,6 +351,12 @@ The runtime commands are:
 xurutil host migrate
 xurutil logs configure [--root /absolute/offline/root]
 xurutil installer prepare|verify|check
+xurutil installer check-runtime [--root /absolute/offline/root]
+xurutil installer sync-clock
+xurutil update-all status|run
+xurutil display status
+xurutil display resize <width> <height> <fps>
+xurutil display moonlight
 xurutil app-update status|check|update|rollback|recover
 xurutil app-update configure <server>
 xurutil app-update channel <stable|nightly|local> [server] [-- <public-key-pem>]
@@ -371,9 +378,53 @@ network. `xur.app-update=on` explicitly requests a bounded refresh before startu
 the background timer only reports available updates. Health verification controls
 disk approval and falls back to the bundled application when needed.
 
-The `host/app-update`, `host/host-service-migrate` and `host/log-compression`
-Python files are small compatibility launchers for older
-agents and installers that explicitly invoke Python. Current startup, updater
-calls and recovery invoke the native utility directly. Other agent Python workers,
-OS updater scripts and distro Python dependencies remain separate migration work.
-No installer image or deployment is required to run these fixture checks.
+`src/Xur.IO` is shared by the utility and application services. It provides bounded
+command execution, Unix-socket HTTP clients, conservative GET/HEAD retries, and
+TeeForge 0.1.0 copy-and-hash streams. Signed downloads verify the receipt from the
+same bytes written to staging, avoiding a second archive read. Read retries use
+bounded backoff for transient connection errors and HTTP 408/429/500/502/503/504;
+they respect short `Retry-After` values and return longer waits to the caller.
+Mutations, TLS failures, authentication failures, missing files, size violations
+and trust/signature failures are not retried. Interrupted download bodies restart
+at most twice in a truncated staging file; cancellation and per-read timeouts
+still apply. The model catalog retains its cached-data fallback and enforces an
+8 MiB byte limit while streaming. The web app's local status reads and Sunshine
+status requests use the same read-only retry policy.
+
+Update All pins the selected bundle for the detached job, stages the OS before
+updating Xur, persists each outcome and continues after an OS failure. It never
+reboots automatically. Installer clock synchronization and RTC verification run
+before Anaconda and disk erasure; image checks verify the merged `/usr/sbin`
+symlink and required executables. Virtual display commands run as the station
+user, force KDE's Wayland backend, and address only `Virtual-Xur-Stream`. A
+versioned executable and license notices are copied into the public station-helper
+directory with root ownership and an executable SELinux label. A rejected
+Moonlight mode keeps streaming the existing desktop.
+
+The `host/app-update`, `host/host-service-migrate`, `host/log-compression` and
+`host/update-all` Python files are small compatibility launchers for older agents
+that explicitly invoke Python. Installer compatibility paths are shell launchers;
+current production callers invoke the native utility directly. `StationDisplay.py`
+is removed. Other agent Python workers, the OS updater and distro Python dependencies
+remain separate migration work.
+Source size comparison against the previous Python implementations (physical
+lines, including comments and blank lines; excludes tests and compatibility
+launchers):
+
+| Previous file | Python lines | C# implementation lines |
+| --- | ---: | ---: |
+| `os/bootc/host-service-migrate` | 124 | 128, plus 89 for independent recovery migration |
+| `os/bootc/log-compression` | 51 | 50 |
+| `os/bootc/app-update` | 327 | 711 across updater, archive, download and compatibility components |
+| `os/installer/app-bootstrap` | 93 | 144 |
+| `os/bootc/update-all` | 74 | 92 |
+| `src/Xur.Agent/StationDisplay.py` | 74 | 53 |
+| `os/installer/check-clock` and `check-runtime` | 50 + 20 | 47 shared in `InstallerPreflight` |
+
+These are source counts, not binary size estimates. Explicit native filesystem
+and SQLite interop, command dispatch and durable-file helpers are additional
+shared code. `Xur.IO` adds about 202 lines reused by the CLI and services. One
+Linux x64 executable contains all commands: the measured Native AOT build is
+8,902,176 bytes (8.49 MiB), up 358,048 bytes from the initial startup-only utility.
+Debug symbols remain separate and do not ship. Tests run without building an
+installer image or deploying the application.

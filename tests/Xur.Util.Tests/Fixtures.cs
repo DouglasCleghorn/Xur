@@ -17,7 +17,7 @@ static class Verify
         try { await action(); }
         catch (Exception error)
         {
-            if (error is not (UserError or IOException or OperationCanceledException or ArgumentException or System.Text.Json.JsonException)) throw;
+            if (error is not (UserError or IOException or InvalidDataException or OperationCanceledException or ArgumentException or System.Text.Json.JsonException)) throw;
             That(message is null || error.Message.Contains(message, StringComparison.Ordinal), description + ": " + error.Message);
             return;
         }
@@ -80,6 +80,11 @@ sealed class FixtureDownloads : Downloads
 {
     public List<string> Requests { get; } = [];
     public required Func<string, string, long, string?> Supply { get; set; }
+    public override async Task<DownloadReceipt> FetchReceipt(string url, string path, long limit, CancellationToken cancellationToken = default)
+    {
+        var pinned = await Fetch(url, path, limit, cancellationToken);
+        return new(pinned, new Xur.IO.TransferReceipt(new FileInfo(path).Length, DurableFiles.HashFile(path)));
+    }
     public override Task<string?> Fetch(string url, string path, long limit, CancellationToken cancellationToken = default)
     {
         Requests.Add(url);

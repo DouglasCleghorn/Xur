@@ -31,9 +31,10 @@ static class BootTests
     {
         using var fixture = new Fixture();
         fixture.Write("xur-agent.service", Legacy);
-        var sdk = Environment.GetEnvironmentVariable("XUR_DOTNET") ?? Path.GetFullPath(Path.Combine(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "../../../dotnet"));
+        var native = !System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported;
+        var sdk = native ? Environment.ProcessPath! : Environment.GetEnvironmentVariable("XUR_DOTNET") ?? Path.GetFullPath(Path.Combine(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "../../../dotnet"));
         var result = await new Runtime().Run(["python3", "tests/Xur.Integration.Tests/xurutil-old-updater.py", fixture.Root,
-            fixture.PathOf("xur-agent.service"), sdk, Path.Combine(AppContext.BaseDirectory, "Xur.Util.Tests.dll")]);
+            fixture.PathOf("xur-agent.service"), sdk, native ? "" : Path.Combine(AppContext.BaseDirectory, "Xur.Util.Tests.dll")]);
         Verify.That(Encoding.UTF8.GetString(result).Contains("Passed"), "Actual old updater reaches native startup repair and can roll back");
         var program = File.ReadAllText("src/Xur.Agent/Program.cs");
         Verify.That(program.IndexOf("if(!installer && File.Exists(hostUtility))", StringComparison.Ordinal) < program.IndexOf("app.MapGet(\"/application-health\"", StringComparison.Ordinal), "Agent startup repair precedes health readiness");
@@ -188,7 +189,7 @@ static class BootTests
         fixture.Write("recovery.service", File.ReadAllText("os/bootc/systemd/xur-app-recovery.service")
             .Replace("ExecStart=/var/lib/xur/updater/xurutil app-update recover", "ExecStart=/usr/bin/python3 /var/lib/xur/updater/app-update recover"));
         fixture.Write("binary", "\u007fELFfixture");
-        foreach (var name in new[] { "System.CommandLine-LICENSE.txt", "dotnet-LICENSE.txt", "dotnet-THIRD-PARTY-NOTICES.TXT" }) fixture.Write("licenses/" + name, "fixture notice\n");
+        foreach (var name in new[] { "System.CommandLine-LICENSE.txt", "dotnet-LICENSE.txt", "dotnet-THIRD-PARTY-NOTICES.TXT", "TeeForge-LICENSE.txt", "TeeForge-THIRD-PARTY-NOTICES.txt" }) fixture.Write("licenses/" + name, "fixture notice\n");
         File.SetUnixFileMode(fixture.PathOf("binary"), (UnixFileMode)0x1ed);
         var runtime = new FakeRuntime();
         var label = "var_lib_t";

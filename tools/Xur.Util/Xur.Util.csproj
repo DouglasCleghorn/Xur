@@ -8,6 +8,7 @@
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/Xur.IO/Xur.IO.csproj" /></ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.12" />
     <EmbeddedResource Include="../../os/bootc/logging/journald.conf.d/60-xur-log-compression.conf" LogicalName="Xur.Util.JournalConfiguration" />

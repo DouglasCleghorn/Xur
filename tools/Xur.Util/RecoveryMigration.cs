@@ -38,7 +38,7 @@ public sealed class RecoveryMigration(Runtime runtime, DurableFiles files)
             throw new IOException("Recovery requires an owned, protected native utility executable");
         var stable = Path.Combine(directory, "xurutil");
         var notices = new Dictionary<string, byte[]>();
-        foreach (var name in new[] { "System.CommandLine-LICENSE.txt", "dotnet-LICENSE.txt", "dotnet-THIRD-PARTY-NOTICES.TXT" })
+        foreach (var name in new[] { "System.CommandLine-LICENSE.txt", "dotnet-LICENSE.txt", "dotnet-THIRD-PARTY-NOTICES.TXT", "TeeForge-LICENSE.txt", "TeeForge-THIRD-PARTY-NOTICES.txt" })
         {
             var bytes = HostServiceMigration.ReadBounded(Path.Combine(Path.GetDirectoryName(executable)!, "licenses", name), out var notice, 4 * 1024 * 1024);
             if (notice.Uid != owner || (notice.Mode & 0x12) != 0) throw new IOException("Unsafe utility license notice");
