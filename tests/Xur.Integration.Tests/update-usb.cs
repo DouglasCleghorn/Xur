@@ -23,8 +23,34 @@ internal static class UsbUpdateTests
     }
     private static string Digest(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
 
-    public static int Main()
+    public static async Task<int> Main()
     {
+        var calls = 0;
+        string? selectedDevice = null;
+        var checkOnly = false;
+        var command = UsbUpdate.CreateCommand((device, check) =>
+        {
+            calls++; selectedDevice = device; checkOnly = check;
+            return Task.CompletedTask;
+        });
+        Check(await command.Parse(["--check", "--device", "/dev/sdz1"]).InvokeAsync() == 0 &&
+              calls == 1 && selectedDevice == "/dev/sdz1" && checkOnly, "CLI did not bind options.");
+        Check(await command.Parse(["--device=/dev/sdy1"]).InvokeAsync() == 0 &&
+              calls == 2 && selectedDevice == "/dev/sdy1" && !checkOnly, "CLI equals syntax/defaults failed.");
+        foreach (var invalid in new[] { new[] { "--device" }, new[] { "--device", "--check" }, new[] { "--unknown" } })
+            Check(command.Parse(invalid).Errors.Count > 0, "CLI accepted missing/unknown arguments: " + string.Join(' ', invalid));
+        var previousOut = Console.Out; var previousError = Console.Error;
+        using var help = new StringWriter(); using var errors = new StringWriter();
+        try
+        {
+            Console.SetOut(help); Console.SetError(errors);
+            Check(await command.Parse(["--help"]).InvokeAsync() == 0 && calls == 2,
+                  "CLI help invoked the updater.");
+            Check(help.ToString().Contains("--device") && help.ToString().Contains("--check"), "Generated help omitted options.");
+            Check(await command.Parse(["--device"]).InvokeAsync() != 0 && calls == 2,
+                  "Invalid CLI invoked the updater.");
+        }
+        finally { Console.SetOut(previousOut); Console.SetError(previousError); }
         Check(Native.geteuid() == 0, "Run this fixture test as root.");
         using var workspace = new Workspace();
         var evidence = Path.Combine(workspace.Path, ".build/evidence/usb-update");
@@ -111,7 +137,7 @@ internal static class UsbUpdateTests
                 {"path":"/dev/sdd1","type":"part","fstype":"vfat","ro":false,"label":"XUR_TEST","uuid":"system","maj:min":"8:49","size":9000,"mountpoints":["/"]}]}]}
             """);
         Check(UsbUpdate.Partitions(disks.RootElement).Select(p => p.Path).SequenceEqual(new[] { "/dev/sdc1" }), "SSD or system disk considered eligible.");
-        Console.WriteLine("Passed: streaming FAT32 extraction, byte-identical configuration, custom label, preserved files/logs, full/part checksums, truncation, traversal/symlinks, release selection and SSD/system protection.");
+        Console.WriteLine("Passed: CLI binding/help/errors, streaming FAT32 extraction, byte-identical configuration, custom label, preserved files/logs, full/part checksums, truncation, traversal/symlinks, release selection and SSD/system protection.");
         Console.WriteLine("Physical USB writing: not run.");
         return 0;
     }

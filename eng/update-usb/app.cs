@@ -1,9 +1,11 @@
 #:package TeeForge@0.1.0
+#:package System.CommandLine@2.0.12
 #:property PublishAot=false
 #:property RestorePackagesWithLockFile=false
 
 // MIT licensed. See the repository LICENSE. Requires Linux, .NET 10 and libarchive.
 using System.Diagnostics;
+using System.CommandLine;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -15,7 +17,11 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        try { await UsbUpdate.Run(args); return 0; }
+        try
+        {
+            return await UsbUpdate.CreateCommand(UsbUpdate.Run).Parse(args).InvokeAsync(
+                new() { EnableDefaultExceptionHandler = false });
+        }
         catch (Exception error)
         {
             Console.Error.WriteLine("USB update failed: " + error.Message);
@@ -298,17 +304,32 @@ internal static class UsbUpdate
         if (!SameConfig(Configurations(destination), saved)) throw new IOException("USB configuration changed.");
     }
 
-    internal static async Task Run(string[] args)
+    internal static RootCommand CreateCommand(Func<string?, bool, Task> action)
     {
-        string? device = null;
-        var check = false;
-        for (var i = 0; i < args.Length; i++)
+        var device = new Option<string?>("--device")
         {
-            if (args[i] is "--help" or "-h") { Console.WriteLine("dotnet run app.cs -- [--check] [--device /dev/sdX1]\nStream the latest GitHub installer to an existing FAT32 Xur USB; preserve diagnostics."); return; }
-            if (args[i] == "--check") check = true;
-            else if (args[i] == "--device" && ++i < args.Length) device = args[i];
-            else throw new ArgumentException("Unknown/missing argument. Use --help.");
-        }
+            Description = "Existing removable USB FAT32 partition, such as /dev/sdX1; otherwise auto-detect",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        device.Validators.Add(result =>
+        {
+            var path = result.GetValueOrDefault<string?>();
+            if (path != null && (!Path.IsPathFullyQualified(path) || !path.StartsWith("/dev/", StringComparison.Ordinal)))
+                result.AddError("Specify an absolute USB partition path under /dev/.");
+        });
+        var check = new Option<bool>("--check")
+        {
+            Description = "Check USB and latest release without downloading the ISO or changing USB files"
+        };
+        var root = new RootCommand("Stream the latest GitHub installer to an existing FAT32 Xur USB; preserve diagnostics.");
+        root.Options.Add(device);
+        root.Options.Add(check);
+        root.SetAction(async (result, _) => await action(result.GetValue(device), result.GetValue(check)));
+        return root;
+    }
+
+    internal static async Task Run(string? device, bool check)
+    {
         if (!OperatingSystem.IsLinux() || Native.geteuid() != 0) throw new IOException("Run on Linux as root: sudo ./eng/update-usb.sh");
         if (!NativeLibrary.TryLoad("libarchive.so.13", out var library)) throw new IOException("Install libarchive (libarchive13 on Ubuntu; libarchive on Fedora).");
         NativeLibrary.Free(library);

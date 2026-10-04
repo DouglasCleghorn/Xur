@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   checks:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -40,7 +40,7 @@ jobs:
           python3 tests/Xur.Integration.Tests/source-manifest.py
           python3 website/build.py
   installer-usb:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6

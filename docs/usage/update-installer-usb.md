@@ -11,6 +11,8 @@ The launcher uses sudo and runs the file-based C# app at
 `eng/update-usb/app.cs`. It finds the removable FAT32 USB that already contains
 Xur and exactly one `xur-diagnostics.yml` or `.yaml`. If several drives qualify,
 select the partition explicitly with `--device /dev/sdX1`.
+Command-line parsing and generated help use Microsoft's `System.CommandLine`,
+matching Xur's CLI. Run `./eng/update-usb.sh --help` to list the options.
 
 With .NET on your PATH, you can also run the app directly:
 
