@@ -248,7 +248,7 @@ public static class LocalConsole
         var optionLimit=Math.Max(1,innerRows-12);
         var optionStart=selectedOption/optionLimit*optionLimit;
         var footer=qrView ? new[]{"> Back to menu"} : logWindow
-            ? new[]{"> Back to menu","PgUp/PgDn: Scroll logs"}
+            ? new[]{"> Back to menu","PgUp/PgDn / LB/RB: Scroll logs"}
             : options.Select((option,index)=>(index==selectedOption ? "> " : "  ")+(index+1)+" "+option).Skip(optionStart).Take(optionLimit).ToArray();
         var height=Math.Max(1,innerRows-footer.Length-5);
         var lines=Clean(text).Split('\n').SelectMany(line=>Wrap(line,width)).ToArray();
@@ -272,7 +272,7 @@ public static class LocalConsole
         var console=AnsiConsole.Create(new AnsiConsoleSettings { Out=new AnsiConsoleOutput(writer), Ansi=AnsiSupport.No, ColorSystem=ColorSystemSupport.NoColors });
         console.Profile.Width=innerColumns; console.Profile.Height=innerRows; console.Profile.Capabilities.Unicode=true;
         var content=new Panel(new Text(string.Join('\n',lines))).Header("Xur setup | "+Markup.Escape(heading)).RoundedBorder().Expand();
-        var controls=new Panel(new Text(string.Join('\n',footer)+"\n"+(qrView ? "Enter: Open | Esc / 0: Menu | Alt+F2: Logs" : "Up/Down: Select | Enter: Open | Esc / 0: Back"+(pages>1?$" | PgUp/PgDn: {selected+1}/{pages}":"")))).RoundedBorder().Expand();
+        var controls=new Panel(new Text(string.Join('\n',footer)+"\n"+(qrView ? "Enter/A: Open | Esc/B/0: Menu | Alt+F2: Logs" : "Up/Down: Select | Enter/A: Open | Esc/B/0: Back"+(pages>1?$" | PgUp/PgDn/LB/RB: {selected+1}/{pages}":"")))).RoundedBorder().Expand();
         console.Write(new Layout("root").SplitRows(new Layout("content").Update(content),new Layout("controls").Size(footer.Length+3).Update(controls)));
         var frame=writer.ToString().Replace("\r","").TrimEnd('\n').Split('\n');
         var output=new StringBuilder("\x1b%G\x1b[0m\x1b[r\x1b[?25l\x1b[?7l\x1b[H");

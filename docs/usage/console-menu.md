@@ -11,6 +11,26 @@ On the physical console, use arrows or a number to select a row, then Enter.
 Escape or 0 returns to the parent screen. PgUp/PgDn scroll long status content.
 The text menu accepts a row number followed by Enter; 0 returns or exits.
 
+An Xbox One controller can also operate the physical console once Linux detects
+it as a gamepad. Connect it by USB, or use an already paired Bluetooth connection
+or wireless receiver supported by the host. No menu setting is needed; connecting,
+disconnecting and reconnecting a controller while the menu is running is supported.
+
+| Controller control | Menu action |
+| --- | --- |
+| D-pad up/down or left stick up/down | Select a row; hold to repeat |
+| A | Open or confirm the selected row |
+| B | Back or cancel |
+| LB / RB | Scroll backward / forward through long content |
+
+A and B require a new press for each action. Reboot, shutdown and disk erasure
+keep their existing confirmation screens and default to Cancel or No. Text fields
+such as server names, IP addresses and Wi-Fi passwords still use a keyboard;
+A submits the current text and B cancels. Bluetooth pairing is configured outside
+this menu. Controllers assigned to workstation seats, including streaming input,
+do not control the setup menu. Input is accepted while the setup or log terminal
+is active, and paused while another terminal or workstation desktop is active.
+
 **Updates** shows installed versions, the selected Xur channel, and the latest
 Update All progress and results. Choose **Update All** to check and stage OS
 updates, then check and update Xur. Each component reports its own result, even
@@ -149,10 +169,10 @@ failures are distinguished from completed scans with no named networks.
 
 ## Idle screen
 
-After ten minutes without keyboard input, the setup console puts its monitors
+After ten minutes without keyboard or controller input, the setup console puts its monitors
 into power-save, including while logs or installation progress are changing.
 Displays without power-save support show a completely black screen. The server
-and installation continue running. The first key only wakes the display; press
+and installation continue running. The first key or mapped controller action only wakes the display; press
 again to operate the menu. Waking can take a few seconds while the monitor
 restores its HDMI or DisplayPort connection. Workstation desktops keep their
 own idle settings.

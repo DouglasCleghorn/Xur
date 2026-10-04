@@ -438,6 +438,41 @@ async Task StartHost()
             case 'p':LocalConsole.Page(-1);break;
         }
     }
+    // Call while holding the same gate for keyboard, serial and gamepad input.
+    async Task HandleConsoleInput(bool plain,string? line,ConsoleKeyAction action,char? typed,bool logTerminal)
+    {
+        try
+        {
+            if(LocalConsole.ConsumeWakeInput(plain,typed,action))return;
+            LocalConsole.ConsumeDiagnosticRevision();
+            char? key;
+            if(plain)
+            {
+                if(LocalConsole.EditingText){if(line=="/cancel")await consoleMenu.Select('0');else await consoleMenu.Submit(line!);ShowConsoleMenu();return;}
+                key=LocalConsole.SelectLine(line!);
+            }
+            else
+            {
+                if(logTerminal)
+                {
+                    if(action is ConsoleKeyAction.Enter or ConsoleKeyAction.Back){LocalConsole.Status(appliance,auth);await Processes.Run("chvt",["3"]);}
+                    else if(action is ConsoleKeyAction.PageDown or ConsoleKeyAction.PageUp)LocalConsole.Page(action==ConsoleKeyAction.PageDown?1:-1);
+                    return;
+                }
+                if(LocalConsole.EditingText)
+                {
+                    if(action==ConsoleKeyAction.Enter){var value=LocalConsole.TextValue;LocalConsole.ClearText();await consoleMenu.Submit(value);ShowConsoleMenu();}
+                    else if(action==ConsoleKeyAction.Back && typed==null){await consoleMenu.Select('0');ShowConsoleMenu();}
+                    else if(typed.HasValue)LocalConsole.EditText(typed.Value);
+                    return;
+                }
+                if(action==ConsoleKeyAction.None)return;
+                key=LocalConsole.Navigate(action);
+            }
+            if(key.HasValue)await DispatchConsoleKey(key.Value);
+        }
+        catch{LocalConsole.Show("Action unavailable","Press Esc / B / 0 to return to the menu and retry.");}
+    }
     async Task Input(TextReader input, bool logTerminal)
     {
         var keys=new ConsoleKeyReader();var buffer=new char[1];Task<int>? read=null;
@@ -458,44 +493,21 @@ async Task StartHost()
                 }
             }
             await networkRefreshGate.WaitAsync();
-            try
-            {
-                if(LocalConsole.ConsumeWakeInput(plain,typed,action))continue;
-                LocalConsole.ConsumeDiagnosticRevision();
-                char? key;
-                if(plain)
-                {
-                    if(LocalConsole.EditingText){if(line=="/cancel")await consoleMenu.Select('0');else await consoleMenu.Submit(line!);ShowConsoleMenu();continue;}
-                    key=LocalConsole.SelectLine(line!);
-                }
-                else
-                {
-                    if(logTerminal)
-                    {
-                        if(action is ConsoleKeyAction.Enter or ConsoleKeyAction.Back){LocalConsole.Status(appliance,auth);await Processes.Run("chvt",["3"]);}
-                        else if(action is ConsoleKeyAction.PageDown or ConsoleKeyAction.PageUp)LocalConsole.Page(action==ConsoleKeyAction.PageDown?1:-1);
-                        continue;
-                    }
-                    if(LocalConsole.EditingText)
-                    {
-                        if(action==ConsoleKeyAction.Enter){var value=LocalConsole.TextValue;LocalConsole.ClearText();await consoleMenu.Submit(value);ShowConsoleMenu();}
-                        else if(action==ConsoleKeyAction.Back && typed==null){await consoleMenu.Select('0');ShowConsoleMenu();}
-                        else if(typed.HasValue)LocalConsole.EditText(typed.Value);
-                        continue;
-                    }
-                    if(action==ConsoleKeyAction.None)continue;
-                    key=LocalConsole.Navigate(action);
-                }
-                if(key.HasValue)await DispatchConsoleKey(key.Value);
-            }
-            catch{LocalConsole.Show("Action unavailable","Press 0 to return to the menu and retry.");}
+            try{await HandleConsoleInput(plain,line,action,typed,logTerminal);}
             finally{networkRefreshGate.Release();}
         }
     }
     if(Environment.GetEnvironmentVariable("XUR_CONSOLE") == "stdio") _ = Task.Run(()=>Input(Console.In,false));
-    else foreach(var path in new[]{"/dev/tty3","/dev/ttyS0","/dev/tty2"}) _ = Task.Run(async()=>{
-        try { using var input = new StreamReader(LocalConsole.OpenDevice(path,FileAccess.Read)); await Input(input,path=="/dev/tty2"); } catch { }
-    });
+    else
+    {
+        foreach(var path in new[]{"/dev/tty3","/dev/ttyS0","/dev/tty2"}) _ = Task.Run(async()=>{
+            try { using var input = new StreamReader(LocalConsole.OpenDevice(path,FileAccess.Read)); await Input(input,path=="/dev/tty2"); } catch { }
+        });
+        _ = Task.Run(async()=>{
+            using var gamepads=new ConsoleGamepadInput();
+            await gamepads.Run((action,logTerminal)=>HandleConsoleInput(false,null,action,null,logTerminal),networkRefreshGate,app.Lifetime.ApplicationStopping);
+        });
+    }
     _ = Task.Run(async()=>{
         while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {

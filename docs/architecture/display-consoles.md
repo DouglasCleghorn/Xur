@@ -1,7 +1,7 @@
 # Consoles on unassigned displays
 
 See the [console menu guide](../usage/console-menu.md) for updates, power actions,
-and keyboard navigation.
+and keyboard/controller navigation.
 
 Each connected output on an unassigned GPU displays the shared terminal menu.
 Loading a workstation releases the console on its selected GPU before starting
@@ -25,6 +25,24 @@ It retains the last complete frame during manager reconnection;
 no frame, access code or QR is written to its journal. Keyboard navigation stays
 on the existing local VT, and serial access remains available. While a desktop
 owns the local keyboard, the other screens continue displaying the menu.
+
+The control service also reads gamepad evdev devices on seat0, using the
+[Linux gamepad mappings](https://docs.kernel.org/input/gamepad.html) for Xbox One
+USB and HID controllers. A shared input gate routes D-pad/left-stick navigation,
+A/B and bumper scrolling through the same menu handling as keyboard input.
+Discovery repeats while the menu is running; disconnection closes the descriptor
+and reconnection starts with the current button/axis state. Stick hysteresis
+filters drift, and only navigation/scrolling repeat. A/B require fresh presses.
+After an evdev queue overrun, queued events are ignored through SYN_REPORT and
+the current state is queried before accepting more input, following the
+[evdev synchronization protocol](https://docs.kernel.org/input/event-codes.html).
+
+Gamepad readers use nonblocking, read-only descriptors without exclusive grabs.
+They close when the active VT leaves tty3/tty2, or when udev seat ownership or
+device identity changes. Missing udev records and `xur/` synthetic input are
+excluded. Seat ownership is rechecked before dispatching input, so a workstation
+controller cannot operate the setup menu. Display children still have no input
+devices. Text entry and Bluetooth pairing remain outside gamepad navigation.
 
 The signed app bundle includes the renderer under `agent/console`, using the
 existing installed executable labels. Each child receives only its assigned DRM
@@ -57,17 +75,17 @@ apart. An enabled output resets that budget. Workstation-owned and handoff GPUs
 are excluded. This does not diagnose every HDMI cable, firmware or driver fault;
 physical AMD HDMI recovery still requires hardware testing.
 
-After ten minutes without local keyboard activity, the control service returns
+After ten minutes without local keyboard or controller activity, the control service returns
 a black frame with an explicit power-save header over its root-private socket.
 The native client sends the corresponding OSC to its kmscon child, which sets
 DPMS Off on its assigned displays. Displays without DPMS support retain the
 black frame. The renderer continues reading its PTY while asleep so the next
-keyboard input can restore DPMS On and repaint the menu. Newly connected
+keyboard or controller input can restore DPMS On and repaint the menu. Newly connected
 outputs inherit the sleep state.
 
 The control service maintains a root-private `console-sleep` marker in its run
 directory. Display recovery excludes deliberate sleep and resets its recovery
-budget; the wake key removes the marker before menu handling, including disk
+budget; the wake input removes the marker before menu handling, including disk
 approval. Control startup clears stale sleep state. Frame polling, log updates
 and network changes never count as input. The server and installation continue
 running, and workstation desktops retain their own display power settings.

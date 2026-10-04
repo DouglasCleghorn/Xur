@@ -1,6 +1,6 @@
 namespace Xur.Control;
 
-// Only keyboard input counts as activity; polling, logs and network changes do not.
+// Only user input counts as activity; polling, logs and network changes do not.
 public sealed class ConsoleIdle(TimeProvider? clock=null,TimeSpan? timeout=null,string? statePath=null)
 {
     readonly TimeProvider time=clock??TimeProvider.System;
