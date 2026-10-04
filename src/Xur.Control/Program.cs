@@ -284,7 +284,7 @@ async Task StartHost()
     app.MapPost("/api/bootstrap",(ApiBootstrapRequest request)=> {
         var result=auth.Login("xur",request.Token ?? "");
         return result.Session is { } session ? Results.Json(new { accessToken=session, tokenType="Bearer", expiresIn=28800, setupRequired=true })
-            : Results.Json(new { error=result.Status==503 ? "Setup is starting" : result.Status==429 ? "Wait 30 seconds before retrying" : "Invalid or expired token" },statusCode:result.Status);
+            : Results.Json(new { error=result.Status==503 ? "Setup is starting" : result.Status==429 ? "Wait 30 seconds before retrying" : "Invalid token" },statusCode:result.Status);
     });
     void SetSession(HttpContext ctx,string session)=>ctx.Response.Cookies.Append("xur.session",session,new CookieOptions { HttpOnly=true,SameSite=SameSiteMode.Strict,Secure=true,MaxAge=TimeSpan.FromHours(8),Path="/" });
     app.MapPost("/auth/login",async (HttpContext ctx) => {

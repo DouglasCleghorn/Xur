@@ -34,10 +34,10 @@ and reinstall from current media before using Btrfs-required releases. See
 There is no web device installer and no Tailscale enrollment on live media.
 The console or `xur setup` handles naming, networking, disk approval and progress.
 Administrator credentials are created only after installation; no password
-must be typed on the physical console. The initial access code expires after
-30 minutes and allows five attempts per 30 seconds; reboot generates a fresh
-code if needed. An answer-supplied code is carried privately into the installed
-system and removed once the account is created.
+must be typed on the physical console. The initial access code has no time-based
+expiration and remains usable until the administrator account is created.
+Five attempts are allowed per 30 seconds. An answer-supplied code is carried
+privately into the installed system and removed once the account is created.
 
 ## Console
 
