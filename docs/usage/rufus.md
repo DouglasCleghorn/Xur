@@ -9,6 +9,9 @@ label changes. Use a USB drive of at least 16 GB. Writing replaces its contents.
 The ISO remains hybrid media: virtual DVD and raw/DD USB writing remain
 available. File-copy mode uses the supplied Fedora shim and GRUB at
 `EFI/BOOT/BOOTX64.EFI`; no NTFS helper or custom unsigned GRUB is needed.
+For an existing FAT32 Xur USB with diagnostic configuration, the Linux
+[USB updater](update-installer-usb.md) streams the latest published ISO into its
+installer files while preserving the configuration.
 Preserving these loaders does not establish that the complete installed Bazzite
 Secure Boot chain has been tested. The automated test uses ordinary UEFI.
 
