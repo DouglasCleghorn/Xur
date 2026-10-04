@@ -49,9 +49,27 @@ loaders. Entering setup never bypasses disk review and Yes/No approval.
 
 Installation progress shows a six-stage bar: time synchronization, source
 resolution, disk preparation, download, deployment and configuration. The bar
-counts completed stages, not elapsed time or downloaded bytes. Download is
-indeterminate until the installer reports deployment; only confirmed completion
-fills the bar. The diagnostic status includes the same structured progress.
+counts completed stages. During download, the console embeds bootc's native
+terminal progress: its layer bar and the current layer's byte bar, size and
+transfer rate. Layers vary in size, so their count is not an overall byte
+percentage. Only confirmed installation completion fills the stage bar. The
+diagnostic status includes the same progress text. Without native progress, the
+console shows the reported download size and layer count and tracks stages.
+The screen also shows the latest three lines of Anaconda's own command-line
+output, including disk preparation, bootloader installation and system
+configuration messages. Terminal controls and credentials are removed. Native
+tools reporting completion does not mark the whole installation complete;
+Xur's successful completion marker remains authoritative.
+
+Anaconda runs bootc through a pipe, which hides bootc's terminal transfer bars.
+An installer-scoped bootc wrapper gives stderr a private terminal and saves the
+native progress lines, with terminal controls removed, in a bounded, atomic
+snapshot at `/run/xur/install-download.json`. Anaconda's command-line output is
+also copied to `/run/xur/anaconda-output.log` while remaining in the journal.
+Standard output, other stderr messages, command arguments and exit status remain
+available to Anaconda. Capture failure leaves stage progress available; it never retries
+the installation. The wrapper is included in installer media and selected through
+Anaconda's PATH, so an application update alone cannot enable the live counters.
 
 Local agent startup is ordered after NetworkManager startup, so answer-file
 networking can be applied, but does not require successful network activation.
