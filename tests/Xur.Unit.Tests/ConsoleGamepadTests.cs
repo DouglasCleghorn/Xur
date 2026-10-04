@@ -13,7 +13,9 @@ static class ConsoleGamepadTests
     }
     static ConsoleGamepadReader Reader(Clock clock,bool hat=true,int minimum=-32768,int maximum=32767)
     {
-        var reader=new ConsoleGamepadReader(clock);reader.Synchronize([],hat,0,minimum,maximum,0,(minimum+maximum)/2);return reader;
+        var reader=new ConsoleGamepadReader(clock);reader.Synchronize([],hat,0,minimum,maximum,0,(minimum+maximum)/2);
+        reader.Keyboard.Synchronize([],new[]{0,1,3,4}.Select(code=>new ConsoleGamepadAxis(code,(minimum+maximum)/2,minimum,maximum))
+            .Concat([new(2,0,0,1023),new(5,0,0,1023)]));return reader;
     }
     public static async Task Run(Action<bool,string> check)
     {
@@ -90,16 +92,22 @@ static class ConsoleGamepadTests
             writer.Write(bytes);writer.Flush();
         }
         check(!device.Read(out _),"Native evdev transport returns immediately when its nonblocking descriptor has no events");
-        Event(1,0x130,1);check(device.Read(out var action) && action==ConsoleKeyAction.Enter,"Native Linux input_event bytes decode Xbox A through the real read syscall");
-        Event(1,0x130,2);check(device.Read(out action) && action==ConsoleKeyAction.None,"Native event transport suppresses kernel button repeat");
+        Event(1,0x130,1);check(device.Read(out var action) && action.Action==ConsoleKeyAction.Enter,"Native Linux input_event bytes decode Xbox A through the real read syscall");
+        Event(1,0x130,2);check(device.Read(out action) && action.Action==ConsoleKeyAction.None,"Native event transport suppresses kernel button repeat");
         Event(3,0x11,1);device.Read(out _);clock.Advance(1000);
-        Event(0,3,0);check(device.Read(out action) && action==ConsoleKeyAction.None && device.Repeat()==ConsoleKeyAction.None,"SYN_DROPPED immediately stops held navigation repeats");
+        Event(0,3,0);check(device.Read(out action) && action.Action==ConsoleKeyAction.None && device.Repeat().Action==ConsoleKeyAction.None,"SYN_DROPPED immediately stops held navigation repeats");
         Event(1,0x130,0);Event(1,0x130,1);Event(3,0x11,-1);
-        for(var i=0;i<3;i++)check(device.Read(out action) && action==ConsoleKeyAction.None,"Events between SYN_DROPPED and SYN_REPORT cannot operate the menu");
-        Event(0,0,0);check(device.Read(out action) && action==ConsoleKeyAction.None && synchronized==1,"SYN_REPORT after overrun queries fresh device state without dispatching an action");
-        Event(1,0x130,1);check(device.Read(out action) && action==ConsoleKeyAction.None,"A held in the recovery snapshot cannot confirm another screen");
+        for(var i=0;i<3;i++)check(device.Read(out action) && action.Action==ConsoleKeyAction.None,"Events between SYN_DROPPED and SYN_REPORT cannot operate the menu");
+        Event(0,0,0);check(device.Read(out action) && action.Action==ConsoleKeyAction.None && synchronized==1,"SYN_REPORT after overrun queries fresh device state without dispatching an action");
+        Event(1,0x130,1);check(device.Read(out action) && action.Action==ConsoleKeyAction.None,"A held in the recovery snapshot cannot confirm another screen");
         Event(1,0x130,0);device.Read(out _);Event(1,0x130,1);
-        check(device.Read(out action) && action==ConsoleKeyAction.Enter,"Native event handling resumes on a fresh A press after overrun recovery");
+        check(device.Read(out action) && action.Action==ConsoleKeyAction.Enter,"Native event handling resumes on a fresh A press after overrun recovery");
+        device.SetTextContext("pipe-field");
+        Event(3,1,-28000);Event(3,4,-28000);Event(3,5,1023);
+        for(var i=0;i<3;i++)check(device.Read(out action) && action.IsEmpty,"Native stick and trigger updates wait for the complete input packet before previewing");
+        Event(0,0,0);check(device.Read(out action) && action.Preview is {Active:true,Character:'a'} && action.Character==null,"Native controller packets display a two-stick candidate without inserting text");
+        Event(3,5,0);check(device.Read(out action) && action.IsEmpty,"Native trigger release waits for SYN_REPORT before typing");
+        Event(0,0,0);check(device.Read(out action) && action.Character=='a',"Native trigger release inserts the candidate through the text-input event path");
         writer.Dispose();var disconnected=false;try{device.Read(out _);}catch(IOException){disconnected=true;}
         check(disconnected,"Native event transport reports closed descriptors as disconnections");
     }
@@ -111,13 +119,15 @@ static class ConsoleGamepadTests
         readonly Queue<(ushort Type,ushort Code,int Value)> events=[];
         public bool Disposed,Disconnected;
         public void Queue(ushort type,ushort code,int value)=>events.Enqueue((type,code,value));
-        public bool Read(out ConsoleKeyAction action)
+        public bool Read(out ConsoleControllerInput action)
         {
             if(Disconnected)throw new IOException("Fixture disconnected.");
-            action=ConsoleKeyAction.None;if(!events.TryDequeue(out var input))return false;
-            action=keys.Read(input.Type,input.Code,input.Value);return true;
+            action=default;if(!events.TryDequeue(out var input))return false;
+            action=keys.ReadController(input.Type,input.Code,input.Value);return true;
         }
-        public ConsoleKeyAction Repeat()=>keys.Repeat();
+        public ConsoleControllerInput Repeat()=>keys.Keyboard.Editing?default:new(keys.Repeat());
+        public void SetTextContext(string? context)=>keys.SetTextContext(context);
+        public void SuppressGesture()=>keys.Keyboard.SuppressGesture();
         public void Dispose()=>Disposed=true;
     }
     static async Task Routing(Action<bool,string> check)
@@ -144,10 +154,10 @@ static class ConsoleGamepadTests
             }
             void Properties(int index,string? seat=null,string identity="1")=>File.WriteAllText(udev+"/c13:"+(64+index),"I:"+identity+"\nE:ID_INPUT_JOYSTICK=1\n"+(seat==null?"":"E:ID_SEAT="+seat+"\n"));
             Node(0);Node(1,"seat-xur-test");Node(2,phys:"xur/seat-xur-stream/input0");Node(3,gamepad:false);Node(4,"seat-xur-unassigned");Node(5);File.Delete(udev+"/c13:69");
-            var opened=new List<Device>();var clock=new Clock();
-            using var input=new ConsoleGamepadInput(sys,root+"/dev",udev,clock,_=>{var device=new Device(clock);opened.Add(device);return device;});
+            var opened=new List<Device>();var clock=new Clock();string? editor=null;var cleared=0;
+            using var input=new ConsoleGamepadInput(sys,root+"/dev",udev,clock,_=>{var device=new Device(clock);opened.Add(device);return device;},()=>editor,()=>cleared++);
             var actions=new List<(ConsoleKeyAction Action,bool Logs)>();
-            Task Dispatch(ConsoleKeyAction action,bool logs){actions.Add((action,logs));return Task.CompletedTask;}
+            Task<bool> Dispatch(ConsoleControllerInput input,bool logs){actions.Add((input.Action,logs));return Task.FromResult(false);}
             await input.Pump(Dispatch);
             check(opened.Count==1,"Gamepad discovery excludes workstation, unassigned, streaming, keyboard and unsettled udev devices");
             opened[0].Queue(3,0x11,1);opened[0].Queue(1,0x130,1);await input.Pump(Dispatch);
@@ -166,6 +176,16 @@ static class ConsoleGamepadTests
             check(opened[3].Disposed && actions.Count==0,"A reused event name cannot dispatch queued input from the old device identity");
             await input.Pump(Dispatch);check(opened.Count==5,"An event node with a new identity is discovered again");
             Node(6);clock.Advance(1000);await input.Pump(Dispatch);check(opened.Count==6,"A second controller hot-plugs after the periodic discovery interval");
+            editor="controller-field";File.WriteAllText(active,"tty3");
+            var textInputs=new List<ConsoleControllerInput>();var wake=true;
+            Task<bool> Text(ConsoleControllerInput command,bool logs){textInputs.Add(command);var consumed=wake;wake=false;return Task.FromResult(consumed);}
+            var typing=opened[4];typing.Queue(3,1,-28000);typing.Queue(3,4,-28000);typing.Queue(3,5,1023);typing.Queue(0,0,0);
+            await input.Pump(Text);typing.Queue(3,5,0);typing.Queue(0,0,0);await input.Pump(Text);
+            check(textInputs.All(command=>command.Character==null),"The shared input pump suppresses trigger-release typing after its wake gate consumes the gesture");
+            textInputs.Clear();typing.Queue(3,5,1023);typing.Queue(0,0,0);await input.Pump(Text);typing.Queue(3,5,0);typing.Queue(0,0,0);await input.Pump(Text);
+            check(textInputs.Count(command=>command.Character=='a')==1,"The shared input pump forwards a fresh two-stick gesture as exactly one text edit");
+            typing.Queue(3,5,1023);typing.Queue(0,0,0);await input.Pump(Text);textInputs.Clear();Properties(0,"seat-xur-test");typing.Queue(3,5,0);typing.Queue(0,0,0);await input.Pump(Text);
+            check(textInputs.All(command=>command.Character==null) && typing.Disposed && cleared>0,"A seat handoff cancels a pending typing gesture and removes its local preview");
             using var gate=new SemaphoreSlim(1,1);using var stop=new CancellationTokenSource();
             var running=input.Run(Dispatch,gate,stop.Token);stop.Cancel();await running;
             check(opened.All(d=>d.Disposed),"Manager cancellation releases every gamepad descriptor");

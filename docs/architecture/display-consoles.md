@@ -42,7 +42,23 @@ They close when the active VT leaves tty3/tty2, or when udev seat ownership or
 device identity changes. Missing udev records and `xur/` synthetic input are
 excluded. Seat ownership is rechecked before dispatching input, so a workstation
 controller cannot operate the setup menu. Display children still have no input
-devices. Text entry and Bluetooth pairing remain outside gamepad navigation.
+devices. Bluetooth pairing remains outside gamepad navigation.
+
+In text fields, a packet-synchronized two-stick keyboard normalizes all four
+stick axes using their reported ranges. The left wheel selects the high digit
+and the right wheel the low digit of a character index. Each alphabet uses
+`ceil(sqrt(character count))` slices: six for lowercase, uppercase and symbols,
+four for numbers. Trigger hold previews; trigger release inserts once. Radial
+and angular hysteresis stabilize selection, and centered sticks or unused
+combinations cancel insertion. Bumpers switch alphabets; X deletes and Y inserts
+a space. All printable ASCII characters remain available, including passwords
+with spaces and punctuation. Ordinary keyboard entry also remains available.
+
+Controller text input uses complete SYN_REPORT packets so the trigger release
+sees both stick coordinates from the same packet. Wake, text-field transitions,
+disconnects and overruns cancel pending gestures. Held buttons and triggers in
+state snapshots require release before rearming. The local preview is rendered
+separately from diagnostic snapshots, and entered secret text remains masked.
 
 The signed app bundle includes the renderer under `agent/console`, using the
 existing installed executable labels. Each child receives only its assigned DRM

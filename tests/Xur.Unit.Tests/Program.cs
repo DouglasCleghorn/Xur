@@ -21,7 +21,7 @@ if(args is ["--control-panel-render",var homeOutput]) { await ControlPanelRender
 if(args is ["--website-render",var websiteOutput]) { await ControlPanelRender.Run(websiteOutput, documentation:true);return; }
 var results = new List<string>();
 void Check(bool value,string name) { if(!value) throw new Exception(name); results.Add(name); }
-if(args is ["--console-gamepad"]){await ConsoleGamepadTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ConsoleGamepad",passed=results}));return;}
+if(args is ["--console-gamepad"]){await ConsoleGamepadTests.Run(Check);ConsoleStickKeyboardTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ConsoleGamepad",passed=results}));return;}
 await InstallerDiagnosticsTests.Run(Check);
 await ApplicationLogTests.Run(Check);
 await BrowserErrorTests.Run(Check);
@@ -163,6 +163,7 @@ await StorageDiscoveryTests.Run(Check);
 await DisplayRecoveryTests.Run(Check);
 ConsoleIdleTests.Run(Check);
 await ConsoleGamepadTests.Run(Check);
+ConsoleStickKeyboardTests.Run(Check);
 await NetworkEndpointTests.Run(Check);
 var desktopRecipe=new Recipe("gaming-workstation","Gaming workstation","host:plasma",[],0,"","Display",1,0,"Desktop",Kind:"Workstation",Engine:"Plasma");
 var displayGpu=new GpuDevice("0000:01:00.0","NVIDIA","Display GPU","nvidia","GPU-test",24576,["/dev/dri/renderD128"],["Compute runtime unavailable"],["/dev/dri/card0"],["card0-HDMI-A-1"]);

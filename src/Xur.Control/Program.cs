@@ -504,8 +504,14 @@ async Task StartHost()
             try { using var input = new StreamReader(LocalConsole.OpenDevice(path,FileAccess.Read)); await Input(input,path=="/dev/tty2"); } catch { }
         });
         _ = Task.Run(async()=>{
-            using var gamepads=new ConsoleGamepadInput();
-            await gamepads.Run((action,logTerminal)=>HandleConsoleInput(false,null,action,null,logTerminal),networkRefreshGate,app.Lifetime.ApplicationStopping);
+            using var gamepads=new ConsoleGamepadInput(textContext:()=>LocalConsole.GamepadTextContext,clearPreview:()=>LocalConsole.SetControllerPreview(null));
+            await gamepads.Run(async(input,logTerminal)=>{
+                if(input.Activity && LocalConsole.Wake()){LocalConsole.SetControllerPreview(null);return true;}
+                if(input.Preview!=null)LocalConsole.SetControllerPreview(input.Preview);
+                if(input.Character.HasValue)LocalConsole.EditText(input.Character.Value);
+                if(input.Action!=ConsoleKeyAction.None)await HandleConsoleInput(false,null,input.Action,null,logTerminal);
+                return false;
+            },networkRefreshGate,app.Lifetime.ApplicationStopping);
         });
     }
     _ = Task.Run(async()=>{

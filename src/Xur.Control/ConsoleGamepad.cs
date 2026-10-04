@@ -11,6 +11,7 @@ internal sealed class ConsoleGamepadReader(TimeProvider? clock=null)
     internal const int South=0x130,East=0x131,LeftBumper=0x136,RightBumper=0x137,Up=0x220,Down=0x221;
     internal const int StickY=1,HatY=0x11;
     readonly TimeProvider time=clock??TimeProvider.System;
+    internal readonly ConsoleStickKeyboard Keyboard=new();
     readonly HashSet<int> pressed=[];
     bool hasHat;
     int hat,stick;
@@ -18,6 +19,13 @@ internal sealed class ConsoleGamepadReader(TimeProvider? clock=null)
     ConsoleKeyAction repeat;
     long lastRepeat;
     bool repeating;
+    string? textContext;
+
+    public void SetTextContext(string? context)
+    {
+        if(textContext!=context)repeat=ConsoleKeyAction.None;
+        textContext=context;Keyboard.SetContext(context);
+    }
 
     ConsoleKeyAction Held
     {
@@ -67,6 +75,13 @@ internal sealed class ConsoleGamepadReader(TimeProvider? clock=null)
         return after;
     }
 
+    public ConsoleControllerInput ReadController(ushort type,ushort code,int value)
+    {
+        var keyboard=Keyboard.Read(type,code,value);
+        var navigation=Read(type,code,value);
+        return Keyboard.Editing?keyboard:new(navigation);
+    }
+
     public ConsoleKeyAction Repeat()
     {
         if(repeat==ConsoleKeyAction.None || Held!=repeat || time.GetElapsedTime(lastRepeat)<TimeSpan.FromMilliseconds(repeating?100:400))return ConsoleKeyAction.None;
@@ -76,14 +91,16 @@ internal sealed class ConsoleGamepadReader(TimeProvider? clock=null)
 
 internal interface IConsoleGamepadDevice:IDisposable
 {
-    bool Read(out ConsoleKeyAction action);
-    ConsoleKeyAction Repeat();
+    bool Read(out ConsoleControllerInput input);
+    ConsoleControllerInput Repeat();
+    void SetTextContext(string? context);
+    void SuppressGesture();
 }
 
 // One reader in the control service, never one per display. Read-only evdev
 // descriptors are not grabbed; workstation and synthetic streaming seats stay out.
 internal sealed class ConsoleGamepadInput(string sysRoot="/sys",string devRoot="/dev",string udevRoot="/run/udev/data",
-    TimeProvider? clock=null,Func<string,IConsoleGamepadDevice>? openDevice=null):IDisposable
+    TimeProvider? clock=null,Func<string,IConsoleGamepadDevice>? openDevice=null,Func<string?>? textContext=null,Action? clearPreview=null):IDisposable
 {
     sealed record Node(string Path,string Identity);
     readonly TimeProvider time=clock??TimeProvider.System;
@@ -125,7 +142,7 @@ internal sealed class ConsoleGamepadInput(string sysRoot="/sys",string devRoot="
         catch(Exception e) when(e is IOException or UnauthorizedAccessException){return "";}
     }
 
-    internal async Task Pump(Func<ConsoleKeyAction,bool,Task> dispatch)
+    internal async Task Pump(Func<ConsoleControllerInput,bool,Task<bool>> dispatch)
     {
         var active=Foreground();
         if(active is not ("tty3" or "tty2")){Dispose();scanned=false;return;}
@@ -147,24 +164,27 @@ internal sealed class ConsoleGamepadInput(string sysRoot="/sys",string devRoot="
             if(Describe(path)!=entry.Node){Remove(path);scanned=false;continue;}
             try
             {
+                entry.Device.SetTextContext(active=="tty3"?textContext?.Invoke():null);
                 // Bound work even if a broken device floods its event queue.
-                for(var i=0;i<128 && entry.Device.Read(out var action);i++)
-                    if(action!=ConsoleKeyAction.None)
+                for(var i=0;i<128 && entry.Device.Read(out var input);i++)
+                    if(!input.IsEmpty)
                     {
                         if(Foreground()!=active || Describe(path)!=entry.Node){Remove(path);scanned=false;break;}
-                        await dispatch(action,active=="tty2");
+                        if(await dispatch(input,active=="tty2"))entry.Device.SuppressGesture();
+                        entry.Device.SetTextContext(active=="tty3"?textContext?.Invoke():null);
                     }
                 if(!devices.ContainsKey(path))continue;
                 var repeated=entry.Device.Repeat();
-                if(repeated!=ConsoleKeyAction.None && Foreground()==active && Describe(path)==entry.Node)await dispatch(repeated,active=="tty2");
+                if(!repeated.IsEmpty && Foreground()==active && Describe(path)==entry.Node)
+                    if(await dispatch(repeated,active=="tty2"))entry.Device.SuppressGesture();
             }
             catch(IOException){Remove(path);scanned=false;}
         }
     }
 
-    void Remove(string path){devices[path].Device.Dispose();devices.Remove(path);}
+    void Remove(string path){devices[path].Device.Dispose();devices.Remove(path);clearPreview?.Invoke();}
     public void Dispose(){foreach(var path in devices.Keys.ToArray())Remove(path);}
-    public async Task Run(Func<ConsoleKeyAction,bool,Task> dispatch,SemaphoreSlim gate,CancellationToken stop)
+    public async Task Run(Func<ConsoleControllerInput,bool,Task<bool>> dispatch,SemaphoreSlim gate,CancellationToken stop)
     {
         try
         {
@@ -208,10 +228,14 @@ internal sealed class ConsoleGamepadDevice:IConsoleGamepadDevice
         var hasHat=IoctlAxis(Fd,Request(0x40+ConsoleGamepadReader.HatY,24),out var hat)==0;
         var hasStick=IoctlAxis(Fd,Request(0x40+ConsoleGamepadReader.StickY,24),out var stick)==0;
         keys.Synchronize(held,hasHat,hat.Value,hasStick?stick.Minimum:0,hasStick?stick.Maximum:0,stick.Flat,stick.Value);
+        var axes=new List<ConsoleGamepadAxis>();
+        foreach(var code in new[]{0,1,2,3,4,5,0x14,0x15})
+            if(IoctlAxis(Fd,Request(0x40+code,24),out var axis)==0)axes.Add(new(code,axis.Value,axis.Minimum,axis.Maximum,axis.Flat));
+        keys.Keyboard.Synchronize(held,axes);
     }
-    public bool Read(out ConsoleKeyAction action)
+    public bool Read(out ConsoleControllerInput action)
     {
-        action=ConsoleKeyAction.None;
+        action=default;
         var length=NativeRead(Fd,out var input,(nuint)Marshal.SizeOf<InputEvent>());
         if(length<0)
         {
@@ -221,16 +245,23 @@ internal sealed class ConsoleGamepadDevice:IConsoleGamepadDevice
             throw new IOException("Gamepad disconnected.");
         }
         if(length!=Marshal.SizeOf<InputEvent>())throw new IOException("Incomplete gamepad event.");
-        if(input.Type==0 && input.Code==3){dropped=true;return true;} // SYN_DROPPED
+        if(input.Type==0 && input.Code==3) // SYN_DROPPED
+        {
+            dropped=true;keys.Keyboard.SuppressGesture();
+            if(keys.Keyboard.Editing)action=new(Preview:keys.Keyboard.Hidden,Activity:false);
+            return true;
+        }
         if(dropped)
         {
             // Never execute possibly stale confirmation presses after an overrun.
             if(input.Type==0 && input.Code==0){synchronize();dropped=false;}
             return true;
         }
-        action=keys.Read(input.Type,input.Code,input.Value);return true;
+        action=keys.ReadController(input.Type,input.Code,input.Value);return true;
     }
-    public ConsoleKeyAction Repeat()=>dropped?ConsoleKeyAction.None:keys.Repeat();
+    public ConsoleControllerInput Repeat()=>dropped || keys.Keyboard.Editing?default:new(keys.Repeat());
+    public void SetTextContext(string? context)=>keys.SetTextContext(context);
+    public void SuppressGesture()=>keys.Keyboard.SuppressGesture();
     public void Dispose()=>handle.Dispose();
     [StructLayout(LayoutKind.Sequential)] struct InputEvent {public nint Seconds,Microseconds;public ushort Type,Code;public int Value;}
     [StructLayout(LayoutKind.Sequential)] struct Axis {public int Value,Minimum,Maximum,Fuzz,Flat,Resolution;}

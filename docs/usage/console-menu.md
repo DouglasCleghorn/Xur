@@ -24,12 +24,30 @@ disconnecting and reconnecting a controller while the menu is running is support
 | LB / RB | Scroll backward / forward through long content |
 
 A and B require a new press for each action. Reboot, shutdown and disk erasure
-keep their existing confirmation screens and default to Cancel or No. Text fields
-such as server names, IP addresses and Wi-Fi passwords still use a keyboard;
-A submits the current text and B cancels. Bluetooth pairing is configured outside
-this menu. Controllers assigned to workstation seats, including streaming input,
+keep their existing confirmation screens and default to Cancel or No.
+Bluetooth pairing is configured outside this menu.
+Controllers assigned to workstation seats, including streaming input,
 do not control the setup menu. Input is accepted while the setup or log terminal
 is active, and paused while another terminal or workstation desktop is active.
+
+Text fields such as server names, IP addresses and Wi-Fi passwords also support
+a two-stick keyboard. Hold **LT or RT**, point the **left stick** at a character
+group, then point the **right stick** at a character within that group. The left
+wheel is the most significant digit; the right wheel is the second digit.
+Both wheels show their choices and the selected character is previewed locally.
+**Release the trigger to type that character once.** If both triggers are held,
+release both. Centering either stick or pressing B while holding the trigger
+cancels the character without leaving the text field.
+
+**LB/RB** cycle lowercase, uppercase, numbers and symbols. Letters and symbols
+use six slices per wheel; numbers use four, the minimum needed for ten digits.
+Slices start at up and proceed clockwise. Empty combinations insert nothing.
+**X** deletes, **Y** inserts a space, and **A** submits the field after the trigger
+is released. **B** without a held trigger cancels the field. A normal keyboard
+continues to work. Password text stays masked, and diagnostic console snapshots
+omit the transient character preview. Waking the display, reconnecting a
+controller, changing fields or recovering an input overrun cancels an unfinished
+typing gesture; start a fresh gesture to type.
 
 **Updates** shows installed versions, the selected Xur channel, and the latest
 Update All progress and results. Choose **Update All** to check and stage OS

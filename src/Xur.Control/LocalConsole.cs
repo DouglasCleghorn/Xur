@@ -36,6 +36,9 @@ public static class LocalConsole
     static int selection;
     static ConsoleScreen? maintenance;
     static string textBuffer="";static bool replaceText;
+    static long textGeneration;
+    static ConsoleKeyboardPreview? controllerPreview;
+    internal static string? GamepadTextContext {get{lock(Sync)return EditingText?textGeneration.ToString():null;}}
     public static bool EditingText {get{lock(Sync)return view=="maintenance" && maintenance?.InputValue!=null;}}
     public static string TextValue {get{lock(Sync)return textBuffer;}}
     static long diagnosticGeneration;
@@ -57,7 +60,20 @@ public static class LocalConsole
     }
     static readonly string DiagnosticInstance=Guid.NewGuid().ToString("N");
     static string DisplayText=>maintenance?.Secret==true?new string('*',textBuffer.Length):textBuffer;
-    public static void ClearText(){lock(Sync){textBuffer="";replaceText=true;}}
+    public static void ClearText(){lock(Sync){textBuffer="";replaceText=true;textGeneration++;controllerPreview=null;}}
+    internal static void SetControllerPreview(ConsoleKeyboardPreview? preview)
+    {
+        lock(Sync)
+        {
+            if(!EditingText){controllerPreview=null;return;}
+            if(controllerPreview==preview)return;
+            controllerPreview=preview;if(preview?.Active==true)page=0;
+            body=InputBody();Render();
+        }
+    }
+    static string InputBody()=>controllerPreview is {Active:true} preview
+        ? ConsoleStickKeyboard.Render(preview)+"\n> "+DisplayText+"\n\n"+Clean(maintenance!.Body)
+        : Clean(maintenance!.Body)+"\n> "+DisplayText+"\nHold LT/RT: stick keyboard | LB/RB: set | X: delete | Y: space";
     public static void EditText(char character)
     {
         lock(Sync)
@@ -66,7 +82,7 @@ public static class LocalConsole
             diagnosticGeneration++;
             if(character is '\b' or '\x7f'){textBuffer=replaceText?"":textBuffer.Length>0?textBuffer[..^1]:"";replaceText=false;}
             else if(character is >= ' ' and <= '~' && textBuffer.Length<(maintenance?.Secret==true?64:1024)){textBuffer=(replaceText?"":textBuffer)+character;replaceText=false;}
-            body=Clean(maintenance!.Body)+"\n> "+DisplayText;Render();
+            body=InputBody();Render();
         }
     }
     public static string[] RootOptions(bool installer=false) => installer
@@ -183,14 +199,14 @@ public static class LocalConsole
             // leaving the physical console and diagnostic snapshot on Scanning.
             var scanCompleted=maintenance?.Id=="wifi-scanning" && screen.Id is "wifi-networks" or "wifi-scan-error";
             if(refreshOnly && (view!="maintenance" || (maintenance?.Id!=screen.Id && !scanCompleted)))return;
-            if(view!="maintenance" || maintenance?.Id!=screen.Id){selection=0;page=0;textBuffer=screen.InputValue??"";replaceText=true;}
+            if(view!="maintenance" || maintenance?.Id!=screen.Id){selection=0;page=0;textBuffer=screen.InputValue??"";replaceText=true;textGeneration++;controllerPreview=null;}
             else if(maintenance!=null)
             {
                 var key=maintenance.Options[Math.Min(selection,maintenance.Options.Length-1)].Key;
                 var index=Array.FindIndex(screen.Options,o=>o.Key==key);
                 selection=index<0?0:index;
             }
-            maintenance=screen;view="maintenance";title=screen.Title;body=Clean(screen.Body)+(screen.InputValue!=null?"\n> "+DisplayText:"");serialLogs=false;Render();
+            maintenance=screen;view="maintenance";title=screen.Title;body=screen.InputValue!=null?InputBody():Clean(screen.Body);serialLogs=false;Render();
         }
     }
     public static char? SelectLine(string line)
