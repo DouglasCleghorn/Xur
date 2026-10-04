@@ -30,10 +30,10 @@ jobs:
       version: ${{ steps.identity.outputs.version }}
       build_iso: ${{ steps.iso.outputs.build }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.401
       - id: identity
@@ -83,7 +83,7 @@ jobs:
           archive=pathlib.Path('dist/xur-app-x86_64.tar.gz')
           pathlib.Path('dist/build.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],'channel':os.environ['RELEASE_CHANNEL'],'sha256':hashlib.file_digest(archive.open('rb'),'sha256').hexdigest(),'contextSha256':hashlib.file_digest(pathlib.Path('.build/context/publish-receipt.json').open('rb'),'sha256').hexdigest(),'checks':'eng/test-fast.sh passed','hardwareTests':'Not run'},indent=2)+'\n')
           PY
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@v7
         with:
           name: release-candidate-${{ steps.identity.outputs.channel }}-${{ github.sha }}
           compression-level: 0
@@ -96,7 +96,7 @@ jobs:
         env:
           RELEASE_CHANNEL: ${{ steps.identity.outputs.channel }}
         run: python3 eng/ci-context.py export --commit "$GITHUB_SHA" --channel "$RELEASE_CHANNEL"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@v7
         if: steps.iso.outputs.build == 'true'
         with:
           name: context-candidate-${{ steps.identity.outputs.channel }}-${{ github.sha }}
@@ -112,7 +112,7 @@ jobs:
           python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --kind context
       - name: Keep failed-check diagnostics
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@v7
         with:
           name: failed-checks-${{ github.sha }}
           retention-days: 7
@@ -140,7 +140,7 @@ jobs:
       contents: write
       actions: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@v7
       - name: Download this run's tested candidate
         env:
           GH_TOKEN: ${{ github.token }}
