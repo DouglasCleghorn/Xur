@@ -18,14 +18,13 @@ def publish(channel,version,commit,with_installer=True):
  spec=importlib.util.spec_from_file_location('repository',ROOT/'eng/update-repository.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);module.publish(version,channel)
  public=module.PUBLIC;identity=(public/'latest').read_text().strip()
  tag=('nightly-' if channel=='nightly' else 'v')+version
- # One migration release per legacy channel. Never advance its old discovery path.
+ # Channel aliases contain only the current public release pointer.
  result=subprocess.run(['gh','api','repos/'+REPO+'/releases/tags/'+channel],capture_output=True,text=True)
  if result.returncode:
   if '404' not in result.stderr:raise RuntimeError(result.stderr)
   run('gh','release','create',channel,'--repo',REPO,'--target',commit,'--prerelease','--latest=false','--title',channel.title()+' update channel','--notes','Small update pointers. Download installer media from the versioned releases.')
   channel_assets=[]
  else:channel_assets=json.loads(result.stdout)['assets']
- transition=not any(a['name']=='migration' for a in channel_assets)
  installer_metadata=None
  if with_installer:
   installer_spec=importlib.util.spec_from_file_location('installer',ROOT/'eng/ci-installer.py');installer=importlib.util.module_from_spec(installer_spec);installer_spec.loader.exec_module(installer)
@@ -33,36 +32,34 @@ def publish(channel,version,commit,with_installer=True):
   installer_metadata=json.loads((public/'installer/installer.json').read_text())
   if len(installer_metadata['parts'])!=1 or installer_metadata['parts'][0]['file']!=installer_metadata['iso']['file']:raise ValueError('Installer exceeds the single-ISO release limit; shrink it before publishing')
  entry=json.loads((public/(identity+'.json')).read_text())
- descriptor=module.compact(public,entry,pathlib.Path(os.environ['XUR_UPDATE_SIGNING_KEY']),installer_metadata,entry['file'] if transition else 'xur-update-x86_64.tar.gz')
+ descriptor=module.compact(public,entry,pathlib.Path(os.environ['XUR_UPDATE_SIGNING_KEY']),installer_metadata,'xur-update-x86_64.tar.gz')
  named_descriptor=public/'xur-update.json';shutil.copyfile(descriptor,named_descriptor)
- named_archive=public/entry['file'] if transition else public/'xur-update-x86_64.tar.gz'
- if not transition:shutil.copyfile(public/entry['file'],named_archive)
+ named_archive=public/'xur-update-x86_64.tar.gz'
+ shutil.copyfile(public/entry['file'],named_archive)
  files=[named_archive,named_descriptor]
  if with_installer:
   iso_name=installer_metadata['iso']['file']
   files.insert(0,public/'installer'/iso_name)
- if transition:files += [public/'latest',public/(identity+'.json'),public/(identity+'.json.sig')]
  notes=public/'release-notes.md'
  if with_installer:
   iso=installer_metadata['iso']
   notes.write_text(f"[**Download Xur installer ISO**](https://github.com/{REPO}/releases/download/{tag}/{iso_name}) · {iso['bytes']/1024**3:.2f} GiB\n\n"
   "[USB installation guide](https://xur.app/download/) · Bazzite downloads during installation.\n\n"
-  +("This is the one-time updater transition for this channel. The extra legacy files allow older installations to upgrade automatically. Future releases contain only the ISO, app archive and signed JSON descriptor.\n\n" if transition else "The app archive and JSON descriptor are for the built-in updater; choose the ISO for installation.\n\n")
+  +"The app archive and JSON descriptor are for the built-in updater; choose the ISO for installation.\n\n"
   +f"<details><summary>Verification and build details</summary>\n\nISO SHA-256: `{iso['sha256']}`\n\nThe JSON descriptor includes its signature, authenticated ISO size/hash and inspection receipt. See [verification instructions](https://github.com/{REPO}/blob/main/docs/development/installer-releases.md#download-and-verify).\n\nCommit: `{commit}`. Automated app checks and installer contents inspection passed. Boot/install and physical GPU tests were not run for this build.\n\n</details>\n")
  else:
   notes.write_text("Application update. Installer builds are manual; use the [most recent installer](https://xur.app/download/) for bootable media.\n\n"
    +f"Commit: `{commit}`. Automated app checks passed. The app archive and signed JSON descriptor are for the built-in updater.\n")
  run('gh','release','create',tag,'--repo',REPO,'--target',commit,'--draft','--title','Xur '+channel+' '+version,'--notes-file',str(notes),*map(str,files))
- # GitHub Latest remains the Stable migration release for unmodified old clients.
- # Modern clients use stable/current and nightly/current instead.
- run('gh','release','edit',tag,'--repo',REPO,'--draft=false','--prerelease='+str(channel=='nightly').lower(),'--latest='+str(channel=='stable' and transition).lower())
+ # Stable's app release is GitHub Latest; updater clients use channel/current.
+ run('gh','release','edit',tag,'--repo',REPO,'--draft=false','--prerelease='+str(channel=='nightly').lower(),'--latest='+str(channel=='stable').lower())
  with tempfile.TemporaryDirectory() as temp:
   temp=pathlib.Path(temp)
-  if transition:
-   if channel=='nightly':
-    legacy=temp/'latest';legacy.write_text(tag+'\n');run('gh','release','upload',channel,str(legacy),'--repo',REPO,'--clobber')
-   migration=temp/'migration';migration.write_text(tag+'\n');run('gh','release','upload',channel,str(migration),'--repo',REPO,'--clobber')
   pointer=temp/'current';pointer.write_text(tag+'\n');run('gh','release','upload',channel,str(pointer),'--repo',REPO,'--clobber')
+ # Retire leftover bridge markers only after the new release is discoverable.
+ for asset in channel_assets:
+  if asset['name'] in ('migration','latest'):
+   run('gh','release','delete-asset',channel,asset['name'],'--repo',REPO,'--yes')
  print(json.dumps({'published':tag,'channel':channel,'commit':commit}))
 
 def publish_installer(channel,version,commit):
