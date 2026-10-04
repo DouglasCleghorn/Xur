@@ -45,11 +45,7 @@ to a language model:
 
 ![Example: two workstations and a two-GPU language model on a four-RTX-3090 host](docs/assets/workstations-and-llm.png)
 
-Another profile can allocate those GPUs to speech and language workloads:
-
-![Example: speech synthesis, speech recognition and a two-GPU language model](docs/assets/speech-and-llm.png)
-
-These diagrams illustrate allocation ideas. Exact model, quantization, engine and
+This diagram illustrates allocation ideas. Exact model, quantization, engine and
 GPU compatibility must be checked for the selected recipe. They are not benchmark
 results. GPU allocations are exclusive; NVLink does not make separate cards one
 shared memory pool for every application.

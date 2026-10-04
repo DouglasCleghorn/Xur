@@ -20,7 +20,7 @@ def build():
  for name in ['xur-icon.svg','xur-icon-180.png','xur-icon-32.png']:
   shutil.copy2(app/'icons'/name,OUT/'assets'/name)
  for name in ['IBMPlexSans.ttf','OFL.txt']:shutil.copy2(app/'fonts'/name,OUT/'assets'/name)
- for name in ['xur-header.png','workstations-and-llm.png','speech-and-llm.png','control-panel.jpg','workstations.jpg','profile-editor.jpg','model-lab.jpg','update-channel.jpg']:shutil.copy2(ROOT/'docs/assets'/name,OUT/'assets'/name)
+ for name in ['xur-header.png','workstations-and-llm.png','control-panel.jpg','workstations.jpg','profile-editor.jpg','model-lab.jpg','update-channel.jpg']:shutil.copy2(ROOT/'docs/assets'/name,OUT/'assets'/name)
  shutil.copy2(ROOT/'LICENSE',OUT/'license.txt')
  (OUT/'examples').mkdir()
  shutil.copy2(ROOT/'docs/examples/xur.yml',OUT/'examples/xur.yml')

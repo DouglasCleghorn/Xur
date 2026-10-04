@@ -21,7 +21,7 @@ const fs=require('node:fs'),assert=require('node:assert/strict');
   const now=Date.now(),fixture=structuredClone(data);fixture.cards=Array.from({length:4},(_,i)=>{
    const card=structuredClone(data.cards[0]);card.telemetry.device.pci=`0000:0${i+1}:00.0`;card.telemetry.device.name='RTX 3090 · layout fixture';card.telemetry.device.vendor='NVIDIA';
    card.telemetry.history=Array.from({length:61},(_,n)=>({at:new Date(now-(60-n)*15000).toISOString(),utilization:n===30?null:30+20*Math.sin(n/8+i),memoryUsedMiB:n===30?null:8192+1024*Math.sin(n/6+i),memoryTotalMiB:24576,powerWatts:n===30?null:120+80*Math.sin(n/9+i),powerLimitWatts:350,temperatureC:52+8*Math.sin(n/10)}));
-   card.telemetry.reading=card.telemetry.history.at(-1);card.workloads=[{id:'fixture-'+i,name:['Qwen LLM','Qwen LLM','Fish Speech','Gaming workstation'][i],engine:'Fixture',state:'running',pid:100+i}];return card;
+   card.telemetry.reading=card.telemetry.history.at(-1);card.workloads=[{id:'fixture-'+i,name:['Qwen LLM','Qwen LLM','Speech model','Gaming workstation'][i],engine:'Fixture',state:'running',pid:100+i}];return card;
   });
   const queried=[];await page.route('**/api/gpus?*',async route=>{queried.push(new URL(route.request().url()).searchParams.get('minutes'));await route.fulfill({json:fixture});});
   await page.setViewportSize({width:1440,height:1000});

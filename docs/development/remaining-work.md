@@ -132,11 +132,11 @@ from behavior implemented but not yet exercised on the four-3090 machine.
 - Independent desktops on different outputs of one GPU. A whole selected card
   and its connected outputs currently belong to one desktop.
 - The complete reference AI set: Qwen INT8 W8A16 with BF16 MTP on the NVLink pair,
-  Fish S2 Pro through vLLM-Omni, and Qwen3-ASR through core vLLM on the other pair.
+  and Qwen3-ASR through core vLLM on the other pair.
   Discovering a model in search is not a model-specific deployment recipe.
 - NVLink-aware automatic allocation, speech co-residency and measured shared-GPU
-  scheduling. NVLink discovery and selection hints are implemented. GPU allocations are currently exclusive, so the requested Fish/ASR
-  capacity-sharing behavior is absent.
+  scheduling. NVLink discovery and selection hints are implemented. GPU allocations
+  are currently exclusive, so capacity-sharing behavior is absent.
 - Per-model vLLM tuning and Omni stage configurations from reviewed upstream
   recipes; driver/architecture compatibility checks beyond file format and the
   current engine/device checks; gated-model credentials and license acceptance.

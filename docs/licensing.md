@@ -23,8 +23,6 @@ Existing notices include:
 - GitHub mark in the website header: GitHub Octicons, MIT; notice shipped in
   `website/assets/github-mark-LICENSE.txt`.
 - OS packages and container images: their upstream license/source notices.
-- Fish codec dependencies: upstream notices retained in the installed Python
-  packages in the derived engine image; see `os/engines/fish/README.md`.
 - Model weights: each selected repository's own license; the model catalog keeps
   the model repository, license and revision. MIT licensing of Xur does not grant
   rights to third-party models or games.
