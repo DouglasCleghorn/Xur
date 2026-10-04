@@ -31,8 +31,18 @@ fi
 /usr/bin/bash /usr/libexec/xur-install-manager "$target"
 # Publish only after the installed manager and configuration have been copied.
 # The USB menu searches the separate /boot filesystem for this completion marker.
+mountpoint -q "$target/boot"
 test -s "$target/boot/grub2/grub.cfg"
+# bootc can leave the separate boot filesystem read-only after deployment.
+# Open it only for the completion marker and restore its original protection.
+case ",$(findmnt -n -o OPTIONS --target "$target/boot")," in
+  *,ro,*)
+    mount -o remount,rw "$target/boot"
+    trap 'mount -o remount,ro "$target/boot"' EXIT
+    ;;
+esac
 mkdir -p "$target/boot/xur"
 printf 'Xur installation configured\n' > "$target/boot/xur/installed"
 touch "$target/var/lib/xur/installed"
+sync -f "$target/boot"
 %end

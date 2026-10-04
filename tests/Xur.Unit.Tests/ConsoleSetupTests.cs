@@ -36,6 +36,12 @@ static class ConsoleSetupTests
         try
         {
             await agent.StartAsync();await control.StartAsync();using var client=LocalClient.Create(root+"/control.sock");
+            LocalConsole.Status(device,auth);
+            File.WriteAllText(Path.Combine(root,"diagnostics-status.json"),JsonSerializer.Serialize(new InstallerDiagnosticsStatus(ApiEnabled:true)));
+            LocalConsole.OpenMaintenance(new("setup-confirm","Confirm disk erasure","Disk serial TEST-001",[new('0',"No"),new('y',"Yes")]));
+            check(LocalConsole.ExportFrame(80,25).Contains(InstallerDiagnosticWarning.Banner)&&LocalConsole.DiagnosticSnapshot().Body.Contains(InstallerDiagnosticWarning.Banner),"Physical disk confirmation and diagnostic snapshots both warn when diagnostics are active");
+            File.Delete(Path.Combine(root,"diagnostics-status.json"));
+            check(!LocalConsole.ExportFrame(80,25).Contains(InstallerDiagnosticWarning.Banner),"Removing the active status refreshes a cached console frame immediately");
             using(var denied=await client.PostAsJsonAsync("/local/setup/plan",new ConsolePlanRequest(disk.Path)))check(denied.StatusCode==HttpStatusCode.Conflict,"Console installation requires a saved server name before planning");
             check(!await device.StartWebLogin()&&!device.QrRunning&&device.EnrollmentError.Contains("after installation"),"Tailscale enrollment is blocked throughout live installation");
             var menu=new ConsoleMaintenance(client,true,true);await menu.Open("setup");check(menu.Screen.Title.Contains("Step 1"),"Initial setup starts at the server-name step");await menu.Submit("");check(menu.Screen.Id=="computer-name"&&menu.Screen.Body.Contains("Enter a server name"),"A rejected server name keeps the flow on the naming step");await menu.Submit("living-room");

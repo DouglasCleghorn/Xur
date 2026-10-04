@@ -27,6 +27,10 @@ static class ConsoleKeyboardOverlayTests
         {
             var compact=new Screen(width,height);compact.Apply(LocalConsole.ExportFrame(width,height));
             check(compact.InBounds && compact.Text.Contains("Preview: c") && compact.Text.Contains("Text: x") && compact.Text.Contains("cancel"),"The controller overlay keeps candidate, text and cancellation visible within "+width+"x"+height+" bounds");
+            var warningFrame=LocalConsole.Frame("Server name","Enter a name, then choose Save.",width,height,diagnosticsActive:true);
+            var withDiagnostics=new Screen(width,height);
+            withDiagnostics.Apply(ConsoleKeyboardOverlay.Draw(warningFrame,new(Choice,null),"x",false,width,height,diagnosticsActive:true));
+            check(withDiagnostics.InBounds && withDiagnostics.Text.Contains(InstallerDiagnosticWarning.Banner) && withDiagnostics.Text.Contains("Preview: c"),"The controller keyboard cannot cover the active diagnostics warning at "+width+"x"+height);
         }
         // Match the native client's column-1 row comparison with an unchanged
         // overlay and changed background; incremental painting must be complete.

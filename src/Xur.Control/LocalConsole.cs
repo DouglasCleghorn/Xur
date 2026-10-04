@@ -50,6 +50,7 @@ public static class LocalConsole
     public static bool EditingText {get{lock(Sync)return view=="maintenance" && maintenance?.InputValue!=null;}}
     public static string TextValue {get{lock(Sync)return textBuffer;}}
     static long diagnosticGeneration;
+    static bool DiagnosticsActive=>appliance?.Installer==true && InstallerDiagnosticWarning.Read(appliance.RunDirectory).Active;
     public static void ConsumeDiagnosticRevision(){lock(Sync)diagnosticGeneration++;}
     public static ConsoleDiagnosticSnapshot DiagnosticSnapshot()
     {
@@ -59,7 +60,7 @@ public static class LocalConsole
             var options=screen?.Options ?? Options.Select((label,i)=>new ConsoleOption(RootKey(i,appliance?.Installer==true),label)).ToArray();
             if(view is "logs" or "qr")options=[new('0',"Back to menu")];
             var snapshot=new ConsoleDiagnosticSnapshot("",screen?.Id??view,title,
-                Redaction.Logs(screen?.Body??(view=="logs"?logs:body)),
+                (DiagnosticsActive?InstallerDiagnosticWarning.Banner+"\n":"")+Redaction.Logs(screen?.Body??(view=="logs"?logs:body)),
                 options.Select(o=>new ConsoleDiagnosticOption(o.Key,Redaction.Logs(o.Label),o.Enabled)).ToArray(),
                 selection,screen?.InputValue!=null,screen?.Secret==true,
                 screen?.InputValue!=null && screen.Secret==false?textBuffer:null);
@@ -271,7 +272,7 @@ public static class LocalConsole
         return new string(text.Where(c=>!char.IsControl(c) || c=='\n' || c=='\t').ToArray()).Replace("\t","    ");
     }
     // Kept pure so overflow, pagination and fixed controls can be checked directly.
-    public static string Frame(string heading,string text,int columns,int rows,int requestedPage=0,bool qrView=false,bool logWindow=false,int selectedOption=0,string[]? optionList=null,string[]? statusQr=null)
+    public static string Frame(string heading,string text,int columns,int rows,int requestedPage=0,bool qrView=false,bool logWindow=false,int selectedOption=0,string[]? optionList=null,string[]? statusQr=null,bool diagnosticsActive=false)
     {
         var options=optionList ?? Options; selectedOption=Math.Clamp(selectedOption,0,options.Length-1);
         columns=Math.Clamp(columns,40,240); rows=Math.Clamp(rows,12,120);
@@ -279,7 +280,7 @@ public static class LocalConsole
         var horizontalMargin=Math.Max(3,(int)Math.Ceiling(columns*0.05));
         var verticalMargin=Math.Max(1,(int)Math.Ceiling(rows*0.05));
         var innerColumns=columns-2*horizontalMargin;
-        var innerRows=rows-2*verticalMargin;
+        var innerRows=rows-2*verticalMargin-(diagnosticsActive?1:0);
         var width=innerColumns-4;
         var optionLimit=Math.Max(1,innerRows-12);
         var optionStart=selectedOption/optionLimit*optionLimit;
@@ -315,9 +316,10 @@ public static class LocalConsole
         // No newline reaches the terminal. In-place writes cannot scroll at the bottom edge.
         for(int i=0;i<rows;i++)
         {
-            var index=i-verticalMargin;
+            var index=i-verticalMargin-(diagnosticsActive?1:0);
             var line=index>=0 && index<Math.Min(frame.Length,innerRows)?frame[index]:"";
             line=line.PadRight(innerColumns);
+            if(diagnosticsActive && i==verticalMargin)line="\x1b[1;33m"+InstallerDiagnosticWarning.Banner.PadRight(innerColumns)+"\x1b[0m";
             if(line.Contains(qrView || logWindow ? "> Back to menu" : "> "+(selectedOption+1)+" "+options[selectedOption]))
                 line=line[..1]+"\x1b[7m"+line[1..^1]+"\x1b[0m"+line[^1..];
             output.Append($"\x1b[{i+1};1H").Append(' ',horizontalMargin).Append(line).Append(' ',horizontalMargin);
@@ -350,12 +352,13 @@ public static class LocalConsole
         if(sleeping??Idle.IsBlank)return BlankFrame(columns,rows);
         columns=Math.Clamp(columns,40,240);rows=Math.Clamp(rows,12,120);
         var options=CurrentOptions;var code=!logWindow&&view=="status"?ServeQr():null;
+        var diagnosticsActive=DiagnosticsActive;
         var overlay=!logWindow && EditingText?keyboardOverlay.View:null;
-        var key=System.Text.Json.JsonSerializer.Serialize(new{title,content,page,view,selection,options,code,overlay});
+        var key=System.Text.Json.JsonSerializer.Serialize(new{title,content,page,view,selection,options,code,diagnosticsActive,overlay});
         var size=(columns,rows,logWindow);
         if(FrameCache.TryGetValue(size,out var cached)&&cached.Key==key)return cached.Frame;
-        var frame=Frame(logWindow?"Logs":title,content,columns,rows,page,!logWindow&&view=="qr",logWindow,selection,options,code);
-        if(overlay!=null)frame=ConsoleKeyboardOverlay.Draw(frame,overlay,DisplayText,maintenance!.Secret,columns,rows);
+        var frame=Frame(logWindow?"Logs":title,content,columns,rows,page,!logWindow&&view=="qr",logWindow,selection,options,code,diagnosticsActive);
+        if(overlay!=null)frame=ConsoleKeyboardOverlay.Draw(frame,overlay,DisplayText,maintenance!.Secret,columns,rows,diagnosticsActive);
         if(FrameCache.Count>=16)FrameCache.Clear();
         FrameCache[size]=(key,frame);return frame;
     }
@@ -378,6 +381,7 @@ public static class LocalConsole
         if(Plain)
         {
             var text=view=="qr"?QrText():body+(view=="status"&&ConnectedQr?"\n"+string.Join('\n',ServeQr()):"")+"\n"+string.Join('\n',CurrentOptions.Select((o,i)=>$"{i+1}. {o}"))+"\n0. Back";
+            if(DiagnosticsActive)text=InstallerDiagnosticWarning.Banner+"\n"+text;
             if(LastFrames.GetValueOrDefault("stdio")==text)return;
             LastFrames["stdio"]=text;Console.WriteLine("Xur setup\n"+text);return;
         }

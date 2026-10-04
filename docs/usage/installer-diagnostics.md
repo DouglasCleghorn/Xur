@@ -5,6 +5,10 @@ API with a configuration USB drive. It runs in the agent, independently of the
 console renderer and web manager. Web management and Tailscale still start only
 after installation. No diagnostic listener exists without this opt-in file, and
 this configuration is never copied to the installed system.
+The installer displays **WARNING: Diagnostics active** above every screen while
+the diagnostic HTTPS API or optional SSH access is running. The warning remains
+visible when scrolling logs or reviewing disk erasure, and is absent on normal
+boots without diagnostics.
 
 ## Enable before boot
 
@@ -24,6 +28,8 @@ control when enabled, including the ability to approve erasure of an eligible di
 
 The file must be regular, not a symlink, at most 32 KiB, with one YAML document.
 Unknown fields, invalid keys and duplicate configuration files disable the API.
+Invalid SSH settings also disable diagnostic configuration; they never silently
+enable less restricted access.
 Its containing disk is protected from selection for installation, even if the
 configuration is invalid. Correct the file and reboot to rescan.
 
@@ -85,6 +91,50 @@ once diagnostic configuration is discovered and is bounded to the most recent
 A console failure returns 503 for console routes while agent diagnostics remain
 available. Boot logs and history are volatile: collect them before rebooting.
 There is no arbitrary shell execution or arbitrary file-download route.
+
+## Optional SSH access
+
+Current media also supports explicit root SSH access. On the computer used for
+diagnosis, create a separate Ed25519 identity:
+
+```sh
+mkdir -p .build/installer-diagnostics
+ssh-keygen -t ed25519 -f .build/installer-diagnostics/diagnostic_ed25519
+```
+
+Add the public `.pub` file's contents to the existing diagnostic YAML. Keep its
+API key and `allowControl: true`; SSH is unavailable in read-only mode:
+
+```yaml
+sshAuthorizedKeys:
+  - "ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY"
+```
+
+Replace the placeholder with an actual public key. The list accepts up to eight
+distinct Ed25519 keys, optionally with comments. Private keys, other key types,
+authorized_keys options, multiline entries and malformed encodings are rejected.
+After booting media that supports this setting, connect with:
+
+```sh
+ssh -o IdentitiesOnly=yes -i .build/installer-diagnostics/diagnostic_ed25519 root@SERVER_IP
+```
+
+Verify the server's SSH host key through a trusted local connection on first
+contact. Host keys can change between live boots. SSH grants unrestricted root
+shell and file access for troubleshooting. It accepts only the configured keys;
+password and keyboard-interactive login are disabled. Xur applies the SSH service
+override and authorization file beneath `/run/`, opens TCP 22 for this boot when
+firewalld is active, and removes its access on orderly agent shutdown. SELinux
+remains enforcing. No root password or installed-system authorization is changed,
+and the diagnostic YAML and runtime keys are excluded from installation.
+
+Update the installer application/media before adding `sshAuthorizedKeys` to an
+older USB: older versions reject this unknown field and disable the diagnostic
+API. Merely editing the file cannot add SSH support to an already-running older
+installer. Reboot to rediscover configuration; deleting the file takes effect on
+the next boot.
+
+## Display startup recovery
 
 On installer boots, a matching AMD `REG_WAIT timeout` in `disable_crtc` triggers
 one HDMI re-detection and console restart after a 15-second settling period. The

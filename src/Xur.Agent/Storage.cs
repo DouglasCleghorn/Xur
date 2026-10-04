@@ -142,7 +142,7 @@ public sealed class Storage(Func<Task<JsonElement[]>>? nodesObserver=null,Func<s
                 var options = fs switch {
                     "ext3" or "ext4" => "ro,noload,nosuid,nodev,noexec",
                     "xfs" => "ro,norecovery,nosuid,nodev,noexec",
-                    "btrfs" => "ro,nologreplay,nosuid,nodev,noexec",
+                    "btrfs" => "ro,rescue=nologreplay,nosuid,nodev,noexec",
                     "ext2" or "vfat" or "exfat" or "ntfs" or "ntfs3" or "iso9660" or "udf" => "ro,nosuid,nodev,noexec",
                     _ => "" };
                 if (options.Length == 0) { errors.Add($"{path}: unsupported or encrypted filesystem {fs}; discovery incomplete"); continue; }

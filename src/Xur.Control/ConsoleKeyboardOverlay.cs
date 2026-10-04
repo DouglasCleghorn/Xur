@@ -31,11 +31,13 @@ internal sealed class ConsoleKeyboardOverlay(TimeProvider? clock=null)
     internal void Edited(char character)
     {feedback=character;edited=released=time.GetTimestamp();}
 
-    internal static string Draw(string frame,ConsoleKeyboardOverlayView view,string text,bool secret,int columns,int rows)
+    internal static string Draw(string frame,ConsoleKeyboardOverlayView view,string text,bool secret,int columns,int rows,bool diagnosticsActive=false)
     {
         columns=Math.Clamp(columns,40,240);rows=Math.Clamp(rows,12,120);
         var marginX=Math.Max(3,(int)Math.Ceiling(columns*.05));var marginY=Math.Max(1,(int)Math.Ceiling(rows*.05));
-        var width=Math.Min(94,columns-2*marginX);var height=Math.Min(21,rows-2*marginY);
+        // The diagnostics warning occupies the first row inside the safe area.
+        var availableRows=rows-2*marginY-(diagnosticsActive?1:0);
+        var width=Math.Min(94,columns-2*marginX);var height=Math.Min(21,availableRows);
         var full=width>=68 && height>=21;
         if(!full)height=Math.Min(height,14);
         var canvas=new Canvas(width,height);
@@ -95,7 +97,7 @@ internal sealed class ConsoleKeyboardOverlay(TimeProvider? clock=null)
             canvas.Center(height-3,"LB/RB: set · X: del · Y: space",Style.Muted);
             canvas.Center(height-2,"A: done · B: cancel field",Style.Muted);
         }
-        var x=(columns-width)/2;var y=(rows-height)/2;
+        var x=(columns-width)/2;var y=marginY+(diagnosticsActive?1:0)+(availableRows-height)/2;
         // Keep each overlay row alongside its background row. The native
         // display client compares chunks beginning at column 1; appending the
         // entire overlay would let a changed background overwrite an unchanged
