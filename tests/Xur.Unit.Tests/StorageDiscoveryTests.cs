@@ -10,7 +10,7 @@ static class StorageDiscoveryTests
         Directory.CreateDirectory(root);
         try
         {
-            bool readOnlyFailure=false;string fileName="xur.yml";bool symlink=false;
+            bool readOnlyFailure=false;string fileName="xur.yml";bool symlink=false;bool btrfsMountFailure=false;
             async Task<Storage> Scan(string filesystem,params string[] answers)
             {
                 var directory=Path.Combine(root,Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);
@@ -30,6 +30,14 @@ static class StorageDiscoveryTests
                     }
                     if(exe=="mount")
                     {
+                        if(current=="/dev/test3"&&filesystem=="btrfs")
+                        {
+                            // Current installer kernels reject the old standalone alias.
+                            var options=args[Array.IndexOf(args,"-o")+1].Split(',');
+                            if(options.Contains("nologreplay"))return Task.FromResult(new ProcessResult(32,"btrfs: Unknown parameter 'nologreplay'"));
+                            if(!options.Contains("ro")||!options.Contains("rescue=nologreplay"))throw new Exception("Btrfs discovery must disable writes and log replay");
+                            if(btrfsMountFailure)return Task.FromResult(new ProcessResult(32,"Btrfs fixture mount failure"));
+                        }
                         if(current.StartsWith("/dev/config"))
                         {
                             var payload=answers[answer++];
@@ -46,6 +54,10 @@ static class StorageDiscoveryTests
                 await storage.DiscoverAnswers();return storage;
             }
             var locked=await Scan("crypto_LUKS");
+            var btrfs=await Scan("btrfs");
+            check(btrfs.CanPlan&&btrfs.Scan.State=="NoAnswer"&&btrfs.Scan.Mounts is [{Filesystem:"btrfs",BlockReadOnly:true}],"An existing Btrfs installation is discoverable on kernels that reject the standalone nologreplay alias");
+            btrfsMountFailure=true;btrfs=await Scan("btrfs");btrfsMountFailure=false;
+            check(!btrfs.CanPlan&&btrfs.Scan.State=="Incomplete"&&btrfs.Scan.Errors.Any(e=>e.Contains("Btrfs fixture mount failure")),"Btrfs mount failure still locks installation without retrying an unsafe mount");
             check(locked.Diagnostics==null,"No diagnostic configuration means no diagnostic listener is configured");
             check(locked.CanPlan&&locked.Scan.State=="NoAnswer"&&locked.Scan.Errors.Length==0&&locked.Scan.Skipped is {Length:1},"A locked LUKS partition does not block explicit installation and is recorded as unsearched");
             check(locked.Scan.ReadOnlyDevices.Contains("/dev/test3")&&locked.Scan.Mounts.Length==0,"Encrypted storage stays read-only and is never mounted during answer discovery");

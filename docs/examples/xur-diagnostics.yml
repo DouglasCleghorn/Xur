@@ -3,3 +3,7 @@
 schemaVersion: 1
 apiKey: REPLACE_WITH_64_RANDOM_HEXADECIMAL_CHARACTERS
 allowControl: true
+# Optional root SSH access during this installer boot only. Requires allowControl.
+# Paste the contents of your Ed25519 .pub file; never put a private key here.
+# sshAuthorizedKeys:
+#   - "ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY"

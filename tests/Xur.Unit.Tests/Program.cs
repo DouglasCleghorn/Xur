@@ -22,6 +22,7 @@ if(args is ["--website-render",var websiteOutput]) { await ControlPanelRender.Ru
 var results = new List<string>();
 void Check(bool value,string name) { if(!value) throw new Exception(name); results.Add(name); }
 await InstallerDiagnosticsTests.Run(Check);
+await InstallerDiagnosticSshTests.Run(Check);
 await ApplicationLogTests.Run(Check);
 await BrowserErrorTests.Run(Check);
 await RebootTests.Run(Check);

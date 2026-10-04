@@ -135,6 +135,9 @@ independent scans of hybrid USB media's whole-disk ISO and child filesystems
 without competing for the original mounted block device's filesystem claim.
 The view is detached after unmount; failure to create, verify or clean up a
 view keeps the gate locked.
+Existing Btrfs volumes are scanned with `ro,rescue=nologreplay` so kernels that
+reject the old standalone `nologreplay` alias can inspect them without replaying
+the filesystem log. The block device and loop view remain read-only.
 
 ## Run the installer VM evidence suite
 

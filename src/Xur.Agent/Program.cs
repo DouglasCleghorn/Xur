@@ -51,6 +51,15 @@ var operationFile = Path.Combine(stateDir,"install-operation.json");
 Operation? operation = File.Exists(operationFile) ? JsonSerializer.Deserialize<Operation>(File.ReadAllText(operationFile)) : null;
 var gate = new SemaphoreSlim(1, 1);
 string logExport="";
+var diagnosticsStatus=new InstallerDiagnosticsStatus();
+var diagnosticSsh=new InstallerDiagnosticSsh(run);
+void PublishDiagnosticsStatus()
+{
+    var path=Path.Combine(run,"diagnostics-status.json");
+    File.WriteAllText(path+".tmp",JsonSerializer.Serialize(diagnosticsStatus));
+    File.Move(path+".tmp",path,true);
+}
+if(installer)PublishDiagnosticsStatus();
 var plans = new Dictionary<string, InstallPlan>();
 var layout = new PlainRootLayout();
 void SaveOperation(Operation value)
@@ -96,7 +105,7 @@ app.MapGet("/configuration/export",async Task<IResult>()=>{
     try{var zone=await timezoneSettings.Read();var ntp=await ntpSettings.Read();return Results.Json(new{timezone=new{zone.Current,zone.Automatic},ntp=new{ntp.Enabled,ntp.Servers},files=ConfigExport.Read(stateDir),workstationUsers=StationAccounts.Read(includeTemporary:true)});}
     catch(Exception e) when(e is InvalidOperationException or IOException or JsonException){return Results.Conflict(new{error="Configuration export could not read all settings. Retry after resolving the settings error."});}
 });
-app.MapGet("/status", () => Results.Json(new { installer, scan = storage.Scan, operation, logExport }));
+app.MapGet("/status", () => Results.Json(new { installer, scan = storage.Scan, operation, logExport, diagnostics=diagnosticsStatus }));
 // Root-private Unix socket only; the token never appears in public status or logs.
 app.MapGet("/bootstrap-config", () => Results.Json(new { state=storage.Scan.State, token=storage.BootstrapToken }));
 app.MapGet("/disks", async () => await storage.Observe());
@@ -344,6 +353,15 @@ System.Security.Cryptography.X509Certificates.X509Certificate2? diagnosticCertif
 if (installer)
 {
     await storage.DiscoverAnswers();
+    diagnosticsStatus=diagnosticsStatus with{AllowControl=storage.Diagnostics?.AllowControl==true};
+    try
+    {
+        await diagnosticSsh.Configure(storage.Diagnostics);
+        if(diagnosticSsh.Enabled)Console.Error.WriteLine("Installer diagnostic SSH enabled on port 22 for root with configured public keys only.");
+        diagnosticsStatus=diagnosticsStatus with{SshEnabled=diagnosticSsh.Enabled};
+        PublishDiagnosticsStatus();
+    }
+    catch(Exception e){diagnosticsStatus=diagnosticsStatus with{SshError="Diagnostic SSH could not start: "+e.GetType().Name};Console.Error.WriteLine(diagnosticsStatus.SshError);}
     if(storage.DiagnosticError.Length>0)Console.Error.WriteLine(storage.DiagnosticError);
     if(storage.Diagnostics is {} diagnosticConfiguration)
     {
@@ -353,6 +371,8 @@ if (installer)
             diagnosticCertificate=InstallerDiagnosticsApi.Certificate(run);
             diagnosticsApi=InstallerDiagnosticsApi.Create(diagnosticConfiguration,diagnosticCertificate,diagnosticAgent,diagnosticConsole);
             await diagnosticsApi.StartAsync(app.Lifetime.ApplicationStopping);
+            diagnosticsStatus=diagnosticsStatus with{ApiEnabled=true,AllowControl=diagnosticConfiguration.AllowControl};
+            PublishDiagnosticsStatus();
             Console.Error.WriteLine("Installer diagnostics HTTPS port 9443 enabled; certificate SHA256: "+diagnosticCertificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256));
             if((await Processes.Run("systemctl",["is-active","firewalld"],5)).ExitCode==0)
             {
@@ -362,6 +382,7 @@ if (installer)
         }
         catch(Exception e){Console.Error.WriteLine("Installer diagnostic API could not start: "+e.GetType().Name);}
     }
+    PublishDiagnosticsStatus();
     if(storage.BootstrapToken is { } bootstrapToken)
     {
         using var tokenFile=new FileStream(Path.Combine(run,"bootstrap-token"),new FileStreamOptions {Mode=FileMode.Create,Access=FileAccess.Write,UnixCreateMode=UnixFileMode.UserRead|UnixFileMode.UserWrite});
@@ -412,5 +433,11 @@ _ = Task.Run(async () => {
 });
 await app.WaitForShutdownAsync();
 if(diagnosticsApi!=null){await diagnosticsApi.StopAsync();await diagnosticsApi.DisposeAsync();}
+if(installer)
+{
+    await diagnosticSsh.Stop();
+    diagnosticsStatus=diagnosticsStatus with{ApiEnabled=false,SshEnabled=false};
+    PublishDiagnosticsStatus();
+}
 diagnosticCertificate?.Dispose();
 record PlanRequest(string Path);

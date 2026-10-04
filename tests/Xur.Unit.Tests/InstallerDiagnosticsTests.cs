@@ -29,6 +29,7 @@ static class InstallerDiagnosticsTests
         var config=DiagnosticsConfiguration.Parse(Yaml(true));
         check(config.AllowControl&&config.ApiKey==key,"Diagnostic configuration explicitly enables control with a 256-bit key");
         check(!DiagnosticsConfiguration.Parse($"schemaVersion: 1\napiKey: {key}").AllowControl,"Diagnostic control defaults off");
+        check(config.SshAuthorizedKeys.Length==0,"Existing diagnostic files do not enable SSH access");
         foreach(var yaml in new[]{"",Yaml(true)+"extra: true",Yaml(true).Replace(key,"weak"),Yaml(true).Replace("schemaVersion: 1","schemaVersion: 2"),Yaml(true)+"---\napiKey: nope",Yaml(true).Replace("allowControl: true","allowControl: []"),Yaml(true)+"apiKey: duplicate"})
         {
             bool rejected=false;try{DiagnosticsConfiguration.Parse(yaml);}catch{rejected=true;}check(rejected,"Invalid or ambiguous diagnostic YAML rejected");

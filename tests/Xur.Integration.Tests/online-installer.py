@@ -99,19 +99,50 @@ with tempfile.TemporaryDirectory() as directory:
  manifest['pipelines'][1]['stages']=[];before.write_text(json.dumps(manifest))
  invalid=subprocess.run(['python3',str(repo/'eng/label-live-manifest.py'),str(before),str(after)],capture_output=True,text=True)
  assert invalid.returncode!=0 and 'Expected exactly one' in invalid.stderr
- # Exercise the post-install marker against fixtures, never a real disk.
+ # Exercise the real post-install completion block against a simulated boot mount.
+ # These commands model mount state; marker writes still use the real temporary files.
  target=root/'installed';(target/'boot/grub2').mkdir(parents=True);(target/'var/lib/xur').mkdir(parents=True)
  marker=ks.split('# Publish only after',1)[1].split('%end',1)[0]
  marker='# Publish only after'+marker
- result=subprocess.run(['bash','-eu','-c',marker],env={**os.environ,'target':str(target)},capture_output=True)
- assert result.returncode!=0 and not (target/'boot/xur/installed').exists()
- (target/'boot/grub2/grub.cfg').write_text('set default=0\n')
- subprocess.run(['bash','-eu','-c',marker],env={**os.environ,'target':str(target)},check=True)
- assert (target/'boot/xur/installed').is_file() and (target/'var/lib/xur/installed').is_file()
+ tools=root/'mount-tools';tools.mkdir();state=root/'boot-mount.json'
+ command='''#!/usr/bin/env python3
+import json,os,pathlib,sys
+path=pathlib.Path(os.environ['XUR_BOOT_FIXTURE']);state=json.loads(path.read_text());name=pathlib.Path(sys.argv[0]).name
+if name=='mountpoint':sys.exit(0 if state['mounted'] else 1)
+if name=='findmnt':print('ro,relatime' if state['readOnly'] else 'rw,relatime');sys.exit(0)
+assert name=='mount' and sys.argv[1]=='-o' and sys.argv[3]==state['boot']
+mode=sys.argv[2];assert mode in ('remount,rw','remount,ro');state['remounts'].append(mode)
+if mode=='remount,rw' and state['failRemount']:path.write_text(json.dumps(state));sys.exit(32)
+state['readOnly']=mode=='remount,ro';pathlib.Path(state['boot']).chmod(0o555 if state['readOnly'] else 0o755);path.write_text(json.dumps(state))
+'''
+ for name in ('mountpoint','findmnt','mount'):
+  file=tools/name;file.write_text(command);file.chmod(0o700)
+ marker_cases=[]
+ for case in ('missing-grub','unmounted-boot','writable-boot','readonly-boot','remount-failure','marker-write-failure'):
+  boot=target/'boot';boot.chmod(0o755)
+  if (boot/'xur').is_dir():
+   (boot/'xur/installed').unlink();(boot/'xur').rmdir()
+  elif (boot/'xur').exists():(boot/'xur').unlink()
+  (target/'var/lib/xur/installed').unlink(missing_ok=True)
+  grub=boot/'grub2/grub.cfg';grub.unlink(missing_ok=True)
+  if case!='missing-grub':grub.write_text('set default=0\n')
+  readonly=case in ('readonly-boot','remount-failure','marker-write-failure')
+  if case=='marker-write-failure':(boot/'xur').write_text('Not a directory')
+  boot.chmod(0o555 if readonly else 0o755)
+  state.write_text(json.dumps({'boot':str(boot),'mounted':case!='unmounted-boot','readOnly':readonly,'failRemount':case=='remount-failure','remounts':[]}))
+  result=subprocess.run(['bash','-eu','-c',marker],env={**os.environ,'target':str(target),'XUR_BOOT_FIXTURE':str(state),'PATH':str(tools)+os.pathsep+os.environ['PATH']},capture_output=True)
+  observed=json.loads(state.read_text());success=case in ('writable-boot','readonly-boot')
+  assert (result.returncode==0)==success,(case,result.stderr)
+  assert (boot/'xur/installed').is_file()==success and (target/'var/lib/xur/installed').is_file()==success,case
+  assert observed['readOnly']==readonly,(case,'Original boot protection was not restored')
+  expected=['remount,rw','remount,ro'] if case in ('readonly-boot','marker-write-failure') else ['remount,rw'] if case=='remount-failure' else []
+  assert observed['remounts']==expected,(case,observed['remounts'])
+  marker_cases.append(case)
+ boot.chmod(0o755)
 # Online readiness must never be a default prerequisite of the visible console.
 prepare_unit=(repo/'os/installer/systemd/xur-installer-app-prepare.service').read_text()
 assert 'network-online.target' not in prepare_unit and 'xur-network.service' not in prepare_unit
 timer=(repo/'os/installer/systemd/xur-installer-app-check.timer').read_text()
 assert 'OnUnitInactiveSec=60s' in timer
 assert 'xur-installer-app-check.timer' in (repo/'os/installer/Containerfile').read_text()
-print(json.dumps({'suite':'OnlineInstaller','result':'Passed','digestPinned':True,'sameUpdateChannel':True,'immediateBundledBoot':True,'networkFallback':True,'boundedBackgroundCheck':True,'lateConnection':True,'noBackgroundActivation':True,'approvalIndependentOfInternet':True,'unhealthyAppFallback':True,'noEmbeddedPayload':True,'liveBootTested':False}))
+print(json.dumps({'suite':'OnlineInstaller','result':'Passed','digestPinned':True,'sameUpdateChannel':True,'immediateBundledBoot':True,'networkFallback':True,'boundedBackgroundCheck':True,'lateConnection':True,'noBackgroundActivation':True,'approvalIndependentOfInternet':True,'unhealthyAppFallback':True,'noEmbeddedPayload':True,'bootCompletionCases':marker_cases,'liveBootTested':False}))
