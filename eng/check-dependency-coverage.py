@@ -53,12 +53,6 @@ def check(root, config):
         if (path.name.endswith('lock.json') and path.name not in ('packages.lock.json', 'package-lock.json')) or path.name == 'font-source.json':
             if str(path.relative_to(root)) not in manual:
                 errors.append(f'{path.relative_to(root)}: document custom dependency checks in docs/development/dependencies.md')
-    engines = root / 'catalog/engines/Containerfile'
-    fish = root / 'os/engines/fish/Containerfile'
-    if engines.exists() and fish.exists():
-        omni = re.search(r'^FROM (\S+) AS omni$', engines.read_text(), re.M).group(1)
-        if fish.read_text().splitlines()[0] != 'FROM ' + omni:
-            errors.append('Fish and the catalog must select the same Omni version; update both Containerfiles')
     vendor = root / 'src/Xur.Control/wwwroot/vendor/ag-grid'
     if (vendor / 'package.json').exists():
         selected = json.loads((vendor / 'package.json').read_text())['dependencies']['ag-grid-community']

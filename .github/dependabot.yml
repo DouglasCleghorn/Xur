@@ -34,7 +34,6 @@ updates:
       - /catalog/engines
       - /eng
       - /os/bootc
-      - /os/engines/fish
     patterns: ["*"]
     multi-ecosystem-group: weekly-dependencies
 
@@ -49,7 +48,6 @@ updates:
   - package-ecosystem: pip
     directories:
       - /eng
-      - /os/engines/fish
       - /tests/Xur.Media.Tests
     patterns: ["*"]
     multi-ecosystem-group: weekly-dependencies

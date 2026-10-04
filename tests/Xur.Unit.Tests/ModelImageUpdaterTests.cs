@@ -32,22 +32,15 @@ static class ModelImageUpdaterTests
         current=latest;calls.Clear();var unchanged=await updater.Refresh(workload,stopped);
         check(unchanged?.Recreate==false&&calls.Any(a=>a[0]=="pull")&&!calls.Any(a=>a[0]=="rm"),"A stopped container already using latest is checked again and reused");
         calls.Clear();check(await updater.Refresh(workload,stopped with{State="running"})==null&&calls.Count==0,"Running model containers are kept intact without downloading or replacing their engine");
-        current=old;calls.Clear();var prepared=false;
-        var fish=await updater.Refresh(workload,stopped,image=>{prepared=image==latest;return Task.FromResult(old);});
-        check(prepared&&fish?.Recreate==false&&!calls.Any(a=>a[0]=="rm"),"Fish refresh compares the prepared image after resolving the latest upstream base");
+        current=old;calls.Clear();
         async Task<bool> Rejected(){try{await updater.Refresh(workload,stopped);return false;}catch(InvalidOperationException){return true;}}
         pullFails=true;calls.Clear();
         var offline=await updater.Refresh(workload,stopped);
         check(offline?.Image==old&&offline.Recreate==false&&offline.Warning?.Contains("mirror cache miss")==true&&!calls.Any(a=>a[0]=="rm"),"Failed pull reuses a stopped engine when its image is the only locally available copy");
-        prepared=false;
-        await updater.Refresh(workload,stopped,image=>{prepared=true;return Task.FromResult(image);});
-        check(!prepared,"Offline reuse of an existing Fish runtime does not build its codec layer twice");
         bool missing=false;try{await updater.Refresh(workload,null);}catch(InvalidOperationException e){missing=e.Message.Contains("no cached image");}
         check(missing,"A failed first pull with no local engine produces a clear startup error");
         cached=true;calls.Clear();offline=await updater.Refresh(workload,stopped);
         check(offline?.Image==latest&&offline.Recreate&&offline.Warning!=null,"Failed pull uses the newest locally cached upstream image rather than an older stopped container");
-        calls.Clear();offline=await updater.Refresh(workload,stopped,_=>throw new InvalidOperationException("Codec package download unavailable"));
-        check(offline?.Image==old&&offline.Recreate==false&&offline.Warning?.Contains("Codec package download unavailable")==true,"Offline Fish startup can reuse the retained prepared runtime when cached-base preparation needs unavailable packages");
         calls.Clear();offline=await updater.Refresh(workload,null);
         check(offline?.Image==latest&&offline.Warning!=null&&!calls.Any(a=>a[0]=="container"),"A fresh offline container starts from a previously downloaded engine");
         timeout=true;calls.Clear();offline=await updater.Refresh(workload,null);

@@ -15,7 +15,6 @@ configured directories and copied version information that needs refreshing.
 | llama.cpp variants, vLLM and Omni | `catalog/engines/Containerfile`, embedded by `EngineImages`; the client pulls the rolling channels on each start | `docker` |
 | Hosted Fedora native builder | `eng/Containerfile`, read by `eng/ci-native.py` | `docker` |
 | Live installer Fedora base | `os/bootc/Containerfile`; resolved once to a digest in a private build recipe | `docker` |
-| Fish image and Python codec layer | `os/engines/fish/Containerfile`, `os/engines/fish/requirements.txt` | `docker`, `pip` |
 | Playwright and axe-core | `eng/browser/package.json` and lock | `npm` |
 | AG Grid | `src/Xur.Control/wwwroot/vendor/ag-grid/package.json` and lock | `npm` |
 | Website deployment CLI | `website/package.json` and lock | `npm` |
@@ -30,7 +29,6 @@ All installations, caches and private test evidence remain under `.build/`.
 An AG Grid manifest update needs a reviewed refresh of the vendored source assets:
 run `python3 eng/update-ag-grid.py`, review the JavaScript and license changes,
 then run the Files UI checks. Coverage validation rejects a stale vendored version.
-Fish and catalog Omni references must agree; coverage validation checks both.
 The default CPU recipe uses `@engine/server`, resolved to the upstream channel
 before validation or saving. Every model-container start pulls the current
 channel, including saved selections with older tags or digests. A stopped
@@ -39,8 +37,7 @@ volumes are reused. A running container is left alone. Failed pulls use the
 newest locally downloaded Linux amd64 image for the same engine/variant, or the
 image retained by the stopped container if no named base remains cached. The
 selected image and pull error are recorded in the workload's update log. A pull
-failure with no local engine fails startup. Fish's cache includes the downloaded
-Omni image ID, so its codec layer rebuilds whenever that base changes.
+failure with no local engine fails startup.
 
 Model containers use `--restart=no`: the control service automatically restores
 models from the committed loaded profile through the same `Start` path after an

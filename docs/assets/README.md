@@ -12,7 +12,7 @@ These are source assets and should be committed. No icon-generation step is
 needed when building. The PNGs are declared as ordinary icons, not maskable
 icons, so platforms do not crop the supplied mark into a different safe area.
 
-`workstations-and-llm.png` and `speech-and-llm.png` are supplied allocation
-diagrams, preserved unchanged. They illustrate example profiles, not performance
-measurements or a certification of the named models. They contain no server
-addresses, credentials, or personal account information.
+`workstations-and-llm.png` is a supplied allocation diagram, preserved unchanged.
+It illustrates an example profile, not performance measurements or a
+certification of the named models. It contains no server addresses, credentials,
+or personal account information.

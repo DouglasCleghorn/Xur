@@ -10,8 +10,6 @@ public static class EngineStartup
             return "The checkpoint contains packed token-embedding weights (embed_tokens.weight_packed), but this engine expects embed_tokens.weight. A compatible engine recipe is required; waiting or retrying the same image will not fix it.";
         if(log.Contains("max_num_seqs (")&&log.Contains("exceeds available Mamba cache blocks"))
             return "The engine's concurrency limit exceeds its Mamba cache capacity. Select the model again to use the corrected concurrency settings; retrying the saved command will not fix it.";
-        if(log.Contains("No module named 'fish_speech'"))
-            return "The vLLM-Omni image is missing Fish Speech's codec dependency (fish_speech). A Fish-enabled engine image is required; retrying this image will not fix it.";
         var lines=log.Split('\n').Select(l=>l.Trim()).Where(l=>l.Length>0).ToArray();
         var cause=lines.LastOrDefault(l=>l.Contains("ModuleNotFoundError:")||l.Contains("ValueError:")||l.Contains("CUDA out of memory")||l.Contains("OutOfMemoryError:"));
         if(cause!=null)return "Engine startup failed: "+Redaction.Logs(cause)[..Math.Min(1200,Redaction.Logs(cause).Length)];

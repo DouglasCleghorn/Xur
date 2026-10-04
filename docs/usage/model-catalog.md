@@ -63,17 +63,9 @@ disabled prefix caching and three MTP speculative tokens. Loading or resuming a
 legacy saved Qwen MTP recipe repairs the known missing settings automatically;
 there is no need to reselect that model solely for this migration. This repairs the saved launch settings independently of the engine image update.
 
-For `fishaudio/s2-pro`, Xur builds and caches a hash-locked codec dependency layer
-on the freshly downloaded vLLM-Omni image. It preserves the base engine's
-package versions and checks codec construction before starting the model.
-The first build requires network access and can take several minutes; later
-starts reuse it while the upstream image is unchanged. A new Omni image rebuilds
-the layer. Workload errors report preparation failures, with build logs under
-`/var/lib/xur/fish-engine/<hash>/build.log`.
-
-Qwen MTP and Fish speech passed the [September 20 live smoke tests](../releases/live-model-retest-2026-09-20.md).
+Qwen MTP passed the [September 20 live smoke tests](../releases/live-model-retest-2026-09-20.md).
 Those tests do not establish Qwen3-ASR, every catalog model, or every GPU as
-working. Model lab is a text-chat tester; Fish uses its speech API.
+working. Model lab is a text-chat tester.
 
 Gaming workstation starts the installed Bazzite Plasma desktop in its own PAM
 session, Unix user and logind seat. KWin uses the selected DRM card. Persistent

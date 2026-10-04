@@ -75,7 +75,7 @@ revisions and the image identity used for each start, and avoid hot-updating run
 because upstream changed. A downloaded configuration is not permission to run
 arbitrary privileged commands or mount unassigned devices.
 
-Retain the owner's Qwen3.8 INT8 W8A16/BF16 MTP, Fish S2 Pro and Qwen3-ASR choices
+Retain the owner's Qwen3.8 INT8 W8A16/BF16 MTP and Qwen3-ASR choices
 as reference deployments and favorites, not the entire available catalog. Do
 not substitute other checkpoints automatically. The selected Qwen checkpoint's
 upstream card currently describes a vLLM pin with concurrency and prefix-cache

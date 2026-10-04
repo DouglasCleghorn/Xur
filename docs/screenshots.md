@@ -19,7 +19,6 @@ usernames, file paths, account names, or model prompts in public screenshots.
 | --- | --- | --- | --- | --- |
 | `docs/assets/xur-header.png` | README header; website social sharing | User-supplied artwork, unchanged | 2026-09-20; no private data or embedded metadata | Branding changes |
 | `docs/assets/workstations-and-llm.png` | README example profiles; website home/model guide | User-supplied diagram, unchanged | 2026-09-20; illustrative allocation, not a benchmark | Workstation/profile changes |
-| `docs/assets/speech-and-llm.png` | README example profiles; website home/model guide | User-supplied diagram, unchanged | 2026-09-20; illustrative allocation, not a compatibility guarantee | Model/engine catalog changes |
 
 No live-server screenshots are published. The diagrams above are artwork.
 The following app screenshots are produced by `node eng/capture-website.cjs`
@@ -49,6 +48,12 @@ readability; key actions are also described in text.
 | User-supplied bug screenshots | Reproduce reported defects | T3 attachments; referenced in conversation, not copied into source | Keep private; add a sanitized published-image entry before reuse |
 
 ## Change log
+
+- 2026-10-04: Retired `docs/assets/speech-and-llm.png` and removed its README
+  and website uses because the illustrated model-specific runtime preparation
+  was removed. User-supplied allocation diagram; privacy reviewed 2026-09-20,
+  with no private data. Also rechecked the published profile-editor and model-lab
+  screenshots: synthetic fixture data, no references to the removed runtime.
 
 - 2026-10-02: Regenerated the private profile-editor capture family below for
   dropdown activation and the adjacent Add user button at all four widths.

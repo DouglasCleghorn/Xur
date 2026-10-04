@@ -10,14 +10,14 @@ public record ModelImageSelection(string Image,bool Recreate,string? Warning=nul
 public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResult>>? execute=null)
 {
     readonly Func<string,string[],int,Task<ProcessResult>> run=execute??((exe,args,seconds)=>Processes.Run(exe,args,seconds));
-    public async Task<ModelImageSelection?> Refresh(Workload workload,RuntimeInstance? instance,Func<string,Task<string>>? prepare=null)
+    public async Task<ModelImageSelection?> Refresh(Workload workload,RuntimeInstance? instance)
     {
         if(instance?.State=="running")return null;
         var reference=EngineImages.For(workload.Recipe);
         ProcessResult pulled;
         try{pulled=await run("podman",["pull","--quiet","--policy=always","--arch=amd64",reference],900);}
         catch(OperationCanceledException){pulled=new(124,"Image pull timed out.");}
-        string? warning=null;string image;bool prepared=false;
+        string? warning=null;string image;
         if(pulled.ExitCode==0)image=Identity(pulled.Output.Split('\n')[0].Trim());
         else
         {
@@ -26,8 +26,8 @@ public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResul
             if(cached==null && instance!=null)
             {
                 // A stopped container retains its last usable image even if its
-                // tag was removed. Fish's image already contains the codec layer.
-                cached=await StoppedImage(workload,instance);prepared=true;
+                // tag was removed.
+                cached=await StoppedImage(workload,instance);
             }
             if(cached==null)throw new InvalidOperationException("Latest engine image download failed for "+reference+" and no cached image is available: "+log);
             image=Identity(cached);
@@ -35,17 +35,6 @@ public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResul
         }
         // Use pull's result, rather than re-reading a shared tag that another
         // simultaneous workload could have updated after our download.
-        if(prepare!=null && !prepared)
-        {
-            try{image=Identity(await prepare(image));}
-            catch(InvalidOperationException e) when(warning!=null && instance!=null)
-            {
-                // Offline, a newly assembled codec layer may need uncached
-                // packages. The retained prepared runtime is still usable.
-                image=await StoppedImage(workload,instance);
-                warning+=" Using the retained prepared runtime because preparation of the cached base failed: "+Redaction.Logs(e.Message);
-            }
-        }
         if(instance==null)return new(image,false,warning);
         if(await StoppedImage(workload,instance)==image)return new(image,false,warning);
         // No force flag: a concurrently started container must not be removed.

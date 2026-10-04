@@ -39,7 +39,7 @@ static class EngineStartupTests
         check(mtp.Contains("--no-enable-prefix-caching")&&mtp.Contains("--mamba-cache-mode")&&mtp.Contains("--speculative-config"),"Qwen MTP explicitly enables speculation and aligned Mamba caching with prefix reuse disabled");
         check(!ModelLaunchSettings.Vllm("owner/ordinary",1).Contains("--speculative-config"),"MTP is never inferred from unrelated models");
         check(EngineStartup.Failure("max_num_seqs (256) exceeds available Mamba cache blocks (115)")?.Contains("concurrency limit")==true,"Reported Mamba allocation failure is not reported as a health timeout");
-        check(EngineStartup.Failure("ModuleNotFoundError: No module named 'fish_speech'")?.Contains("codec dependency")==true,"Missing Fish module identifies the engine dependency failure");
+        check(EngineStartup.Failure("ModuleNotFoundError: No module named 'missing_dependency'\nEngineCore failed to start.")=="Engine startup failed: ModuleNotFoundError: No module named 'missing_dependency'","Missing engine dependencies retain the actionable cause instead of the generic initialization failure");
         var logged="ValueError: There is no module or parameter named 'embed_tokens.weight_packed' in Qwen3_5Model. The available parameters belonging to embed_tokens (VocabParallelEmbedding) are: {'embed_tokens.weight'}\nEngineCore failed to start.";
         check(EngineStartup.Failure(logged)?.Contains("packed token-embedding weights")==true,"Recorded Qwen embedding failure produces a specific compatibility error");
         check(EngineStartup.Failure("Loading safetensors checkpoint shards: 50%\nWARNING: using default context") is null,"Slow checkpoint loading and warnings are not startup failures");

@@ -1,7 +1,7 @@
 # Xur documentation
 
-Current source review: **2026-09-20**, including file management, Fish speech
-runtime preparation, and the installer CI readiness fix. Xur remains a preview;
+Current source review: **2026-09-20**, including file management
+and the installer CI readiness fix. Xur remains a preview;
 implemented behavior and hardware validation are separate.
 
 ## Start here
@@ -27,8 +27,7 @@ implemented behavior and hardware validation are separate.
   successful workloads while a sibling fails.
 - Named workstations retain Moonlight pairing across profiles and GPU changes.
   The owner confirmed desktop, input, game rendering and sound on an RTX 3090.
-- Qwen MTP inference and Fish S2 Pro speech synthesis passed live smoke tests.
-  Fish now prepares and caches its pinned codec dependency image automatically.
+- Qwen MTP inference passed live smoke tests.
   See the [dated retest and its limits](releases/live-model-retest-2026-09-20.md).
 - File management includes storage/home tabs, a sortable/filterable grid,
   streamed file and ZIP downloads, rename/move, confirmed deletion and cached
@@ -48,8 +47,7 @@ an actual release; the website download page handles missing or multipart media.
 Remaining acceptance work includes a completed hosted online ISO build and its
 boot/install/reboot tests, simultaneous physical workstations with USB/audio
 isolation and hotplug/reboot checks, and broader GPU/model compatibility testing.
-The Fish test did not cover voice cloning, streamed audio or concurrent speech;
-it did not validate Qwen3-ASR. GPU allocations remain exclusive: separate desktops
+Qwen3-ASR remains unvalidated. GPU allocations remain exclusive: separate desktops
 on different outputs of one GPU and shared-GPU workload scheduling are unsupported.
 
 Files in `docs/releases/` are dated records. The historical
