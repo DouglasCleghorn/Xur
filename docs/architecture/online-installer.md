@@ -1,12 +1,12 @@
 # Online installer and public updates
 
 The ISO contains Fedora's live Anaconda environment and a bundled Xur application.
-It does not embed Bazzite. After the operator approves an exact disk, the installer
-resolves `ghcr.io/ublue-os/bazzite-nvidia-open:stable` to a digest and hands that
-fixed `registry:` reference to Anaconda/bootc. The installed update reference
-remains the same stable channel used by `os-update`. Image pulls require the
-Bazzite signing key through containers/image's sigstore policy; TLS stays enabled.
-The digest/channel receipt is copied into `/etc/xur/upstream.json`.
+It does not embed Bazzite. After the operator approves an exact disk, Anaconda/bootc
+installs directly from `registry:ghcr.io/ublue-os/bazzite-nvidia-open:stable` using
+the approved Kickstart file. Installation and `os-update` use the same stable
+channel. Image pulls require the Bazzite signing key through containers/image's
+sigstore policy; TLS stays enabled.
+The installed update channel is saved in `/etc/xur/upstream.json`.
 
 Fresh disk plans create a FAT32 EFI partition, an ext4 `/boot`, and a Btrfs root
 volume using the remaining space. User homes under `/var/home` share that Btrfs
@@ -17,7 +17,7 @@ with current media. Application updates preserve filesystems and reject
 incompatible hosts. See [Steam storage](../usage/steam-storage.md)
 for sharing limits and validation.
 
-Before source resolution, the approved installation starts chronyd, requests fresh
+Before starting Anaconda, the approved installation starts chronyd, requests fresh
 time measurements and waits up to 30 seconds for synchronization. It writes UTC to
 the hardware clock, when present, and verifies the readback before starting
 Anaconda. This prevents Anaconda's initial RTC read from restoring stale time and
@@ -28,10 +28,10 @@ The live image includes one SELinux permission allowing chronyd to reply to the
 installer's Unix datagram socket. Enforcement remains enabled; without this
 reply permission, the H 255 preflight timed out even with chronyd synchronized.
 
-Resolution fails before Anaconda starts if the registry cannot be reached. A
-network failure during the subsequent image download can still interrupt an
-approved installation; the ISO is not an offline recovery image. Registry images
-are downloaded directly from GHCR, without an Xur-hosted duplicate.
+Anaconda/bootc resolves the stable tag when it downloads the OS image. Registry
+or network failures can interrupt an approved installation after disk preparation;
+the ISO is not an offline recovery image. Registry images are downloaded directly
+from GHCR, without an Xur-hosted duplicate.
 
 Normal boot starts the bundled Xur application without waiting for internet or
 `network-online.target`. The console and Wi-Fi setup become available
@@ -47,8 +47,8 @@ marker still require removing the USB or choosing the SSD in the firmware menu.
 Both UEFI and BIOS menus use the same configuration and retain the supplied EFI
 loaders. Entering setup never bypasses disk review and Yes/No approval.
 
-Installation progress shows a six-stage bar: time synchronization, source
-resolution, disk preparation, download, deployment and configuration. The bar
+Installation progress shows a five-stage bar: time synchronization, disk
+preparation, download, deployment and configuration. The bar
 counts completed stages. During download, the console embeds bootc's native
 terminal progress: its layer bar and the current layer's byte bar, size and
 transfer rate. Layers vary in size, so their count is not an overall byte
@@ -109,7 +109,7 @@ clock and system executables remain intact. A broken overlay fails the build
 instead of shipping services that cannot start.
 
 The source implementation is covered by clock/RTC preflight, executable-path,
-digest-pinning, manifest, signed-update,
+stable-channel installation, manifest, signed-update,
 network-failure and unhealthy-app fallback tests. Actual online Anaconda
 installation, live SELinux transitions and Moonlight GPU switching still need
 validation on newly built media/hardware; historical offline ISO tests do not

@@ -67,7 +67,7 @@ sys.exit(int(os.environ.get('FIXTURE_EXIT', '0')))
         .replace("pathlib.Path('/run/xur/install-download.json')", 'pathlib.Path(' + repr(str(status)) + ')'))
     wrapper.chmod(0o700)
     args_file = root / 'args.json'
-    arguments = ['install', 'to-filesystem', '--source-imgref=registry:ghcr.io/test/os@sha256:' + 'a' * 64,
+    arguments = ['install', 'to-filesystem', '--source-imgref=registry:ghcr.io/test/os:stable',
                  '--target-imgref=ghcr.io/test/os:stable', '--karg=value with spaces;$()', '/fixture/approved-target']
     env = {**os.environ, 'FIXTURE_ARGS': str(args_file), 'TERM': 'dumb'}
     for code in (0, 9):
@@ -126,7 +126,6 @@ sys.exit(result.returncode)
         installer.write_text((repo / 'os/installer/run-install').read_text()
             .replace('/run/xur', str(run))
             .replace('/usr/libexec/xur-check-install-clock', str(clock))
-            .replace('/usr/libexec/xur-resolve-install-source', str(clock))
             .replace('/usr/libexec/xur-install-bin', str(root / 'bin'))
             .replace('/usr/bin/anaconda', str(anaconda)))
         result = subprocess.run(['bash', str(installer)], env={**env, 'FIXTURE_EXIT': str(code), 'FIXTURE_INSTALL_ARGS': json.dumps(arguments)}, capture_output=True, text=True, timeout=10)

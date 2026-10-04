@@ -57,11 +57,11 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
                     title="Installation progress";body=operation==null?"No installation has started.":operation.Stage+"\n"+operation.Message;
                     if(operation!=null)
                     {
-                        var progress=operation.Stage=="Complete"?new InstallationProgress(6,"Complete"):operation.Progress??new InstallationProgress(0,"Preparing installation");
-                        var completed=operation.Stage=="Complete"?6:Math.Clamp(progress.CompletedSteps,0,5);
-                        body+="\n\n["+new string('#',completed*4)+new string('-',24-completed*4)+$"] {completed}/6 stages complete\n"+progress.CurrentStep;
+                        var progress=operation.Stage=="Complete"?new InstallationProgress(5,"Complete"):operation.Progress??new InstallationProgress(0,"Preparing installation");
+                        var completed=operation.Stage=="Complete"?5:Math.Clamp(progress.CompletedSteps,0,4);
+                        body+="\n\n["+new string('#',completed*4)+new string('-',20-completed*4)+$"] {completed}/5 stages complete\n"+progress.CurrentStep;
                         if(progress.Detail.Length>0)body+="\n"+progress.Detail;
-                        body+="\nTime check → Source → Disk → Download → Deploy → Configure";
+                        body+="\nTime check → Disk → Download → Deploy → Configure";
                     }
                     if(operation?.Stage=="Complete"){body+="\nRemove the installer USB when restarting.\nAfter reboot, use the displayed web address and access code to create the required administrator account.";options.Add(new('r',"Reboot into installed system"));}
                     if(operation?.Stage=="Failed")body+="\nKeep this installer running while reviewing the logs. Rebooting clears them.\nNo automatic retry. A new attempt requires rebooting the installer and approving the disk again.";
