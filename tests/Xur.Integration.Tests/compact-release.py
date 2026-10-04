@@ -4,10 +4,10 @@ import importlib.machinery,contextlib,hashlib,importlib.util,json,os,pathlib,shu
 from unittest.mock import patch
 repo=pathlib.Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('release',repo/'eng/ci-release.py');release=importlib.util.module_from_spec(spec);spec.loader.exec_module(release)
-with tempfile.TemporaryDirectory() as directory:
+with tempfile.TemporaryDirectory(dir=repo/'.build') as directory:
  root=pathlib.Path(directory);release.ROOT=root
  (root/'eng').mkdir();(root/'os/bootc').mkdir(parents=True);(root/'docs/usage').mkdir(parents=True)
- for name in ['update-repository.py','ci-installer.py']:shutil.copyfile(repo/'eng'/name,root/'eng'/name)
+ for name in ['update-repository.py','ci-installer.py','verify-release.py']:shutil.copyfile(repo/'eng'/name,root/'eng'/name)
  (root/'docs/usage/install.md').write_text('Installation guide')
  key=root/'key';subprocess.run(['openssl','genpkey','-algorithm','ED25519','-out',str(key)],check=True,capture_output=True)
  (root/'os/bootc/application-update-key.pem').write_bytes(subprocess.check_output(['openssl','pkey','-in',str(key),'-pubout']))
@@ -23,13 +23,19 @@ with tempfile.TemporaryDirectory() as directory:
  def run(*args):
   calls.append(args)
   if args[:2]==('git','ls-remote'):return commit+' refs/heads/main'
+  if args[:2]==('gh','api'):
+   tag=args[2].rsplit('/',1)[-1]
+   return json.dumps({'draft':False,'prerelease':tag.startswith('nightly-'),'target_commitish':commit})
   assert args[:2]==('gh','release'),args
   action,tag=args[2:4]
   if action=='create':
    if tag in ('nightly','stable'):aliases[tag]={};return ''
    assert tag not in releases
-   notes=pathlib.Path(args[args.index('--notes-file')+1]).read_text();assert '**Download Xur installer ISO**' in notes or 'Installer inputs are unchanged' in notes
+   notes=pathlib.Path(args[args.index('--notes-file')+1]).read_text();assert '**Download Xur installer ISO**' in notes or 'Installer builds are manual' in notes
    start=args.index('--notes-file')+2;releases[tag]={pathlib.Path(f).name:pathlib.Path(f).read_bytes() for f in args[start:]};return ''
+  if action=='download':
+   name=args[args.index('--pattern')+1];destination=pathlib.Path(args[args.index('--dir')+1]);destination.mkdir(parents=True,exist_ok=True)
+   (destination/name).write_bytes(releases[tag][name]);return ''
   if action=='upload':
    f=pathlib.Path(args[4]);aliases[tag][f.name]=f.read_text();return ''
   assert action=='edit';return ''
@@ -63,6 +69,32 @@ with tempfile.TemporaryDirectory() as directory:
    assert 'installer' not in json.loads(releases[prefix+'1.2']['xur-update.json'])['release']
    assert aliases[channel]['migration']==frozen['migration']
    assert aliases[channel]['current']==prefix+'1.2\n'
+   # Detached installer publication preserves the already-live update bytes,
+   # signature, sequence and discovery pointers for both channels.
+   live_release=dict(releases[prefix+'1.2']);live_pointers=dict(aliases[channel])
+   shutil.rmtree(root/'.build/ci-app-release',ignore_errors=True)
+   release.publish_installer(channel,'1.2',commit)
+   media=releases[prefix+'1.2-installer']
+   assert set(media)=={f'xur-{channel}-1.2-x86_64.iso','xur-update-x86_64.tar.gz','xur-update.json'}
+   assert releases[prefix+'1.2']==live_release and aliases[channel]==live_pointers
+   assert media['xur-update-x86_64.tar.gz']==live_release['xur-update-x86_64.tar.gz']
+   original=json.loads(live_release['xur-update.json'])['release'];detached=json.loads(media['xur-update.json'])['release']
+   assert {k:v for k,v in detached.items() if k!='installer'}==original
+   descriptor=root/'detached.json';descriptor.write_bytes(media['xur-update.json'])
+   media_iso=root/'detached.iso';media_iso.write_bytes(media[f'xur-{channel}-1.2-x86_64.iso'])
+   verify_spec=importlib.util.spec_from_file_location('verify',root/'eng/verify-release.py');verify=importlib.util.module_from_spec(verify_spec);verify_spec.loader.exec_module(verify)
+   verify.verify(descriptor,root/'os/bootc/application-update-key.pem',iso=media_iso)
+   assert '--latest=false' in calls[-1]
+   # The detached release cannot upload media if the app archive changed.
+   shutil.rmtree(root/'.build/ci-app-release')
+   archive_bytes=releases[prefix+'1.2']['xur-update-x86_64.tar.gz']
+   releases[prefix+'1.2']['xur-update-x86_64.tar.gz']=archive_bytes+b'tampered'
+   before=len([c for c in calls if c[:3]==('gh','release','create')])
+   try:release.publish_installer(channel,'1.2',commit)
+   except ValueError:pass
+   else:raise AssertionError('Tampered published app archive accepted')
+   assert before==len([c for c in calls if c[:3]==('gh','release','create')])
+   releases[prefix+'1.2']['xur-update-x86_64.tar.gz']=archive_bytes
  # Actual signed bridge descriptors remain readable by the unchanged legacy checker,
  # while the upgraded checker follows the same channel to the three-asset release.
  loader=importlib.machinery.SourceFileLoader('migration_updater',str(repo/'os/bootc/app-update'));spec=importlib.util.spec_from_loader(loader.name,loader);u=importlib.util.module_from_spec(spec);loader.exec_module(u)
@@ -78,4 +110,4 @@ with tempfile.TemporaryDirectory() as directory:
   assert u.check_legacy(stage)['version']=='1.0'
   upgraded=u.check(stage);assert upgraded['version']=='1.2'
   downloaded=u.download_bundle(stage,upgraded);assert hashlib.file_digest(downloaded.open('rb'),'sha256').hexdigest()==upgraded['sha256']
-print(json.dumps({'suite':'CompactRelease','result':'Passed','installerReleaseAssets':3,'appOnlyAssets':2,'transitionAssets':6,'legacyPointersFrozen':True,'stableAndNightly':True}))
+print(json.dumps({'suite':'CompactRelease','result':'Passed','installerReleaseAssets':3,'appOnlyAssets':2,'transitionAssets':6,'legacyPointersFrozen':True,'stableAndNightly':True,'detachedInstallerPreservesLiveUpdate':True}))

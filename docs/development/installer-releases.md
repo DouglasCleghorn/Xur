@@ -2,41 +2,47 @@
 
 A push to `main` (Nightly) or `release` (Stable) runs **Build and publish release**:
 
-1. Run the reusable **Source checks** workflow for this exact commit, then build
-   and run the app's fast and browser checks. Pull requests run the same source
-   checks without release permissions or signing secrets.
-2. Always create and upload the tested application update archive without an
-   approval gate. Compare installer inputs against the channel's last published
-   ISO, including changes from canceled or unpublished runs. Application-only
-   changes skip the ISO. OS files, build tooling, native helpers, licensing and
-   release/installer workflows select a rebuild. Missing baselines or history and
-   failed lookups select a conservative rebuild. Manual dispatch can force a build
-   with `build_iso` for final release media verification.
-3. When selected, transfer the tested publication context to `installer.yml` with
-   commit, channel and SHA-256 receipts. The installer verifies it instead of
-   repeating publication and application checks. Build and inspect the online ISO
+1. Run the reusable **Source checks** workflow and the application build in
+   parallel for this exact commit. The application build runs fast and browser
+   checks and always uploads the tested update archive without approval. Pull
+   requests run source checks without release permissions or signing secrets.
+2. Publish the signed application update as soon as both checks and the app build
+   pass. Nightly publishes automatically. Stable waits for the maintainer's
+   `stable` GitHub Environment approval after hardware testing. Both environments
+   retain their branch restrictions (`main` for Nightly, `release` for Stable) and
+   signing secrets. Publication rejects superseded commits and verifies candidate
+   hashes and commit/channel receipts. It never waits for an ISO job.
+3. **ISO builds are manual only.** Use **Run workflow**, select `main` or `release`,
+   and enable `build_iso` to build and publish media. A push never builds an ISO,
+   even when installer or OS inputs change. Review those changes and request new
+   media when needed; the previous installer remains available until then.
+4. When requested, transfer the tested publication context to `installer.yml`
+   with commit, channel and SHA-256 receipts. The installer verifies it instead of
+   repeating application publication and checks. Build and inspect the online ISO
    in an isolated Fedora VM on a disposable GitHub-hosted runner. Inspect embedded
-   files, BIOS/UEFI layout, SELinux settings and absence of a Bazzite payload. The
-   tested context carries the selected application channel; Bazzite uses Stable.
-4. Retain unsigned app and installer candidates for seven days, pruning older
-   candidates for that channel. The signing key is unavailable to both build jobs.
-   Transferred build contexts expire after one day and are removed after publication.
-5. Nightly publishes automatically after every required check and build passes.
-   Stable waits for the maintainer's `stable` GitHub Environment approval after
-   hardware testing. Both environments retain their branch restrictions (`main`
-   for Nightly, `release` for Stable) and signing secrets. The publication job
-   depends on source checks, the app build and any selected installer inspection.
-   A failed or canceled required ISO blocks publication. It rejects superseded
-   commits and verifies candidate hashes and commit/channel receipts.
-6. Sign a self-contained JSON descriptor containing the app archive manifest and,
-   when rebuilt, the installer hash/inspection receipt. Publish it with the app
-   archive and optional ISO, then advance the channel's
-   `current` pointer and remove the Actions candidates. No source tarball is
-   uploaded; GitHub provides source archives for each tag.
+   files, BIOS/UEFI layout, SELinux settings and absence of a Bazzite payload. This
+   runs alongside application publication; failure does not block or undo the
+   update. The context carries the selected application channel; Bazzite uses Stable.
+5. After inspection and application publication succeed, publish a separate
+   `nightly-<version>-installer` or `v<version>-installer` release. Stable installer
+   publication also requires environment approval. Download and verify the signed
+   app descriptor and archive from the matching, already-published app release,
+   verify the inspected ISO candidate, then sign a new descriptor that adds the ISO
+   receipt. The original app archive bytes and signed update sequence are retained.
+   This release never changes the app release, migration bridge, channel's
+   `current` pointer or GitHub's **Latest** designation.
+6. Retain unsigned candidates for seven days, pruning older candidates for that
+   channel. Build jobs cannot access signing keys. Contexts expire after one day;
+   app publication removes its app candidate, and installer publication removes
+   its installer candidate and context. No source tarball is uploaded; GitHub
+   provides source archives for each tag. New pushes cancel older runs, including
+   runs waiting for Stable approval, and each publisher rejects superseded commits.
 
 Installer releases have **three assets**: `xur-<channel>-<version>-x86_64.iso`,
-`xur-update-x86_64.tar.gz`, and `xur-update.json`. The first compact-format release on each channel also has
-the legacy descriptor, detached signature and pointer (reusing the app archive). Those transition releases must remain available. Legacy
+`xur-update-x86_64.tar.gz`, and `xur-update.json` (a migration bridge may retain
+the archive's original bundle-ID filename). The first compact-format application
+release on each channel also has the legacy descriptor, detached signature and
+pointer (reusing the app archive). Those transition releases must remain available. Legacy
 Nightly `nightly/latest` and GitHub's Stable **Latest** designation stay fixed on
 these bridges. New clients use `nightly/current` or `stable/current`, which point
 to immutable versioned releases. Consequently GitHub's **Latest** badge is a
@@ -44,7 +50,7 @@ migration entry point, not the newest Stable version; use Xur's channel selector
 or the website download page. Do not manually move that designation or delete a
 migration release. The channel alias's `migration` asset records its fixed tag.
 
-Application-only releases contain the app archive and signed JSON descriptor.
+Application releases contain the app archive and signed JSON descriptor.
 The last installer release remains available; the website selects releases that
 contain media. The descriptor never claims that an older ISO was built from the
 newer application commit. New pushes cancel older runs on the same branch,
@@ -56,11 +62,13 @@ Stable uses `YY.MM.z` (for example `26.09.1`); Nightly uses `YY.MM.zzz`
 (`26.09.001`). Each channel has its own monthly counter, starting at 1 in a
 new UTC calendar month. `eng/release-version.py` selects one more than the
 highest existing tag number for that channel and month. Gaps are not reused;
-failed or cancelled builds that did not publish a tag do not consume a number.
+failed or cancelled builds that did not publish an app tag do not consume a number.
+Installer tags reuse the matching app version and do not consume another number.
 Nightly numbers have at least three digits, so the counter continues past 999.
 Keep release tags even when cleaning up old assets to preserve the counter.
 
-Tags remain `v26.09.1` and `nightly-26.09.001`. ISO names include both the
+Application tags remain `v26.09.1` and `nightly-26.09.001`; manually requested
+media uses `v26.09.1-installer` and `nightly-26.09.001-installer`. ISO names include both the
 channel and version: `xur-stable-26.09.1-x86_64.iso` and
 `xur-nightly-26.09.001-x86_64.iso`. Existing long-version releases and migration
 pointers remain valid. Updater ordering uses the signed publication sequence,
@@ -121,8 +129,9 @@ Google's mirror, as required by `AGENTS.md`.
   See [builder readiness](build.md) for details.
 - **No ISO in Releases:** the installer may have failed, been superseded by a new
   commit, or (for Stable) be waiting for approval. Candidates are Actions artifacts
-  until the publication job attaches them to a versioned release. Earlier app-only
-  releases do not acquire media retroactively.
+  until the installer publisher creates a separate versioned media release.
+  Application releases do not acquire media retroactively. Check whether the run
+  was manually dispatched with `build_iso`; pushes intentionally skip media.
 
 A new push supersedes the branch's previous release workflow. For Stable, review
 and approve only the newest successful candidate. Nightly has no manual approval
