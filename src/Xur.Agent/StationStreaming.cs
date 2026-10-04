@@ -31,9 +31,12 @@ public static class StationStreaming
     record Credentials(string Password);
     static async Task Run(string command,string[] args,int seconds=20)
     {var r=await Processes.Run(command,args,seconds);if(r.ExitCode!=0)throw new InvalidOperationException(command+" failed while preparing streaming: "+Redaction.Logs(r.Output)[..Math.Min(2000,Redaction.Logs(r.Output).Length)]);}
+    // Sunshine also logs to stdout, which the transient service sends to journald.
+    // Discard its duplicate file stream. The pinned version reports a harmless
+    // rotation warning for /dev/null; it runs as the unprivileged station user.
     public static string Configuration(Workload w,GpuDevice gpu,string path,int port=47989)=>
         $"sunshine_name = {string.Concat(w.Name.Where(c=>!char.IsControl(c)))}\nport = {port}\naddress_family = both\norigin_web_ui_allowed = pc\nupnp = disabled\nlan_encryption_mode = 2\nwan_encryption_mode = 2\nsystem_tray = disabled\nmin_log_level = info\ncapture = kwin\nencoder = {(gpu.Vendor=="NVIDIA"?"nvenc":gpu.Vendor is "AMD" or "Intel"?"vaapi":"software")}\nadapter_name = {gpu.Nodes.FirstOrDefault()??""}\n"+
-        $"file_apps = {path}/apps.json\nfile_state = {path}/state/sunshine_state.json\ncredentials_file = {path}/state/credentials.json\npkey = {path}/key.pem\ncert = {path}/cert.pem\nlog_path = {path}/state/sunshine.log\n";
+        $"file_apps = {path}/apps.json\nfile_state = {path}/state/sunshine_state.json\ncredentials_file = {path}/state/credentials.json\npkey = {path}/key.pem\ncert = {path}/cert.pem\nlog_path = /dev/null\n";
     public static string Applications(bool headless,string helper)
     {
         var desktop=new Dictionary<string,object>{{"name","Desktop"},{"image-path","desktop.png"}};
@@ -97,7 +100,7 @@ public static class StationStreaming
         // An ACL alone does not prove that cgroups or SELinux permit the device.
         var probeUnit="xur-stream-access-"+Guid.NewGuid().ToString("N");
         await Run("systemd-run",["--quiet","--wait","--collect","--unit="+probeUnit,"--property=User="+user,"--property=DevicePolicy=closed","--property=NoNewPrivileges=true",..await StreamDeviceArguments(gpu),"--property=RuntimeMaxSec=10","/usr/bin/python3","-c","import os,sys; [os.close(os.open(p, os.O_RDWR | os.O_CLOEXEC)) for p in sys.argv[1:]]",..StationDeviceAccess.Nodes(gpu),"/dev/uinput"]);
-        if(!running)await Run("systemd-run",["--unit="+Unit(w.Id),"--collect","--property=Type=exec","--property=User="+user,"--property=DevicePolicy=closed","--property=NoNewPrivileges=true",..await StreamDeviceArguments(gpu),"--property=KillMode=control-group","--property=UMask=0077","--property=WorkingDirectory="+Runtime,..RecoveryPolicy(),"--property=PartOf=xur-station-"+w.Id+".service","--setenv=HOME=/var/home/"+user,"--setenv=XDG_RUNTIME_DIR=/run/user/"+uid,"--setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"+uid+"/bus","--setenv=WAYLAND_DISPLAY="+wayland,"--setenv=QT_QPA_PLATFORM=offscreen","--setenv="+TimezoneSettings.StationEnvironment,..encoderEnvironment,"--setenv=LD_PRELOAD="+Runtime+"/usr/lib/libxur-seat-input.so","--setenv=XUR_INPUT_PHYS="+StationSeats.Physical(w.Id),"--setenv=XDG_SEAT="+StationSeats.Seat(w.Id),Runtime+"/usr/bin/sunshine",path+"/sunshine.conf"]);
+        if(!running)await Run("systemd-run",["--unit="+Unit(w.Id),"--collect","--property=Type=exec","--property=StandardOutput=journal","--property=StandardError=journal","--property=User="+user,"--property=DevicePolicy=closed","--property=NoNewPrivileges=true",..await StreamDeviceArguments(gpu),"--property=KillMode=control-group","--property=UMask=0077","--property=WorkingDirectory="+Runtime,..RecoveryPolicy(),"--property=PartOf=xur-station-"+w.Id+".service","--setenv=HOME=/var/home/"+user,"--setenv=XDG_RUNTIME_DIR=/run/user/"+uid,"--setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"+uid+"/bus","--setenv=WAYLAND_DISPLAY="+wayland,"--setenv=QT_QPA_PLATFORM=offscreen","--setenv="+TimezoneSettings.StationEnvironment,..encoderEnvironment,"--setenv=LD_PRELOAD="+Runtime+"/usr/lib/libxur-seat-input.so","--setenv=XUR_INPUT_PHYS="+StationSeats.Physical(w.Id),"--setenv=XDG_SEAT="+StationSeats.Seat(w.Id),Runtime+"/usr/bin/sunshine",path+"/sunshine.conf"]);
         async Task FailStart(string message)
         {
             await File.WriteAllTextAsync(path+"/startup-error",message);
