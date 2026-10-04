@@ -4,8 +4,8 @@
 
 Always pull Docker Hub images through Google's `mirror.gcr.io` cache. Use fully
 qualified `mirror.gcr.io/library/<image>` or `mirror.gcr.io/<publisher>/<image>`
-references in new recipes, Dockerfiles, tests and build commands. Preserve pinned
-digests. Never add a silent fallback to Docker Hub: a cache miss must fail with a
+references in new recipes, Dockerfiles, tests and build commands.
+Never add a silent fallback to Docker Hub: a cache miss must fail with a
 clear error or be resolved by choosing an explicitly approved alternate registry.
 Google caches public images; it is not a full clone and does not serve private Hub
 repositories. GHCR, Quay and other explicit registries retain their own addresses.
