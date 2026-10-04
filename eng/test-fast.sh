@@ -43,6 +43,7 @@ python3 tests/Xur.Integration.Tests/log-compression.py > .build/fast/log-compres
 python3 tests/Xur.Integration.Tests/application-update.py > .build/fast/application-updates.json
 python3 tests/Xur.Integration.Tests/online-installer.py > .build/fast/online-installer.json
 python3 tests/Xur.Integration.Tests/installer-preflight.py > .build/fast/installer-preflight.json
+python3 tests/Xur.Integration.Tests/installer-progress.py > .build/fast/installer-progress.json
 python3 tests/Xur.Integration.Tests/install-failure.py > .build/fast/install-failure.json
 python3 tests/Xur.Integration.Tests/compact-update.py > .build/fast/compact-update.json
 python3 tests/Xur.Integration.Tests/compact-release.py > .build/fast/compact-release.json

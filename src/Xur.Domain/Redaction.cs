@@ -4,7 +4,7 @@ public static partial class Redaction
 {
     public static string Logs(string value)
     {
-        var lines=value.Split('\n').Where(l=>!l.Any(c=>"▀▄█".Contains(c)));
+        var lines=value.Split('\n').Where(l=>!l.Any(c=>"▀▄█".Contains(c))||l.StartsWith("Fetching layers ",StringComparison.Ordinal)||l.StartsWith("└ Fetching ",StringComparison.Ordinal));
         return string.Join('\n',lines.Select(line=> {
             line=Code().Replace(line,"Access code: [REDACTED]");
             line=Claim().Replace(line,"[REDACTED CLAIM]");
