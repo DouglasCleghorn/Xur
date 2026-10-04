@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   checks:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -39,3 +39,25 @@ jobs:
           python3 tests/Xur.Integration.Tests/ci-build.py
           python3 tests/Xur.Integration.Tests/source-manifest.py
           python3 website/build.py
+  installer-usb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Install FAT32 fixture tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dosfstools libarchive-tools xorriso
+      - name: Test streaming installer updates on file-backed FAT32 media
+        run: |
+          mkdir -p .build/usb-update/tmp
+          sudo env TMPDIR="$PWD/.build/usb-update/tmp" \
+            DOTNET_CLI_HOME="$PWD/.build/usb-update/dotnet-home" \
+            NUGET_PACKAGES="$PWD/.build/usb-update/packages" \
+            NUGET_HTTP_CACHE_PATH="$PWD/.build/usb-update/http-cache" \
+            NUGET_SCRATCH="$PWD/.build/usb-update/nuget-scratch" \
+            DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 \
+            DOTNET_GENERATE_ASPNET_CERTIFICATE=false \
+            "$(command -v dotnet)" run --file tests/Xur.Integration.Tests/update-usb.cs
