@@ -36,14 +36,14 @@ jobs:
       - name: Identify Fedora toolchain cache
         id: toolchain
         run: echo "key=$(python3 eng/ci-builder-cache.py key)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v5
+      - uses: actions/cache/restore@v6
         id: cache
         with:
           path: .build/fedora-toolchain/
           key: fedora-toolchain-x86_64-${{ steps.toolchain.outputs.key }}
       - name: Prepare or verify Fedora toolchain template
         run: python3 eng/ci-builder-cache.py prepare
-      - uses: actions/cache/save@v5
+      - uses: actions/cache/save@v6
         if: steps.cache.outputs.cache-hit != 'true'
         with:
           path: .build/fedora-toolchain/
