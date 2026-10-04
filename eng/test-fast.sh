@@ -11,6 +11,8 @@ python3 eng/check-web-assets.py > .build/fast/web-assets.log
 python3 tests/Xur.Integration.Tests/web-assets.py >> .build/fast/web-assets.log
 cc -O2 -Wall -Wextra -Werror tests/Xur.Unit.Tests/SeatInputTest.c -ldl -o .build/fast/seat-input-test
 .build/fast/seat-input-test
+c++ -std=c++20 -O2 -Wall -Wextra -Werror tests/Xur.Unit.Tests/ProfileSwitcherInputTest.cpp -o .build/fast/profile-switcher-input-test
+.build/fast/profile-switcher-input-test > .build/fast/profile-switcher-input.log
 python3 tests/Xur.Integration.Tests/source-manifest.py > .build/fast/source-manifest.log
 python3 tests/Xur.Integration.Tests/cleanup-build.py > .build/fast/cleanup.log
 bash eng/publish.sh > .build/fast/publish.log 2>&1
@@ -26,6 +28,7 @@ python3 tests/Xur.Integration.Tests/account-api.py > .build/fast/account-api.jso
 node tests/Xur.Integration.Tests/https-login.cjs > .build/fast/https-login.json
 node tests/Xur.Integration.Tests/updates-ui.cjs > .build/fast/updates-ui.json
 node tests/Xur.Integration.Tests/control-panel-ui.cjs > .build/fast/control-panel-ui.json
+node tests/Xur.Integration.Tests/profile-switcher-ui.cjs > .build/fast/profile-switcher-ui.json
 node tests/Xur.Integration.Tests/endpoints-ui.cjs > .build/fast/endpoints-ui.json
 node tests/Xur.Integration.Tests/station-identity-ui.cjs > .build/fast/station-identity-ui.json
 node tests/Xur.Integration.Tests/workstations-ui.cjs > .build/fast/workstations-ui.json

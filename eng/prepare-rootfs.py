@@ -15,6 +15,7 @@ for source,target in [('publish/control','usr/lib/xur/control'),('publish/agent'
     copy(context/source,base/target)
 copy(repo/'.build/console-runtime',base/'usr/lib/xur/agent/console')
 copy(repo/'.build/virtual-display-runtime',base/'usr/lib/xur/agent/virtual-display')
+copy(repo/'.build/profile-switcher-runtime',base/'usr/lib/xur/agent/profile-switcher')
 copy(repo/'.build/streaming-runtime',base/'usr/lib/xur/agent/streaming')
 copy(repo/'os/bootc/systemd',base/'usr/lib/systemd/system')
 copy(repo/'os/bootc/system.conf.d',base/'usr/lib/systemd/system.conf.d')
@@ -33,6 +34,7 @@ for name in ('control','agent','gateway'):
 copy(context/'catalog',bundle/'catalog')
 copy(repo/'.build/console-runtime',bundle/'agent/console')
 copy(repo/'.build/virtual-display-runtime',bundle/'agent/virtual-display')
+copy(repo/'.build/profile-switcher-runtime',bundle/'agent/profile-switcher')
 copy(repo/'.build/streaming-runtime',bundle/'agent/streaming')
 for name in ('LICENSE','docs/licensing.md'):
     copy(repo/name,base/'usr/share/licenses/xur'/pathlib.Path(name).name)

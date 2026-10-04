@@ -1,0 +1,53 @@
+// Browser-side assertions shared by CI and the collaborative T3 preview.
+window.runProfileSwitcherChecks=async()=>{
+ const checks=[],sleep=ms=>new Promise(r=>setTimeout(r,ms)),dialog=document.querySelector('#profile-switcher');
+ const assert=(value,name)=>{if(!value)throw Error(name);checks.push(name);};
+ const mode=async value=>{await fetch('/test/mode?value='+value);};
+ const requests=async()=> (await(await fetch('/test/state')).json()).requests;
+ const wait=async predicate=>{for(let n=0;n<200;n++){if(predicate())return;await sleep(25);}throw Error('Timed out waiting for picker response');};
+ const open=async()=>{document.querySelector('[data-profile-switcher-open]').click();await wait(()=>dialog.open&&document.querySelector('#switcher-profiles').getAttribute('aria-busy')==='false');};
+ const key=value=>document.dispatchEvent(new KeyboardEvent('keydown',{key:value,bubbles:true}));
+ const choose=async()=>{document.querySelector('[data-profile-id="2"]').click();await wait(()=>!document.querySelector('#switcher-apply').disabled||!document.querySelector('#switcher-error').hidden);};
+ if(dialog.open)dialog.close();await mode('normal');await open();
+ assert(dialog.open,'Menu opens picker');assert((await requests()).length===0,'Opening never mutates profiles');
+ assert(document.querySelector('[data-profile-id="1"]').disabled,'Current unchanged profile cannot reload');
+ assert(!document.querySelector('#switcher-profiles img'),'Profile names are rendered as text');
+ const search=document.querySelector('#switcher-search');search.value='Studio';search.dispatchEvent(new Event('input'));
+ assert(document.querySelectorAll('.switcher-choice').length===1,'Search filters profiles');
+ key('ArrowDown');assert(document.activeElement.dataset.profileId==='2','Arrow keys focus matching profile');
+ await choose();assert(!document.querySelector('#switcher-review').hidden,'Selection opens review');
+ assert(document.querySelector('#switcher-changes').textContent.includes('Keep runningAssistant'),'Review names retained workload');
+ assert(!document.querySelector('#switcher-desktop-warning').hidden,'Review explains stopped workstation');
+ assert((await requests()).every(r=>r.path.endsWith('/preview')),'Review never applies');
+ document.querySelector('#switcher-back').click();document.querySelector('[data-switcher-close]').click();
+ assert(!dialog.open,'Back and Close dismiss without applying');
+ document.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyP',key:'p',ctrlKey:true,altKey:true,bubbles:true}));await wait(()=>dialog.open&&document.querySelector('#switcher-profiles').getAttribute('aria-busy')==='false');
+ assert(dialog.open,'Keyboard shortcut opens picker');dialog.close();
+ await mode('offline');await open();assert(!document.querySelector('#switcher-error').hidden,'Unavailable manager displays actionable error');
+ await mode('normal');document.querySelector('#switcher-retry').click();await wait(()=>document.querySelector('#switcher-profiles').getAttribute('aria-busy')==='false');assert(document.querySelectorAll('.switcher-choice').length>0,'Retry restores profiles');dialog.close();
+ await mode('empty');await open();assert(document.querySelector('#switcher-empty').textContent.includes('No profiles yet'),'Empty state directs creation');dialog.close();
+ await mode('busy');await open();assert([...document.querySelectorAll('.switcher-choice')].every(b=>b.disabled),'In-progress change disables selection');dialog.close();
+ await mode('expired');await open();await choose();document.querySelector('#switcher-apply').click();await sleep(80);
+ assert(document.querySelector('#switcher-error').textContent.includes('expired'),'Expired approval requires fresh review');assert((await requests()).every(r=>r.path.endsWith('/preview')),'Expired review never applies');dialog.close();
+ await mode('rejected');await open();await choose();document.querySelector('#switcher-apply').click();await wait(()=>!document.querySelector('#switcher-error').hidden);
+ assert(document.querySelector('#switcher-error').textContent.includes('running workloads changed'),'Stale observation rejection remains visible');
+ assert(document.querySelector('#switcher-apply').disabled,'Rejected plan cannot be retried without review');
+ const approval=(await requests()).find(r=>r.path.endsWith('/apply'));
+ assert(approval.body.id==='plan-2'&&approval.body.digest==='fixture-digest','Approval binds exact plan and digest');
+ assert(approval.csrf==='fixture-only','Approval sends browser antiforgery token');dialog.close();await mode('normal');
+ const oldFocus=document.hasFocus;document.hasFocus=()=>true;
+ let pads=[{index:0,mapping:'standard',buttons:Array.from({length:17},()=>({pressed:false}))}];
+ const previous=Object.getOwnPropertyDescriptor(navigator,'getGamepads');Object.defineProperty(navigator,'getGamepads',{configurable:true,value:()=>pads});
+ try{
+  pads[0].buttons[8].pressed=pads[0].buttons[9].pressed=true;await sleep(550);assert(!dialog.open,'Controller hold threshold prevents accidental opening');
+  await sleep(650);assert(dialog.open,'Controller chord opens picker');
+  pads[0].buttons[0].pressed=true;await sleep(80);assert(document.querySelector('#switcher-review').hidden,'Opening chord must be released before navigation');
+  pads[0].buttons.forEach(b=>b.pressed=false);await sleep(80);pads[0].buttons[13].pressed=true;await sleep(80);assert(document.activeElement.classList.contains('switcher-choice'),'D-pad navigates profiles');
+  pads[0].buttons[13].pressed=false;await sleep(80);pads[0].buttons[1].pressed=true;await sleep(80);assert(!dialog.open,'Controller B dismisses picker');
+  pads=[{index:0,mapping:'standard',buttons:Array.from({length:17},()=>({pressed:false}))},{index:1,mapping:'standard',buttons:Array.from({length:17},()=>({pressed:false}))}];
+  pads[0].buttons[8].pressed=true;pads[1].buttons[9].pressed=true;await sleep(1200);assert(!dialog.open,'Separate controllers cannot form a chord');
+ }finally{document.hasFocus=oldFocus;if(previous)Object.defineProperty(navigator,'getGamepads',previous);else delete navigator.getGamepads;}
+ assert(!(await requests()).some(r=>r.path.endsWith('/apply')),'Controller opening and navigation never apply');
+ assert(document.documentElement.scrollWidth<=innerWidth,'Interface fits viewport');
+ return {suite:'ProfileSwitcherUi',result:'Passed',checks};
+};

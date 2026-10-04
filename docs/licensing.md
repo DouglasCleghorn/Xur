@@ -18,6 +18,10 @@ Existing notices include:
   notices in `screencast.xml`.
 - Console runtime: upstream information in `tools/Xur.Console/upstream-lock.json`
   and license files collected by its build script.
+- Profile switcher: original helper code is MIT; Qt, KDE KGlobalAccel, libevdev,
+  libudev and their runtime dependencies retain their upstream licenses. Its
+  runtime includes collected RPM license notices and `dependencies.json` with
+  exact package versions, license declarations and corresponding source RPMs.
 - IBM Plex Sans: `src/Xur.Control/wwwroot/fonts/OFL.txt`, also copied to the public
   website alongside the font.
 - GitHub mark in the website header: GitHub Octicons, MIT; notice shipped in

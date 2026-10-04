@@ -26,6 +26,7 @@ mkdir -p .build/context/tailscale
 tar -xzf .build/downloads/tailscale.tgz --strip-components=1 -C .build/context/tailscale
 python3 eng/build-console.py
 python3 eng/build-virtual-display.py
+python3 eng/build-profile-switcher.py
 python3 eng/prepare-streaming.py
 python3 eng/prepare-rootfs.py
 python3 eng/context-receipt.py create .build/context

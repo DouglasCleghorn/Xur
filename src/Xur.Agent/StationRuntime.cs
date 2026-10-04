@@ -52,6 +52,7 @@ public sealed class StationRuntime(DisplayConsoles? consoles=null)
             // Write user configuration as that user, so symlinks in their home
             // cannot turn a profile change into privileged file writes.
             await Run("runuser",["-u",user,"--","/bin/bash","-c",UserConfiguration,"xur",home,gpu.Cards![0],headless?"headless":"local",string.Join("\n",StationGraphics.LaunchEnvironment(gpu)),StationSeats.Seat(w.Id)]);
+            await StationProfileSwitcher.Prepare(user,home);
             await StationPower.Apply(user,headless);
             await Run("restorecon",["-RF",home]);
             // Register the current bundle's helper before KWin starts reading

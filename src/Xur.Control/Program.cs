@@ -181,6 +181,13 @@ async Task StartHost()
         try{await next();}finally{maintenance.Exit();}
     });
     app.MapGet("/local/application-health",()=>Results.Json(new {id=ApplicationIdentity.Id,active=maintenance.Active,profileBusy=profileManager.UpdateBusy}));
+    // Only public TLS material is provisioned to the desktop helper. It uses
+    // the normal authenticated API and never receives a privileged local token.
+    app.MapGet("/local/profile-switcher/connection",()=> {
+        if(appliance.Installer)return Results.Conflict();
+        using var certificate=LocalTls.Load(identityDirectory);
+        return Results.Json(new {url="https://localhost:"+(appliance.Port+363),certificate=certificate.ExportCertificatePem()});
+    });
     app.UseProtectedCompression(Path.Combine(identityDirectory,"response-spool"));
     app.MapStaticAssets().WithMetadata(new PublicStaticAsset());
     app.UseAntiforgery();
