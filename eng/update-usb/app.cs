@@ -1,9 +1,10 @@
 #:package TeeForge@0.1.0
+#:package LibArchive.Net@0.3.1
 #:package System.CommandLine@2.0.12
 #:property PublishAot=false
 #:property RestorePackagesWithLockFile=false
 
-// MIT licensed. See the repository LICENSE. Requires Linux, .NET 10 and libarchive.
+// MIT licensed. See the repository LICENSE. Requires Linux and .NET 10.
 using System.Diagnostics;
 using System.CommandLine;
 using System.Runtime.InteropServices;
@@ -11,6 +12,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using LibArchive.Net;
+using TeeForge.Broadcasting;
 using TeeForge.Hashing;
 
 internal static class Program
@@ -34,6 +37,12 @@ internal static class Program
 internal static class UsbUpdate
 {
     internal const string Repo = "DouglasCleghorn/Xur";
+    internal static readonly JsonSerializerOptions Json = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        RespectRequiredConstructorParameters = true,
+        RespectNullableAnnotations = true
+    };
     internal static readonly string[] Grub = ["EFI/BOOT/grub.cfg", "boot/grub2/grub.cfg"];
     internal static readonly HashSet<string> ConfigNames = new(StringComparer.OrdinalIgnoreCase)
         { "xur-diagnostics.yml", "xur-diagnostics.yaml", "xur.yml", "xur.yaml" };
@@ -57,50 +66,46 @@ internal static class UsbUpdate
         return client;
     }
 
-    internal static Release? ChooseRelease(IEnumerable<JsonElement> releases)
+    internal static Release? ChooseRelease(IEnumerable<GitHubRelease> releases)
     {
-        foreach (var release in releases.OrderByDescending(r => r.GetProperty("published_at").GetString()))
+        foreach (var release in releases.OrderByDescending(r => r.PublishedAt))
         {
-            if (release.GetProperty("draft").GetBoolean() || release.GetProperty("published_at").ValueKind == JsonValueKind.Null) continue;
-            var assets = release.GetProperty("assets").EnumerateArray().ToDictionary(a => a.GetProperty("name").GetString()!);
+            if (release.Draft || release.PublishedAt == null) continue;
+            var assets = release.Assets.ToDictionary(a => a.Name);
             var isos = assets.Keys.Where(n => Regex.IsMatch(n, @"^xur-.*x86_64\.iso$", RegexOptions.CultureInvariant)).ToArray();
             var split = assets.Keys.Any(n => Regex.IsMatch(n, @"^xur-installer-x86_64\.iso\.part\d+$"));
             if (isos.Length == 0 && !split) continue; // Newer app-only releases do not replace installer media.
             if (isos.Length > 1) throw new IOException("Latest installer release contains multiple x86_64 ISOs.");
-            return new(release.GetProperty("tag_name").GetString()!, assets, isos.SingleOrDefault());
+            return new(release.TagName, assets, isos.SingleOrDefault());
         }
         return null;
     }
 
     internal static async Task<Release> Latest(HttpClient client)
     {
-        var releases = new List<JsonElement>();
+        var releases = new List<GitHubRelease>();
         for (var page = 1; ; page++)
         {
             using var response = await client.GetAsync($"https://api.github.com/repos/{Repo}/releases?per_page=100&page={page}");
             response.EnsureSuccessStatusCode();
-            using var document = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
-            var batch = document.RootElement.EnumerateArray().Select(r => r.Clone()).ToArray();
+            using var json = await response.Content.ReadAsStreamAsync();
+            var batch = ReadJson<GitHubRelease[]>(json);
             releases.AddRange(batch);
             if (batch.Length < 100) break;
         }
         return ChooseRelease(releases) ?? throw new IOException("No published installer ISO found; app update archives are not bootable media.");
     }
 
-    internal static string AssetUrl(JsonElement asset)
+    internal static string AssetUrl(ReleaseAsset asset)
     {
-        var url = asset.GetProperty("browser_download_url").GetString()!;
+        var url = asset.BrowserDownloadUrl;
         if (!url.StartsWith($"https://github.com/{Repo}/releases/download/", StringComparison.Ordinal))
             throw new IOException("Unexpected GitHub asset URL.");
         return url;
     }
 
-    internal static MediaPart Record(JsonElement record)
-    {
-        var part = new MediaPart(record.GetProperty("file").GetString()!, record.GetProperty("bytes").GetInt64(), record.GetProperty("sha256").GetString()!);
-        if (part.Bytes <= 0 || !Regex.IsMatch(part.Sha256, "^[a-f0-9]{64}$")) throw new IOException("Invalid installer length or SHA-256.");
-        return part;
-    }
+    internal static T ReadJson<T>(Stream json) where T : class =>
+        JsonSerializer.Deserialize<T>(json, Json) ?? throw new IOException("Missing release metadata.");
 
     internal static async Task<(MediaPart Iso, MediaPart[] Parts)> Media(HttpClient client, Release release, string workspace)
     {
@@ -109,7 +114,7 @@ internal static class UsbUpdate
             foreach (var name in new[] { "installer.json", "installer.json.sig" })
             {
                 var asset = release.Assets[name];
-                var size = asset.GetProperty("size").GetInt64();
+                var size = asset.Size;
                 if (size is <= 0 or > 1048576) throw new IOException("Invalid descriptor/signature size.");
                 using var response = await client.GetAsync(AssetUrl(asset), HttpCompletionOption.ResponseHeadersRead);
                 response.EnsureSuccessStatusCode();
@@ -121,27 +126,26 @@ internal static class UsbUpdate
             }
             Command("openssl", "pkeyutl", "-verify", "-pubin", "-inkey", FindTrustKey(), "-rawin", "-in",
                 Path.Combine(workspace, "installer.json"), "-sigfile", Path.Combine(workspace, "installer.json.sig"));
-            using var descriptor = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(workspace, "installer.json")));
-            var root = descriptor.RootElement;
-            if (root.GetProperty("schema").GetInt32() != 1) throw new IOException("Unsupported installer descriptor.");
-            var iso = Record(root.GetProperty("iso"));
+            using var json = File.OpenRead(Path.Combine(workspace, "installer.json"));
+            var descriptor = ReadJson<InstallerDescriptor>(json);
+            if (descriptor.Schema != 1) throw new IOException("Unsupported installer descriptor.");
+            var iso = descriptor.Iso.Validated();
             if (iso.File != "xur-installer-x86_64.iso") throw new IOException("Unexpected signed ISO filename.");
-            var parts = root.GetProperty("parts").EnumerateArray().Select(Record).ToArray();
+            var parts = descriptor.Parts.Select(p => p.Validated()).ToArray();
             var whole = parts.Length == 1 && parts[0].File == iso.File;
             if (parts.Length == 0 || parts.Sum(p => p.Bytes) != iso.Bytes) throw new IOException("Invalid installer parts.");
             for (var i = 0; i < parts.Length; i++)
                 if ((!whole && parts[i].File != iso.File + ".part" + (i + 1).ToString("D3")) ||
-                    release.Assets[parts[i].File].GetProperty("size").GetInt64() != parts[i].Bytes)
+                    release.Assets[parts[i].File].Size != parts[i].Bytes)
                     throw new IOException("Missing, changed or out-of-order installer part.");
             return (iso, parts);
         }
         if (release.IsoName == null) throw new IOException("Split media requires a signed installer.json descriptor.");
         var direct = release.Assets[release.IsoName];
-        var digest = direct.TryGetProperty("digest", out var value) ? value.GetString() : null;
+        var digest = direct.Digest;
         if (digest == null || !Regex.IsMatch(digest, "^sha256:[a-f0-9]{64}$"))
             throw new IOException("Published ISO has no GitHub SHA-256 digest or signed descriptor.");
-        var single = new MediaPart(release.IsoName, direct.GetProperty("size").GetInt64(), digest[7..]);
-        if (single.Bytes <= 0) throw new IOException("Invalid ISO size.");
+        var single = new MediaPart(release.IsoName, direct.Size, digest[7..]).Validated();
         return (single, [single]);
     }
 
@@ -233,35 +237,36 @@ internal static class UsbUpdate
 
     internal static void StreamIso(Stream source, MediaPart iso, string destination, string usbLabel, Dictionary<string, byte[]> saved)
     {
+        using var broadcast = new BroadcastHashStream(HashAlgorithmName.SHA256, out var results, source, readerCount: 2,
+            new BroadcastStreamOptions(bufferSize: 65536, pauseWriterThreshold: 131072, resumeWriterThreshold: 65536, leaveOpen: true));
         var prefix = new byte[65536];
-        source.ReadExactly(prefix);
+        using (var probe = broadcast.Readers[0]) probe.ReadExactly(prefix);
+        var input = broadcast.Readers[1];
         if (prefix[32768] != 1 || Encoding.ASCII.GetString(prefix, 32769, 5) != "CD001") throw new IOException("Download is not an ISO9660 image.");
         var label = Encoding.ASCII.GetString(prefix, 32808, 32).TrimEnd(' ');
         if (!Regex.IsMatch(label, "^[A-Za-z0-9_]{1,32}$")) throw new IOException("Unsupported ISO label.");
         var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        using var reader = new IsoReader(source, prefix, iso);
         try
         {
-            while (reader.Next(out var entry))
+            using var reader = new LibArchiveReader(input, blockSize: 65536);
+            foreach (var entry in IsoEntry.Read(reader))
             {
-                var rawName = Marshal.PtrToStringUTF8(Native.archive_entry_pathname(entry))!;
-                var target = SafePath(destination, rawName);
+                var target = SafePath(destination, entry.Name);
                 var name = Path.GetRelativePath(destination, target);
                 if (target == destination || ConfigNames.Contains(name)) continue;
-                if (Native.archive_entry_filetype(entry) == 0x4000) { Directory.CreateDirectory(target); continue; }
-                if (Native.archive_entry_symlink(entry) != IntPtr.Zero) throw new IOException("ISO symlinks are unsupported: " + name);
-                var link = Native.archive_entry_hardlink(entry);
-                if (link != IntPtr.Zero)
+                if (entry.IsDirectory) { Directory.CreateDirectory(target); continue; }
+                if (!entry.IsRegularFile) throw new IOException("Unsupported ISO entry: " + name);
+                if (entry.Hardlink is { } link)
                 {
-                    var original = Path.GetRelativePath(destination, SafePath(destination, Marshal.PtrToStringUTF8(link)!));
+                    var original = Path.GetRelativePath(destination, SafePath(destination, link));
                     if (!hashes.TryGetValue(original, out var expected)) throw new IOException("Unresolved ISO hardlink: " + name);
                     if (!hashes.TryAdd(name, expected)) throw new IOException("Duplicate ISO filename: " + name);
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                     File.Copy(SafePath(destination, original), target, true);
                     continue;
                 }
-                var size = Native.archive_entry_size(entry);
-                if (Native.archive_entry_filetype(entry) != 0x8000 || size < 0 || size > uint.MaxValue) throw new IOException("Unsupported ISO entry: " + name);
+                var size = entry.LengthBytes ?? -1;
+                if (size < 0 || size > uint.MaxValue) throw new IOException("Unsupported ISO entry: " + name);
                 if (hashes.ContainsKey(name)) throw new IOException("Duplicate ISO filename: " + name);
                 if (new DriveInfo(destination).AvailableFreeSpace + (File.Exists(target) ? new FileInfo(target).Length : 0) < size + 1048576)
                     throw new IOException("USB has insufficient free space.");
@@ -271,7 +276,7 @@ internal static class UsbUpdate
                 {
                     if (size > 1048576) throw new IOException("Oversized boot configuration.");
                     using var data = new MemoryStream();
-                    reader.CopyEntry(data, size);
+                    CopyEntry(entry, data, size, broadcast, iso.Bytes);
                     var content = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(data.ToArray()).Replace(label, usbLabel, StringComparison.Ordinal));
                     File.WriteAllBytes(target, content);
                     hash = Convert.ToHexStringLower(SHA256.HashData(content));
@@ -279,19 +284,23 @@ internal static class UsbUpdate
                 else
                 {
                     using var file = File.Create(target);
-                    var tee = new TeeHashStream(HashAlgorithmName.SHA256, out var results, file);
-                    using (tee) reader.CopyEntry(tee, size);
-                    hash = results[HashAlgorithmName.SHA256].Hex.ToLowerInvariant();
+                    var tee = new TeeHashStream(HashAlgorithmName.SHA256, out var fileHash, file);
+                    using (tee) CopyEntry(entry, tee, size, broadcast, iso.Bytes);
+                    hash = fileHash[HashAlgorithmName.SHA256].Hex.ToLowerInvariant();
                 }
                 hashes.Add(name, hash);
             }
-            reader.Complete(); // Drain ISO padding as well as extracted bytes before checking the full hash.
+            input.CopyTo(Stream.Null, 65536); // ISO padding must also reach EOF for whole-image verification.
+            broadcast.Completion.GetAwaiter().GetResult();
+            if (broadcast.BytesBroadcast != iso.Bytes || results[HashAlgorithmName.SHA256].Hex != iso.Sha256.ToUpperInvariant())
+                throw new IOException("Full ISO length/SHA-256 mismatch.");
             Command("sync", "-f", destination);
             foreach (var (name, expected) in hashes)
                 if (HashFile(SafePath(destination, name)) != expected) throw new IOException("USB readback verification failed: " + name);
             if (!IsInstaller(destination) || !Grub.All(hashes.ContainsKey) || !hashes.ContainsKey("LiveOS/squashfs.img") || !hashes.ContainsKey("EFI/BOOT/BOOTX64.EFI"))
                 throw new IOException("Streamed ISO is missing required Xur installer files.");
         }
+        catch (ApplicationException error) { throw new IOException("ISO reader: " + error.Message, error); }
         finally
         {
             foreach (var (name, content) in saved)
@@ -302,6 +311,26 @@ internal static class UsbUpdate
             Command("sync", "-f", destination); // Flush only this filesystem, never the host SSD.
         }
         if (!SameConfig(Configurations(destination), saved)) throw new IOException("USB configuration changed.");
+    }
+
+    private static void CopyEntry(IsoEntry entry, Stream destination, long expected, BroadcastHashStream broadcast, long isoBytes)
+    {
+        using var input = entry.Stream;
+        var buffer = new byte[65536];
+        long written = 0, nextProgress = broadcast.BytesBroadcast + 256 * 1024 * 1024;
+        int count;
+        while ((count = input.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            written += count;
+            if (written > expected) throw new IOException("ISO entry exceeds its advertised length.");
+            destination.Write(buffer, 0, count);
+            if (broadcast.BytesBroadcast >= nextProgress)
+            {
+                Console.WriteLine($"Streamed {broadcast.BytesBroadcast / 1073741824.0:F2} GiB ({100.0 * broadcast.BytesBroadcast / isoBytes:F0}%)");
+                nextProgress += 256 * 1024 * 1024;
+            }
+        }
+        if (written != expected) throw new IOException("Truncated ISO file.");
     }
 
     internal static RootCommand CreateCommand(Func<string?, bool, Task> action)
@@ -331,8 +360,6 @@ internal static class UsbUpdate
     internal static async Task Run(string? device, bool check)
     {
         if (!OperatingSystem.IsLinux() || Native.geteuid() != 0) throw new IOException("Run on Linux as root: sudo ./eng/update-usb.sh");
-        if (!NativeLibrary.TryLoad("libarchive.so.13", out var library)) throw new IOException("Install libarchive (libarchive13 on Ubuntu; libarchive on Fedora).");
-        NativeLibrary.Free(library);
         using var workspace = new Workspace();
         var (usb, saved) = SelectUsb(workspace.Path, device);
         using var client = Client();
@@ -354,8 +381,15 @@ internal static class UsbUpdate
     }
 }
 
-internal sealed record Release(string Tag, Dictionary<string, JsonElement> Assets, string? IsoName);
-internal sealed record MediaPart(string File, long Bytes, string Sha256);
+internal sealed record GitHubRelease(string TagName, bool Draft, DateTimeOffset? PublishedAt, ReleaseAsset[] Assets);
+internal sealed record ReleaseAsset(string Name, long Size, string BrowserDownloadUrl, string? Digest = null);
+internal sealed record Release(string Tag, Dictionary<string, ReleaseAsset> Assets, string? IsoName);
+internal sealed record InstallerDescriptor(int Schema, MediaPart Iso, MediaPart[] Parts);
+internal sealed record MediaPart(string File, long Bytes, string Sha256)
+{
+    internal MediaPart Validated() => Bytes > 0 && Regex.IsMatch(Sha256, "^[a-f0-9]{64}$")
+        ? this : throw new IOException("Invalid installer length or SHA-256.");
+}
 internal sealed record UsbPartition(string Path, string Label, string Identity, string[] Mountpoints);
 
 internal sealed class Mount : IDisposable
@@ -432,95 +466,28 @@ internal sealed class ReleaseStream(HttpClient client, Release release, MediaPar
     public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 }
 
-internal sealed class IsoReader : IDisposable
+// LibArchive.Net 0.3.1 exposes entry streams but omits hardlink targets. Use its
+// public SafeHandle and protected Entry constructor to add only that metadata.
+internal sealed class IsoEntry(IntPtr entry, IntPtr archive) : LibArchiveReader.Entry(entry, archive)
 {
-    private readonly Stream source;
-    private readonly byte[] prefix;
-    private readonly MediaPart iso;
-    private readonly byte[] buffer = new byte[65536];
-    private readonly IntPtr nativeBuffer = Marshal.AllocHGlobal(65536);
-    private readonly IntPtr entryBuffer = Marshal.AllocHGlobal(65536);
-    private readonly Native.ReadCallback callback;
-    private readonly TeeHashStream hash;
-    private readonly TeeHashResults results;
-    private readonly IntPtr archive;
-    private bool prefixRead, completed;
-    private long count, nextProgress = 256 * 1024 * 1024;
-    private Exception? failure;
-    internal IsoReader(Stream source, byte[] prefix, MediaPart iso)
+    internal string? Hardlink => Marshal.PtrToStringUTF8(Native.archive_entry_hardlink(entryHandle));
+    internal static IEnumerable<IsoEntry> Read(LibArchiveReader reader)
     {
-        this.source = source; this.prefix = prefix; this.iso = iso;
-        hash = new TeeHashStream(HashAlgorithmName.SHA256, out results, Stream.Null);
-        callback = Read;
-        archive = Native.archive_read_new();
-        try { Check(Native.archive_read_support_format_iso9660(archive)); Check(Native.archive_read_open(archive, IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero)); }
-        catch { Dispose(); throw; }
+        var archive = reader.DangerousGetHandle();
+        int status;
+        while ((status = Native.archive_read_next_header(archive, out var entry)) == 0)
+            yield return new(entry, archive);
+        if (status != 1) throw new IOException("ISO reader: " + Marshal.PtrToStringUTF8(Native.archive_error_string(archive)));
+        GC.KeepAlive(reader);
     }
-    private nint Read(IntPtr archive, IntPtr data, out IntPtr block)
-    {
-        block = nativeBuffer;
-        try
-        {
-            int read;
-            if (!prefixRead) { prefix.CopyTo(buffer, 0); read = prefix.Length; prefixRead = true; }
-            else read = source.Read(buffer, 0, buffer.Length);
-            count += read;
-            if (count > iso.Bytes) throw new IOException("ISO exceeds its advertised length.");
-            hash.Write(buffer, 0, read);
-            Marshal.Copy(buffer, 0, nativeBuffer, read);
-            if (count >= nextProgress) { Console.WriteLine($"Streamed {count / 1073741824.0:F2} GiB ({100.0 * count / iso.Bytes:F0}%)"); nextProgress += 256 * 1024 * 1024; }
-            return read;
-        }
-        catch (Exception error) { failure = error; return -1; }
-    }
-    private void Check(int status)
-    {
-        if (failure != null) throw new IOException("ISO stream failed: " + failure.Message, failure);
-        if (status < 0) throw new IOException("ISO reader: " + Marshal.PtrToStringUTF8(Native.archive_error_string(archive)));
-    }
-    internal bool Next(out IntPtr entry) { var status = Native.archive_read_next_header(archive, out entry); Check(status); return status != 1; }
-    internal void CopyEntry(Stream destination, long expected)
-    {
-        long written = 0;
-        while (true)
-        {
-            var size = Native.archive_read_data(archive, entryBuffer, (nuint)buffer.Length);
-            if (size < 0) { Check(-1); }
-            if (size == 0) break;
-            written += (long)size;
-            if (written > expected) throw new IOException("ISO entry exceeds its advertised length.");
-            Marshal.Copy(entryBuffer, buffer, 0, (int)size);
-            destination.Write(buffer, 0, (int)size);
-        }
-        if (written != expected) throw new IOException("Truncated ISO file.");
-    }
-    internal void Complete()
-    {
-        // libarchive can reach its last file before the ISO's trailing padding.
-        while (Read(archive, IntPtr.Zero, out _) > 0) { }
-        Check(0);
-        hash.Dispose(); completed = true;
-        if (count != iso.Bytes || results[HashAlgorithmName.SHA256].Hex != iso.Sha256.ToUpperInvariant()) throw new IOException("Full ISO length/SHA-256 mismatch.");
-    }
-    public void Dispose() { Native.archive_read_free(archive); Marshal.FreeHGlobal(nativeBuffer); Marshal.FreeHGlobal(entryBuffer); if (!completed) hash.Dispose(); GC.KeepAlive(callback); }
 }
 
 internal static class Native
 {
     internal static bool IsMountPoint(string path) => File.ReadLines("/proc/self/mountinfo")
         .Any(line => line.Split(' ')[4] == path.Replace("\\", "\\134").Replace(" ", "\\040").Replace("\t", "\\011").Replace("\n", "\\012"));
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate nint ReadCallback(IntPtr archive, IntPtr data, out IntPtr buffer);
     [DllImport("libc")] internal static extern uint geteuid();
-    [DllImport("libarchive.so.13")] internal static extern IntPtr archive_read_new();
-    [DllImport("libarchive.so.13")] internal static extern int archive_read_support_format_iso9660(IntPtr archive);
-    [DllImport("libarchive.so.13")] internal static extern int archive_read_open(IntPtr archive, IntPtr data, IntPtr open, ReadCallback read, IntPtr close);
-    [DllImport("libarchive.so.13")] internal static extern int archive_read_next_header(IntPtr archive, out IntPtr entry);
-    [DllImport("libarchive.so.13")] internal static extern nint archive_read_data(IntPtr archive, IntPtr buffer, nuint size);
-    [DllImport("libarchive.so.13")] internal static extern int archive_read_free(IntPtr archive);
-    [DllImport("libarchive.so.13")] internal static extern IntPtr archive_error_string(IntPtr archive);
-    [DllImport("libarchive.so.13")] internal static extern IntPtr archive_entry_pathname(IntPtr entry);
-    [DllImport("libarchive.so.13")] internal static extern uint archive_entry_filetype(IntPtr entry);
-    [DllImport("libarchive.so.13")] internal static extern long archive_entry_size(IntPtr entry);
-    [DllImport("libarchive.so.13")] internal static extern IntPtr archive_entry_symlink(IntPtr entry);
-    [DllImport("libarchive.so.13")] internal static extern IntPtr archive_entry_hardlink(IntPtr entry);
+    [DllImport("archive")] internal static extern int archive_read_next_header(IntPtr archive, out IntPtr entry);
+    [DllImport("archive")] internal static extern IntPtr archive_error_string(IntPtr archive);
+    [DllImport("archive")] internal static extern IntPtr archive_entry_hardlink(IntPtr entry);
 }

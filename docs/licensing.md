@@ -22,6 +22,11 @@ Existing notices include:
   website alongside the font.
 - GitHub mark in the website header: GitHub Octicons, MIT; notice shipped in
   `website/assets/github-mark-LICENSE.txt`.
+- USB updater: TeeForge and System.CommandLine retain their MIT licenses.
+  LibArchive.Net uses [BSD-2-Clause](https://github.com/jas88/libarchive.net/blob/31e5dd26941e1d65a35818562c23ee42064498d0/LICENSE.md);
+  its bundled native libarchive and dependencies retain their upstream notices.
+  These NuGet packages are restored during file-based app builds and are not
+  relabeled under Xur's license.
 - OS packages and container images: their upstream license/source notices.
 - Model weights: each selected repository's own license; the model catalog keeps
   the model repository, license and revision. MIT licensing of Xur does not grant

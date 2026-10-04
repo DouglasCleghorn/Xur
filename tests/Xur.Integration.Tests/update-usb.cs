@@ -64,10 +64,13 @@ internal static class UsbUpdateTests
         Write(source, "xur-diagnostics.yml", Encoding.UTF8.GetBytes("Never overwrite the existing secret"));
         Write(source, "xur.yml", Encoding.UTF8.GetBytes("Never overwrite the answer"));
         Write(source, "images/empty", []);
+        UsbUpdate.Command("ln", Path.Combine(source, "LiveOS/squashfs.img"), Path.Combine(source, "images/alias.img"));
         var isoPath = Path.Combine(evidence, "fixture.iso");
-        UsbUpdate.Command("xorriso", "-as", "mkisofs", "-quiet", "-R", "-V", "XUR_SETUP_A", "-o", isoPath, source);
+        UsbUpdate.Command("xorriso", "-as", "mkisofs", "-quiet", "-R", "--hardlinks", "-V", "XUR_SETUP_A", "-o", isoPath, source);
         var isoBytes = File.ReadAllBytes(isoPath);
         var iso = new MediaPart("fixture.iso", isoBytes.Length, Digest(isoBytes));
+        using (var fixture = new LibArchive.Net.LibArchiveReader(new MemoryStream(isoBytes)))
+            Check(IsoEntry.Read(fixture).Any(e => e.Hardlink != null), "Fixture contains no ISO hardlink.");
         var raw = Path.Combine(evidence, "fat32.raw");
         using (var file = File.Create(raw)) file.SetLength(128 * 1024 * 1024);
         var loop = UsbUpdate.Command("losetup", "--find", "--show", raw);
@@ -87,6 +90,7 @@ internal static class UsbUpdateTests
             using (var input = new ForwardOnly(new MemoryStream(isoBytes)))
                 UsbUpdate.StreamIso(input, iso, dest, "XUR_TEST", saved);
             Check(File.ReadAllBytes(Path.Combine(dest, "LiveOS/squashfs.img")).AsSpan().SequenceEqual(payload), "Multi-buffer ISO entry was corrupted.");
+            Check(File.ReadAllBytes(Path.Combine(dest, "images/alias.img")).AsSpan().SequenceEqual(payload), "ISO hardlink content was lost.");
             Check(UsbUpdate.SameConfig(UsbUpdate.Configurations(dest), saved), "Configurations changed.");
             Check(File.ReadAllBytes(Path.Combine(dest, "unrelated/photo.bin")).SequenceEqual(new byte[] { 8, 9, 10 }), "Unrelated file changed.");
             Check(File.Exists(Path.Combine(dest, "xur-diagnostics-old.txt")), "Saved logs removed.");
@@ -103,7 +107,8 @@ internal static class UsbUpdateTests
             var split = isoBytes.Length / 2;
             var chunks = new[] { isoBytes[..split], isoBytes[split..] };
             var parts = chunks.Select((bytes, i) => new MediaPart("fixture.iso.part" + (i + 1).ToString("D3"), bytes.Length, Digest(bytes))).ToArray();
-            var assets = parts.ToDictionary(p => p.File, p => JsonSerializer.SerializeToElement(new { browser_download_url = $"https://github.com/{UsbUpdate.Repo}/releases/download/fixture/{p.File}" }));
+            var assets = parts.ToDictionary(p => p.File, p => new ReleaseAsset(p.File, p.Bytes,
+                $"https://github.com/{UsbUpdate.Repo}/releases/download/fixture/{p.File}"));
             var release = new Release("fixture", assets, null);
             using var client = new HttpClient(new FixtureHandler(parts.Zip(chunks).ToDictionary(p => p.First.File, p => p.Second)));
             using (var input = new ReleaseStream(client, release, parts)) UsbUpdate.StreamIso(input, iso, dest, "XUR_TEST", saved);
@@ -120,12 +125,24 @@ internal static class UsbUpdateTests
         Reject(() => UsbUpdate.SafePath(folder, "link/escape"), "Destination symlink accepted.");
         Check(Path.GetFileName(UsbUpdate.SafePath(folder, "./xur-diagnostics.yml")) == "xur-diagnostics.yml", "Path normalization failed.");
 
-        using var releases = JsonDocument.Parse("""
-            [{"tag_name":"new-app","draft":false,"published_at":"2026-10-04","assets":[{"name":"xur-update.tar.gz"}]},
-             {"tag_name":"old-iso","draft":false,"published_at":"2026-10-03","assets":[{"name":"xur-nightly-x86_64.iso"}]},
-             {"tag_name":"draft-iso","draft":true,"published_at":"2026-10-05","assets":[{"name":"xur-nightly-x86_64.iso"}]}]
-            """);
-        Check(UsbUpdate.ChooseRelease(releases.RootElement.EnumerateArray())?.Tag == "old-iso", "Newer app-only/draft release selected.");
+        using var releaseJson = new MemoryStream(Encoding.UTF8.GetBytes("""
+            [{"tag_name":"new-app","draft":false,"published_at":"2026-10-04T00:00:00Z","assets":[{"name":"xur-update.tar.gz","size":100,"browser_download_url":"unused"}]},
+             {"tag_name":"old-iso","draft":false,"published_at":"2026-10-03T00:00:00Z","assets":[{"name":"xur-nightly-x86_64.iso","size":100,"browser_download_url":"unused"}]},
+             {"tag_name":"draft-iso","draft":true,"published_at":"2026-10-05T00:00:00Z","assets":[{"name":"xur-nightly-x86_64.iso","size":100,"browser_download_url":"unused"}]}]
+            """));
+        Check(UsbUpdate.ChooseRelease(UsbUpdate.ReadJson<GitHubRelease[]>(releaseJson))?.Tag == "old-iso", "Newer app-only/draft release selected.");
+        var asset = new ReleaseAsset("xur-fixture-x86_64.iso", iso.Bytes,
+            $"https://github.com/{UsbUpdate.Repo}/releases/download/fixture/xur-fixture-x86_64.iso", "sha256:" + iso.Sha256);
+        using var metadataClient = new HttpClient();
+        var selected = await UsbUpdate.Media(metadataClient, new("fixture", new() { [asset.Name] = asset }, asset.Name), workspace.Path);
+        Check(selected.Iso.Bytes == iso.Bytes && selected.Iso.Sha256 == iso.Sha256 && selected.Parts.Length == 1,
+              "Typed GitHub asset metadata lost size/digest.");
+        using var descriptorJson = new MemoryStream(Encoding.UTF8.GetBytes(
+            "{\"schema\":1,\"iso\":{\"file\":\"fixture.iso\",\"bytes\":" + iso.Bytes + ",\"sha256\":\"" + iso.Sha256 +
+            "\"},\"parts\":[{\"file\":\"fixture.iso\",\"bytes\":" + iso.Bytes + ",\"sha256\":\"" + iso.Sha256 + "\"}]}"));
+        var descriptor = UsbUpdate.ReadJson<InstallerDescriptor>(descriptorJson);
+        Check(descriptor.Schema == 1 && descriptor.Iso == iso && descriptor.Parts.Single() == iso,
+              "Typed installer descriptor lost metadata.");
 
         using var disks = JsonDocument.Parse("""
             {"blockdevices":[
@@ -137,7 +154,7 @@ internal static class UsbUpdateTests
                 {"path":"/dev/sdd1","type":"part","fstype":"vfat","ro":false,"label":"XUR_TEST","uuid":"system","maj:min":"8:49","size":9000,"mountpoints":["/"]}]}]}
             """);
         Check(UsbUpdate.Partitions(disks.RootElement).Select(p => p.Path).SequenceEqual(new[] { "/dev/sdc1" }), "SSD or system disk considered eligible.");
-        Console.WriteLine("Passed: CLI binding/help/errors, streaming FAT32 extraction, byte-identical configuration, custom label, preserved files/logs, full/part checksums, truncation, traversal/symlinks, release selection and SSD/system protection.");
+        Console.WriteLine("Passed: CLI binding/help/errors, streaming FAT32 extraction, byte-identical configuration, custom label, preserved files/logs, hardlinks, typed metadata, full/part checksums, truncation, traversal/symlinks, release selection and SSD/system protection.");
         Console.WriteLine("Physical USB writing: not run.");
         return 0;
     }

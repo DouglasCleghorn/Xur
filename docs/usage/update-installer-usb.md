@@ -1,6 +1,6 @@
 # Update an existing installer USB
 
-On Linux with .NET 10 and libarchive installed, run from this checkout:
+On Linux with .NET 10 installed, run from this checkout:
 
 ```sh
 ./eng/update-usb.sh --check
@@ -29,7 +29,11 @@ drive is never formatted or repartitioned. Diagnostic and answer YAML files stay
 byte-identical, including their existing keys; unrelated files and saved logs are
 kept. Boot references are adjusted to the USB's existing volume label.
 
-TeeForge 0.1.0 calculates SHA-256 while streaming. Downloads are checked against
+LibArchive.Net 0.3.1 supplies the native ISO9660 reader; its NuGet package
+includes libarchive, so a separate system libarchive install is unnecessary.
+This input is a disk image, rather than a tar archive. TeeForge 0.1.0 uses
+`BroadcastHashStream` to hash the complete incoming ISO with bounded buffering
+and `TeeHashStream` to hash files as they are written. Downloads are checked against
 GitHub's asset digest; releases with `installer.json` also require its signature
 against this checkout's public key. Signed split media is streamed in part order
 without assembling a local ISO. The app checks the full ISO digest and reads back
@@ -50,5 +54,5 @@ The launcher keeps .NET build and NuGet caches in ignored `.build/usb-update/`
 on disk. Small release descriptors and private mount points also go beneath
 that ignored directory and are cleaned up afterward. ISO data uses small memory
 buffers and writes only to the USB; there is no complete ISO file or staging
-directory. Ubuntu needs `libarchive13` (or the distribution's equivalent
-package); Fedora needs `libarchive`.
+directory. The bundled native reader supports Linux x64 (glibc or musl).
+The launcher also uses the distribution's mount, util-linux and OpenSSL tools.

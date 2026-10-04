@@ -61,7 +61,7 @@ release; they are deliberately manual checks, with no companion update service.
 
 | Source | Manual review |
 | --- | --- |
-| `eng/update-usb/app.cs` | Review the pinned TeeForge and System.CommandLine `#:package` versions with upstream releases, keeping System.CommandLine aligned with `tools/Xur.Cli/Xur.Cli.csproj`, then run `tests/Xur.Integration.Tests/update-usb.cs` against disposable FAT32 media. The file-based app's package directives are maintained explicitly. |
+| `eng/update-usb/app.cs` | Review the pinned TeeForge, LibArchive.Net and System.CommandLine `#:package` versions with upstream releases, keeping System.CommandLine aligned with `tools/Xur.Cli/Xur.Cli.csproj`, then run `tests/Xur.Integration.Tests/update-usb.cs` against disposable FAT32 media. Check ISO hardlinks and forward-only extraction when updating LibArchive.Net; the small metadata adapter uses its public SafeHandle and protected Entry constructor. The file-based app's package directives are maintained explicitly. |
 | `src/Xur.Control/libman.json` | Check AG Grid Community releases during the weekly dependency review; update the library version, build Control to restore JavaScript and its MIT notice, and run Files UI checks. LibMan manifests are unsupported by Dependabot. |
 | `eng/toolchain-lock.json` | Refresh the SDK archive URL/checksum whenever `global.json` changes; also review Fedora cloud builder images/checksums, Image Builder source releases, Tailscale archives and recorded toolchain metadata. Historical host/engine version records do not select runtime images. |
 | `tools/Xur.Console/upstream-lock.json` | Check kmscon releases, refresh the source archive/checksum, and exercise console patches and PTY tests. |
