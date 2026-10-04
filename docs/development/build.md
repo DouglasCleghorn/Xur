@@ -323,3 +323,57 @@ For local installer application tests, add `xur.app-update=off` to the boot comm
 
 See [dependency updates](dependencies.md) for Dependabot coverage and the manual
 checks for custom source downloads, fonts and model checkpoints.
+## Native startup utility
+
+`tools/Xur.Util` builds `xurutil` with Microsoft `System.CommandLine` 2.0.12 and
+.NET 10 Native AOT. Publishing requires clang and zlib development headers on the
+Linux build host. On Ubuntu, install `clang zlib1g-dev`; the existing Fedora image
+builder receives the compiled executable and needs no .NET SDK or runtime for it.
+
+```bash
+"${XUR_DOTNET:-$HOME/.local/share/xur-build/dotnet/dotnet}" run --project tests/Xur.Util.Tests -c Release
+bash eng/test-xurutil.sh
+```
+
+The first command tests service migration, journal setup, signed metadata,
+archives, compatibility, activation/recovery and installer startup using temporary
+fixtures and mocked system commands. It also runs an authentic frozen previous
+updater to verify the first upgrade reaches the new agent's startup repair. The
+second publishes and exercises the actual native executable, including offline
+configuration, with no SDK in its execution environment. Evidence goes under
+`.build/evidence/xurutil/`; native output and separate debug symbols stay under
+`.build/xurutil/`.
+
+The runtime commands are:
+
+```text
+xurutil host migrate
+xurutil logs configure [--root /absolute/offline/root]
+xurutil installer prepare|verify|check
+xurutil app-update status|check|update|rollback|recover
+xurutil app-update configure <server>
+xurutil app-update channel <stable|nightly|local> [server] [-- <public-key-pem>]
+xurutil app-update development <true|false>
+xurutil app-update compatibility <installed-bundle-id>
+```
+
+Installed operations require root. The agent runs host migration before exposing
+health and applies journal defaults afterward; logging failures retry on the next
+start. Fresh installations keep a root-private recovery copy under
+`/var/lib/xur/updater/xurutil`. The first upgrade also migrates the recognized
+legacy recovery unit, installs its executable SELinux label, and retains an
+independent copy with license notices. Recovery works with the application stopped
+or the current bundle link broken. Administrator-customized service units are
+preserved.
+
+Installer preparation selects the bundled application without waiting for the
+network. `xur.app-update=on` explicitly requests a bounded refresh before startup;
+the background timer only reports available updates. Health verification controls
+disk approval and falls back to the bundled application when needed.
+
+The `host/app-update`, `host/host-service-migrate` and `host/log-compression`
+Python files are small compatibility launchers for older
+agents and installers that explicitly invoke Python. Current startup, updater
+calls and recovery invoke the native utility directly. Other agent Python workers,
+OS updater scripts and distro Python dependencies remain separate migration work.
+No installer image or deployment is required to run these fixture checks.

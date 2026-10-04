@@ -12,6 +12,8 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+      - name: Native AOT prerequisites
+        run: sudo apt-get install -y clang zlib1g-dev
       - run: |
           mkdir -p .build/checks
           python3 -m pip install --target .build/checks -r eng/requirements.txt
@@ -29,6 +31,7 @@ jobs:
           python3 tests/Xur.Integration.Tests/compact-update.py
           python3 tests/Xur.Integration.Tests/compact-release.py
           python3 tests/Xur.Integration.Tests/steam-storage.py
+          XUR_DOTNET="$(command -v dotnet)" bash eng/test-xurutil.sh
           python3 tests/Xur.Integration.Tests/online-installer.py
           python3 tests/Xur.Integration.Tests/installer-preflight.py
           python3 tests/Xur.Integration.Tests/install-failure.py

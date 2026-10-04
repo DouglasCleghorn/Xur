@@ -24,7 +24,13 @@ for name in agent control; do
   printf '[Service]\nEnvironment=XUR_CATALOG=/var/lib/xur/app/current/catalog\n' > "$target/etc/systemd/system/xur-$name.service.d/catalog.conf"
 done
 mkdir -p "$target/var/lib/xur/updater"
-install -m 700 "$bundle/host/app-update" "$target/var/lib/xur/updater/app-update"
+# A selected older live release may not carry the utility. The ISO always does.
+utility="$bundle/host/xurutil"
+if ! test -x "$utility"; then utility=/usr/libexec/xurutil; fi
+install -m 700 "$utility" "$target/var/lib/xur/updater/xurutil"
+notices="$bundle/host/licenses"
+if ! test -d "$notices"; then notices=/usr/share/licenses/xurutil; fi
+cp -a "$notices" "$target/var/lib/xur/updater/licenses"
 install -m 644 /usr/share/xur/application-update-key.pem "$target/etc/xur/application-update-key.pem"
 install -m 644 /usr/lib/systemd/system/xur-app-recovery.service "$target/etc/systemd/system/"
 systemctl --root="$target" enable xur-app-recovery.service
@@ -62,11 +68,7 @@ fi
 mkdir -p "$target/etc/systemd/system.conf.d" "$target/etc/systemd/journald.conf.d"
 cp /usr/lib/systemd/system.conf.d/50-xur-console.conf "$target/etc/systemd/system.conf.d/"
 cp /usr/lib/systemd/journald.conf.d/50-xur-console.conf "$target/etc/systemd/journald.conf.d/"
-# Install from the selected app bundle, including a refreshed live application.
-logging_helper="$destination/host/log-compression"
-# A selected older live release may predate the helper; use the ISO's default.
-if ! test -f "$logging_helper"; then logging_helper=/usr/share/xur/app-bundle/host/log-compression; fi
-/usr/bin/python3 "$logging_helper" --root "$target"
+"$utility" logs configure --root "$target"
 # Keep the real Bazzite desktop installed, but do not launch a display manager.
 # Persistent local masks survive replacement of upstream /usr defaults.
 systemctl --root="$target" set-default multi-user.target
@@ -81,7 +83,9 @@ systemctl --root="$target" enable xur-network.service xur-agent.service xur-cont
 # Labels are local administrator configuration and therefore survive OS updates.
 chroot "$target" semanage fcontext -a -t bin_t '/var/lib/xur/app/releases/[^/]+/(control|agent|gateway)(/.*)?'
 chroot "$target" semanage fcontext -a -t bin_t '/var/lib/xur/app/releases/[^/]+/host(/.*)?'
+chroot "$target" semanage fcontext -a -t bin_t '/var/lib/xur/updater/xurutil'
 chroot "$target" restorecon -RF /var/lib/xur /etc/systemd /etc/xur
 mkdir -p "$target/var/usrlocal/bin"
 ln -s /var/lib/xur/app/current/control/Xur.Control "$target/var/usrlocal/bin/xur"
+ln -s /var/lib/xur/updater/xurutil "$target/var/usrlocal/bin/xurutil"
 chroot "$target" firewall-offline-cmd --add-port=8080/tcp --add-port=8443/tcp

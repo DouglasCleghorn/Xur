@@ -19,6 +19,7 @@ updates:
       - /src/Xur.Domain
       - /src/Xur.Gateway
       - /tools/Xur.Cli
+      - /tools/Xur.Util
       - /tests/Xur.Unit.Tests
       - /tests/Xur.Profile.Tests
     patterns: ["*"]

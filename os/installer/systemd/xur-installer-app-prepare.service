@@ -6,7 +6,7 @@ Before=xur-gateway.service xur-agent.service xur-control.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/libexec/xur-installer-app prepare
+ExecStart=/usr/libexec/xurutil installer prepare
 TimeoutStartSec=140
 RemainAfterExit=yes
 UMask=0077

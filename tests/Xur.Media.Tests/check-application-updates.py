@@ -14,8 +14,9 @@ def guest(script):
  r=execute(a.name,['/usr/bin/python3','-c',script]);assert r['code']==0,r['error'];return r['output']
 if a.bootstrap:
  assert json.loads((vm/'vm-manifest.json').read_text()).get('developmentVm')
- key=(repo/'os/bootc/application-update-key.pem').read_text();unit=(repo/'os/bootc/systemd/xur-app-recovery.service').read_text();updater=(repo/'os/bootc/app-update').read_text()
- guest('import pathlib,subprocess\n'+f"pathlib.Path('/etc/xur/application-update-key.pem').write_text({key!r})\npathlib.Path('/etc/systemd/system/xur-app-recovery.service').write_text({unit!r})\npathlib.Path('/var/lib/xur/updater').mkdir(exist_ok=True)\npathlib.Path('/var/lib/xur/updater/app-update').write_text({updater!r})\n"+"subprocess.run(['systemctl','daemon-reload'],check=True)\nsubprocess.run(['systemctl','enable','xur-app-recovery.service'],check=True)")
+ key=(repo/'os/bootc/application-update-key.pem').read_text();unit=(repo/'os/bootc/systemd/xur-app-recovery.service').read_text()
+ # Let the native migration install its independent executable, labels and notices.
+ guest('import pathlib,subprocess\n'+f"pathlib.Path('/etc/xur/application-update-key.pem').write_text({key!r})\npathlib.Path('/etc/systemd/system/xur-app-recovery.service').write_text({unit!r})\npathlib.Path('/etc/systemd/system/xur-app-recovery.service').chmod(0o644)\n"+"subprocess.run(['/var/lib/xur/app/current/host/xurutil','host','migrate'],check=True)\nsubprocess.run(['systemctl','enable','xur-app-recovery.service'],check=True)")
 assert call('/api/application-updates',auth=False)[0]==401
 assert call('/api/application-updates',{'action':'update'},False)[0]==401
 assert call('/api/application-updates',{'action':'development','development':True})[0]==202

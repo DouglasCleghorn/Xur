@@ -26,7 +26,8 @@ def status():
     return dict(busy=busy,operation=operation)
 
 def call(tool,action):
-    result=subprocess.run(['/usr/bin/python3',str(HOST/tool),action],capture_output=True,text=True,timeout=7500 if tool=='os-update' else 3700)
+    command=[str(HOST/'xurutil'),'app-update',action] if tool=='app-update' and (HOST/'xurutil').is_file() else ['/usr/bin/python3',str(HOST/tool),action]
+    result=subprocess.run(command,capture_output=True,text=True,timeout=7500 if tool=='os-update' else 3700)
     if result.returncode:raise RuntimeError('Operation failed; see its log on the Updates page.')
     return json.loads(result.stdout) if action=='status' else None
 

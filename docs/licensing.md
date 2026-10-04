@@ -39,3 +39,9 @@ third-party notices remain in their component directories.
 - Files grid: AG Grid Community (MIT), selected in `src/Xur.Control/libman.json`.
   LibMan restores its JavaScript and copyright notice during the build; both
   ship under `wwwroot/vendor/ag-grid/`. No Enterprise modules are used.
+
+`xurutil` uses Microsoft's MIT-licensed `System.CommandLine` and the .NET Native
+AOT runtime. Its published `licenses/` directory carries the command-line library
+license, the .NET license and runtime third-party notices. These ship in the
+application bundle under `host/licenses/` and in the installer under
+`/usr/share/licenses/xurutil/`; the independent recovery copy retains them too.

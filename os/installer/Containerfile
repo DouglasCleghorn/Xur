@@ -13,13 +13,14 @@ COPY installer-rootfs/ /
 # Never replace /usr/sbin with an overlay directory or patch individual aliases.
 RUN python3 /usr/libexec/xur-check-installer-runtime && \
     semodule -i /usr/share/xur/xur-installer-clock.cil && \
-    chmod 755 /usr/libexec/xur-check-install-clock /usr/libexec/xur-network /usr/libexec/xur-run-install /usr/libexec/xur-installer-app /usr/libexec/xur-live-app /usr/libexec/xur-install-bin/bootc && \
+    chmod 755 /usr/libexec/xurutil /usr/libexec/xur-check-install-clock /usr/libexec/xur-network /usr/libexec/xur-run-install /usr/libexec/xur-installer-app /usr/libexec/xur-live-app /usr/libexec/xur-install-bin/bootc && \
     python3 -c 'import pyudev; pyudev.Context()' && \
-    printf '/run/xur/app/releases/[^/]+/(control|agent|gateway)(/.*)? system_u:object_r:bin_t:s0\n/usr/share/xur/app-bundle/(control|agent|gateway)(/.*)? system_u:object_r:bin_t:s0\n/usr/lib/xur/control/Xur\\.Control -- system_u:object_r:bin_t:s0\n/usr/lib/xur/agent/Xur\\.Agent -- system_u:object_r:bin_t:s0\n/usr/lib/xur/agent/console(/.*)? system_u:object_r:bin_t:s0\n/usr/lib/xur/gateway/Xur\\.Gateway -- system_u:object_r:bin_t:s0\n' >> /etc/selinux/targeted/contexts/files/file_contexts.local && \
+    printf '/run/xur/app/releases/[^/]+/(control|agent|gateway|host)(/.*)? system_u:object_r:bin_t:s0\n/usr/share/xur/app-bundle/(control|agent|gateway|host)(/.*)? system_u:object_r:bin_t:s0\n/usr/lib/xur/control/Xur\\.Control -- system_u:object_r:bin_t:s0\n/usr/lib/xur/agent/Xur\\.Agent -- system_u:object_r:bin_t:s0\n/usr/lib/xur/agent/console(/.*)? system_u:object_r:bin_t:s0\n/usr/lib/xur/gateway/Xur\\.Gateway -- system_u:object_r:bin_t:s0\n' >> /etc/selinux/targeted/contexts/files/file_contexts.local && \
     ln -s /usr/lib/xur/control/Xur.Control /usr/bin/xur && \
     ln -s /usr/lib/xur/control/Xur.Control /usr/bin/xur-control && \
     ln -s /usr/lib/xur/agent/Xur.Agent /usr/bin/xur-agent && \
     ln -s /usr/lib/xur/gateway/Xur.Gateway /usr/bin/xur-gateway && \
+    ln -s /usr/libexec/xurutil /usr/bin/xurutil && \
     systemctl enable xur-installer-app-prepare.service xur-installer-app-verify.service xur-installer-app-check.timer xur-gateway.service xur-agent.service xur-control.service xur-network.service && \
     systemctl mask tailscaled.service && \
     systemctl mask autovt@.service autovt@tty1.service autovt@tty2.service autovt@tty3.service getty@tty1.service getty@tty2.service getty@tty3.service serial-getty@ttyS0.service

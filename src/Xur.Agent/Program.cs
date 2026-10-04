@@ -21,22 +21,21 @@ bool installer = File.ReadAllText("/proc/cmdline").Split(' ').Contains("xur.inst
 if(!installer && File.Exists("/var/lib/xur/installed"))await HostFilesystem.RequireBtrfs();
 // New agent startup is reached by the previous updater on the first upgrade.
 // Keep this repair before health readiness; do not rely on a new updater hook.
-const string hostServiceMigration="/var/lib/xur/app/current/host/host-service-migrate";
-if(!installer && File.Exists(hostServiceMigration))
+const string hostUtility="/var/lib/xur/app/current/host/xurutil";
+if(!installer && File.Exists(hostUtility))
 {
-    var migrated=await Processes.Run("/usr/bin/python3",[hostServiceMigration],45);
+    var migrated=await Processes.Run(hostUtility,["host","migrate"],90);
     applicationLog.Write("HostServiceMigration",migrated.ExitCode==0?Microsoft.Extensions.Logging.LogLevel.Information:Microsoft.Extensions.Logging.LogLevel.Error,Redaction.Logs(migrated.Output).Trim());
     if(migrated.ExitCode!=0)throw new InvalidOperationException("Installed agent startup dependency migration failed; application health is withheld for update recovery.");
 }
 
-const string logCompression="/var/lib/xur/app/current/host/log-compression";
-if(!installer && File.Exists(logCompression))
+if(!installer && File.Exists(hostUtility))
 {
     // Startup also covers the first upgrade performed by an older updater.
     // A logging configuration failure must not prevent management or recovery.
     try
     {
-        var compressed=await Processes.Run("/usr/bin/python3",[logCompression],45);
+        var compressed=await Processes.Run(hostUtility,["logs","configure"],45);
         if(compressed.ExitCode!=0)applicationLog.Write("JournalCompression",Microsoft.Extensions.Logging.LogLevel.Warning,"Journal compression setup failed; retrying on next agent start: "+Redaction.Logs(compressed.Output).Trim());
     }
     catch(Exception e){applicationLog.Write("JournalCompression",Microsoft.Extensions.Logging.LogLevel.Warning,"Journal compression setup failed; retrying on next agent start: "+Redaction.Logs(e.Message));}

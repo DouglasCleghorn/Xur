@@ -36,3 +36,20 @@ print(json.dumps(dict(suite='UpdateAll',result='Passed',osBeforeApplication=True
 calls,result,_=scenario(no_stage=True)
 assert result['stage']=='Failed' and result['results'][0]['stage']=='Failed'
 assert ('app-update','update') in calls
+
+# New bundles dispatch application updates directly to the native command.
+from unittest.mock import patch
+import subprocess
+Path=pathlib.Path
+evidence=Path('.build/evidence/xurutil');evidence.mkdir(parents=True,exist_ok=True)
+with tempfile.TemporaryDirectory(dir=evidence) as directory:
+ host=Path(directory);invoke=module['call'];invoke.__globals__['HOST']=host
+ def checked(argv,**kwargs):
+  assert kwargs['timeout']==3700 and kwargs['capture_output'] and kwargs['text']
+  expected=[str(host/'xurutil'),'app-update','status'] if (host/'xurutil').exists() else ['/usr/bin/python3',str(host/'app-update'),'status']
+  assert argv==expected
+  return subprocess.CompletedProcess(argv,0,'{"busy":false}','')
+ with patch('subprocess.run',checked):
+  assert invoke('app-update','status')=={'busy':False}
+  (host/'xurutil').touch()
+  assert invoke('app-update','status')=={'busy':False}

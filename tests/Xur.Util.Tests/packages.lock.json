@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "System.CommandLine": {
+        "type": "Transitive",
+        "resolved": "2.0.12",
+        "contentHash": "FpW672e6qqrTd1EfKqsvUtFZaJWlTlszUR1o8tdakXhkzKbnEZVndtpfd4K3fUPCFcIs9UmcswMyYGJP1zp/rg=="
+      },
+      "xurutil": {
+        "type": "Project",
+        "dependencies": {
+          "System.CommandLine": "[2.0.12, )"
+        }
+      }
+    }
+  }
+}
