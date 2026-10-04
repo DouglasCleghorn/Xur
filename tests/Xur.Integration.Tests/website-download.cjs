@@ -41,6 +41,18 @@ const fs=require('fs'),path=require('path'),assert=require('assert/strict');
    assert((await page.locator('#download-iso').getAttribute('href')).endsWith('/'+name));
    assert((await page.locator('#download-meta').textContent()).includes(version));
   }
+  for(const [channel,version] of [['stable','26.10.1'],['nightly','26.10.001']]){
+   const appTag=(channel==='stable'?'v':'nightly-')+version,tag=appTag+'-installer';
+   const name=`xur-${channel}-${version}-x86_64.iso`;
+   const media=release(tag,'2026-10-03T00:00:00Z',channel==='nightly');
+   media.assets[0].name=name;media.assets[0].browser_download_url=base+'download/'+tag+'/'+name;
+   // A newer app-only release must not hide the independently published media.
+   const app=release(appTag,'2026-10-04T00:00:00Z',channel==='nightly');app.assets=[{name:'xur-update.json'}];
+   releases=[app,media];
+   await page.goto('https://website.test/download/');await page.getByText('Your online installer is ready.',{exact:false}).waitFor();
+   assert.equal(await page.locator('#download-iso').getAttribute('href'),base+'download/'+tag+'/'+name);
+   assert.equal(await page.locator('#download-release').getAttribute('href'),base+'tag/'+tag);
+  }
   releases=[];await page.goto('https://website.test/download/?start=1');await page.getByText('No newer installer was found.',{exact:false}).waitFor();assert(await page.locator('#download-iso').isVisible());assert.equal(requested.length,1);
   failure=true;await page.locator('#download-retry').click();await page.getByText('Could not check GitHub', {exact:false}).waitFor();failure=false;
   releases=[release('split','2026-09-20T00:00:00Z',false,true)];await page.locator('#download-retry').click();await page.getByText('No newer installer was found.',{exact:false}).waitFor();assert(await page.locator('#download-parts').isHidden());assert.equal(requested.length,1);

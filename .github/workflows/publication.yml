@@ -1,0 +1,71 @@
+name: Publish checked candidate
+on:
+  workflow_call:
+    inputs:
+      channel:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      installer:
+        default: false
+        type: boolean
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: ${{ inputs.channel }}
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download this run's tested candidate
+        if: ${{ !inputs.installer }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-candidate-$RELEASE_CHANNEL-$GITHUB_SHA" --dir .build/ci-artifact
+      - name: Download this run's inspected installer
+        if: inputs.installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "installer-candidate-$RELEASE_CHANNEL-$GITHUB_SHA" --dir .build/ci-installer
+      - name: Sign and publish checked build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          XUR_UPDATE_SIGNING_KEY_PEM: ${{ secrets.XUR_UPDATE_SIGNING_KEY_PEM }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          INSTALLER_RELEASE: ${{ inputs.installer }}
+        run: |
+          test -n "$XUR_UPDATE_SIGNING_KEY_PEM"
+          umask 077
+          export XUR_UPDATE_SIGNING_KEY="$RUNNER_TEMP/xur-release-key.pem"
+          trap 'rm -f "$XUR_UPDATE_SIGNING_KEY"' EXIT
+          printf '%s\n' "$XUR_UPDATE_SIGNING_KEY_PEM" > "$XUR_UPDATE_SIGNING_KEY"
+          unset XUR_UPDATE_SIGNING_KEY_PEM
+          args=()
+          if [[ "$INSTALLER_RELEASE" == true ]]; then args+=(--installer-release); fi
+          python3 eng/ci-release.py --channel "$RELEASE_CHANNEL" --version "$RELEASE_VERSION" --commit "$GITHUB_SHA" "${args[@]}"
+      - name: Remove published application candidate
+        if: ${{ !inputs.installer }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+        run: python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --published
+      - name: Remove published installer candidates and context
+        if: inputs.installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+        run: |
+          python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --kind installer --published
+          python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --kind context --published

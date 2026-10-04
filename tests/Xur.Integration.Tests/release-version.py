@@ -15,6 +15,7 @@ refs = '\n'.join('a' * 40 + '\trefs/tags/' + tag for tag in [
     'v26.09.1', 'v26.09.9', 'v26.09.9^{}', 'v26.08.70',
     'nightly-26.09.099', 'nightly-26.09.100', 'nightly-26.09.002',
     'v2026.09.21.30.1', 'nightly-2026.09.21.27.1', 'v26.09.10-extra',
+    'v26.09.90-installer', 'nightly-26.09.900-installer',
 ])
 assert module.next_version('stable', '26.09', refs) == '26.09.10'
 assert module.next_version('nightly', '26.09', refs) == '26.09.101'

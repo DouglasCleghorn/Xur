@@ -37,26 +37,18 @@ cache = load('ci-builder-cache')
 release = load('ci-release')
 with tempfile.TemporaryDirectory(dir=repo / '.build') as temporary:
     root = pathlib.Path(temporary)
-    git = root / 'git'; git.mkdir(); gate.ROOT = git
-    def run(*args):
-        return subprocess.check_output(['git', *args], cwd=git, text=True).strip()
-    run('init', '-q'); run('config', 'user.email', 'fixture@example.test'); run('config', 'user.name', 'Fixture')
-    (git / 'src').mkdir(); (git / 'os').mkdir()
-    (git / 'src/app.cs').write_text('app'); (git / 'os/installer').write_text('installer')
-    def commit(message):
-        run('add', '.'); run('commit', '-qm', message); return run('rev-parse', 'HEAD')
-    baseline = commit('baseline')
-    (git / 'src/app.cs').write_text('app update'); app = commit('app')
-    assert gate.decision(baseline, app)[0] is False
-    assert gate.decision(baseline, app, True)[0] is True
-    assert gate.decision(None, app)[0] is True
-    (git / 'os/installer').write_text('new installer'); canceled = commit('canceled installer run')
-    (git / 'src/app.cs').write_text('another app update'); newest = commit('newer push')
-    assert gate.decision(baseline, newest)[0] is True
-    assert gate.decision(canceled, newest)[0] is False
-    (git / 'os/installer').rename(git / 'src/moved-installer'); moved = commit('move installer out of os')
-    assert gate.decision(canceled, moved)[0] is True
-    assert gate.decision('f' * 40, moved)[0] is True
+    app, newest = 'a' * 40, 'b' * 40
+    assert not gate.decision('push')
+    assert not gate.decision('push', True)
+    assert not gate.decision('pull_request', True)
+    assert not gate.decision('workflow_dispatch')
+    assert gate.decision('workflow_dispatch', True)
+    for event, requested, expected in [('push', False, False), ('push', True, False),
+                                        ('workflow_dispatch', False, False), ('workflow_dispatch', True, True)]:
+        output = root / 'gate-output'; output.write_text('')
+        with patch.dict(os.environ, {'GITHUB_EVENT_NAME': event, 'GITHUB_OUTPUT': str(output)}):
+            subprocess.run(['python3', str(repo / 'eng/ci-iso-gate.py'), *(['--requested'] if requested else [])], check=True)
+        assert output.read_text() == 'build=' + str(expected).lower() + '\n'
 
     fixture = root / 'context'; context.ROOT = fixture
     (fixture / 'eng').mkdir(parents=True); (fixture / 'dist').mkdir()
@@ -152,7 +144,8 @@ with tempfile.TemporaryDirectory(dir=repo / '.build') as temporary:
     # Superseded publication is rejected before reading any artifact or signing.
     with patch.object(release, 'run', return_value=newest + '\trefs/heads/main'):
         reject(lambda: release.publish('nightly', '26.10.001', app, with_installer=False))
+        reject(lambda: release.publish_installer('nightly', '26.10.001', app))
 
 print(json.dumps({'suite': 'CiBuild', 'result': 'Passed', 'contextTamperingRejected': True,
-                  'canceledInstallerChangesPreserved': True, 'supersededPublicationRejected': True,
+                  'isoBuildsManualOnly': True, 'supersededPublicationRejected': True,
                   'templateTamperingRejected': True, 'published': False}))
