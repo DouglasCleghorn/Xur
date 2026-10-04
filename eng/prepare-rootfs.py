@@ -19,6 +19,7 @@ copy(repo/'.build/streaming-runtime',base/'usr/lib/xur/agent/streaming')
 copy(repo/'os/bootc/systemd',base/'usr/lib/systemd/system')
 copy(repo/'os/bootc/system.conf.d',base/'usr/lib/systemd/system.conf.d')
 copy(repo/'os/bootc/journald.conf.d',base/'usr/lib/systemd/journald.conf.d')
+copy(repo/'os/bootc/logging',base/'usr/lib/systemd')
 copy(repo/'os/bootc/xur-network',base/'usr/libexec/xur-network')
 copy(repo/'os/bootc/upstream-lock.json',base/'usr/share/xur/upstream-lock.json')
 for name in ('xur-os-update.service','xur-os-update.timer'):
@@ -36,7 +37,8 @@ for name in ('LICENSE','docs/licensing.md'):
 copy(repo/'os/bootc/application-update-key.pem',base/'usr/share/xur/application-update-key.pem')
 copy(repo/'os/bootc/application-update-key.pem',bundle/'host/application-update-key.pem')
 copy(repo/'os/bootc/application-features.json',bundle/'host/application-features.json')
-for name in ('os-update','app-update','update-all','xur-network','host-service-migrate','hardware-hooks/reboot'):
+copy(repo/'os/bootc/logging',bundle/'host/logging')
+for name in ('os-update','app-update','update-all','xur-network','host-service-migrate','log-compression','hardware-hooks/reboot'):
     copy(repo/'os/bootc'/name,bundle/'host'/name)
     (bundle/'host'/name).chmod(0o755)
 files={str(p.relative_to(bundle)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(bundle.rglob('*')) if p.is_file()}

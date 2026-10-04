@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Signed metadata and hostile archive checks, without root operations."""
-import hashlib,importlib.machinery,importlib.util,io,json,pathlib,sqlite3,subprocess,tarfile,tempfile
+import base64,hashlib,importlib.machinery,importlib.util,io,json,pathlib,sqlite3,subprocess,tarfile,tempfile
 from unittest.mock import patch
+import urllib.error
 repo=pathlib.Path(__file__).resolve().parents[2]
 loader=importlib.machinery.SourceFileLoader('updater',str(repo/'os/bootc/app-update'));spec=importlib.util.spec_from_loader(loader.name,loader);u=importlib.util.module_from_spec(spec);loader.exec_module(u)
 assert u.normalized('192.168.0.134')=='http://192.168.0.134:8088'
@@ -103,56 +104,56 @@ with tempfile.TemporaryDirectory() as t:
   assert not u.github_asset(url),url
  assert u.github_asset('https://github.com/DouglasCleghorn/Xur/releases/download/v1/latest')
  assert u.github_asset('https://release-assets.githubusercontent.com/release-asset?signature=fixture')
- # Sign real fixture metadata with an ephemeral test key. Repoint latest during
- # the check: descriptor/signature/payload must remain on the originally resolved tag.
+ # Official discovery fetches signed compact metadata from one immutable tag.
  key=root/'key';u.KEY=root/'pub';subprocess.run(['openssl','genpkey','-algorithm','ED25519','-out',str(key)],check=True,capture_output=True)
  u.KEY.write_bytes(subprocess.check_output(['openssl','pkey','-in',str(key),'-pubout']))
  identity='a'*64
- entry=dict(schema=1,hostAbi=1,dataSchema=1,id=identity,file=identity+'.tar.gz',version='1.2',sequence=10,bytes=20,sha256='b'*64)
+ entry=dict(schema=2,hostAbi=1,dataSchema=1,id=identity,file=u.ARCHIVE,version='1.2',channel='stable',sequence=10,bytes=20,sha256='b'*64)
  descriptor=root/'fixture.json';signature=root/'fixture.sig'
  def sign():
-  descriptor.write_text(json.dumps(entry));subprocess.run(['openssl','pkeyutl','-sign','-inkey',str(key),'-rawin','-in',str(descriptor),'-out',str(signature)],check=True,capture_output=True)
+  descriptor.write_text(json.dumps(entry,sort_keys=True,separators=(',',':')))
+  subprocess.run(['openssl','pkeyutl','-sign','-inkey',str(key),'-rawin','-in',str(descriptor),'-out',str(signature)],check=True,capture_output=True)
+  descriptor.write_text(json.dumps({'schema':2,'release':entry,'signature':base64.b64encode(signature.read_bytes()).decode()}))
  sign();u.development(False);urls=[]
  def fetch(url,path,limit):
   urls.append(url)
-  if url==u.PUBLIC+'/latest':path.write_text(identity);return u.GITHUB+'/download/v1.2'
-  if url==u.GITHUB+'/download/v1.2/'+identity+'.json':path.write_bytes(descriptor.read_bytes());return
-  if url==u.GITHUB+'/download/v1.2/'+identity+'.json.sig':path.write_bytes(signature.read_bytes());return
+  if url==u.source()+'/current':path.write_text('nightly-1.3' if u.channel()=='nightly' else 'v1.2');return
+  tag='nightly-1.3' if u.channel()=='nightly' else 'v1.2'
+  if url==u.GITHUB+'/download/'+tag+'/xur-update.json':path.write_bytes(descriptor.read_bytes());return
   raise AssertionError('Metadata escaped pinned release: '+url)
  original_fetch=u.fetch;u.fetch=fetch
- stage=root/'stage';stage.mkdir();assert u.check_legacy(stage)==entry
+ stage=root/'stage';stage.mkdir();assert u.check(stage)==entry
+ with patch.object(u,'fetch',side_effect=AssertionError('Public channel attempted legacy discovery')):
+  try:u.check_local_legacy(stage)
+  except ValueError as error:assert 'only for local' in str(error)
+  else:raise AssertionError('Public legacy discovery remained available')
  assert (stage/'source').read_text()==u.GITHUB+'/download/v1.2'
- descriptor.write_text(descriptor.read_text()+' ')
- try:u.check_legacy(stage)
+ tampered=json.loads(descriptor.read_text());tampered['release']['sequence']=100
+ descriptor.write_text(json.dumps(tampered))
+ try:u.check(stage)
  except subprocess.CalledProcessError:pass
  else:raise AssertionError('Tampered signed metadata accepted')
- sign();(root/'highest-sequence.json').write_text('11')
- try:u.check_legacy(stage)
+ sign();u.remember_sequence({**entry,'sequence':11},'stable')
+ try:u.check(stage)
  except ValueError as e:assert 'older release' in str(e)
  else:raise AssertionError('Downgrade accepted')
- # Each signed channel has its own replay floor; selecting stable after a newer
- # nightly remains possible without accepting older metadata in either channel.
+ # Stable after a newer Nightly respects its own replay floor.
  u.select_channel('nightly');assert u.source()==u.NIGHTLY
  entry['channel']='nightly';entry['sequence']=20;sign()
- def channel_fetch(url,path,limit):
-  if url==u.NIGHTLY+'/latest':path.write_text('nightly-1.3');return
-  if url==u.GITHUB+'/download/nightly-1.3/latest':path.write_text(identity);return
-  if url.startswith(u.GITHUB+'/download/nightly-1.3/'):
-   path.write_bytes(signature.read_bytes() if url.endswith('.sig') else descriptor.read_bytes());return
-  return fetch(url,path,limit)
- u.fetch=channel_fetch;assert u.check_legacy(stage)==entry
+ assert u.check(stage)==entry
  assert (stage/'source').read_text()==u.GITHUB+'/download/nightly-1.3'
  (root/'channel-sequences.json').write_text(json.dumps({'nightly':20,'stable':5}))
  u.select_channel('stable');entry['channel']='stable';entry['sequence']=6;sign()
- assert u.check_legacy(stage)==entry # Older than nightly and legacy global floor.
+ assert u.check(stage)==entry
  entry['sequence']=4;sign()
- try:u.check_legacy(stage)
+ try:u.check(stage)
  except ValueError as e:assert 'older release' in str(e)
  else:raise AssertionError('Same-channel replay accepted')
  entry['sequence']=21;entry['channel']='nightly';sign()
- try:u.check_legacy(stage)
+ try:u.check(stage)
  except ValueError as e:assert 'selected channel' in str(e)
  else:raise AssertionError('Wrong signed channel accepted')
+ assert all('/latest' not in url for url in urls)
  u.fetch=original_fetch
 print(json.dumps({'suite':'UpdateSources','result':'Passed','localOptIn':True,'pinnedGitHubRelease':True,'signedMetadata':True,'rollbackGuard':True}))
 
@@ -179,29 +180,35 @@ with tempfile.TemporaryDirectory() as t:
  identity='a'*64;entry=dict(schema=1,hostAbi=1,dataSchema=1,id=identity,file=identity+'.tar.gz',version='1',channel='development',sequence=1,bytes=20,sha256='b'*64)
  descriptor=root/'signed.json';signature=root/'signed.sig';stage=root/'stage';stage.mkdir()
  def sign_with(private):
-  descriptor.write_text(json.dumps(entry));subprocess.run(['openssl','pkeyutl','-sign','-inkey',str(private),'-rawin','-in',str(descriptor),'-out',str(signature)],check=True,capture_output=True)
+  descriptor.write_text(json.dumps(entry,sort_keys=True,separators=(',',':')))
+  subprocess.run(['openssl','pkeyutl','-sign','-inkey',str(private),'-rawin','-in',str(descriptor),'-out',str(signature)],check=True,capture_output=True)
+  if u.channel()!='local':descriptor.write_text(json.dumps({'schema':2,'release':entry,'signature':base64.b64encode(signature.read_bytes()).decode()}))
  def fetch_fixture(url,path,limit):
-  if url.endswith('/latest'):path.write_text(identity);return u.GITHUB+'/download/v1' if url.startswith(u.PUBLIC) else None
+  if url.endswith('/current'):
+   if u.channel()=='local':raise urllib.error.HTTPError(url,404,'fixture',{},None)
+   path.write_text('v1.0');return
+  if url.endswith('/latest'):path.write_text(identity);return
   path.write_bytes(signature.read_bytes() if url.endswith('.sig') else descriptor.read_bytes())
- u.fetch=fetch_fixture;sign_with(contributor);assert u.check_legacy(stage)==entry
+ u.fetch=fetch_fixture;sign_with(contributor);assert u.check(stage)==entry
  scope=u.sequence_scope();u.remember_sequence(entry,scope)
  assert not (root/'highest-sequence.json').exists()
  entry['sequence']=0;sign_with(contributor)
- try:u.check_legacy(stage)
+ try:u.check(stage)
  except ValueError:pass
  else:raise AssertionError('Local replay accepted')
  u.select_channel('local','192.0.2.11:8088',custom_public);assert u.sequence_scope()!=scope
- assert u.check_legacy(stage)==entry
+ assert u.check(stage)==entry
  u.select_channel('stable');assert u.source()==u.PUBLIC and u.trust_key()==official_public
  assert u.read(u.CONFIG)['publicKey']==custom_public and not (root/'available.json').exists()
- entry['channel']='stable';entry['sequence']=2;sign_with(contributor)
- try:u.check_legacy(stage)
+ entry['schema']=2;entry['file']=u.ARCHIVE;entry['channel']='stable';entry['sequence']=2;sign_with(contributor)
+ try:u.check(stage)
  except subprocess.CalledProcessError:pass
  else:raise AssertionError('Contributor key accepted for official release')
- sign_with(official);assert u.check_legacy(stage)==entry
+ sign_with(official);assert u.check(stage)==entry
  u.remember_sequence(entry,'stable');assert u.read(root/'channel-sequences.json')['stable']==2
  u.select_channel('local','192.0.2.10:8088',custom_public)
- try:u.check_legacy(stage)
+ entry['schema']=1;entry['file']=identity+'.tar.gz';sign_with(official)
+ try:u.check(stage)
  except subprocess.CalledProcessError:pass
  else:raise AssertionError('Local key selection ignored')
  u.fetch=original_fetch

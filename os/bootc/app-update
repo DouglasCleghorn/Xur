@@ -3,7 +3,7 @@
 import base64,fcntl,hashlib,http.client,json,os,pathlib,re,shutil,socket,sqlite3,subprocess,sys,tarfile,tempfile,time,urllib.parse,urllib.request,uuid
 ROOT=pathlib.Path('/var/lib/xur/app');CONFIG=pathlib.Path('/etc/xur/application-updates.json');KEY=pathlib.Path('/etc/xur/application-update-key.pem')
 GITHUB='https://github.com/DouglasCleghorn/Xur/releases'
-PUBLIC=GITHUB+'/latest/download'
+PUBLIC=GITHUB+'/download/stable'
 NIGHTLY=GITHUB+'/download/nightly'
 STATE=ROOT/'update.json';TX=ROOT/'transaction.json';BLOCK=ROOT/'maintenance';SERVICES=['xur-control','xur-agent','xur-gateway']
 def atomic(path,data):
@@ -102,16 +102,11 @@ def fetch(url,path,limit):
             out.write(chunk)
         out.flush();os.fsync(out.fileno())
     return release_base
-def check_legacy(stage):
+def check_local_legacy(stage):
+    if channel()!='local':raise ValueError('Legacy update discovery is supported only for local build testing')
     server=source()
     if not server:raise ValueError('Set the update server address first')
-    if server==NIGHTLY:
-        fetch(server+'/latest',stage/'channel-latest',128)
-        tag=(stage/'channel-latest').read_text().strip()
-        if not re.fullmatch(r'nightly-[0-9]+(?:[.][0-9]+)+',tag):raise ValueError('Invalid nightly release pointer')
-        server=GITHUB+'/download/'+tag
     pinned=fetch(server+'/latest',stage/'latest',128)
-    if server==PUBLIC and (not pinned or not pinned.startswith(GITHUB+'/download/')):raise ValueError('GitHub did not resolve an immutable release')
     server=pinned or server
     (stage/'source').write_text(server)
     identity=(stage/'latest').read_text().strip()
@@ -122,10 +117,8 @@ def check_legacy(stage):
     entry=read(stage/'release.json')
     if entry.get('schema')!=1 or entry.get('hostAbi')!=1 or entry.get('dataSchema')!=1 or entry.get('id')!=identity or entry.get('file')!=identity+'.tar.gz':raise ValueError('Release is incompatible with this installation')
     if not isinstance(entry.get('bytes'),int) or not 0<entry['bytes']<=2*1024**3 or not re.fullmatch('[a-f0-9]{64}',entry.get('sha256','')):raise ValueError('Invalid release metadata')
-    if read(CONFIG,{}).get('development') is not True and entry.get('channel','stable')!=channel():raise ValueError('Signed release does not match the selected channel')
     key=sequence_scope()
     floor=read(ROOT/'channel-sequences.json',{}).get(key,0)
-    if 'channel' not in entry and channel()!='local':floor=max(floor,read(ROOT/'highest-sequence.json',0))
     if entry.get('sequence',0)<floor:raise ValueError('Repository offered an older release in this channel; use Roll back for the previous installation')
     atomic(ROOT/'available.json',entry);return entry
 
@@ -157,13 +150,14 @@ def signed_descriptor(path,stage):
 def check(stage):
     server=source()
     if not server:raise ValueError('Set the update server address first')
-    # New channel pointers are separate from the frozen legacy migration pointers.
     official=channel()!='local'
-    base=GITHUB+'/download/'+channel() if official else server
+    base=server
     try:fetch(base+'/current',stage/'current',128)
     except urllib.error.HTTPError as error:
         if error.code!=404:raise
-        return check_legacy(stage) # Existing contributor repositories and rollout bootstrap.
+        if not official:return check_local_legacy(stage)
+        (ROOT/'available.json').unlink(missing_ok=True)
+        raise ValueError('No '+channel().title()+' release available. Keep the current installation and check again later.') from None
     target=(stage/'current').read_text().strip()
     if official:
         pattern=r'nightly-[0-9]+(?:[.][0-9]+)+' if channel()=='nightly' else r'v[0-9]+(?:[.][0-9]+)+'

@@ -31,6 +31,14 @@ with tempfile.TemporaryDirectory() as directory:
   assert requests==['/current','/'+identity+'.update.json'],'Check downloaded payload'
   assert u.download_bundle(stage,checked).read_bytes()==original_payload
   assert requests[-1]=='/'+payload.name
+  # Older contributor repositories remain supported only for local testing.
+  (public/'latest').write_text(identity)
+  legacy=public/(identity+'.json');legacy.write_text(json.dumps(entry))
+  subprocess.run(['openssl','pkeyutl','-sign','-inkey',str(key),'-rawin','-in',str(legacy),'-out',str(legacy)+'.sig'],check=True,capture_output=True)
+  (public/'current').unlink();requests.clear()
+  assert u.check(stage)==entry
+  assert requests==['/current','/latest','/'+identity+'.json','/'+identity+'.json.sig']
+  (public/'current').write_text(identity)
   # Tampering, bounded metadata, truncation, and payload integrity.
   altered=json.loads(original);altered['release']['sha256']='c'*64
   for changed in [json.dumps(altered).encode(),b'{}',b'x'*65537,original[:20]]:
@@ -51,7 +59,7 @@ with tempfile.TemporaryDirectory() as directory:
   except ValueError as error:assert 'older release' in str(error)
   else:raise AssertionError('Replay accepted')
   # Invalid descriptors do not silently fall back to legacy trust/discovery.
-  descriptor.write_bytes(b'{}');u.check_legacy=lambda stage:(_ for _ in ()).throw(AssertionError('Downgrade fallback'))
+  descriptor.write_bytes(b'{}');u.check_local_legacy=lambda stage:(_ for _ in ()).throw(AssertionError('Downgrade fallback'))
   try:u.check(stage)
   except ValueError:pass
   else:raise AssertionError('Invalid compact descriptor accepted')
@@ -73,14 +81,31 @@ with tempfile.TemporaryDirectory() as directory:
   try:u.check(stage)
   except ValueError as error:assert 'selected channel' in str(error)
   else:raise AssertionError('Wrong channel accepted')
- with tempfile.TemporaryDirectory() as fallback_directory:
-  stage=pathlib.Path(fallback_directory);u.check_legacy=lambda stage:'legacy';u.select_channel('stable')
+ # Missing public pointers get a useful message, clear stale availability,
+ # and never try old public discovery. Authorization and server errors propagate.
+ for channel in ['stable','nightly']:
+  u.select_channel(channel)
   for status in [404,403,500]:
-   def fail(url,path,limit):raise urllib.error.HTTPError(url,status,'fixture',{},None)
+   calls=[];u.atomic(u.ROOT/'available.json',{'id':'stale'})
+   def fail(url,path,limit):
+    calls.append(url);raise urllib.error.HTTPError(url,status,'fixture',{},None)
    u.fetch=fail
-   if status==404:assert u.check(stage)=='legacy'
-   else:
-    try:u.check(stage)
-    except urllib.error.HTTPError as error:assert error.code==status
-    else:raise AssertionError('HTTP failure silently fell back to legacy')
-print(json.dumps({'suite':'CompactUpdate','result':'Passed','checkBytesUnder':2048,'payloadOnlyOnUpdate':True,'signatureBoundsReplayAndRace':True,'bothChannelsPinned':True,'isoVerification':True}))
+   try:u.check(stage)
+   except ValueError as error:
+    assert status==404 and str(error).startswith('No '+channel.title()+' release available.')
+    assert not (u.ROOT/'available.json').exists()
+   except urllib.error.HTTPError as error:assert status!=404 and error.code==status
+   else:raise AssertionError('Missing or failed public pointer accepted')
+   assert calls==[u.source()+'/current']
+ # A missing descriptor is a broken release, not an unpublished channel.
+ u.select_channel('stable');calls=[]
+ def missing_descriptor(url,path,limit):
+  calls.append(url)
+  if url==u.source()+'/current':path.write_text('v1.0');return
+  raise urllib.error.HTTPError(url,404,'fixture',{},None)
+ u.fetch=missing_descriptor
+ try:u.check(stage)
+ except urllib.error.HTTPError as error:assert error.code==404
+ else:raise AssertionError('Broken release was treated as an unpublished channel')
+ assert calls==[u.source()+'/current',u.GITHUB+'/download/v1.0/'+u.DESCRIPTOR]
+print(json.dumps({'suite':'CompactUpdate','result':'Passed','checkBytesUnder':2048,'payloadOnlyOnUpdate':True,'signatureBoundsReplayAndRace':True,'bothChannelsPinned':True,'isoVerification':True,'missingPublicChannelExplained':True,'localLegacyOnly':True}))

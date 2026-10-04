@@ -9,7 +9,7 @@ const fs=require('fs'),assert=require('assert/strict');
  const initial=[{name:'.local',kind:'folder',modified:1700000000},{name:'steam-123.log',kind:'file',bytes:128,modified:1700000000},{name:'archive.zip',kind:'file',bytes:256,modified:1700000000},{name:'<script>alert(1)</script>',kind:'link',modified:1700000000}];let items=structuredClone(initial);
  await page.route('http://files.test/**',async r=>{
   const u=new URL(r.request().url());
-  if(u.pathname==='/api/storage/mounts')return r.fulfill({json:[{id:'ssd',path:'/var',source:'/dev/nvme0n1p2',type:'ext4',bytes:1000000000,used:400000000,available:600000000,readOnly:false}]});
+  if(u.pathname==='/api/storage/mounts')return r.fulfill({json:[{id:'ssd',path:'/var',source:'/dev/nvme0n1p2',type:'btrfs',bytes:1000000000,used:400000000,available:600000000,readOnly:false}]});
   if(u.pathname==='/api/files/roots')return r.fulfill({json:[{username:'station',name:'Gaming workstation',home:'/var/home/station'}]});
   if(u.pathname.endsWith('/size')){sizes.push(u.href);return r.fulfill({json:{bytes:290000000,partial:false,scanning:false,capturedAt:'2026-09-20T18:00:00Z'}});}
   if(u.pathname==='/api/storage/files/list')return r.fulfill({json:{ok:true,entries:[{name:'models',kind:'folder',bytes:null,modified:1700000000},{name:'<script>bad</script>',kind:'link',bytes:null,modified:1700000000}],truncated:false}});

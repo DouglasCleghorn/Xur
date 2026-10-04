@@ -29,6 +29,19 @@ if(!installer && File.Exists(hostServiceMigration))
     if(migrated.ExitCode!=0)throw new InvalidOperationException("Installed agent startup dependency migration failed; application health is withheld for update recovery.");
 }
 
+const string logCompression="/var/lib/xur/app/current/host/log-compression";
+if(!installer && File.Exists(logCompression))
+{
+    // Startup also covers the first upgrade performed by an older updater.
+    // A logging configuration failure must not prevent management or recovery.
+    try
+    {
+        var compressed=await Processes.Run("/usr/bin/python3",[logCompression],45);
+        if(compressed.ExitCode!=0)applicationLog.Write("JournalCompression",Microsoft.Extensions.Logging.LogLevel.Warning,"Journal compression setup failed; retrying on next agent start: "+Redaction.Logs(compressed.Output).Trim());
+    }
+    catch(Exception e){applicationLog.Write("JournalCompression",Microsoft.Extensions.Logging.LogLevel.Warning,"Journal compression setup failed; retrying on next agent start: "+Redaction.Logs(e.Message));}
+}
+
 var stateDir = installer ? run : "/var/lib/xur";
 if(!installer)_=Task.Run(async()=>{try{if((await Processes.Run("systemctl",["is-active","firewalld"],5)).ExitCode==0)await Processes.Run("firewall-cmd",["--add-port=8443/tcp"],10);}catch{}});
 Directory.CreateDirectory(stateDir);

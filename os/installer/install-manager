@@ -61,6 +61,11 @@ fi
 mkdir -p "$target/etc/systemd/system.conf.d" "$target/etc/systemd/journald.conf.d"
 cp /usr/lib/systemd/system.conf.d/50-xur-console.conf "$target/etc/systemd/system.conf.d/"
 cp /usr/lib/systemd/journald.conf.d/50-xur-console.conf "$target/etc/systemd/journald.conf.d/"
+# Install from the selected app bundle, including a refreshed live application.
+logging_helper="$destination/host/log-compression"
+# A selected older live release may predate the helper; use the ISO's default.
+if ! test -f "$logging_helper"; then logging_helper=/usr/share/xur/app-bundle/host/log-compression; fi
+/usr/bin/python3 "$logging_helper" --root "$target"
 # Keep the real Bazzite desktop installed, but do not launch a display manager.
 # Persistent local masks survive replacement of upstream /usr defaults.
 systemctl --root="$target" set-default multi-user.target

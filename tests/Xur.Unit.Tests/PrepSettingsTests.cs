@@ -54,7 +54,7 @@ static class PrepSettingsTests
     }
     static async Task Trim(string root,Action<bool,string> check)
     {
-        var mounts="""{"filesystems":[{"source":"/dev/nvme0n1p1","target":"/var","fstype":"ext4","size":1000,"used":400,"avail":500,"options":"rw","maj:min":"259:1"},{"source":"/dev/sda1","target":"/archive","fstype":"ext4","size":2000,"used":1000,"avail":900,"options":"rw","maj:min":"8:1"},{"source":"/dev/nvme0n1p2","target":"/boot","fstype":"ext4","size":1000,"used":400,"avail":500,"options":"ro","maj:min":"259:2"}]}""";
+        var mounts="""{"filesystems":[{"source":"/dev/nvme0n1p1","target":"/var","fstype":"btrfs","size":1000,"used":400,"avail":500,"options":"rw","maj:min":"259:1"},{"source":"/dev/sda1","target":"/archive","fstype":"ext4","size":2000,"used":1000,"avail":900,"options":"rw","maj:min":"8:1"},{"source":"/dev/nvme0n1p2","target":"/boot","fstype":"ext4","size":1000,"used":400,"avail":500,"options":"ro","maj:min":"259:2"}]}""";
         var disks="""{"blockdevices":[{"path":"/dev/nvme0n1p1","uuid":"ssd-a","rota":false,"disc-max":1000000,"maj:min":"259:1"},{"path":"/dev/sda1","uuid":"hdd-a","rota":true,"disc-max":0,"maj:min":"8:1"},{"path":"/dev/nvme0n1p2","uuid":"ssd-b","rota":0,"disc-max":1000000,"maj:min":"259:2"}]}""";
         var parsed=StorageMounts.Parse(mounts,disks);check(parsed.Single(m=>m.Path=="/var").TrimSupported&&!parsed.Single(m=>m.Path=="/boot").TrimSupported&&!parsed.Single(m=>m.Path=="/archive").Ssd,"TRIM detects SSD discard support and excludes read-only/HDD mounts");
         var trimmed=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);int calls=0;string[]? command=null;

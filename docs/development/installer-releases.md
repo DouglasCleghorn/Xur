@@ -29,7 +29,7 @@ A push to `main` (Nightly) or `release` (Stable) runs **Build and publish releas
    app descriptor and archive from the matching, already-published app release,
    verify the inspected ISO candidate, then sign a new descriptor that adds the ISO
    receipt. The original app archive bytes and signed update sequence are retained.
-   This release never changes the app release, migration bridge, channel's
+   This release never changes the app release, channel's
    `current` pointer or GitHub's **Latest** designation.
 6. Retain unsigned candidates for seven days, pruning older candidates for that
    channel. Build jobs cannot access signing keys. Contexts expire after one day;
@@ -39,16 +39,20 @@ A push to `main` (Nightly) or `release` (Stable) runs **Build and publish releas
    runs waiting for Stable approval, and each publisher rejects superseded commits.
 
 Installer releases have **three assets**: `xur-<channel>-<version>-x86_64.iso`,
-`xur-update-x86_64.tar.gz`, and `xur-update.json` (a migration bridge may retain
-the archive's original bundle-ID filename). The first compact-format application
-release on each channel also has the legacy descriptor, detached signature and
-pointer (reusing the app archive). Those transition releases must remain available. Legacy
-Nightly `nightly/latest` and GitHub's Stable **Latest** designation stay fixed on
-these bridges. New clients use `nightly/current` or `stable/current`, which point
-to immutable versioned releases. Consequently GitHub's **Latest** badge is a
-migration entry point, not the newest Stable version; use Xur's channel selector
-or the website download page. Do not manually move that designation or delete a
-migration release. The channel alias's `migration` asset records its fixed tag.
+`xur-update-x86_64.tar.gz`, and `xur-update.json`. Application releases contain
+only the archive and signed JSON descriptor, including the first release on a
+channel. Public clients use `nightly/current` or `stable/current` to resolve an
+immutable versioned application release. Each Stable application publication
+advances GitHub's **Latest** designation; Nightly and detached installer releases
+never advance it. The website download page selects the newest release with media.
+
+Ext4-root releases and their public updater bridges were retired on 2026-10-03.
+The publisher no longer creates legacy descriptors, `nightly/latest` or
+`migration` markers. On the next successful publication for a channel, it removes
+any leftover `latest` and `migration` alias assets after uploading `current`.
+A channel without a `current` pointer is unavailable; public clients report that
+no release is available instead of following retired discovery paths. Stable
+requires a new Btrfs application release before its channel can be used again.
 
 Application releases contain the app archive and signed JSON descriptor.
 The last installer release remains available; the website selects releases that
@@ -70,20 +74,20 @@ Keep release tags even when cleaning up old assets to preserve the counter.
 Application tags remain `v26.09.1` and `nightly-26.09.001`; manually requested
 media uses `v26.09.1-installer` and `nightly-26.09.001-installer`. ISO names include both the
 channel and version: `xur-stable-26.09.1-x86_64.iso` and
-`xur-nightly-26.09.001-x86_64.iso`. Existing long-version releases and migration
-pointers remain valid. Updater ordering uses the signed publication sequence,
-not a numeric comparison of the displayed version, so shortening the year
+`xur-nightly-26.09.001-x86_64.iso`. These filenames illustrate the version format;
+the corresponding ext4-root downloads were retired. Historical Git tags remain
+available for source history and release numbering. Updater ordering uses the
+signed publication sequence, not a numeric comparison of the displayed version, so shortening the year
 does not block upgrades. Local contributor builds may still set their own version.
 
 Version lookup fails if the remote cannot be read. It never invents a fallback
 number. Per-branch workflow concurrency and the publication check for a
 superseded commit remain in effect; an existing release tag is never overwritten.
 
-## Migration and validation
+## Validation
 
-There is one transition generation per channel because old clients reject signed
-metadata for the other channel. Each bridge is created by that channel's release
-workflow; publishing Nightly does not silently promote it to Stable.
+Signed metadata binds an application release to its channel. Each channel uses
+its own publication workflow; publishing Nightly does not promote it to Stable.
 
 This workflow does **not** assert that boot/install, GPU or physical USB tests
 passed. Its installer receipt explicitly records these as not run. Run the
@@ -165,13 +169,10 @@ JSON contains the installer build receipt and inspection report digest. Full
 embedded reports remain in the build's CI inspection output rather than adding
 more download assets. Checksums in release notes alone do not authenticate media.
 
-Publication refuses an ISO of 2 GiB or larger so a size regression cannot silently
-reintroduce split downloads. Historical split releases still work: concatenate
-all `.partNNN` files in filename order, then verify their old `installer.json`
-with its `.sig` using `openssl pkeyutl -verify -pubin -inkey
-os/bootc/application-update-key.pem -rawin -in installer.json -sigfile
-installer.json.sig`. Compare the assembled hash to `iso.sha256` in that verified
-JSON. Never write an individual part to USB.
+Publication refuses an ISO of 2 GiB or larger. The retired ext4-root releases,
+including historical split media, are no longer offered for download. Preserve
+Git tags when retiring downloads so source history and version counters remain
+available. New installations use a Btrfs root; `/boot` remains ext4 and EFI is FAT32.
 
 Local builds still use `./eng/build-iso.sh`; `XUR_INSTALLER_CHANNEL=nightly` selects
 Nightly, otherwise they default to Stable. Use `xur.app-update=off` at installer

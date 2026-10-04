@@ -173,7 +173,7 @@ try{
  Check(Xur.Agent.StationAccounts.Read(passwd) is [{Username:"xuruserone",Uid:1001,Name:"Alex"}],"User inventory excludes root, services and disposable temporary users");
 }finally{File.Delete(passwd);}
 var filesystemJson="""
-{"filesystems":[{"source":"/dev/vda3[/ostree/var]","target":"/var","fstype":"ext4","size":1000,"used":400,"avail":500},{"source":"/dev/vda3","target":"/sysroot","fstype":"ext4","size":1000,"used":400,"avail":500},{"source":"tmpfs","target":"/run","fstype":"tmpfs","size":800,"used":200,"avail":600},{"source":"/dev/vdb1","target":"/mnt/data","fstype":"xfs","size":2000,"used":800,"avail":1200}]}
+{"filesystems":[{"source":"/dev/vda3[/ostree/var]","target":"/var","fstype":"btrfs","size":1000,"used":400,"avail":500},{"source":"/dev/vda3","target":"/sysroot","fstype":"btrfs","size":1000,"used":400,"avail":500},{"source":"tmpfs","target":"/run","fstype":"tmpfs","size":800,"used":200,"avail":600},{"source":"/dev/vdb1","target":"/mnt/data","fstype":"xfs","size":2000,"used":800,"avail":1200}]}
 """;
 var storageFilesystems=Xur.Agent.StorageUsage.Filesystems(filesystemJson);
 Check(storageFilesystems.Length==2 && storageFilesystems[0].Source=="/dev/vda3" && storageFilesystems[0].Mounts.Length==2 && storageFilesystems.Sum(f=>f.Bytes)==3000,"Storage deduplicates bind-mounted system filesystems and excludes RAM disks");
