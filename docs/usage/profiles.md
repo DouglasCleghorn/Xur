@@ -150,7 +150,7 @@ acceptance and the reference four-3090 deployment remain to be verified. See
 Upstream implementation references:
 [Podman run](https://docs.podman.io/en/latest/markdown/podman-run.1.html),
 [NVIDIA CDI](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/cdi-support.html),
-[llama.cpp containers](https://github.com/ggml-org/llama.cpp/blob/eafe15a5e3d87dd68ae33acf6a7cbd9415a0ac5e/docs/docker.md).
+[llama.cpp b10920 containers](https://github.com/ggml-org/llama.cpp/blob/b10920/docs/docker.md).
 
 ## Cancel a profile change
 

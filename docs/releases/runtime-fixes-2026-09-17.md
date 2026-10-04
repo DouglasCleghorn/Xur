@@ -22,7 +22,7 @@ Saved recipes remain immutable. Re-select the model in the workload editor and s
 
 ## Fish S2 Pro
 
-The root failure is `ModuleNotFoundError: No module named 'fish_speech'`. The [pinned vLLM-Omni instructions](https://github.com/vllm-project/vllm-omni/blob/eb11446b7f2e30ca582f8aff3afe12e9a2e66f6c/examples/online_serving/text_to_speech/README.md) require this extra dependency.
+The root failure is `ModuleNotFoundError: No module named 'fish_speech'`. The [pinned vLLM-Omni instructions](https://github.com/vllm-project/vllm-omni/blob/v0.28.0/examples/online_serving/text_to_speech/README.md) require this extra dependency.
 
 `eng/build-fish-engine.sh` prepares a local derived engine image from the existing digest. The Fish wheel is hash-pinned. The build installs codec dependencies with constraints preserving the base environment, initializes the DAC codec on CPU, and records a dependency install report and package list. This preparation script does not publish or change the catalog. Transitive dependencies still need locking from that report, the image needs a registry manifest digest, and actual TTS requests need testing before catalog selection can use it. No weights are included.
 

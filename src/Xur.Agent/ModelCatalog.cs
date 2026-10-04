@@ -23,7 +23,7 @@ public sealed class ModelCatalog(string state)
         "Intel"=>"ghcr.io/ggml-org/llama.cpp@sha256:09800bdcf619dbea87cd22194c3210ebbb80c943e5d93fb27e4e5bb6f6e7b1ce",_=>Cpu};
     const string Vllm="mirror.gcr.io/vllm/vllm-openai@sha256:082ca6f035279109041ffd3fe0695cb568b29bc580b35c4f297a66a08b216c1b";
     const string Omni="mirror.gcr.io/vllm/vllm-omni@sha256:4780186f168af96634917208596675439fa71cb5ed3440a30e8c21ca1defc451";
-    const string OmniModels="https://raw.githubusercontent.com/vllm-project/vllm-omni/eb11446b7f2e30ca582f8aff3afe12e9a2e66f6c/docs/models/supported_models.md";
+    const string OmniModels="https://raw.githubusercontent.com/vllm-project/vllm-omni/v0.28.0/docs/models/supported_models.md";
     static void Validate(string model,string? revision=null)
     {
         if(!Regex.IsMatch(model,@"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$") || revision!=null && !Regex.IsMatch(revision,@"^[0-9a-f]{40}$"))throw new InvalidOperationException("Invalid model identity.");

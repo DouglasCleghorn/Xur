@@ -85,7 +85,7 @@ API clients should use an **Automation** API key for catalog resolution; see
 
 Sources: [Unsloth inference defaults](https://github.com/unslothai/unsloth/tree/main/studio/backend/assets/configs),
 [Hugging Face Hub API](https://huggingface.co/docs/hub/api),
-[vLLM-Omni supported models at the pinned engine revision](https://github.com/vllm-project/vllm-omni/blob/eb11446b7f2e30ca582f8aff3afe12e9a2e66f6c/docs/models/supported_models.md).
+[vLLM-Omni v0.28.0 supported models](https://github.com/vllm-project/vllm-omni/blob/v0.28.0/docs/models/supported_models.md).
 
 ## Packed token embeddings
 
