@@ -21,7 +21,7 @@
   }
   function installerName(release) {
     const tag = release.tag_name || '';
-    const match = /^(nightly-|v)([0-9]+(?:\.[0-9]+)+)$/.exec(tag);
+    const match = /^(nightly-|v)([0-9]+(?:\.[0-9]+)+)(?:-installer)?$/.exec(tag);
     const name = match ? `xur-${match[1] === 'v' ? 'stable' : 'nightly'}-${match[2]}-x86_64.iso` : null;
     return release.assets.find(a => name && a.name === name) ||
       release.assets.find(a => a.name === 'xur-installer-x86_64.iso');

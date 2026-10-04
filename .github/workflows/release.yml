@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       build_iso:
-        description: Force an installer build (including final media verification)
+        description: Build and publish an installer separately from the application update
         type: boolean
         default: false
 permissions:
@@ -18,7 +18,6 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release'
     uses: ./.github/workflows/checks.yml
   build:
-    needs: checks
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -46,13 +45,11 @@ jobs:
       - name: Select installer build
         id: iso
         env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_CHANNEL: ${{ steps.identity.outputs.channel }}
-          FORCE_ISO: ${{ inputs.build_iso || false }}
+          REQUEST_ISO: ${{ inputs.build_iso || false }}
         run: |
           args=()
-          if [[ "$FORCE_ISO" == true ]]; then args+=(--force); fi
-          python3 eng/ci-iso-gate.py --commit "$GITHUB_SHA" --channel "$RELEASE_CHANNEL" "${args[@]}"
+          if [[ "$REQUEST_ISO" == true ]]; then args+=(--requested); fi
+          python3 eng/ci-iso-gate.py "${args[@]}"
       - name: Prepare native build tools and browser
         run: |
           python3 eng/ci-native.py
@@ -118,7 +115,7 @@ jobs:
           retention-days: 7
           path: .build/fast/
   installer:
-    needs: build
+    needs: [checks, build]
     if: needs.build.outputs.build_iso == 'true'
     uses: ./.github/workflows/installer.yml
     permissions:
@@ -127,55 +124,24 @@ jobs:
     with:
       channel: ${{ needs.build.outputs.channel }}
   publish:
-    needs: [checks, build, installer]
-    if: >-
-      ${{ !cancelled() && needs.checks.result == 'success' && needs.build.result == 'success' &&
-          (needs.installer.result == 'success' ||
-           (needs.installer.result == 'skipped' && needs.build.outputs.build_iso == 'false')) }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    environment:
-      name: ${{ needs.build.outputs.channel }}
+    needs: [checks, build]
+    uses: ./.github/workflows/publication.yml
     permissions:
       contents: write
       actions: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Download this run's tested candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
-        run: |
-          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-candidate-$RELEASE_CHANNEL-$GITHUB_SHA" --dir .build/ci-artifact
-      - name: Download this run's inspected installer
-        if: needs.installer.result == 'success'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
-        run: |
-          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "installer-candidate-$RELEASE_CHANNEL-$GITHUB_SHA" --dir .build/ci-installer
-      - name: Sign and publish checked build
-        env:
-          GH_TOKEN: ${{ github.token }}
-          XUR_UPDATE_SIGNING_KEY_PEM: ${{ secrets.XUR_UPDATE_SIGNING_KEY_PEM }}
-          RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
-          RELEASE_VERSION: ${{ needs.build.outputs.version }}
-          INCLUDE_INSTALLER: ${{ needs.installer.result == 'success' }}
-        run: |
-          test -n "$XUR_UPDATE_SIGNING_KEY_PEM"
-          umask 077
-          export XUR_UPDATE_SIGNING_KEY="$RUNNER_TEMP/xur-release-key.pem"
-          trap 'rm -f "$XUR_UPDATE_SIGNING_KEY"' EXIT
-          printf '%s\n' "$XUR_UPDATE_SIGNING_KEY_PEM" > "$XUR_UPDATE_SIGNING_KEY"
-          unset XUR_UPDATE_SIGNING_KEY_PEM
-          args=()
-          if [[ "$INCLUDE_INSTALLER" == true ]]; then args+=(--with-installer); fi
-          python3 eng/ci-release.py --channel "$RELEASE_CHANNEL" --version "$RELEASE_VERSION" --commit "$GITHUB_SHA" "${args[@]}"
-      - name: Remove published candidate from Actions storage
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
-        run: |
-          python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --published
-          python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --kind installer --published
-          python3 eng/ci-artifacts.py "$RELEASE_CHANNEL" --kind context --published
+    secrets: inherit
+    with:
+      channel: ${{ needs.build.outputs.channel }}
+      version: ${{ needs.build.outputs.version }}
+  publish-installer:
+    needs: [build, installer, publish]
+    if: needs.build.outputs.build_iso == 'true'
+    uses: ./.github/workflows/publication.yml
+    permissions:
+      contents: write
+      actions: write
+    secrets: inherit
+    with:
+      channel: ${{ needs.build.outputs.channel }}
+      version: ${{ needs.build.outputs.version }}
+      installer: true
