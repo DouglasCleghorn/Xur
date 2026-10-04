@@ -40,7 +40,7 @@ static class PrepSettingsTests
             var link=ConsoleQr.LoginUrl("https://xur.example.ts.net/",false,"ABC-DEF");
             check(link=="https://xur.example.ts.net/login#code=ABC-DEF"&&new Uri(link).Query=="","Initial console QR keeps the access code out of HTTP requests");
             check(ConsoleQr.LoginUrl("https://xur.example.ts.net/",true,"ABC-DEF")=="https://xur.example.ts.net/login","Configured account QR contains only login URL");
-            check(ConsoleQr.LoginUrl("https://xur.example.ts.net/",false,"Expired; reboot to generate a new code")=="https://xur.example.ts.net/login","Expired bootstrap messages never enter QR credentials");
+            check(ConsoleQr.LoginUrl("https://xur.example.ts.net/",false,"Invalid code")=="https://xur.example.ts.net/login","Invalid bootstrap messages never enter QR credentials");
             var rows=ConsoleQr.Rows(link);check(rows.All(r=>r.Length==rows[0].Length)&&rows[0].All(c=>c=='█'),"Terminal QR retains rectangular modules and a light quiet zone");
             var frame=LocalConsole.Clean(LocalConsole.Frame("Status","Ready",120,45,statusQr:rows));check(rows.All(frame.Contains),"Status dashboard includes the complete QR without wrapping its rows");
             await Trim(root,check);

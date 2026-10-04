@@ -124,7 +124,7 @@ with tempfile.TemporaryDirectory(prefix='xur-test-') as temp:
         check(status==200 and code not in body,'Login page does not expose the code')
         token=re.search(r'name="__RequestVerificationToken" value="([^"]+)"',body).group(1)
         check('The sign-in form expired' in request('/auth/login',{'user':'xur','code':code})[1],'Login rejects missing antiforgery token with a fresh sign-in form')
-        check('Invalid or expired access code.' in request('/auth/login',{'user':'xur','code':'wrong','__RequestVerificationToken':token})[1],'Wrong code rejected by running server')
+        check('Invalid access code.' in request('/auth/login',{'user':'xur','code':'wrong','__RequestVerificationToken':token})[1],'Wrong code rejected by running server')
         check(request('/auth/login',{'user':'xur','code':code,'__RequestVerificationToken':token})[0]==200,'Console code logs into the running application')
         status,setup_page=request('/')
         check('Create your account' in setup_page and 'Install Xur' not in setup_page,'Token login leads only to account creation')

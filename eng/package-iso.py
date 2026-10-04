@@ -51,7 +51,7 @@ catalog=json.loads((repo/'.build/evidence/catalog-workstation.json').read_text()
 assert catalog['result']=='Passed' and all(catalog[k] for k in ['liveUnslothSearch','immutableSelection','realGgufInference','nativePlasmaStart','vulkanExercise','stationStop','stationReboot','modelPidPreserved'])
 acceptance={'schema':1,'scope':'Xur installer, model catalogs, profiles and one native workstation','isoSha256':iso_hash,'results':{
  'uefiLiveBoot':'Passed','twoDhcpAdapters':'Passed','lanWebRoot':'Passed','ipv6ListenerProcessTest':'Passed',
- 'localConsoleBootstrap':'Passed','reusableAccessCode':'Passed','bootstrapAuthenticationExpiryRateLimit':'Passed','anonymousStorageDenied':'Passed',
+ 'localConsoleBootstrap':'Passed','reusableAccessCode':'Passed','bootstrapAuthenticationRateLimit':'Passed','anonymousStorageDenied':'Passed',
  'realTailscaleQrVisibleAndDecodable':'Passed','webResponsiveWhileTailscaleWaits':'Passed','tailscaleEnrollmentAndExternalHttps':'NotRun',
  'noDiskBoot':'Passed','zeroOneMultipleAnswerCases':'Passed','readOnlyAllEligibleStorageInTestMatrix':'Passed',
  'configParentProtection':'Passed','hybridUsbBootMediaProtection':'Passed','partitionTargetRejected':'Passed',
