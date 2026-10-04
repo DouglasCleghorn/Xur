@@ -30,6 +30,15 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='log-compression-') as temp
     def forbidden(argv):raise AssertionError('Unchanged startup invoked '+str(argv))
     assert module.ensure(root,runner=forbidden)=='current'
     assert [path.stat().st_mtime_ns for path in paths]==stamps, 'No configuration writes on later starts'
+    # Upgrade from the previous default threshold without republishing the codec.
+    paths[0].write_text('[Journal]\nCompress=yes\n');commands.clear()
+    codec_stamp=paths[1].stat().st_mtime_ns
+    assert module.ensure(root,runner=run)=='activated' and commands==expected
+    assert 'Compress=128\n' in paths[0].read_text()
+    assert paths[1].stat().st_mtime_ns==codec_stamp
+    stamps=[path.stat().st_mtime_ns for path in paths]
+    assert module.ensure(root,runner=forbidden)=='current'
+    assert [path.stat().st_mtime_ns for path in paths]==stamps
     # Separate administrator overrides survive activation.
     local=paths[0].with_name('99-local.conf');local.write_text('[Journal]\nSystemMaxUse=1G\n')
     for failure in range(len(expected)):
@@ -66,5 +75,6 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='log-compression-') as temp
     finally:module.subprocess.run=real_run
 
 print(json.dumps({'suite':'LogCompression','result':'Passed','offlineInstallation':True,
+                  'thresholdUpgradeActivatesOnce':True,
                   'unchangedStartupWritesNothing':True,'failedActivationRetries':True,
                   'interruptedPublicationRetries':True,'administratorOverridesPreserved':True}))

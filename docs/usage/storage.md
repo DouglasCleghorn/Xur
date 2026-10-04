@@ -46,7 +46,7 @@ replace the filesystem's capacity/available-space figures.
 ## Log compression and SSD writes
 
 Xur enables native zstd compression for systemd journal logs. Eligible journal
-data objects (larger than the default 512-byte threshold) are compressed in memory
+data objects (at least 128 bytes, including their field name) are compressed in memory
 before writing. Short or incompressible records can remain uncompressed, and
 journal metadata still requires writes. Logs stay readable through `journalctl`
 and Xur's diagnostics. This covers services and containers that log to the journal;
@@ -60,15 +60,50 @@ not rewrite configuration or restart journald unless configuration changes or a
 previous activation failed. A failure is logged and retried on the next agent start.
 
 The defaults are `/etc/systemd/journald.conf.d/60-xur-log-compression.conf`
-(`Compress=yes`) and
+(`Compress=128`, a byte threshold rather than a zstd compression level) and
 `/etc/systemd/system/systemd-journald.service.d/60-xur-log-compression.conf`
 (`SYSTEMD_JOURNAL_COMPRESS=ZSTD`). To override them, use separate, later-sorting
 administrator drop-ins such as `99-local.conf`. Algorithm selection uses systemd's
 [documented environment variable](https://github.com/systemd/systemd/blob/v258/docs/ENVIRONMENT.md#systemd-journald-journalctl),
 which has weaker stability guarantees than its main configuration interface.
-Check `journalctl --header` for `COMPRESSED-ZSTD` on new journal files when
-validating an installed release. `systemctl show systemd-journald -p Environment`
-shows the requested codec; it does not prove on-disk compression by itself.
+`journalctl --header` reports `COMPRESSED-ZSTD` on new journal files when the
+codec is enabled. That flag describes the file's compression capability; it can
+appear even when no data objects were worth compressing. Likewise,
+`systemctl show systemd-journald -p Environment` shows the requested codec, not
+proof that individual objects were compressed.
+
+A synthetic systemd 259 journal-writer comparison found that lowering the
+threshold from 512 to 128 allowed 360-byte messages to compress, reducing used
+journal content by about 37% relative to uncompressed journals. The 120-byte
+messages did not benefit, and the 1800-byte messages already compressed at the
+default threshold. All messages round-tripped through `journalctl`. This measures
+journal content, not SSD writes; journal preallocation, metadata, and device write
+amplification still affect actual wear.
+
+Sunshine's console output remains in the journal for workstation logs, diagnostics,
+and encoder readiness checks. Xur sets `log_path=/dev/null` to discard Sunshine's
+duplicate file output, without moving logs to RAM. This takes effect on the next
+Sunshine start; running streams are not restarted for this setting. Existing file
+logs are retained. Sunshine's own file-backed log viewer will have no file output;
+use Xur's workstation logs instead. The pinned Sunshine version has no independent
+file-logging switch and attempts to rotate `/dev/null`, producing one harmless
+`Failed to rotate log file '/dev/null': Permission denied` warning at startup.
+It runs as the unprivileged workstation user and continues logging to stdout.
+See the [pinned logging implementation](https://github.com/LizardByte/Sunshine/blob/v2026.914.233613/src/logging.cpp).
+
+The other plain text logs written by Xur are episodic:
+
+| Log | Writes and readers | Wear priority |
+| --- | --- | --- |
+| `/var/lib/xur/updates/operation.log` | Replaced for each OS operation; child output goes directly to this file rather than also to the journal. The update view returns its last 24,000 characters. | Best remaining text-log candidate for compression; the file itself has no size cap. |
+| `/var/lib/xur/fish-engine/<hash>/build.log` | Redacted build output written once per attempted Fish image build; retained with that build's identity. | Infrequent; image-layer writes are likely to outweigh the log. |
+| `/var/lib/xur/workloads/<id>.error.log` | Replaced on a workload startup failure; combined with container logs when Xur displays workload logs. | Low; keep this failure evidence. |
+| Installer `/tmp/*.log` | Installer and Anaconda operation logs, with explicit diagnostic export when requested. | Installation-only; separate from steady-state host logging. |
+
+Xur's own service logger writes to stderr and keeps a bounded in-memory fallback;
+it does not also write a persistent text file. Container logs depend on the Podman
+log driver chosen when the container was created. Journald compression covers
+the journal driver, not file drivers or application logs inside containers.
 
 For ordinary append-only text logs on Btrfs, a directory's `compression=zstd`
 property can compress future writes before they reach disk. Enabling compression
@@ -77,6 +112,10 @@ recompressing them with defragmentation would add writes. Btrfs compression
 requires copy-on-write and checksums, while journal files commonly use NoCoW
 and preallocation, so a Btrfs mount setting alone does not cover the journal.
 See the [Btrfs compression documentation](https://btrfs.readthedocs.io/en/latest/Compression.html).
+Before adding a text-log property, check whether the live filesystem already uses
+zstd. A directory property applies to newly created files; existing log files need
+their own property for future writes. No text-log properties or recompression of
+old files are applied by Xur's journal defaults.
 
 Further SSD-wear improvements to consider:
 
