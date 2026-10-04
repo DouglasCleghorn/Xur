@@ -125,7 +125,6 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 {model=await DownloadModel(w.Recipe.Model);modelFiles=await DownloadFiles(w.Recipe.Files);}
                 var pull=await Processes.Run("podman",w.Recipe.Kind=="Container"?["image","exists",w.Recipe.Image]:["pull","--arch=amd64",w.Recipe.Image],900);
                 if(pull.ExitCode!=0)throw Failure("Engine image download failed",pull);
-                var image=FishEngine.Applies(w.Recipe)?await new FishEngine(Path.GetDirectoryName(directory)!).Prepare(w.Recipe.Image):w.Recipe.Image;
                 var args=new List<string> {"create","--name",Name(w.Id),"--label","io.xur.fingerprint="+w.Fingerprint,"--label","io.xur.id="+w.Id,
                     "--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096","--shm-size=1g",w.Recipe.Kind=="Model"?"--restart=no":"--restart=unless-stopped"};
                 if(w.Recipe.Port>0)args.AddRange(["--publish","127.0.0.1::"+w.Recipe.Port]);
@@ -148,7 +147,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 if(model!=null)args.AddRange(["--volume",model+":/model.gguf:ro,z"]);
                 if(modelFiles!=null)args.AddRange(["--volume",modelFiles+":/models:ro,z"]);
                 if(w.Recipe.Engine is "vLLM" or "vLLM-Omni")args.AddRange(["--entrypoint","vllm"]);
-                args.Add(image);args.AddRange(w.Recipe.Command);
+                args.Add(w.Recipe.Image);args.AddRange(w.Recipe.Command);
                 var created=await Processes.Run("podman",args,60);
                 if(created.ExitCode!=0)throw Failure("Container creation failed",created);
                 instance=await Inspect(w) ?? throw new IOException();

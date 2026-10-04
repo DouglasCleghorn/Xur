@@ -20,7 +20,7 @@ The bundled smoke recipe is SmolLM2 135M CPU chat, using the actual llama.cpp
 server. The workload picker also includes Gaming workstation and live upstream
 model search, described in `docs/usage/model-catalog.md`. Its first start downloads an immutable engine image and a 145 MB GGUF,
 verified against its SHA-256. This small model is an additional recipe; it does
-not replace the requested Qwen, Fish or ASR models. No model starts automatically
+not replace the requested Qwen or ASR models. No model starts automatically
 after installation. The recipe records the model revision, license, image digest
 and exact arguments in `catalog/models/smollm2-135m-cpu.json`.
 

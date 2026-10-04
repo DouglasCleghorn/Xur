@@ -47,17 +47,9 @@ legacy saved Qwen MTP recipe repairs the known missing settings automatically;
 there is no need to reselect that model solely for this migration. This is a
 specific compatibility repair, not a general engine upgrade.
 
-For `fishaudio/s2-pro` on the supported pinned vLLM-Omni image, first load builds
-and caches a hash-locked codec dependency layer. It preserves the base engine's
-package versions and checks codec construction before starting the model.
-The first build requires network access and can take several minutes; later
-starts reuse it. Workload errors report preparation failures, with build logs
-under `/var/lib/xur/fish-engine/<hash>/build.log`. A different base engine needs
-an explicitly supported recipe; Xur does not silently substitute an arbitrary image.
-
-Qwen MTP and Fish speech passed the [September 20 live smoke tests](../releases/live-model-retest-2026-09-20.md).
+Qwen MTP passed the [September 20 live smoke tests](../releases/live-model-retest-2026-09-20.md).
 Those tests do not establish Qwen3-ASR, every catalog model, or every GPU as
-working. Model lab is a text-chat tester; Fish uses its speech API.
+working. Model lab is a text-chat tester.
 
 Gaming workstation starts the installed Bazzite Plasma desktop in its own PAM
 session, Unix user and logind seat. KWin uses the selected DRM card. Persistent

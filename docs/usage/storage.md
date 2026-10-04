@@ -96,7 +96,6 @@ The other plain text logs written by Xur are episodic:
 | Log | Writes and readers | Wear priority |
 | --- | --- | --- |
 | `/var/lib/xur/updates/operation.log` | Replaced for each OS operation; child output goes directly to this file rather than also to the journal. The update view returns its last 24,000 characters. | Best remaining text-log candidate for compression; the file itself has no size cap. |
-| `/var/lib/xur/fish-engine/<hash>/build.log` | Redacted build output written once per attempted Fish image build; retained with that build's identity. | Infrequent; image-layer writes are likely to outweigh the log. |
 | `/var/lib/xur/workloads/<id>.error.log` | Replaced on a workload startup failure; combined with container logs when Xur displays workload logs. | Low; keep this failure evidence. |
 | Installer `/tmp/*.log` | Installer and Anaconda operation logs, with explicit diagnostic export when requested. | Installation-only; separate from steady-state host logging. |
 
