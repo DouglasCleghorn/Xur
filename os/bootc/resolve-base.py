@@ -9,7 +9,7 @@ import sys
 
 
 def resolve(containerfile, run=subprocess.check_output):
-    matches = re.findall(r'^ARG XUR_INSTALLER_BASE=(quay\.io/fedora/fedora-bootc:([0-9]+))$', containerfile, re.M)
+    matches = re.findall(r'^FROM (quay\.io/fedora/fedora-bootc:([0-9]+)) AS common$', containerfile, re.M)
     if len(matches) != 1:
         raise ValueError('Expected one Fedora release tag in the installer Containerfile')
     reference, release = matches[0]
@@ -30,6 +30,10 @@ def resolve(containerfile, run=subprocess.check_output):
 
 
 if __name__ == '__main__':
-    result = resolve(pathlib.Path(sys.argv[1]).read_text())
+    containerfile = pathlib.Path(sys.argv[1]).read_text()
+    result = resolve(containerfile)
     pathlib.Path(sys.argv[2]).write_text(json.dumps(result, indent=2) + '\n')
+    if len(sys.argv) > 3:
+        pathlib.Path(sys.argv[3]).write_text(containerfile.replace('FROM ' + result['reference'] + ' AS common',
+                                                                 'FROM ' + result['resolvedReference'] + ' AS common', 1))
     print(result['resolvedReference'])

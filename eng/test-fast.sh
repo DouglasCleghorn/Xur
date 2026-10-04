@@ -4,6 +4,9 @@ cd "$(dirname "$0")/.."
 start=$SECONDS
 sdk="${XUR_DOTNET:-$HOME/.local/share/xur-build/dotnet/dotnet}"
 mkdir -p .build/fast
+python3 -m pip install --target .build/checks -r eng/requirements.txt > .build/fast/check-dependencies.log
+PYTHONPATH=.build/checks python3 eng/check-dependency-coverage.py > .build/fast/dependency-coverage.log
+PYTHONPATH=.build/checks python3 tests/Xur.Integration.Tests/dependency-coverage.py >> .build/fast/dependency-coverage.log
 cc -O2 -Wall -Wextra -Werror tests/Xur.Unit.Tests/SeatInputTest.c -ldl -o .build/fast/seat-input-test
 .build/fast/seat-input-test
 python3 tests/Xur.Integration.Tests/source-manifest.py > .build/fast/source-manifest.log

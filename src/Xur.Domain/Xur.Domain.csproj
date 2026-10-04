@@ -1,1 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../../catalog/engines/Containerfile" LogicalName="Xur.EngineImages" /></ItemGroup>
+</Project>

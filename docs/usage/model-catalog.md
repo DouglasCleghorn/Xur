@@ -16,44 +16,52 @@ is estimated from checkpoint size, observed capacity and a memory allowance.
 The editor selects unoccupied compatible GPUs and permits an explicit override.
 Actual peak memory can exceed the estimate; startup failures remain visible.
 
-Selecting a model resolves its repository commit, file hashes and engine digest.
+Selecting a model resolves its repository commit, file hashes and engine channel.
 All shards of a split GGUF are downloaded and verified before launch. Cached
 weights live under `/var/lib/xur`; immutable selected recipes are stored in
 `/var/lib/xur/catalog-selected`. Refreshing search never modifies an existing
 profile or a running model. GGUF sampling provenance does not restart a model
 when the actual runtime arguments and files are unchanged.
 
-llama.cpp has pinned CPU, CUDA, ROCm and Vulkan images. The current vLLM and
+llama.cpp has current upstream CPU, CUDA, ROCm and Vulkan image channels. The current vLLM and
 vLLM-Omni images require NVIDIA. They invoke their real upstream `vllm serve`
 commands with the selected checkpoint revision; Omni uses `--omni`. vLLM uses
 tensor parallelism across the allocated GPUs. Omni uses its upstream deployment
 defaults; Xur does not invent multi-stage parallelism settings. Models requiring
 custom deployment files or publisher patches need dedicated recipes. The model
 list is discovery, not a guarantee that every upstream architecture runs in the
-pinned engine. Save an authorized Hugging Face token in **Settings** for gated
+current engine. Save an authorized Hugging Face token in **Settings** for gated
 repositories and obtain any required publisher access first. Xur's catalog and
 model downloaders use the saved credentials; a token does not grant access the
 account does not already have. Review the linked model license before applying.
 Model weights are not bundled.
 
-`eng/engine-lock.json` records engine versions and manifest digests. Updating a
-catalog entry does not update a running engine. The Updates page lists component
-versions; components that cannot be upgraded separately have no independent
-update button. Saved workload engine versions remain pinned.
+`catalog/engines/Containerfile` selects the upstream rolling channels: `server`
+and its GPU variants for llama.cpp, and `latest` for vLLM and vLLM-Omni. Xur
+checks and pulls the latest image before every model-container start, including
+restarting a stopped container or loading an older saved selection. If the
+image changed, Xur recreates the stopped container and keeps its model-cache
+volume. Running engines continue using their current image until their next
+start. A failed latest-image download fails startup with a visible error.
+Model weights and launch settings remain the selected versions.
+
+The Updates page identifies these engines as updating at container start.
+Model containers start through Xur so the update check runs: use Load or Resume
+after an engine exits or after rebooting. User-prepared containers keep their
+selected image and existing restart behavior.
 
 The supported Qwen MTP recipe uses `--max-num-seqs 1`, aligned Mamba cache,
 disabled prefix caching and three MTP speculative tokens. Loading or resuming a
 legacy saved Qwen MTP recipe repairs the known missing settings automatically;
-there is no need to reselect that model solely for this migration. This is a
-specific compatibility repair, not a general engine upgrade.
+there is no need to reselect that model solely for this migration. This repairs the saved launch settings independently of the engine image update.
 
-For `fishaudio/s2-pro` on the supported pinned vLLM-Omni image, first load builds
-and caches a hash-locked codec dependency layer. It preserves the base engine's
+For `fishaudio/s2-pro`, Xur builds and caches a hash-locked codec dependency layer
+on the freshly downloaded vLLM-Omni image. It preserves the base engine's
 package versions and checks codec construction before starting the model.
 The first build requires network access and can take several minutes; later
-starts reuse it. Workload errors report preparation failures, with build logs
-under `/var/lib/xur/fish-engine/<hash>/build.log`. A different base engine needs
-an explicitly supported recipe; Xur does not silently substitute an arbitrary image.
+starts reuse it while the upstream image is unchanged. A new Omni image rebuilds
+the layer. Workload errors report preparation failures, with build logs under
+`/var/lib/xur/fish-engine/<hash>/build.log`.
 
 Qwen MTP and Fish speech passed the [September 20 live smoke tests](../releases/live-model-retest-2026-09-20.md).
 Those tests do not establish Qwen3-ASR, every catalog model, or every GPU as
@@ -85,7 +93,7 @@ API clients should use an **Automation** API key for catalog resolution; see
 
 Sources: [Unsloth inference defaults](https://github.com/unslothai/unsloth/tree/main/studio/backend/assets/configs),
 [Hugging Face Hub API](https://huggingface.co/docs/hub/api),
-[vLLM-Omni v0.28.0 supported models](https://github.com/vllm-project/vllm-omni/blob/v0.28.0/docs/models/supported_models.md).
+[vLLM-Omni supported models](https://github.com/vllm-project/vllm-omni/blob/main/docs/models/supported_models.md).
 
 ## Packed token embeddings
 

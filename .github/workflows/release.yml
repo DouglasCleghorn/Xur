@@ -35,7 +35,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.401
+          global-json-file: global.json
       - id: identity
         shell: bash
         run: |
@@ -57,7 +57,7 @@ jobs:
         run: |
           python3 eng/ci-native.py
           mkdir -p .build/browser .build/downloads
-          npm install --prefix .build/browser playwright@1.58.2 axe-core@4.13.0
+          python3 eng/prepare-npm.py browser
           .build/browser/node_modules/.bin/playwright install --with-deps chromium
           python3 - <<'PY'
           import hashlib,json,pathlib,urllib.request

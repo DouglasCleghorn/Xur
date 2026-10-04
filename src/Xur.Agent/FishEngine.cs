@@ -6,7 +6,7 @@ using Xur.Domain;
 namespace Xur.Agent;
 
 // Fish's optional codec is absent from the generic Omni image. Keep the base
-// engine pinned and build the small, versioned dependency layer on demand.
+// engine current and build the small, versioned dependency layer on demand.
 public sealed class FishEngine(string state,Func<string,string[],int,Task<ProcessResult>>? execute=null)
 {
     static readonly SemaphoreSlim gate=new(1,1);
@@ -14,25 +14,26 @@ public sealed class FishEngine(string state,Func<string,string[],int,Task<Proces
     public static bool Applies(Recipe recipe)=>recipe.Kind=="Model" && recipe.Engine=="vLLM-Omni" && recipe.Hub?.Repository=="fishaudio/s2-pro";
     static string Resource(string name){using var stream=typeof(FishEngine).Assembly.GetManifestResourceStream("Xur.Fish."+name)!;using var reader=new StreamReader(stream);return reader.ReadToEnd();}
     public static string Containerfile=>Resource("Containerfile");
-    public static string Requirements=>Resource("requirements.lock");
+    public static string Requirements=>Resource("requirements.txt");
     public static string BaseImage=>Containerfile.Split('\n')[0][5..].Trim();
     public async Task<string> Prepare(string image)
     {
-        // Older saved recipes named Docker Hub directly. Only the same pinned
-        // base is eligible; never combine an untested engine with this layer.
-        if(image.Replace("docker.io/","mirror.gcr.io/",StringComparison.Ordinal)!=BaseImage)
-            throw new InvalidOperationException("This Fish recipe uses a different engine version. Select Fish S2 Pro again before loading it.");
+        // Startup already pulled the rolling channel. Include its resolved local
+        // image ID in the build recipe so a changed base invalidates this cache.
+        if(!Regex.IsMatch(image,@"\Asha256:[a-f0-9]{64}\z"))
+            throw new InvalidOperationException("Fish preparation requires the downloaded engine image identity.");
         await gate.WaitAsync();try
         {
-            var hash=Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Containerfile+"\n"+Requirements)));
+            var containerfile=Containerfile.Replace("FROM "+BaseImage,"FROM "+image,StringComparison.Ordinal);
+            var hash=Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(containerfile+"\n"+Requirements)));
             var tag="localhost/xur-fish:"+hash;
             var path=Path.Combine(state,"fish-engine",hash);Directory.CreateDirectory(path);
             var exists=await run("podman",["image","exists",tag],15);
             if(exists.ExitCode!=0)
             {
-                await File.WriteAllTextAsync(Path.Combine(path,"Containerfile"),Containerfile);
-                await File.WriteAllTextAsync(Path.Combine(path,"requirements.lock"),Requirements);
-                var built=await run("podman",["build","--pull=missing","--tag",tag,"--file",Path.Combine(path,"Containerfile"),path],900);
+                await File.WriteAllTextAsync(Path.Combine(path,"Containerfile"),containerfile);
+                await File.WriteAllTextAsync(Path.Combine(path,"requirements.txt"),Requirements);
+                var built=await run("podman",["build","--pull=never","--tag",tag,"--file",Path.Combine(path,"Containerfile"),path],900);
                 await File.WriteAllTextAsync(Path.Combine(path,"build.log"),Redaction.Logs(built.Output));
                 if(built.ExitCode!=0){var log=Redaction.Logs(built.Output);throw new InvalidOperationException("Could not prepare the Fish speech runtime: "+log[^Math.Min(1800,log.Length)..]);}
             }

@@ -117,21 +117,30 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 await new EngineRestartPolicy().Set(Name(w.Id),instance.InstanceId,"no");
             }
             if(w.Recipe.Engine is "vLLM" or "vLLM-Omni")await new ModelCatalog(Path.GetDirectoryName(directory)!).ValidateEngineCheckpoint(w.Recipe);
+            ModelImageSelection? engineImage=null;
+            if(w.Recipe.Kind=="Model")
+            {
+                Func<string,Task<string>>? prepare=FishEngine.Applies(w.Recipe)?new FishEngine(Path.GetDirectoryName(directory)!).Prepare:null;
+                engineImage=await new ModelImageUpdater().Refresh(w,instance,prepare);
+                if(engineImage?.Recreate==true)instance=null;
+            }
             if(instance==null)
             {
                 var selected=observed.Gpus.Where(g=>w.Gpus.Contains(g.Pci)).ToArray();await GpuInventory.VerifyReleased(selected);
                 string? model,modelFiles;
                 await using(var cache=await Stops.Resources((w.Recipe.Model is {} asset?new[]{asset.Sha256}:[]).Concat((w.Recipe.Files??[]).Select(f=>f.Asset.Sha256)).Select(hash=>"model:"+hash)))
                 {model=await DownloadModel(w.Recipe.Model);modelFiles=await DownloadFiles(w.Recipe.Files);}
-                var pull=await Processes.Run("podman",w.Recipe.Kind=="Container"?["image","exists",w.Recipe.Image]:["pull","--arch=amd64",w.Recipe.Image],900);
-                if(pull.ExitCode!=0)throw Failure("Engine image download failed",pull);
-                var image=FishEngine.Applies(w.Recipe)?await new FishEngine(Path.GetDirectoryName(directory)!).Prepare(w.Recipe.Image):w.Recipe.Image;
+                if(w.Recipe.Kind=="Container")
+                {
+                    var exists=await Processes.Run("podman",["image","exists",w.Recipe.Image],15);
+                    if(exists.ExitCode!=0)throw Failure("Prepared container image is unavailable",exists);
+                }
+                var image=engineImage?.Image??w.Recipe.Image;
                 var args=new List<string> {"create","--name",Name(w.Id),"--label","io.xur.fingerprint="+w.Fingerprint,"--label","io.xur.id="+w.Id,
-                    "--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096","--shm-size=1g",w.Recipe.Kind=="Model"?"--restart=no":"--restart=unless-stopped"};
+                    "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096","--shm-size=1g",w.Recipe.Kind=="Model"?"--restart=no":"--restart=unless-stopped"};
                 if(w.Recipe.Port>0)args.AddRange(["--publish","127.0.0.1::"+w.Recipe.Port]);
                 if(w.Recipe.Container is {} container)
                 {
-                    args.Add("--pull=never");
                     foreach(var mount in container.Mounts){await ContainerLibrary.VerifyVolume(mount.Volume);args.AddRange(["--volume",mount.Volume+":"+mount.Destination+":"+(mount.ReadOnly?"ro,z":"rw,z")]);}
                     foreach(var pair in container.Environment.OrderBy(p=>p.Key,StringComparer.Ordinal))args.AddRange(["--env",pair.Key+"="+pair.Value]);
                 }
@@ -186,10 +195,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 if(w.Recipe.Kind=="Container" && w.Recipe.Port==0)return instance;
                 try {using var response=await health.GetAsync(instance.Endpoint.TrimEnd('/')+w.Recipe.HealthPath);if(response.IsSuccessStatusCode)
                     {
-                        if(w.Recipe.Kind=="Model")
-                        {
-                            await new EngineRestartPolicy().Set(Name(w.Id),instance.InstanceId,"unless-stopped");
-                        }
+                        // Model starts must pass through Xur's update check;
+                        // Podman's automatic restart would bypass it.
                         return instance;
                     }}catch(HttpRequestException){}catch(TaskCanceledException){}
                 await Task.Delay(1000);

@@ -1,0 +1,7 @@
+# Rolling upstream engine channels, refreshed before each model-container start.
+FROM ghcr.io/ggml-org/llama.cpp:server AS server
+FROM ghcr.io/ggml-org/llama.cpp:server-cuda AS server-cuda
+FROM ghcr.io/ggml-org/llama.cpp:server-rocm AS server-rocm
+FROM ghcr.io/ggml-org/llama.cpp:server-vulkan AS server-vulkan
+FROM mirror.gcr.io/vllm/vllm-openai:latest AS vllm
+FROM mirror.gcr.io/vllm/vllm-omni:latest AS omni

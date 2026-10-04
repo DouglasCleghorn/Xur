@@ -16,14 +16,11 @@ public sealed class ModelCatalog(string state)
     static ModelCatalog(){http.DefaultRequestHeaders.UserAgent.ParseAdd("Xur/1.0");}
     static readonly JsonSerializerOptions json=new(JsonSerializerDefaults.Web);
     readonly SemaphoreSlim gate=new(1,1);
-    const string Cpu="ghcr.io/ggml-org/llama.cpp@sha256:e33f80e54fc3f403118ab92b24f21dc1a3125ffd0c7725532028eca8128b548d";
-    static string Image(string vendor)=>vendor switch {
-        "NVIDIA"=>"ghcr.io/ggml-org/llama.cpp@sha256:6b4e57594fbb8fb1111bfe64a470570586bb4649a1d38647680a4ec3ed159695",
-        "AMD"=>"ghcr.io/ggml-org/llama.cpp@sha256:4b1e4cee27366a6250b88960a8dd2ad6a111ced7a1b9a234ff0f53299bedca8f",
-        "Intel"=>"ghcr.io/ggml-org/llama.cpp@sha256:09800bdcf619dbea87cd22194c3210ebbb80c943e5d93fb27e4e5bb6f6e7b1ce",_=>Cpu};
-    const string Vllm="mirror.gcr.io/vllm/vllm-openai@sha256:082ca6f035279109041ffd3fe0695cb568b29bc580b35c4f297a66a08b216c1b";
-    const string Omni="mirror.gcr.io/vllm/vllm-omni@sha256:4780186f168af96634917208596675439fa71cb5ed3440a30e8c21ca1defc451";
-    const string OmniModels="https://raw.githubusercontent.com/vllm-project/vllm-omni/v0.28.0/docs/models/supported_models.md";
+    static string Image(string vendor)=>EngineImages.Image(vendor switch {
+        "NVIDIA"=>"server-cuda","AMD"=>"server-rocm","Intel"=>"server-vulkan",_=>"server"});
+    static string Vllm=>EngineImages.Image("vllm");
+    static string Omni=>EngineImages.Image("omni");
+    static string OmniModels=>"https://raw.githubusercontent.com/vllm-project/vllm-omni/main/docs/models/supported_models.md";
     static void Validate(string model,string? revision=null)
     {
         if(!Regex.IsMatch(model,@"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$") || revision!=null && !Regex.IsMatch(revision,@"^[0-9a-f]{40}$"))throw new InvalidOperationException("Invalid model identity.");

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Build Fedora native helpers on hosted CI, using the required Docker mirror."""
-import hashlib,json,os,pathlib,shutil,subprocess,tarfile,tempfile,urllib.request
+import hashlib,json,os,pathlib,re,shutil,subprocess,tarfile,tempfile,urllib.request
 repo=pathlib.Path(__file__).resolve().parents[1]
 def sha(p):return hashlib.file_digest(p.open('rb'),'sha256').hexdigest()
 def build():
  console=repo/'tools/Xur.Console';virtual=repo/'tools/Xur.VirtualDisplay'
+ image=re.search(r"^FROM (\S+) AS native-builder$",(repo/"eng/Containerfile").read_text(),re.M).group(1)
  lock=json.loads((console/'upstream-lock.json').read_text())['kmscon']
  (repo/'.build').mkdir(exist_ok=True)
  with tempfile.TemporaryDirectory(dir=repo/'.build') as temp:
@@ -24,7 +25,7 @@ def build():
   wayland-scanner private-code screencast.xml screencast-code.c
   cc -O2 -Wall -Wextra -Werror client.c screencast-code.c -o xur-virtual-output $(pkg-config --cflags --libs wayland-client libsystemd)
   '''
-  try:subprocess.run(['docker','run','--rm','--volume',str(work.resolve())+':/work','mirror.gcr.io/library/fedora:44','bash','-c',script],check=True)
+  try:subprocess.run(['docker','run','--rm','--volume',str(work.resolve())+':/work',image,'bash','-c',script],check=True)
   finally:subprocess.run(['sudo','chown','-R',str(os.getuid())+':'+str(os.getgid()),str(work)],check=True)
   out=repo/'.build/console-runtime';shutil.rmtree(out,ignore_errors=True);shutil.copytree(c/'output',out)
   inputs={p.name:sha(p) for p in sorted(console.iterdir()) if p.is_file()}

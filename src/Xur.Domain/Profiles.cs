@@ -91,12 +91,15 @@ public static class ProfilePolicy
             return;
         }
         if(r.Kind!="Model" || r.Container!=null)throw new InvalidOperationException("Unknown workload kind.");
+        var image=r.Image??"";
+        var versionedImage=Regex.IsMatch(image,@"\A[a-zA-Z0-9][a-zA-Z0-9.:-]*/[a-zA-Z0-9][a-zA-Z0-9./_-]*:[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}\z");
+        var digestImage=Regex.IsMatch(image,@"\A[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}\z");
         if(!Identifier(r.Id) || string.IsNullOrWhiteSpace(r.Name) ||
-            !Regex.IsMatch(r.Image??"",@"^[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}$") ||
+            (!versionedImage && !digestImage) ||
             r.Command==null || r.Command.Length>128 || r.Command.Any(a=>a==null || a.Length>4096 || a.Contains('\0')) ||
             r.Port is <1 or >65535 || !Regex.IsMatch(r.HealthPath??"",@"^/[a-zA-Z0-9/_.-]*$") ||
             r.Vendor is not ("CPU" or "NVIDIA" or "AMD" or "Intel") || r.GpuCount is <0 or >16 || r.MemoryMiB<0 ||
-            (r.Vendor=="CPU")!=(r.GpuCount==0))throw new InvalidOperationException("The recipe must use an immutable image digest, valid health endpoint and explicit GPU requirements.");
+            (r.Vendor=="CPU")!=(r.GpuCount==0))throw new InvalidOperationException("The recipe must use an explicit image version or digest, valid health endpoint and explicit GPU requirements.");
         if(r.Model is { } m && (!Uri.TryCreate(m.Url,UriKind.Absolute,out var u) || u.Scheme!="https" || !Regex.IsMatch(m.Sha256,@"^[0-9a-f]{64}$") || m.Bytes<=0))
             throw new InvalidOperationException("The model requires an HTTPS URL, SHA-256 and exact size.");
         if(r.Files!=null && (r.Files.Length is <1 or >256 || r.Files.Select(f=>f.Name).Distinct().Count()!=r.Files.Length || r.Files.Any(f=>!Regex.IsMatch(f.Name,@"^[a-zA-Z0-9_.-]+$") || f.Name.Contains("..") || !Uri.TryCreate(f.Asset.Url,UriKind.Absolute,out var url) || url.Scheme!="https" || !Regex.IsMatch(f.Asset.Sha256,@"^[0-9a-f]{64}$") || f.Asset.Bytes<=0)))
@@ -136,11 +139,11 @@ public sealed class RecipeCatalog
     }
     Recipe[] Read()
     {
-        var recipes=new[]{directory,selected}.Where(d=>d!=null && Directory.Exists(d)).SelectMany(d=>Directory.GetFiles(d!,"*.json",SearchOption.AllDirectories)).Select(p=>System.Text.Json.JsonSerializer.Deserialize<Recipe>(File.ReadAllText(p),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!).ToArray();
+        var recipes=new[]{directory,selected}.Where(d=>d!=null && Directory.Exists(d)).SelectMany(d=>Directory.GetFiles(d!,"*.json",SearchOption.AllDirectories)).Select(p=>System.Text.Json.JsonSerializer.Deserialize<Recipe>(File.ReadAllText(p),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!).Select(EngineImages.Resolve).ToArray();
         foreach(var r in recipes)ProfilePolicy.ValidateRecipe(r);
         if(recipes.Select(r=>r.Id).Distinct().Count()!=recipes.Length)throw new InvalidOperationException("Duplicate recipe ID");
         return recipes;
     }
     public void Verify(Recipe recipe)
-    {if(!Read().Any(r=>r.Id==recipe.Id && (Canonical.Hash(r)==Canonical.Hash(recipe) || Canonical.Hash(ModelLaunchSettings.RepairSaved(r))==Canonical.Hash(recipe))))throw new InvalidOperationException("Select a recipe from the installed catalog.");}
+    {if(!Read().Any(r=>r.Id==recipe.Id && EngineImages.Equivalent(r.Image,recipe.Image) && (Canonical.Hash(r with{Image=recipe.Image})==Canonical.Hash(recipe) || Canonical.Hash(ModelLaunchSettings.RepairSaved(r) with{Image=recipe.Image})==Canonical.Hash(recipe))))throw new InvalidOperationException("Select a recipe from the installed catalog.");}
 }

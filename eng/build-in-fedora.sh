@@ -10,8 +10,8 @@ mkdir -p /etc/containers/registries.conf.d
 install -m 644 os/containers/99-xur-docker-hub.conf /etc/containers/registries.conf.d/
 mkdir -p /home/builder/xur-output
 # Follow Fedora's release tag across builds, but use one exact image per build.
-installer_base=$(python3 os/bootc/resolve-base.py os/bootc/Containerfile /home/builder/xur-output/installer-base.json)
-podman build --build-arg "XUR_INSTALLER_BASE=$installer_base" --target common -t localhost/xur-common:x86_64 -f os/bootc/Containerfile .
+python3 os/bootc/resolve-base.py os/bootc/Containerfile /home/builder/xur-output/installer-base.json /home/builder/xur-output/Containerfile.common
+podman build --target common -t localhost/xur-common:x86_64 -f /home/builder/xur-output/Containerfile.common .
 # Online installer: Bazzite is pulled only after disk approval, from its stable channel.
 podman build -t localhost/xur-installer:x86_64 -f os/installer/Containerfile .
 "${XUR_IMAGE_BUILDER:-/home/builder/image-builder}" manifest \

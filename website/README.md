@@ -32,7 +32,7 @@ uses static assets only, with no Worker script.
 | --- | --- |
 | Project name | `xur` |
 | Build command | `python3 website/build.py` |
-| Deploy command | `npx wrangler deploy --config website/wrangler.json` |
+| Deploy command | `python3 eng/prepare-npm.py website && .build/website/node_modules/.bin/wrangler deploy --config website/wrangler.json` |
 | Advanced path | `/` (repository root) |
 | Non-production branch builds | Off initially |
 | Protect with Cloudflare Access | Off for the public site |
@@ -64,7 +64,7 @@ approval gates; `build.py` only generates files and never deploys them.
 For a local configuration check after building:
 
 ```sh
-npx wrangler deploy --config website/wrangler.json --dry-run
+python3 eng/prepare-npm.py website && .build/website/node_modules/.bin/wrangler deploy --config website/wrangler.json --dry-run
 ```
 
 This checks the deployment configuration without publishing; server-side upload
@@ -135,10 +135,10 @@ Cloudflare's build. Only reviewed JPEGs under `docs/assets` enter the static sit
 Run site checks (test dependencies stay in ignored `.build`):
 
 ```sh
-npm install --prefix .build/browser --no-save --package-lock=false playwright axe-core
+python3 eng/prepare-npm.py browser
 python3 website/build.py
 node tests/Xur.Integration.Tests/website-ui.cjs
 node tests/Xur.Integration.Tests/website-download.cjs
 node tests/Xur.Integration.Tests/website-accessibility.cjs
-npx wrangler deploy --config website/wrangler.json --dry-run
+python3 eng/prepare-npm.py website && .build/website/node_modules/.bin/wrangler deploy --config website/wrangler.json --dry-run
 ```
