@@ -33,7 +33,21 @@ public static class StationStreaming
     {
         var result=await Processes.Run(command,args,seconds);
         if(result.ExitCode==0)return;
-        var error=Redaction.Logs(result.Output).Trim();
+        var output=result.Output;
+        if(command=="systemd-run"&&args.FirstOrDefault(a=>Regex.IsMatch(a,@"^--unit=xur-stream-access-[a-f0-9]{32}$")) is {} unit)
+        {
+            // Read this attempt's journal instead of passing agent pipe FDs
+            // to PID 1, which the installed host can reject before execution.
+            try
+            {
+                var journal=await Processes.Run("journalctl",["--boot","--unit="+unit[7..]+".service","--no-pager","--output=cat","--lines=20"],5);
+                if(journal.ExitCode==0)output+="\n"+journal.Output;
+                else output+="\nCould not read the device check journal.";
+            }
+            catch(Exception e) when(e is IOException or System.ComponentModel.Win32Exception or OperationCanceledException)
+            {output+="\nCould not read the device check journal.";}
+        }
+        var error=Redaction.Logs(output).Trim();
         throw new InvalidOperationException(command+" failed while preparing streaming (exit "+result.ExitCode+"): "+
             (error.Length==0?"No error output was returned.":error[..Math.Min(2000,error.Length)]));
     }
@@ -105,9 +119,7 @@ public static class StationStreaming
         // Check actual opens inside the same user/device boundary as Sunshine.
         // An ACL alone does not prove that cgroups or SELinux permit the device.
         var probeUnit="xur-stream-access-"+Guid.NewGuid().ToString("N");
-        // Pipe the probe's stderr back to the agent; --wait alone leaves a
-        // failed device open in the journal and returns an empty error here.
-        await Run("systemd-run",["--quiet","--wait","--pipe","--collect","--unit="+probeUnit,"--property=Type=exec","--property=User="+user,"--property=DevicePolicy=closed","--property=NoNewPrivileges=true",..await StreamDeviceArguments(gpu),"--property=RuntimeMaxSec=10","/usr/bin/python3","-c","import os,sys; [os.close(os.open(p, os.O_RDWR | os.O_CLOEXEC)) for p in sys.argv[1:]]",..StationDeviceAccess.Nodes(gpu),"/dev/uinput"]);
+        await Run("systemd-run",["--quiet","--wait","--collect","--unit="+probeUnit,"--property=Type=exec","--property=User="+user,"--property=DevicePolicy=closed","--property=NoNewPrivileges=true",..await StreamDeviceArguments(gpu),"--property=RuntimeMaxSec=10","/usr/bin/python3","-c","import os,sys; [os.close(os.open(p, os.O_RDWR | os.O_CLOEXEC)) for p in sys.argv[1:]]",..StationDeviceAccess.Nodes(gpu),"/dev/uinput"]);
         if(!running)await Run("systemd-run",["--unit="+Unit(w.Id),"--collect","--property=Type=exec","--property=StandardOutput=journal","--property=StandardError=journal","--property=User="+user,"--property=DevicePolicy=closed","--property=NoNewPrivileges=true",..await StreamDeviceArguments(gpu),"--property=KillMode=control-group","--property=UMask=0077","--property=WorkingDirectory="+Runtime,..RecoveryPolicy(),"--property=PartOf=xur-station-"+w.Id+".service","--setenv=HOME=/var/home/"+user,"--setenv=XDG_RUNTIME_DIR=/run/user/"+uid,"--setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"+uid+"/bus","--setenv=WAYLAND_DISPLAY="+wayland,"--setenv=QT_QPA_PLATFORM=offscreen","--setenv="+TimezoneSettings.StationEnvironment,..encoderEnvironment,"--setenv=LD_PRELOAD="+Runtime+"/usr/lib/libxur-seat-input.so","--setenv=XUR_INPUT_PHYS="+StationSeats.Physical(w.Id),"--setenv=XDG_SEAT="+StationSeats.Seat(w.Id),Runtime+"/usr/bin/sunshine",path+"/sunshine.conf"]);
         async Task FailStart(string message)
         {
