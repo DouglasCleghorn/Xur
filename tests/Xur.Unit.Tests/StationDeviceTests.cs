@@ -26,6 +26,7 @@ static class StationDeviceTests
         check(rules.Contains("seat-xur-unassigned")&&StationSeats.Seat("1")!=StationSeats.Seat("2"),"Unclaimed input waits for reconciliation instead of entering another desktop");
         var card=new GpuDevice("0000:41:00.0","NVIDIA","GPU","nvidia","",24576,["/dev/dri/renderD130"],[],["/dev/dri/card3"]);
         var launch=StationRuntime.SessionArguments(secondary,card,1002,"/var/home/user2");
+        check(launch.Contains("--setenv="+TimezoneSettings.StationEnvironment),"Desktop session inherits the same named timezone as its user-manager apps");
         check(launch.Contains("--property=PAMName=login")&&launch.Contains("--property=Slice=user-1002.slice")&&launch.Contains("--setenv=XDG_SEAT="+StationSeats.Seat("2"))&&launch.Contains("--setenv=KWIN_DRM_DEVICES=/dev/dri/card3")&&launch[^1]=="/usr/bin/startplasma-wayland","Each desktop starts as its own PAM user, logind seat and assigned GPU without a shared display manager");
         var moved=inventory with{Usb=[hub with{Path="/usb/elsewhere"},keyboard with{Path="/usb/elsewhere/keyboard",Ancestors=["/usb/elsewhere"]},headset with{Path="/usb/elsewhere/headset",Ancestors=["/usb/elsewhere"]}]};
         check(StationDevicePolicy.Plan([primary,secondary],moved)[1].Nodes.SequenceEqual(plan[1].Nodes),"Serial hub survives changing USB ports with its attached devices");

@@ -28,11 +28,13 @@ static class TimezoneTests
             fail=true;try{await settings.Set("UTC");throw new Exception("Failure accepted");}catch(InvalidOperationException){}
             check(File.ReadAllText(Path.Combine(dir,"timezone")).Trim()=="Asia/Kolkata","Failed timezone change does not overwrite saved selection");
             check(TimezoneSettings.ContainerArguments().Contains("--tz=local")&&TimezoneSettings.ContainerArguments().Contains("--env=TZ=:/etc/localtime"),"Model and generic container timezone uses host zone data even without image tzdata");
+            var stationZone=TimezoneSettings.StationEnvironment[3..];
+            check(!Path.IsPathRooted(stationZone)&&!stationZone.Contains(':')&&TimeZoneInfo.FindSystemTimeZoneById(stationZone).Id==stationZone,"Native workstation and Sunshine receive a recognized timezone name rather than a zonefile path");
             var gpu=new GpuDevice("0000:c6:00.0","NVIDIA","RTX 3090","nvidia","GPU-test",24576,[],[]);
             check(StationGraphics.LaunchEnvironment(gpu).SequenceEqual(new[]{"__GLX_VENDOR_LIBRARY_NAME=nvidia"}),"NVIDIA GLX selects its vendor without assuming GPU index or changing Vulkan driver paths");
             check(StationGraphics.LaunchEnvironment(gpu with {Vendor="AMD"}).Single()=="DRI_PRIME=pci-0000_c6_00_0!","Mesa workstation selects exact PCI device rather than ordinal");
             check(StationGraphics.LaunchEnvironment(gpu with {Vendor="Unknown",Pci="vmbus:test"}).Length==0,"Virtual graphics does not receive fabricated PCI selection");
-            var environment=StationGraphics.SelectEnvironment("DISPLAY=:1\nHF_TOKEN=private\nWAYLAND_DISPLAY=wayland-0\nTZ=:/etc/localtime\nSECRET_KEY=private\nLD_PRELOAD=untrusted");
+            var environment=StationGraphics.SelectEnvironment("DISPLAY=:1\nHF_TOKEN=private\nWAYLAND_DISPLAY=wayland-0\nTZ=America/Denver\nSECRET_KEY=private\nLD_PRELOAD=untrusted");
             check(environment.Count==3&&!environment.Values.Contains("private"),"Graphics diagnostics copy only allowlisted display variables, not credentials or preload hooks");
         }
         finally{if(Directory.Exists(dir))Directory.Delete(dir,true);}

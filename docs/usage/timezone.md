@@ -19,13 +19,17 @@ The agent uses `timedatectl set-timezone`; `/etc/localtime` persists across rebo
 and OS/app updates. A choice made in the installer is handed to the installed OS.
 This does not change the hardware clock or disable time synchronization.
 
-Workstations and Sunshine read the host's localtime. New model and generic
+Workstations and Sunshine receive the host's named timezone (for example,
+`America/Denver`). Desktop apps such as Steam Big Picture need a zone name rather
+than a zonefile pathname to recognize the timezone correctly. New model and generic
 containers use Podman's `--tz=local` and `TZ=:/etc/localtime`, overriding an image's
 baked-in TZ and copying the required zone data even when it lacks tzdata. Running
 processes may cache timezone data and existing containers keep their original
 copy. Unload and reload their profile to apply the selection everywhere; saving a
 timezone never interrupts running workloads. Apps with their own explicit timezone
 setting may still use that app setting. Internal journal timestamps remain UTC.
+After updating from a version that supplied a zonefile pathname to the desktop,
+unload and reload the workstation profile to replace its saved session environment.
 
 ## Clock synchronization
 

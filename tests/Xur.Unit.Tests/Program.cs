@@ -15,6 +15,7 @@ if(args is ["--terminal-probe",var terminal])
 if(args is ["--password-probe",var expected]) { Console.WriteLine("Ready");var value=ConsolePassword.Read();if(value!=(expected=="cancel"?"/cancel":"  correct horse "))throw new Exception("Password input mismatch");Console.WriteLine("Matched");return; }
 if(args is ["--updates-render",var renderOutput]) { await UpdatesRender.Run(renderOutput);return; }
 if(args is ["--workload-settings-smoke"]) { await WorkloadSettingsSmoke.Run();return; }
+if(args is ["--station-timezone"]) { Console.WriteLine(Xur.Agent.TimezoneSettings.StationEnvironment);return; }
 if(args is ["--station-units-smoke"]) { await StationUnitsTests.Smoke();return; }
 if(args is ["--cancellation-render",var cancelOutput]) { await CancellationRender.Run(cancelOutput);return; }
 if(args is ["--control-panel-render",var homeOutput]) { await ControlPanelRender.Run(homeOutput);return; }

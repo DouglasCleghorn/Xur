@@ -22,6 +22,7 @@ jobs:
           python3 eng/check-web-assets.py
           python3 tests/Xur.Integration.Tests/web-assets.py
           dotnet run --project tests/Xur.Unit.Tests -c Release
+          python3 tests/Xur.Integration.Tests/desktop-timezone.py
           python3 tests/Xur.Integration.Tests/os-update.py
           XUR_DOTNET="$(command -v dotnet)" python3 tests/Xur.Integration.Tests/console-menu.py
           dotnet build src/Xur.Gateway -c Release
