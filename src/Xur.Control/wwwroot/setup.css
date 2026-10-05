@@ -65,7 +65,6 @@ label.inline-option{display:flex;align-items:center;gap:.5rem}label.inline-optio
 .station-identity-choice{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:12px;min-width:0}.station-identity-choice small{grid-column:1/-1;color:var(--muted)}.station-identity-choice input{width:100%}
 
 .station-devices { grid-column:1/-1; }
-.station-devices summary { cursor:pointer; padding:.5rem 0; }
 .usb-choice { display:flex; align-items:start; gap:.6rem; padding:.45rem 0; overflow-wrap:anywhere; }
 .usb-choice input { width:auto; margin-top:.25rem; }
 .usb-choice small { display:block; font-weight:normal; color:var(--muted); }

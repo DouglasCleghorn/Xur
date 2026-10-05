@@ -22,7 +22,8 @@ public static class StationDevicePolicy
             if(w.User is {Temporary:false} user&&!users.Add(user.Uid))throw new InvalidOperationException("Each running workstation needs a different user. Temporary users are separate for each workstation.");
             var usb=w.Devices?.Usb??[];
             if(usb.Length>64||usb.Any(id=>id==null||!System.Text.RegularExpressions.Regex.IsMatch(id,@"^usb:[0-9a-f]{64}$")))throw new InvalidOperationException("Select USB devices from the device inventory.");
-            if(usb.Any(id=>!assigned.Add(id)))throw new InvalidOperationException("A USB device or hub can belong to only one workstation.");
+            // A primary's saved selections are dormant until it becomes secondary.
+            if(w.Devices?.Primary!=true && usb.Any(id=>!assigned.Add(id)))throw new InvalidOperationException("A USB device or hub can belong to only one workstation.");
         }
     }
 
@@ -38,7 +39,7 @@ public static class StationDevicePolicy
         var problems=stations.ToDictionary(w=>w.Id,_=>new List<string>());
         void Claim(string id,string station)
         {if(!claims.TryGetValue(id,out var owners))claims[id]=owners=[];owners.Add(station);}
-        foreach(var w in stations)
+        foreach(var w in stations.Where(w=>w.Devices?.Primary!=true))
         foreach(var id in w.Devices?.Usb??[])
         {
             var matches=inventory.Usb.Where(d=>d.Id==id).ToArray();

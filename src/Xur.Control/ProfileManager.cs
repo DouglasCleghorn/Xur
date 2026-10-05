@@ -113,7 +113,7 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
         {
             var stations=workloads.Where(w=>w.Recipe.Kind=="Workstation").OrderBy(w=>w.Id).ToArray();
             var primary=stations.SingleOrDefault(w=>w.Devices?.Primary==true)?.Id??(stations.Length==1?stations[0].Id:null);
-            return Canonical.Hash(new{Primary=primary,Claims=stations.Where(w=>w.Devices?.Usb is {Length:>0}).Select(w=>new{w.Id,Usb=w.Devices!.Usb!.Order().ToArray()}).ToArray()});
+            return Canonical.Hash(new{Primary=primary,Claims=stations.Where(w=>w.Devices?.Primary!=true && w.Devices?.Usb is {Length:>0}).Select(w=>new{w.Id,Usb=w.Devices!.Usb!.Order().ToArray()}).ToArray()});
         }
         return previous.Length>0&&Signature(previous)!=Signature(target.Workloads);
     }

@@ -84,6 +84,14 @@ See [release preparation](development/release-preparation.md).
   capture version is unverified. No credentials or account details visible.
   Kept private in T3 attachments; not copied into source or published.
 
+- 2026-10-04: Reviewed the expanded profile-editor USB section in the working
+  tree based on `0c3346c`. Private T3 browser capture
+  `.build/evidence/profile-editor/primary-desktop.png` shows disabled USB choices
+  and retained connected/disconnected selections for a primary workstation.
+  Rendered from synthetic Razor fixtures; no live devices, accounts or credentials.
+  Browser checks covered 1440, 900, 390 and 320 px. Refresh this capture and the
+  published profile-editor image before release when primary/device controls change.
+
 - 2026-10-04: Captured web Wi-Fi setup at desktop and phone widths in
   `.build/evidence/network-ui/wifi-{1440,390,320}.png`. Working-tree Wi-Fi web
   controls, rendered from synthetic Razor fixtures; shows a saved open-network
