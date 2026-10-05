@@ -17,7 +17,7 @@ def build():
   script='''set -euo pipefail
   # Fedora's container defaults omit docs, including COPYING files marked %doc.
   # Retain those original notices for the bundled native runtime dependencies.
-  dnf --setopt=tsflags= install -y gcc gcc-c++ cmake qt6-qtbase-devel qt6-qtwayland kf6-kglobalaccel-devel libevdev-devel libinput-devel meson ninja-build ncurses libdrm-devel libxkbcommon-devel systemd-devel zlib-devel libtsm-devel libcurl-devel wayland-devel python3 tar gzip
+  dnf --setopt=tsflags= install -y gcc gcc-c++ cmake qt6-qtbase-devel qt6-qtwayland kf6-kglobalaccel-devel libevdev-devel libinput-devel meson ninja-build ncurses libdrm-devel libxkbcommon-devel systemd-devel zlib-devel libtsm-devel libcurl-devel wayland-devel python3 tar gzip dbus-daemon
   cd /work/console
   mkdir kmscon
   tar -xzf kmscon.tar.gz --strip-components=1 -C kmscon

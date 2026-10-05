@@ -16,6 +16,12 @@ public static class StationSeats
     public static bool Registered(string id)=>File.Exists(Root+"/"+id+".json");
     static Workload[] Intentions()=>File.Exists(Intent)?JsonSerializer.Deserialize<Workload[]>(File.ReadAllText(Intent))!:[];
     static Session[] Sessions()=>Directory.Exists(Root)?Directory.GetFiles(Root,"*.json").Select(p=>JsonSerializer.Deserialize<Session>(File.ReadAllText(p))!).ToArray():[];
+    public static ProfileSwitcherSession? SwitcherSession(int uid)
+    {
+        var own=Sessions().Where(s=>s.Uid==uid).ToArray();
+        if(uid<1000 || own.Length!=1)return null;
+        var station=own[0];return new(uid,StationAccounts.Username(station.Workload),station.Workload.Id,Seat(station.Workload.Id));
+    }
     static async Task Run(string exe,string[] args)
     {var r=await Processes.Run(exe,args,30);if(r.ExitCode!=0)throw new InvalidOperationException("Workstation seat configuration failed: "+exe+". "+Redaction.Logs(r.Output));}
     static void Save<T>(string file,T value)

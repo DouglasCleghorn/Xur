@@ -211,3 +211,9 @@ capture date, privacy review, and the features whose next changes require a refr
   metadata, so keep these captures private. Regenerate after changes to the
   dialog, shortcuts or navigation. Review existing public UI screenshots for
   the new Switch profile navigation entry before the next release.
+  Follow-up on 2026-10-04, based on `a72a66e`: the previous picker captures
+  predate Unload all and the login-free desktop picker. Regenerate this family
+  and the Settings/console images before release to include Profile access
+  and the console Switch profile entry. Collaborative browser assertions used
+  synthetic fixtures at 1280 and 390 px; screenshot capture was unavailable
+  during this follow-up, so no replacement images were published.

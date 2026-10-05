@@ -52,6 +52,15 @@ worker does not retain authenticated pages or API responses.
   Tailscale browser mutations still require antiforgery tokens.
 - **Local console:** `/local/*` is accessible only through the private local Unix
   socket. It is not exposed through LAN HTTPS or the Serve socket.
+- **Workstation profile controls:** a separate length-framed JSON Unix socket
+  accepts only state, preview, unload preview and plan approval. Kernel
+  `SO_PEERCRED` identifies the caller, and the root-private agent validates its
+  active registered workstation. Preview ownership binds UID, workstation and
+  expiry; the usual plan/digest and runtime checks govern application. Display
+  responses exclude private commands and configuration. Profile access policy
+  is checked again on approval, and application maintenance blocks mutations.
+  This socket never grants web sessions, profile editing or arbitrary agent
+  actions. Web and server-console routes keep their existing transport boundaries.
 - **Top-level safe navigation:** external links may open a GET/HEAD page. They do
   not authorize mutations; protected data still requires authentication. The
   public health/status and login/bootstrap entry points intentionally allow access

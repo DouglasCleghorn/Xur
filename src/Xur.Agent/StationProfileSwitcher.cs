@@ -26,9 +26,7 @@ public static class StationProfileSwitcher
             File.SetUnixFileMode(root+"/xur-profile-switcher",(UnixFileMode)493);
             File.SetUnixFileMode(root+"/launch",(UnixFileMode)493);
         }
-        var run=Environment.GetEnvironmentVariable("XUR_RUN")??"/run/xur";
-        using var control=LocalClient.Create(Path.Combine(run,"control.sock"));
-        var connection=await control.GetStringAsync("/local/profile-switcher/connection");
+        var connection=System.Text.Json.JsonSerializer.Serialize(new{socket=ProfileSwitcherTransport.SocketPath(Environment.GetEnvironmentVariable("XUR_RUN")??"/run/xur")});
         await Check("runuser",["-u",user,"--","/bin/bash","-c",Configuration,"xur",home,root,connection]);
         var label=await Processes.Run("semanage",["fcontext","-a","-t","bin_t","/var/lib/xur-profile-switcher(/.*)?"],30);
         if(label.ExitCode!=0)await Check("semanage",["fcontext","-m","-t","bin_t","/var/lib/xur-profile-switcher(/.*)?"]);

@@ -62,8 +62,8 @@ public static class ProfileEndpoints
         app.MapPost("/api/profiles/unload/preview",()=>Safe(async()=>Results.Json(await manager.PreviewUnload())));
         app.MapPost("/api/profiles/{id}/delete",(string id,ProfileDeleteRequest request)=>Safe(async()=>{await manager.Delete(id,request.Revision);return Results.Ok();}));
         app.MapPost("/api/profiles/{id}/preview",(string id)=>Safe(async()=>Results.Json(await manager.Preview(id))));
-        app.MapPost("/api/profiles/{id}/load",(string id)=>Safe(async()=>{var plan=await manager.Preview(id);return Results.Json(await manager.Apply(new(plan.Id,plan.Digest)));}));
-        app.MapPost("/api/profiles/apply",(Approval p)=>Safe(async()=>Results.Json(await manager.Apply(p))));
+        app.MapPost("/api/profiles/{id}/load",(string id,HttpContext context)=>Safe(async()=>{var plan=await manager.Preview(id);return Results.Json(await manager.Apply(new(plan.Id,plan.Digest),ProfileSwitchAudit.Request(context)));}));
+        app.MapPost("/api/profiles/apply",(Approval p,HttpContext context)=>Safe(async()=>Results.Json(await manager.Apply(p,ProfileSwitchAudit.Request(context)))));
         app.MapPost("/api/profiles/cancel",(ProfileCancelRequest request)=>Safe(async()=>{if(string.IsNullOrEmpty(request.Id))throw new InvalidOperationException("Specify the current operation ID.");await manager.Cancel(request.Id);return Results.Accepted();}));
         app.MapPost("/api/profiles/resume",()=>Safe(async()=>{await manager.Resume();return Results.Accepted();}));
         app.MapGet("/api/workloads/{id}/logs",(string id)=>Safe(async()=>Results.Text(await appliance.Agent.GetStringAsync("/workloads/"+Uri.EscapeDataString(id)+"/logs"))));
@@ -114,11 +114,11 @@ public static class ProfileEndpoints
         }));
         app.MapPost("/profiles/load",async Task<IResult>(HttpContext c)=> {
             if(appliance.Installer)return Results.Conflict();
-            try {var f=await c.Request.ReadFormAsync();var plan=await manager.Preview(f["id"].ToString());await manager.Apply(new(plan.Id,plan.Digest));return Results.Redirect("/profiles");}
+            try {var f=await c.Request.ReadFormAsync();var plan=await manager.Preview(f["id"].ToString());await manager.Apply(new(plan.Id,plan.Digest),ProfileSwitchAudit.Request(c));return Results.Redirect("/profiles");}
             catch(InvalidOperationException e){return Results.Redirect("/profiles?error="+Uri.EscapeDataString(e.Message));}
         });
         app.MapPost("/profiles/apply",async Task<IResult> (HttpContext c)=>await Safe(async()=> {
-            var f=await c.Request.ReadFormAsync();await manager.Apply(new(f["id"].ToString(),f["digest"].ToString()));return Results.Redirect("/profiles");
+            var f=await c.Request.ReadFormAsync();await manager.Apply(new(f["id"].ToString(),f["digest"].ToString()),ProfileSwitchAudit.Request(c));return Results.Redirect("/profiles");
         }));
         app.MapPost("/profiles/cancel",async Task<IResult>(HttpContext context)=>{
             try {

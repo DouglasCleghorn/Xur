@@ -108,13 +108,13 @@ public static class LocalConsole
     }
     public static string[] RootOptions(bool installer=false) => installer
         ? ["Setup and installation", "Network settings", "Hardware", "Logs", "Power"]
-        : ["Status and login", "Tailscale QR", "Network settings", "Hardware", "Logs", "Updates", "Power", "Server name", "Local setup"];
+        : ["Status and login", "Tailscale QR", "Network settings", "Hardware", "Logs", "Updates", "Power", "Server name", "Local setup", "Switch profile"];
     static string[] Options => RootOptions(appliance?.Installer==true);
     static string[] CurrentOptions => view=="maintenance" ? maintenance!.Options.Select(o=>o.Display).ToArray() : Options;
     public static bool ViewingMaintenance { get {lock(Sync)return view=="maintenance";} }
     static bool Plain => Environment.GetEnvironmentVariable("XUR_CONSOLE") == "stdio";
     public static string Menu(bool installer=false) => "\n"+string.Join('\n',RootOptions(installer).Select((label,i)=>$"{i+1}. {label}"))+"\n0. Exit\nSelection: ";
-    public static char RootKey(int index,bool installer=false) => (installer ? "ij45w" : "12j45uwmi")[index];
+    public static char RootKey(int index,bool installer=false) => (installer ? "ij45w" : "12j45uwmif")[index];
 
     public static async Task Start(Appliance app, Bootstrap auth)
     {
@@ -233,12 +233,12 @@ public static class LocalConsole
     public static char? SelectLine(string line)
     {
         var key=Command(line);
-        if(key is >= '1' and <= '9')
+        if(!line.Any(char.IsControl) && int.TryParse(line.Trim(),out var number) && number>0)
         {
             lock(Sync)
             {
-                if(key-'1'>=CurrentOptions.Length)return null;
-                selection=key.Value-'1';return Navigate(ConsoleKeyAction.Enter);
+                if(number>CurrentOptions.Length)return null;
+                selection=number-1;return Navigate(ConsoleKeyAction.Enter);
             }
         }
         return key;

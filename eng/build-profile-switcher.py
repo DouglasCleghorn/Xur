@@ -19,7 +19,7 @@ remote='xur-profile-switcher-'+hashlib.sha256(json.dumps(inputs,sort_keys=True).
 subprocess.run([*ssh,'mkdir -p '+remote],check=True)
 subprocess.run([*scp,*map(str,source.iterdir()),'builder@127.0.0.1:'+remote+'/'],check=True)
 subprocess.run([*ssh,f'''set -eu
-sudo dnf install -y gcc-c++ cmake qt6-qtbase-devel qt6-qtwayland kf6-kglobalaccel-devel libevdev-devel libdrm-devel libinput-devel zlib-devel systemd-devel > {remote}/dependencies.log 2>&1
+sudo dnf install -y gcc-c++ cmake qt6-qtbase-devel qt6-qtwayland kf6-kglobalaccel-devel libevdev-devel libdrm-devel libinput-devel zlib-devel systemd-devel dbus-daemon > {remote}/dependencies.log 2>&1
 bash {remote}/build.sh "$PWD/{remote}" > {remote}/build.log 2>&1
 '''],check=True)
 with tempfile.TemporaryDirectory(dir=repo/'.build') as temp:

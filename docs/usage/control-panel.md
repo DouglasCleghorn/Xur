@@ -5,7 +5,8 @@ Installed Home is a compact control panel: Update All, confirmed reboot, a pendi
 Storage-device/RAM/VRAM meters, charts, network traffic history, workloads and system services are under `/monitoring`. It is in desktop navigation and the phone's More menu. Installation runs in the local console; web management starts after reboot into the installed system. Unknown device telemetry is never displayed as zero.
 
 **Switch profile** opens a picker with an explicit workload review and Load
-profile action. The web keyboard shortcut is **Ctrl + Alt + P**; a native Plasma
+profile or Unload all action. **Settings → Profile access** chooses web-only,
+server-console or all-workstation access. The web keyboard shortcut is **Ctrl + Alt + P**; a native Plasma
 helper provides the same shortcut on workstations. See [Profiles](profiles.md)
 for controller controls and desktop-helper setup.
 
