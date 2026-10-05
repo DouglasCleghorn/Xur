@@ -212,13 +212,26 @@ into power-save, including while logs or installation progress are changing.
 Displays without power-save support show a completely black screen. The server
 and installation continue running. The first key or mapped controller action only wakes the display; press
 again to operate the menu. Waking can take a few seconds while the monitor
-restores its HDMI or DisplayPort connection. Workstation desktops keep their
+restores its HDMI or DisplayPort connection. Xur retries the wake and redraws
+the menu after one, three and seven seconds. Workstation desktops keep their
 own idle settings.
 
 The display console selects the monitor's preferred mode instead of inheriting
 firmware timing. Connected outputs that stay disabled or in display power-save
-receive bounded recovery attempts, including when another output is healthy.
+receive up to three recovery attempts, including when another output is healthy.
+Xur also watches for stalled frame updates even when the driver reports the
+display as on. Recovery restarts only the affected GPU's console.
 Workstation-owned GPUs are excluded from console recovery.
+
+After a detected display failure, that GPU keeps its video signal on and shows
+a black screen when idle for the rest of the boot. This uses more monitor power
+but avoids repeating a failing sleep/wake cycle. Restarting Xur retains this
+fallback; rebooting returns to normal power saving. On both installer media and
+installed systems, a known AMD startup display timeout also triggers a one-time
+HDMI reprobe with 1080p timing when all connected monitors support it.
+
+Software cannot confirm that a physical monitor is showing an image. A persistent
+“no signal” after recovery still needs display diagnostics and a cable/input check.
 
 On installation failure, Xur tries to save a new `xur-diagnostics-*.txt` report
 to a writable installer USB filesystem. Progress shows whether saving succeeded.

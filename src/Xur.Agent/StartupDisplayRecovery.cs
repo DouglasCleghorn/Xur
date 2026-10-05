@@ -2,7 +2,8 @@ using Xur.Domain;
 namespace Xur.Agent;
 
 // A boot-time AMD modeset timeout can leave connected/enabled/DPMS On with no signal.
-// Reprobe once after the monitor has had time to settle; never loop on those flags.
+// Reprobe once on installed systems and installer media after the monitor has
+// had time to settle; never loop on those flags.
 public sealed class StartupDisplayRecovery(string runDirectory,TimeProvider? clock=null)
 {
     readonly TimeProvider time=clock??TimeProvider.System;

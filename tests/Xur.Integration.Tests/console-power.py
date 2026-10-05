@@ -47,8 +47,15 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-power-') as direct
         state.update(power='invalid');read_for(.35);assert on not in captured,'An invalid power header must preserve sleep'
         captured=b'';state.update(power='on');until(on);until(b'footer')
         assert captured.index(on)<captured.index(b'footer'),'Wake must precede a complete menu repaint'
+        captured=b'';read_for(7.5)
+        assert captured.count(on)==3,'Wake retries must be bounded to one, three and seven seconds'
+        assert captured.count(b'footer')==3,'Each wake retry must repaint the entire menu'
+        assert b'\x1b]xurDisplayCheck\x07' in captured,'Awake clients must check renderer progress'
+        captured=b'';read_for(1.2);assert on not in captured,'Wake retries must stop after the recovery window'
         captured=b'';state.update(power='off');until(off)
+        captured=b'';read_for(1.2)
+        assert on not in captured and b'\x1b]xurDisplayCheck\x07' not in captured,'Sleep must cancel retries and progress checks'
         assert len(reads)>10
     finally:
         process.terminate();process.wait(timeout=5);server.shutdown();server.server_close()
-print(json.dumps({'suite':'ConsolePower','sleepAndWake':True,'pollingPreservesSleep':True,'failedResponsesPreserveSleep':True,'fullWakeRepaint':True}))
+print(json.dumps({'suite':'ConsolePower','sleepAndWake':True,'pollingPreservesSleep':True,'failedResponsesPreserveSleep':True,'fullWakeRepaint':True,'boundedWakeRetries':True,'rendererProgressChecks':True}))

@@ -94,12 +94,28 @@ continue to use their own font settings.
 
 Console reconciliation also compares the connected outputs, complete mode list
 and a hash of EDID. A late mode list or monitor replacement restarts only the
-affected unassigned GPU's console, even when font size is unchanged. If all
-connected outputs remain disabled while the console service is active, recovery
+affected unassigned GPU's console, even when font size is unchanged. If any
+connected output remains disabled or in DPMS Off while the console service is active, recovery
 waits 15 seconds and permits at most three restart attempts, at least 30 seconds
-apart. An enabled output resets that budget. Workstation-owned and handoff GPUs
+apart. Timing uses a monotonic clock. All outputs must remain healthy for 60 seconds
+before the restart budget resets, so briefly healthy flags after a restart cannot
+create a recovery loop. Workstation-owned and handoff GPUs
 are excluded. This does not diagnose every HDMI cable, firmware or driver fault;
 physical AMD HDMI recovery still requires hardware testing.
+
+The native client checks renderer progress once per second while awake. Successful
+page flips reset each output's stall counter; ten checks without progress publish
+a root-private `console-fault-<GPU hash>` marker. A healthy output cannot hide a
+stalled sibling. The agent includes this marker in bounded recovery even when
+sysfs reports enabled/DPMS On. Rejected page flips propagate their error and can
+retry, instead of waiting forever for a completion event that will never arrive.
+Markers contain only a fixed error message, never terminal frames or credentials.
+
+Both installed systems and installer media also check for the specific AMD
+`REG_WAIT timeout` / `disable_crtc` startup failure on the affected PCI function.
+After 15 seconds, one recovery per GPU per boot reprobes connected HDMI outputs
+and selects 1920×1080 when every connected output supports it. Its receipt and
+mode choice survive agent restarts. Healthy boots do not get speculative resets.
 
 After ten minutes without local keyboard or controller activity, the control service returns
 a black frame with an explicit power-save header over its root-private socket.
@@ -108,6 +124,17 @@ DPMS Off on its assigned displays. Displays without DPMS support retain the
 black frame. The renderer continues reading its PTY while asleep so the next
 keyboard or controller input can restore DPMS On and repaint the menu. Newly connected
 outputs inherit the sleep state.
+
+Wake sends DPMS On immediately and retries after one, three and seven seconds,
+repainting the complete menu each time. Sleep cancels retries; failed or incomplete
+frame responses and missing power headers cannot initiate them. Wake also reconciles
+the renderer's pending-flip state with the backend before repainting.
+
+After a detected failure requires console recovery, that GPU uses a black idle
+frame with its video signal kept on for the rest of the boot. The root-private
+`console-safe-power-<GPU hash>` marker preserves this fallback across console and
+agent restarts. This consumes more display power but avoids repeatedly entering
+a failing DPMS sleep/wake cycle. Other GPUs retain normal power saving.
 
 The control service maintains a root-private `console-sleep` marker in its run
 directory. Display recovery excludes deliberate sleep and resets its recovery

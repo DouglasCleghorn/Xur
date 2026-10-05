@@ -6,16 +6,20 @@ namespace Xur.Agent;
 // is released for a desktop; compute allocations retain their display console.
 public sealed class DisplayConsoles(string directory,string runDirectory,
     Func<string,string[],int,Task<ProcessResult>>? runner=null,Func<Task<GpuDevice[]>>? observer=null,
-    string? runtimePath=null,string sysRoot="/sys",TimeProvider? clock=null,bool installer=false)
+    string? runtimePath=null,string sysRoot="/sys",TimeProvider? clock=null)
 {
     readonly SemaphoreSlim gate=new(1,1);
     readonly HashSet<string> handingOff=[];
     public string? Error {get;private set;}
     readonly StartupDisplayRecovery startupRecovery=new(runDirectory,clock);
-    public string? LastRecovery=>startupRecovery.LastAttempt;
+    string? lastRecovery;
+    public string? LastRecovery=>lastRecovery??startupRecovery.LastAttempt;
     static string Unit(string pci)=>"xur-console-"+Canonical.Hash(pci)[..16]+".service";
     static string RuntimePath=>Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"console"));
-    readonly Dictionary<string,(DateTimeOffset Next,int Attempts)> recovery=[];
+    readonly TimeProvider time=clock??TimeProvider.System;
+    readonly Dictionary<string,(long Started,TimeSpan Delay,int Attempts,long? HealthySince)> recovery=[];
+    string Fault(string pci)=>Path.Combine(runDirectory,"console-fault-"+Canonical.Hash(pci)[..16]);
+    string SafePower(string pci)=>Path.Combine(runDirectory,"console-safe-power-"+Canonical.Hash(pci)[..16]);
     Task<ProcessResult> RunProcess(string exe,string[] args,int seconds)=>runner?.Invoke(exe,args,seconds)??Processes.Run(exe,args,seconds);
     static string Read(string file){try{return File.ReadAllText(file).Trim();}catch(IOException){return "";}catch(UnauthorizedAccessException){return "";}}
     public static string OutputSignature(string card,IEnumerable<string> displays,string sysRoot="/sys")=>Canonical.Hash(
@@ -25,14 +29,25 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
     static string ReadEdid(string file){try{return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(file)));}catch(IOException){return "";}catch(UnauthorizedAccessException){return "";}}
     bool NeedsRecovery(GpuDevice gpu,string card)
     {
-        var now=(clock??TimeProvider.System).GetUtcNow();
+        var now=time.GetTimestamp();
         var outputs=(gpu.Displays??[]).Where(d=>d.StartsWith(Path.GetFileName(card)+"-",StringComparison.Ordinal)).ToArray();
-        if(outputs.Length==0 || !outputs.Any(d=>Read(Path.Combine(sysRoot,"class/drm",d,"enabled"))=="disabled" || Read(Path.Combine(sysRoot,"class/drm",d,"dpms")) is "Off" or "Standby" or "Suspend"))
-        {recovery.Remove(gpu.Pci);return false;}
-        if(!recovery.TryGetValue(gpu.Pci,out var state)){recovery[gpu.Pci]=(now.AddSeconds(15),0);return false;}
+        if(outputs.Length==0){recovery.Remove(gpu.Pci);return false;}
+        if(!File.Exists(Fault(gpu.Pci)) && !outputs.Any(d=>Read(Path.Combine(sysRoot,"class/drm",d,"enabled"))=="disabled" || Read(Path.Combine(sysRoot,"class/drm",d,"dpms")) is "Off" or "Standby" or "Suspend"))
+        {
+            // A restarted renderer needs time to report a stall. Briefly healthy
+            // sysfs flags must not replenish its restart budget indefinitely.
+            if(recovery.TryGetValue(gpu.Pci,out var healthy))
+            {
+                if(healthy.Attempts==0 || (healthy.HealthySince is long since && time.GetElapsedTime(since,now)>=TimeSpan.FromSeconds(60)))recovery.Remove(gpu.Pci);
+                else recovery[gpu.Pci]=healthy with{HealthySince=healthy.HealthySince??now};
+            }
+            return false;
+        }
+        if(!recovery.TryGetValue(gpu.Pci,out var state)){recovery[gpu.Pci]=(now,TimeSpan.FromSeconds(15),0,null);return false;}
+        recovery[gpu.Pci]=state with{HealthySince=null};
         if(state.Attempts>=3){Error="A connected display is still inactive after console recovery. Check display diagnostics.";return false;}
-        if(now<state.Next)return false;
-        recovery[gpu.Pci]=(now.AddSeconds(30),state.Attempts+1);return true;
+        if(time.GetElapsedTime(state.Started,now)<state.Delay)return false;
+        recovery[gpu.Pci]=(now,TimeSpan.FromSeconds(30),state.Attempts+1,null);return true;
     }
     // Unifont scales in whole 16px steps. Retain at least 120 columns and 45 rows
     // on larger displays; cloned outputs share the smallest connected screen.
@@ -83,8 +98,10 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
             Error=null;
             var root=runtimePath??RuntimePath;
             if(!File.Exists(root+"/kmscon")||!File.Exists(root+"/client")){Error="Display console runtime is missing.";return;}
+            Directory.CreateDirectory(runDirectory);
             var gpus=observer!=null?await observer():await GpuInventory.Observe(probeRuntime:false);var desktops=await DesktopCards();
             var wanted=gpus.Where(g=>!desktops.Contains(g.Pci)&&(g.Cards?.Length??0)>0&&(g.Displays?.Length??0)>0).ToArray();
+            foreach(var pci in recovery.Keys.Where(p=>!wanted.Any(g=>g.Pci==p)).ToArray())recovery.Remove(pci);
             var units=await RunProcess("systemctl",["list-units","--all","--plain","--no-legend","xur-console-*.service"],5);
             foreach(var line in units.Output.Split('\n',StringSplitOptions.RemoveEmptyEntries))
             {
@@ -96,19 +113,28 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
                 var cards=gpu.Cards!;
                 var card=cards.FirstOrDefault(c=>(gpu.Displays??[]).Any(d=>d.StartsWith(Path.GetFileName(c)+"-",StringComparison.Ordinal)))??cards[0];
                 var fontSize=DisplayFontSize(card,gpu.Displays??[],sysRoot);var outputs=OutputSignature(card,gpu.Displays??[],sysRoot);
-                var mode=installer?startupRecovery.Mode(gpu,card,sysRoot):"";
+                var mode=startupRecovery.Mode(gpu,card,sysRoot);
+                var safePower=File.Exists(SafePower(gpu.Pci));
                 if(mode.Length>0)fontSize=FontSize([mode]);
                 if((await RunProcess("systemctl",["is-active",Unit(gpu.Pci)],5)).ExitCode==0)
                 {
                     var environment=await RunProcess("systemctl",["show",Unit(gpu.Pci),"--property=Environment","--value"],5);
                     var sleeping=File.Exists(Path.Combine(runDirectory,"console-sleep"));
                     if(sleeping)recovery.Remove(gpu.Pci);
-                    var startup=!sleeping && installer && await startupRecovery.Due(gpu,RunProcess);
+                    var startup=!sleeping && await startupRecovery.Due(gpu,RunProcess);
                     var recover=(!sleeping && NeedsRecovery(gpu,card))||startup;
-                    if(!recover&&environment.Output.Contains("XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id)&&environment.Output.Contains("XUR_CONSOLE_CARD="+card+" ")&&environment.Output.Contains("XUR_CONSOLE_MODE="+mode+" ")&&environment.Output.Contains("XUR_CONSOLE_FONT="+fontSize+" ")&&environment.Output.Contains("XUR_CONSOLE_OUTPUTS="+outputs+" "))continue;
+                    if(!recover&&environment.Output.Contains("XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id)&&environment.Output.Contains("XUR_CONSOLE_CARD="+card+" ")&&environment.Output.Contains("XUR_CONSOLE_MODE="+mode+" ")&&environment.Output.Contains("XUR_CONSOLE_FONT="+fontSize+" ")&&environment.Output.Contains("XUR_CONSOLE_OUTPUTS="+outputs+" ")&&environment.Output.Contains("XUR_CONSOLE_FAULT="+Fault(gpu.Pci)+" ")&&environment.Output.Contains("XUR_CONSOLE_NO_DPMS=1")==safePower)continue;
                     if(startup)startupRecovery.Consume(gpu); // Persist before acting, including across agent restarts.
                     var stopped=await RunProcess("systemctl",["stop",Unit(gpu.Pci)],20);
                     if(stopped.ExitCode!=0){Error="Display console did not stop for recovery.";continue;}
+                    if(recover)
+                    {
+                        // Keep the video link alive on future idle cycles after a
+                        // failure. Persist for this boot, including agent restarts.
+                        File.WriteAllText(SafePower(gpu.Pci),"");safePower=true;
+                        lastRecovery=(startup?startupRecovery.LastAttempt:"Restarted display console on "+gpu.Pci)+"; idle will keep the video signal on for the rest of this boot.";
+                        Console.Error.WriteLine(lastRecovery);
+                    }
                     if(startup)
                     {
                         try{StartupDisplayRecovery.Reprobe(card,gpu.Displays??[],sysRoot);}
@@ -119,12 +145,14 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
                         if(mode.Length>0)fontSize=FontSize([mode]);
                     }
                 }
+                File.Delete(Fault(gpu.Pci));
                 await RunProcess("systemctl",["reset-failed",Unit(gpu.Pci)],5);
                 var r=await RunProcess("systemd-run",[
                     "--unit="+Unit(gpu.Pci),"--collect","--property=Type=exec","--property=KillMode=control-group",
                     "--property=TimeoutStopSec=10","--property=StandardOutput=null","--property=StandardError=journal",
                     "--property=DevicePolicy=closed","--property=DeviceAllow="+card+" rw","--property=DeviceAllow=char-pts rw",
                     "--property=UMask=0077","--setenv=LANG=C.UTF-8","--setenv=LD_LIBRARY_PATH="+root+"/lib",
+                    "--setenv=XUR_CONSOLE_FAULT="+Fault(gpu.Pci),..(safePower?new[]{"--setenv=XUR_CONSOLE_NO_DPMS=1"}:Array.Empty<string>()),
                     "--setenv=XUR_CONSOLE_MODE="+mode,"--setenv=XUR_CONSOLE_OUTPUTS="+outputs,"--setenv=XUR_CONSOLE_FONT="+fontSize,"--setenv=XUR_CONSOLE_BUNDLE="+ApplicationIdentity.Id,"--setenv=XUR_CONSOLE_CARD="+card,"--setenv=XUR_CONSOLE_MODULES="+root+"/lib",
                     // Select the monitor's preferred mode instead of inheriting a stale or absent firmware mode.
                     root+"/kmscon","--no-use-original-mode",..(mode.Length>0?new[]{"--mode="+mode}:Array.Empty<string>()),"--vt=/dev/null","--no-libseat","--no-hwaccel","--font-engine=unifont","--font-size="+fontSize,
