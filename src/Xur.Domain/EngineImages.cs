@@ -13,9 +13,13 @@ public static class EngineImages
             .ToDictionary(m=>m.Groups[2].Value,m=>m.Groups[1].Value);
     }
     public static string Image(string id)=>images.TryGetValue(id,out var image)?image:throw new InvalidOperationException("Unknown engine image.");
-    public static string Version(string id)=>"Latest";
-    public static string For(Recipe recipe)=>Image(recipe.Engine switch {
-        "vLLM"=>"vllm", "vLLM-Omni"=>"omni", "llama.cpp"=>recipe.Vendor switch {
+    public static string Version(string id)
+    {var tag=Image(id).Split(':')[^1];return tag=="latest"||tag.StartsWith("server",StringComparison.Ordinal)?"Latest":tag;}
+    public static string For(Recipe recipe)=>For(recipe.Engine,recipe.Vendor);
+    public static string For(string engine,string vendor)=>Image(engine switch {
+        "vLLM"=>vendor switch {"NVIDIA"=>"vllm","AMD"=>"vllm-rocm","Intel"=>"vllm-xpu",_=>throw new InvalidOperationException("vLLM requires an available NVIDIA, AMD or Intel GPU.")},
+        "vLLM-Omni"=>vendor switch {"NVIDIA"=>"omni","AMD"=>"omni-rocm","Intel"=>"omni-xpu",_=>throw new InvalidOperationException("vLLM-Omni requires an available NVIDIA, AMD or Intel GPU.")},
+        "llama.cpp"=>vendor switch {
             "NVIDIA"=>"server-cuda", "AMD"=>"server-rocm", "Intel"=>"server-vulkan", _=>"server"},
         _=>throw new InvalidOperationException("Unknown model engine.")});
     public static Recipe Resolve(Recipe recipe)=>recipe.Image?.StartsWith("@engine/",StringComparison.Ordinal)==true?recipe with{Image=Image(recipe.Image[8..])}:recipe;

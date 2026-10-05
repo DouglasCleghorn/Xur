@@ -61,7 +61,7 @@ static class EngineStartupTests
             return exe switch {"podman"=>new(1,""),"uname"=>new(0,"test-kernel"),"tailscale"=>new(0,"1.102.4\n commit: example"),_=>new(0,"1.2.3-1\n")};
         }
         var tools=await new ToolUpdateInventory(AppContext.BaseDirectory,Run).Read();
-        check(tools.Length==13&&tools.Any(t=>t.Name=="vLLM-Omni")&&tools.Any(t=>t.Name=="Sunshine"),"Updates inventories all engine variants and system tools");
+        check(tools.Length==17&&tools.Any(t=>t.Name=="vLLM-Omni")&&tools.Any(t=>t.Name=="Sunshine"),"Updates inventories all engine variants and system tools");
         check(tools.Where(t=>t.Image!=null).All(t=>t.Downloaded==false&&t.UpdatesWith=="Container start"),"Missing engine images are not misreported as installed");
         check(tools.Where(t=>t.Image!=null).All(t=>t.Image==EngineImages.Image(t.Id)&&t.Version==EngineImages.Version(t.Id)),"Tool inventory uses the same latest engine channels as model selection");
         check(tools.Single(t=>t.Id=="tailscale").Version=="1.102.4"&&tools.Single(t=>t.Id=="kernel").Version=="test-kernel","Host tool versions come from running tools rather than build-time defaults");

@@ -57,6 +57,8 @@ await EngineStartupTests.Run(Check);
 ClientLibraryTests.Run(Check);
 await ModelImageUpdaterTests.Run(Check);
 await CachedEngineImagesTests.Run(Check);
+await ModelGpuTests.Run(Check);
+await OmniXpuImageTests.Run(Check);
 await AutomaticModelsTests.Run(Check);
 await EngineRestartPolicyTests.Run(Check);
 await ParallelStopGateTests.Run(Check);

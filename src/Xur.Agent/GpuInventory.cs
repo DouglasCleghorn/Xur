@@ -37,6 +37,8 @@ public static class GpuInventory
                 if(vendor=="AMD" && (driver!="amdgpu" || !File.Exists(devRoot+"/kfd")))problems.Add("ROCm kernel device is unavailable");
                 if(vendor=="Intel" && driver is not ("i915" or "xe"))problems.Add("Intel graphics driver is unavailable");
                 if(long.TryParse(Read(dir+"/mem_info_vram_total"),out var bytes))memory=bytes/1048576;
+                if(vendor=="Intel" && memory==0 && probeRuntime)
+                    memory=nodes.Select(node=>IntelGpuMemory.Read(devRoot+node[4..],driver)/1048576).DefaultIfEmpty().Max();
                 // Unknown memory cannot satisfy recipes with a minimum. Never infer it from system RAM.
                 if(memory==0)problems.Add("Dedicated GPU memory has not been observed");
                 id=pci;

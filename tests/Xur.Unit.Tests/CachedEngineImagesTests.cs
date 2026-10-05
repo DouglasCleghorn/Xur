@@ -34,6 +34,18 @@ static class CachedEngineImagesTests
             var newer=args[2]==Id('b');
             return Task.FromResult(new ProcessResult(0,JsonSerializer.Serialize(new[]{new{Id=newer?Id('b'):Id('a'),Created=newer?"2026-10-02T00:00:00Z":"2026-09-01T00:00:00Z",Architecture="amd64",Os="linux"}})));
         }
-        check(await new CachedEngineImages(Vllm).Newest(recipe with{Engine="vLLM-Omni",Image="mirror.gcr.io/vllm/vllm-omni:latest"})==Id('b'),"Offline Omni uses its newest cached release while excluding nightly and alternate CUDA tags");
+        check(await new CachedEngineImages(Vllm).Newest(recipe with{Engine="vLLM-Omni",Vendor="NVIDIA",Image="mirror.gcr.io/vllm/vllm-omni:latest"})==Id('b'),"Offline Omni uses its newest cached release while excluding nightly and alternate CUDA tags");
+        foreach(var engine in new[]{"vLLM","vLLM-Omni"})
+        foreach(var vendor in new[]{"AMD","Intel"})
+        {
+            var reference=EngineImages.For(engine,vendor);var inspectedGpu=new List<string>();
+            Task<ProcessResult> Variant(string exe,string[] args,int seconds)
+            {
+                if(args[1]=="ls")return Task.FromResult(new ProcessResult(0,string.Join('\n',new[]{Id('b')+" "+reference,Id('c')+" mirror.gcr.io/vllm/vllm-openai:latest",Id('d')+" "+EngineImages.For(engine,vendor=="AMD"?"Intel":"AMD")})));
+                inspectedGpu.Add(args[2]);
+                return Task.FromResult(new ProcessResult(0,JsonSerializer.Serialize(new[]{new{Id=Id('b'),Created="2026-10-04T00:00:00Z",Architecture="amd64",Os="linux"}})));
+            }
+            check(await new CachedEngineImages(Variant).Newest(recipe with{Engine=engine,Vendor=vendor,Image=reference})==Id('b')&&!inspectedGpu.Contains(Id('c'))&&!inspectedGpu.Contains(Id('d')),"Offline "+engine+" / "+vendor+" never substitutes another GPU backend");
+        }
     }
 }

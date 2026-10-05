@@ -15,7 +15,7 @@ public sealed class CachedEngineImages(Func<string,string[],int,Task<ProcessResu
             if(!name.StartsWith(repository+":",StringComparison.Ordinal))return false;
             var tag=name[(repository.Length+1)..];
             return channel=="latest"?tag=="latest" || Regex.IsMatch(tag,@"\Av?\d+(\.\d+){1,3}\z"):
-                tag==channel || Regex.IsMatch(tag,"\\A"+Regex.Escape(channel)+@"-b\d+\z");
+                tag==channel || channel.StartsWith("server",StringComparison.Ordinal) && Regex.IsMatch(tag,"\\A"+Regex.Escape(channel)+@"-b\d+\z");
         }
         var listed=await run("podman",["image","ls","--no-trunc","--format={{.ID}} {{.Repository}}:{{.Tag}}"],20);
         var ids=new HashSet<string>(StringComparer.Ordinal);

@@ -58,7 +58,7 @@ def check(root, config):
                 errors.append(f'{path.relative_to(root)}: document custom dependency checks in docs/development/dependencies.md')
     engines = root / 'catalog/engines/Containerfile'
     if engines.exists():
-        for image, alias in (('vllm-openai', 'vllm'), ('vllm-omni', 'omni')):
+        for image, alias in (('vllm-openai', 'vllm'), ('vllm-openai-rocm', 'vllm-rocm'), ('vllm-openai-xpu', 'vllm-xpu'), ('vllm-omni', 'omni')):
             if not re.search(r'^FROM mirror\.gcr\.io/vllm/' + image + r':latest AS ' + alias + r'$', engines.read_text(), re.M):
                 errors.append(f'{engines.relative_to(root)}: {image} must use the mirrored latest channel')
     sdk = root / 'global.json'

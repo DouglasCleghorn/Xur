@@ -4,4 +4,9 @@ FROM ghcr.io/ggml-org/llama.cpp:server-cuda AS server-cuda
 FROM ghcr.io/ggml-org/llama.cpp:server-rocm AS server-rocm
 FROM ghcr.io/ggml-org/llama.cpp:server-vulkan AS server-vulkan
 FROM mirror.gcr.io/vllm/vllm-openai:latest AS vllm
+FROM mirror.gcr.io/vllm/vllm-openai-rocm:latest AS vllm-rocm
+FROM mirror.gcr.io/vllm/vllm-openai-xpu:latest AS vllm-xpu
 FROM mirror.gcr.io/vllm/vllm-omni:latest AS omni
+# Upstream has no ROCm latest tag or prebuilt XPU Omni image.
+FROM mirror.gcr.io/vllm/vllm-omni-rocm:v0.28.0 AS omni-rocm
+FROM localhost/xur/vllm-omni-xpu:v0.30.0 AS omni-xpu

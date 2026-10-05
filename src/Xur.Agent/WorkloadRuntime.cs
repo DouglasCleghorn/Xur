@@ -120,7 +120,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             ModelImageSelection? engineImage=null;
             if(w.Recipe.Kind=="Model")
             {
-                engineImage=await new ModelImageUpdater().Refresh(w,instance);
+                engineImage=await new ModelImageUpdater(buildRoot:Path.Combine(Path.GetDirectoryName(directory)!,"engine-builds")).Refresh(w,instance);
                 if(engineImage?.Recreate==true)instance=null;
                 var updateLog=Path.Combine(directory,w.Id+".update.log");
                 if(engineImage?.Warning is {} warning)
@@ -140,7 +140,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 }
                 var image=engineImage?.Image??w.Recipe.Image;
                 var args=new List<string> {"create","--name",Name(w.Id),"--label","io.xur.fingerprint="+w.Fingerprint,"--label","io.xur.id="+w.Id,
-                    "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096","--shm-size=1g",w.Recipe.Kind=="Model"?"--restart=no":"--restart=unless-stopped"};
+                    "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096",w.Recipe.Kind=="Model"&&w.Recipe.Engine is "vLLM" or "vLLM-Omni"?"--shm-size=4g":"--shm-size=1g",w.Recipe.Kind=="Model"?"--restart=no":"--restart=unless-stopped"};
                 if(w.Recipe.Port>0)args.AddRange(["--publish","127.0.0.1::"+w.Recipe.Port]);
                 if(w.Recipe.Container is {} container)
                 {
@@ -150,13 +150,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 else args.AddRange(["--volume","xur-cache-"+w.Id+":/root/.cache:Z"]);
                 args.AddRange(TimezoneSettings.ContainerArguments());
                 if(w.Recipe.Kind=="Model" && w.Recipe.Hub!=null)args.AddRange(new HuggingFaceCredentials(Path.GetDirectoryName(directory)!).ContainerArguments());
-                foreach(var g in selected)
-                {
-                    if(g.Vendor=="NVIDIA")args.AddRange(["--device","nvidia.com/gpu="+g.RuntimeId]);
-                    else foreach(var node in g.Nodes)args.AddRange(["--device",node]);
-                }
-                if(selected.Any(g=>g.Vendor=="NVIDIA"))args.AddRange(["--env","CUDA_VISIBLE_DEVICES="+string.Join(',',w.Gpus.Select(pci=>selected.Single(g=>g.Pci==pci).RuntimeId))]);
-                if(selected.Any(g=>g.Vendor=="AMD"))args.AddRange(["--device","/dev/kfd"]);
+                args.AddRange(ModelGpuArguments.For(w,observed.Gpus));
                 if(model!=null)args.AddRange(["--volume",model+":/model.gguf:ro,z"]);
                 if(modelFiles!=null)args.AddRange(["--volume",modelFiles+":/models:ro,z"]);
                 if(w.Recipe.Engine is "vLLM" or "vLLM-Omni")args.AddRange(["--entrypoint","vllm"]);

@@ -77,6 +77,13 @@ See [release preparation](development/release-preparation.md).
   may contain the development server address in metadata and remain private.
   Public JPEGs were not refreshed by this pass.
 
+- 2026-10-04: Reviewed private T3 attachment `image.png`
+  (`fbc21365-4ad1-43ca-8732-030c6b0d29d8-57f564a2-6767-41b0-8f70-f38cc6216217.png`)
+  for AMD/Intel vLLM support. Shows the profile editor selecting
+  `fishaudio/s2-pro` with AMD GPUs and the previous NVIDIA-only validation error;
+  capture version is unverified. No credentials or account details visible.
+  Kept private in T3 attachments; not copied into source or published.
+
 - 2026-10-04: Captured web Wi-Fi setup at desktop and phone widths in
   `.build/evidence/network-ui/wifi-{1440,390,320}.png`. Working-tree Wi-Fi web
   controls, rendered from synthetic Razor fixtures; shows a saved open-network

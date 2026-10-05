@@ -34,5 +34,5 @@ with tempfile.TemporaryDirectory(dir=ROOT / '.build') as temporary:
     assert any('npm lock does not match' in e for e in errors)
     assert any('new-lock.json' in e for e in errors)
     assert any('libman.json' in e and 'manual LibMan' in e for e in errors)
-    assert len([e for e in errors if 'mirrored latest channel' in e]) == 2
+    assert len([e for e in errors if 'mirrored latest channel' in e]) == 4
 print('Missing ecosystems, new unmanaged manifests, undocumented locks are rejected.')

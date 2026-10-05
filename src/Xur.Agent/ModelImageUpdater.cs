@@ -7,16 +7,17 @@ public record ModelImageSelection(string Image,bool Recreate,string? Warning=nul
 
 // A tag update does not change an existing container's image. Resolve the pull
 // to its actual ID, then replace a stopped container only if its image differs.
-public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResult>>? execute=null)
+public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResult>>? execute=null,string buildRoot="/var/lib/xur/engine-builds")
 {
     readonly Func<string,string[],int,Task<ProcessResult>> run=execute??((exe,args,seconds)=>Processes.Run(exe,args,seconds));
     public async Task<ModelImageSelection?> Refresh(Workload workload,RuntimeInstance? instance)
     {
         if(instance?.State=="running")return null;
         var reference=EngineImages.For(workload.Recipe);
+        var build=workload.Recipe.Engine=="vLLM-Omni"&&workload.Recipe.Vendor=="Intel";
         ProcessResult pulled;
-        try{pulled=await run("podman",["pull","--quiet","--policy=always","--arch=amd64",reference],900);}
-        catch(OperationCanceledException){pulled=new(124,"Image pull timed out.");}
+        try{pulled=build?await BuildOmniXpu(reference):await run("podman",["pull","--quiet","--policy=always","--arch=amd64",reference],900);}
+        catch(OperationCanceledException){pulled=new(124,"Engine image preparation timed out.");}
         string? warning=null;string image;
         if(pulled.ExitCode==0)image=Identity(pulled.Output.Split('\n')[0].Trim());
         else
@@ -29,9 +30,10 @@ public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResul
                 // tag was removed.
                 cached=await StoppedImage(workload,instance);
             }
-            if(cached==null)throw new InvalidOperationException("Latest engine image download failed for "+reference+" and no cached image is available: "+log);
+            var failure=build?"Engine image build failed":"Latest engine image download failed";
+            if(cached==null)throw new InvalidOperationException(failure+" for "+reference+" and no cached image is available: "+log);
             image=Identity(cached);
-            warning="Latest engine image download failed; using the newest locally available image "+image+". "+log;
+            warning=failure+"; using the newest locally available image "+image+". "+log;
         }
         // Use pull's result, rather than re-reading a shared tag that another
         // simultaneous workload could have updated after our download.
@@ -41,6 +43,20 @@ public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResul
         var removed=await run("podman",["rm",instance.InstanceId],20);
         if(removed.ExitCode!=0)throw new InvalidOperationException("Could not replace the stopped engine with its latest image: "+Redaction.Logs(removed.Output));
         return new(image,true,warning);
+    }
+    async Task<ProcessResult> BuildOmniXpu(string reference)
+    {
+        // A private context and iidfile avoid shared-tag races between starts.
+        var context=Path.Combine(buildRoot,Guid.NewGuid().ToString("N"));Directory.CreateDirectory(context);
+        try
+        {
+            using var stream=typeof(ModelImageUpdater).Assembly.GetManifestResourceStream("Xur.OmniXpu")!;
+            using var reader=new StreamReader(stream);var file=Path.Combine(context,"Containerfile");
+            await File.WriteAllTextAsync(file,await reader.ReadToEndAsync());var iid=Path.Combine(context,"image.id");
+            var result=await run("podman",["build","--pull=always","--arch=amd64","--tag",reference,"--iidfile",iid,"--file",file,context],1800);
+            return result.ExitCode==0?new(0,await File.ReadAllTextAsync(iid)):result;
+        }
+        finally{Directory.Delete(context,true);}
     }
     async Task<string> StoppedImage(Workload workload,RuntimeInstance instance)
     {
