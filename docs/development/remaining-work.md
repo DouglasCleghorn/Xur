@@ -1,6 +1,6 @@
 # Implementation and validation checklist
 
-Updated October 2, 2026 against pushed commit `b04256c` and the reviewed
+Updated October 4, 2026 against pushed commit `c9ef907` and the reviewed
 follow-up changes recorded below. Checked items below
 mean source work and the stated local checks are complete, not that the H 255
 has received or validated the change. The older planning snapshot is retained
@@ -58,15 +58,32 @@ network-startup integration and native console transport/PTY and monitor-power c
 Tests use isolated fixtures, not live host changes;
 none closes a live acceptance item below.
 
+## October 4 validation
+
+- [x] Independently tested `c9ef907`: 1,553 unit checks, 143 profile checks across
+  20 recovery cycles, and 437 managed utility checks passed. Account HTTP/restart
+  checks preserved manager sessions, password login, revoked keys and closed
+  bootstrap access. These were local isolated tests, not live lifecycle tests.
+- [ ] Saved-profile identity fix: the October 3 test pass on `f8d27c0` reproduced
+  UUID-looking connection names affecting boot profile selection. A path-based
+  fix and adversarial regression cases are under PR review; deployment remains
+  pending.
+
 ## Live verification still open
 
 - [ ] **V1 — Update H 255:** install the reviewed build, confirm its identity and
   management health, and verify the installed service dependency migration.
-  Latest observed host build was `26.09.007`; that observation is not a fresh
-  version check.
+  Read-only authenticated observation on October 4 found installed and available
+  versions both `nightly26.10.013`, with the same bundle ID and a completed app
+  update. This establishes the deployed version, not physical acceptance or
+  successful migration of the installed service unit. The profile-identity fix
+  under review is not part of that release.
 - [ ] **V2 — Workstation recovery:** stop/start Workstation 1 and switch profiles;
   verify devices are released, ownership checks remain effective and failures
-  contain useful details.
+  contain useful details. October 4 read-only snapshots showed a running
+  workstation with Sunshine ready, then no running workloads, with completed
+  profile operations in both snapshots. Another actor appeared to be changing
+  state; this agent did not initiate a lifecycle test or verify physical release.
 - [ ] **V3 — Safari dropdowns/Add user:** select workload, workstation, user and
   GPU; create/select/save a user and cancel without losing an unsaved profile.
 - [ ] **V4 — Account onboarding:** verify immediate management after creation;
