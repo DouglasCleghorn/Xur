@@ -61,6 +61,14 @@ static class ControlPanelRender
                 await File.WriteAllTextAsync(Path.Combine(output,page+".html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><meta name=xur-csrf content=fixture-only><script src='/app-fetch.js'></script><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/workstations.css'><link rel=stylesheet href='/files.css'><link rel=stylesheet href='/profile-editor.css'><link rel=stylesheet href='/profile-switcher.css'></head><body>"+html+"</body></html>");
                 observer.Snapshot=priorSnapshot;
             }
+            observer.Snapshot=observer.Snapshot with{Gpus=[gpu with{ShortId="GPU 1",Cards=["/dev/dri/card0"]}]};
+            foreach(var (fixture,type) in new[]{("empty",typeof(EmptyProfileEditor)),("primary",typeof(ProfileEditor))})
+            {
+                if(fixture=="primary")store.Save(store.Get<Profile>("profile","1")! with{Workloads=[new("w1","Gaming",stationRecipe,[gpu.Pci],"desktop",Devices:new(true,["usb:"+new string('b',64),"usb:"+new string('d',64)]))]});
+                var html=await renderer.Dispatcher.InvokeAsync(async()=> (await renderer.RenderComponentAsync(type,ParameterView.Empty)).ToHtmlString());
+                html=html.Replace("<div id=\"workload-rows\"", "<input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"fixture-only\"><div id=\"workload-rows\"");
+                await File.WriteAllTextAsync(Path.Combine(output,"profile-edit-"+fixture+".html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><script src='/app-fetch.js'></script><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/profile-editor.css'></head><body><main>"+html+"</main></body></html>");
+            }
             var availableWifi=wifi!;
             foreach(var (name,status,pending) in new (string,WifiStatus?,bool)[]{("off",availableWifi with{Enabled=false},false),("blocked",availableWifi with{HardwareEnabled=false},false),("missing",availableWifi with{Adapters=[]},false),("unavailable",availableWifi with{Adapters=[availableWifi.Adapters[0] with{State="20 (unavailable)",Reason="42 (The supplicant is not available)"}]},false),("error",null,false),("pending",availableWifi,true)})
             {
@@ -90,6 +98,7 @@ static class ControlPanelRender
         store.Dispose();Directory.Delete(root,true);
     }
     sealed class ProfileEditor:Xur.Control.Components.Pages.ProfileEdit { protected override async Task OnInitializedAsync(){Id="1";await base.OnInitializedAsync();} }
+    sealed class EmptyProfileEditor:Xur.Control.Components.Pages.ProfileEdit { protected override async Task OnInitializedAsync(){Id="2";await base.OnInitializedAsync();} }
     sealed class Navigation:NavigationManager {public Navigation(){Initialize("http://home.test/","http://home.test/");} protected override void NavigateToCore(string uri,bool forceLoad){} }
     sealed class Observer:IWorkloadRuntime
     {

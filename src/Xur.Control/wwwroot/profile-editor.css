@@ -16,8 +16,7 @@
 #profile-form .station-new-name input{display:block;width:100%;margin-top:5px;min-height:39px;font-size:15px}
 #profile-form .station-user-choice{grid-column:2;grid-row:auto}
 #profile-form .station-devices{margin:0;padding-top:12px;border-top:1px solid var(--rule)}
-#profile-form .station-devices>summary{padding:4px 0}
-#profile-form .station-devices[open]>summary{margin-bottom:12px}
+#profile-form .station-devices>h2{font-size:16px;margin:4px 0 12px}
 #profile-form .station-devices .secondary-text{font-size:13px}
 #profile-form .nvlink-hint,#profile-form .container-library-link{grid-column:1/-1;margin:0}
 #profile-form #add-workload{justify-self:start}
@@ -30,7 +29,6 @@
 @media(max-width:700px){
  #profile-name-input{width:100%;font-size:22px;min-height:44px}
  #profile-form .station-new-name input{min-height:44px;font-size:16px}
- #profile-form .station-devices>summary{min-height:44px;padding:10px 0}
 }
 
 .station-user-choice{display:flex;align-items:end;gap:10px;min-width:0}

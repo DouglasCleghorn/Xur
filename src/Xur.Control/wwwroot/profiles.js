@@ -123,7 +123,22 @@
    if(userRow?.isConnected){const select=userRow.querySelector('[name=stationUser]');select.value=account.username;select.dispatchEvent(new CustomEvent('choices-changed'));}userDialog.close();
   }catch(e){message.textContent=e.message;message.hidden=false;}finally{submit.disabled=false;}
  });
- const renumber=()=>[...rows.children].forEach((row,i)=>{row.querySelectorAll('.gpu-choices select').forEach(s=>s.name='gpus-'+i);row.querySelectorAll('.station-usb').forEach(s=>s.name='usb-'+i);row.querySelector('.station-primary').name='primary-'+i;});
+ const renumber=()=>[...rows.children].forEach((row,i)=>{row.querySelectorAll('.gpu-choices select').forEach(s=>s.name='gpus-'+i);row.querySelectorAll('.station-usb,.station-usb-settings input').forEach(s=>s.name='usb-'+i);row.querySelector('.station-primary').name='primary-'+i;});
+ function usbChoices(row){
+  const primary=row.querySelector('.station-primary');
+  // Disabled checkboxes need hidden fields to retain saved selections on submit.
+  const saved=[];
+  row.querySelectorAll('.station-usb').forEach(input=>{
+   input.disabled=primary.disabled||primary.checked;
+   if(!primary.disabled&&primary.checked&&input.checked){const setting=document.createElement('input');setting.type='hidden';setting.name=input.name;setting.value=input.value;saved.push(setting);}
+  });
+  row.querySelector('.station-usb-settings').replaceChildren(...saved);
+  row.querySelector('.station-primary-help').hidden=primary.disabled||!primary.checked;
+ }
+ function defaultPrimary(row){
+  if(!rows.querySelector('.station-primary:checked:not(:disabled)'))row.querySelector('.station-primary').checked=true;
+  usbChoices(row);
+ }
  function gpus(row){
   const recipe=row.querySelector('[name=recipe]').selectedOptions[0],group=row.querySelector('.gpu-choices');
   const count=Number(recipe?.dataset.gpus??0);
@@ -145,7 +160,8 @@
   const engine=row.querySelector('.catalog-engine').value,select=row.querySelector('[name=recipe]'),station=engine==='Workstation';
   row.querySelector('.recipe-label').textContent=station?'Workstation':engine==='Podman'?'Container':'Model';
   row.querySelector('.container-library-link').hidden=engine!=='Podman';
-  row.querySelector('.recipe-choice').hidden=station;row.querySelector('.station-devices').hidden=!station;row.querySelectorAll('.station-devices input').forEach(input=>input.disabled=!station);
+  row.querySelector('.recipe-choice').hidden=station;row.querySelector('.station-devices').hidden=!station;
+  const primary=row.querySelector('.station-primary');primary.disabled=!station;if(!station)primary.checked=false;usbChoices(row);
   row.querySelector('.station-user-choice').hidden=!station||!!row.querySelector('[name=stationId]').value;row.querySelector('.station-new-name').hidden=!station||!!row.querySelector('[name=stationId]').value;row.querySelector('.station-identity-choice').hidden=!station;
   select.dataset.placeholder=station?'Search workstations…':engine==='Podman'?'Search containers…':'Search models…';
   for(const option of select.options){
@@ -185,7 +201,10 @@
  }
  form.addEventListener('change',event=>{
   const row=event.target.closest('.workload-editor');if(!row)return;
-  if(event.target.matches('.station-primary')&&event.target.checked) rows.querySelectorAll('.station-primary').forEach(input=>{if(input!==event.target)input.checked=false;});
+  if(event.target.matches('.station-primary')){
+   if(event.target.checked)rows.querySelectorAll('.station-primary').forEach(input=>{if(input!==event.target)input.checked=false;});
+   for(const row of rows.children)usbChoices(row);
+  }
   if(event.target.name==='stationId'){
    row.querySelector('.station-user-choice').hidden=!!event.target.value;row.querySelector('.station-new-name').hidden=!!event.target.value;
    const option=event.target.selectedOptions[0];row.querySelector('[name=stationName]').value=option.dataset.name||'';
@@ -198,6 +217,7 @@
    const select=row.querySelector('[name=recipe]');select.value='';
    select.querySelectorAll('[data-remote]').forEach(option=>option.remove());
    row.querySelector('.model-options').replaceChildren();error(row,'');filterRecipes(row);gpus(row);
+   if(event.target.value==='Workstation')defaultPrimary(row);
   }
   if(event.target.name==='recipe'){
    if(event.target.value.startsWith('hub:'))modelOptions(row,event.target.value.slice(4));
@@ -211,7 +231,7 @@
  form.addEventListener('click',event=>{if(event.target.matches('.remove-workload')){event.target.closest('.workload-editor').remove();renumber();}});
  document.querySelector('#add-workload').addEventListener('click',()=>{
   const row=template.cloneNode(true);row.querySelector('[name=workloadId]').value='';row.querySelector('[name=stationId]').value='';row.querySelector('[name=stationName]').value='';row.querySelectorAll('.station-devices input').forEach(input=>input.checked=false);row.querySelector('[name=recipe]').value='';row.querySelector('.catalog-engine').value='Workstation';row.querySelector('[name=stationUser] option[value=legacy]')?.remove();row.querySelector('[name=stationUser]').value='temporary';
-  row.querySelector('.gpu-choices').replaceChildren();row.querySelector('.model-options').replaceChildren();rows.append(row);initialize(row);renumber();
+  row.querySelector('.gpu-choices').replaceChildren();row.querySelector('.model-options').replaceChildren();rows.append(row);initialize(row);defaultPrimary(row);renumber();
   row.querySelector('.catalog-engine').nextElementSibling.querySelector('[role=combobox]').focus();
  });
 })();

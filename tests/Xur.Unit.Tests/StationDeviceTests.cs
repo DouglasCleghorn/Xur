@@ -18,6 +18,12 @@ static class StationDeviceTests
         check(plan[0].Nodes.SequenceEqual(new[]{"/dev/input/event0","/dev/snd/controlC0"}),"Primary receives unassigned input and built-in audio only");
         check(plan[1].Nodes.SequenceEqual(new[]{"/dev/input/event5","/dev/snd/controlC1","/dev/snd/controlC2"}),"Hub follows input/audio children and selected GPU owns display audio");
         check(!plan.Any(p=>p.Nodes.Contains("/dev/sda")),"Hub assignment never grants raw storage access");
+        var savedPrimary=primary with{Devices=new(true,[hub.Id])};
+        var dormant=StationDevicePolicy.Plan([savedPrimary,secondary],inventory);
+        check(dormant.All(p=>p.Problems.Length==0)&&dormant[0].Nodes.SequenceEqual(plan[0].Nodes)&&dormant[1].Nodes.SequenceEqual(plan[1].Nodes),"Primary saved USB selections do not compete with active secondary assignments");
+        var restored=StationDevicePolicy.Plan([savedPrimary with{Devices=savedPrimary.Devices! with{Primary=false}},secondary with{Devices=new(true)}],inventory);
+        check(restored[0].Nodes.Contains("/dev/input/event5")&&restored[0].Nodes.Contains("/dev/snd/controlC2")&&!restored[1].Nodes.Contains("/dev/input/event5"),"Saved USB selections resume when the workstation becomes non-primary");
+        check(StationDevicePolicy.Plan([savedPrimary,secondary with{Devices=new(false)}],inventory with{Usb=[]}).All(p=>p.Problems.Length==0),"Disconnected dormant selections do not cause primary assignment errors");
         var remote=inventory with{Devices=[..inventory.Devices,new("/dev/input/event40","Input",Station:"2"),new("/dev/hidraw7","Hidraw",Station:"unassigned")]};
         var remotePlan=StationDevicePolicy.Plan([primary,secondary],remote);
         check(remotePlan[1].Nodes.Contains("/dev/input/event40")&&!remotePlan[0].Nodes.Contains("/dev/input/event40")&&!remotePlan.Any(a=>a.Nodes.Contains("/dev/hidraw7")),"Moonlight virtual input belongs only to its station; unknown stream identities never fall back to primary");
@@ -34,8 +40,8 @@ static class StationDeviceTests
         check(launch.Contains("--property=PAMName=login")&&launch.Contains("--property=Slice=user-1002.slice")&&launch.Contains("--setenv=XDG_SEAT="+StationSeats.Seat("2"))&&launch.Contains("--setenv=KWIN_DRM_DEVICES=/dev/dri/card3")&&launch[^1]=="/usr/bin/startplasma-wayland","Each desktop starts as its own PAM user, logind seat and assigned GPU without a shared display manager");
         var moved=inventory with{Usb=[hub with{Path="/usb/elsewhere"},keyboard with{Path="/usb/elsewhere/keyboard",Ancestors=["/usb/elsewhere"]},headset with{Path="/usb/elsewhere/headset",Ancestors=["/usb/elsewhere"]}]};
         check(StationDevicePolicy.Plan([primary,secondary],moved)[1].Nodes.SequenceEqual(plan[1].Nodes),"Serial hub survives changing USB ports with its attached devices");
-        var conflict=StationDevicePolicy.Plan([primary with{Devices=new(true,[keyboard.Id])},secondary],inventory);
-        check(conflict.All(p=>p.Problems.Any(m=>m.Contains("overlap")))&&!conflict.Any(p=>p.Nodes.Contains("/dev/input/event5")),"Hub/child overlap is blocked for both owners");
+        var conflict=StationDevicePolicy.Plan([primary with{Devices=new(false,[keyboard.Id])},secondary,Station("3",true) with{Gpus=[]}],inventory);
+        check(conflict.Take(2).All(p=>p.Problems.Any(m=>m.Contains("overlap")))&&!conflict.Any(p=>p.Nodes.Contains("/dev/input/event5")),"Hub/child overlap is blocked for both non-primary owners");
         check(StationDevicePolicy.Plan([primary,secondary],inventory with{Usb=[]})[1].Problems.Length==1,"Missing selected hub is reported instead of silently substituted");
         var duplicate=inventory with{Usb=[..inventory.Usb,hub with{Path="/usb/duplicate"}]};
         check(StationDevicePolicy.Plan([primary,secondary],duplicate)[1].Problems.Any(p=>p.Contains("multiple")),"Duplicate hub serials fail closed");
@@ -46,7 +52,7 @@ static class StationDeviceTests
         check(StationDeviceInventoryReader.Identity("1234","ABCD","serial","first")==Id("serial","second"),"Serial identity is independent of port and USB IDs are normalized");
         check(Id("","devices/pci0000:00/0000:00:14.0/usb1/1-2/1-2.3")==Id("","devices/pci0000:00/0000:00:14.0/usb9/9-2/9-2.3"),"Port identity survives USB bus renumbering");
         check(Id("","devices/pci/usb1/1-2")!=Id("","devices/pci/usb1/1-3"),"Serial-less devices remain bound to the selected physical port");
-        foreach(var workloads in new[]{new[]{primary,secondary with{Devices=new(true)}},new[]{primary,secondary with{User=primary.User}},new[]{primary with{Devices=new(true,[hub.Id])},secondary}})
+        foreach(var workloads in new[]{new[]{primary,secondary with{Devices=new(true)}},new[]{primary,secondary with{User=primary.User}},new[]{primary,secondary,Station("3",usb:[hub.Id])}})
         {
             var blocked=false;try{StationDevicePolicy.Validate(workloads);}catch(InvalidOperationException){blocked=true;}
             check(blocked,"Conflicting primary, account or USB selections are rejected");
