@@ -56,7 +56,7 @@ public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResul
             using var stream=typeof(ModelImageUpdater).Assembly.GetManifestResourceStream(resource)!;
             using var reader=new StreamReader(stream);var file=Path.Combine(context,"Containerfile");
             await File.WriteAllTextAsync(file,await reader.ReadToEndAsync());var iid=Path.Combine(context,"image.id");
-            var result=await run("podman",["build","--pull=always","--arch=amd64","--tag",reference,"--iidfile",iid,"--file",file,context],1800);
+            var result=await run("podman",["build","--pull=always","--arch=amd64","--tag",reference,"--iidfile",iid,"--file",file,context],resource=="Xur.VllmGfx1103"?3600:1800);
             return result.ExitCode==0?new(0,await File.ReadAllTextAsync(iid)):result;
         }
         finally{Directory.Delete(context,true);}

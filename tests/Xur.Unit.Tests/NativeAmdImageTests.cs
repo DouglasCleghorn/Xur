@@ -19,7 +19,7 @@ static class NativeAmdImageTests
             calls.Add(args);
             if(args[0]=="build")
             {
-                check(args.Contains(reference)&&args.Contains("--iidfile")&&args.Contains("--pull=always")&&timeout==1800,"Native AMD build refreshes its approved base and returns a private image receipt");
+                check(args.Contains(reference)&&args.Contains("--iidfile")&&args.Contains("--pull=always")&&timeout==3600,"Native AMD build refreshes its approved base and returns a private image receipt with enough time for HIP compilation");
                 var file=File.ReadAllText(args[Array.IndexOf(args,"--file")+1]);
                 check(file.Contains("PYTORCH_ROCM_ARCH=gfx1103")&&file.Contains("torch[device-gfx1103]==2.13.0+rocm10.0.0")&&file.Contains("db9527a46873454610df6dbedf79a36d6bf1a7f6"),"Native AMD image aligns PyTorch device kernels with a source-built matching vLLM release");
                 if(!fail)File.WriteAllText(args[Array.IndexOf(args,"--iidfile")+1],native);
