@@ -28,6 +28,9 @@ WORKDIR /workspace
 RUN python3 -c "from importlib.metadata import distribution; p=distribution('vllm').locate_file('vllm/env_override.py'); t=p.read_text(); old='\n_maybe_promote_torch_symbols_for_rocm()\n'; assert t.count(old)==1; p.write_text(t.replace(old,'\nimport torch\n_maybe_promote_torch_symbols_for_rocm()\n'))"
 RUN python3 -X faulthandler -c "import vllm.entrypoints.cli.main"
 RUN python3 -c "import torch,vllm,vllm._C,vllm._C_stable_libtorch,vllm._moe_C_stable_libtorch,vllm._rocm_C; assert 'gfx1103' in torch._C._cuda_getArchFlags(); assert vllm.__version__.startswith('0.31.0')"
+# PyTorch preloads the core package's AMD SMI library. Share that instance with
+# the bindings instead of loading the expanded SDK's second copy of its state.
+RUN python3 -c "from importlib.metadata import distribution; from pathlib import Path; core=distribution('rocm-sdk-core').locate_file('_rocm_sdk_core/lib/libamd_smi.so.27'); assert core.is_file(); link=Path('/opt/rocm-native/lib/libamd_smi.so'); link.unlink(); link.symlink_to(core)"
 ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
 LABEL io.xur.amd-gfx-target=gfx1103 io.xur.engine-image="localhost/xur/vllm-rocm-gfx1103:v0.31.0-rocm10.0.0"
 ENTRYPOINT ["vllm"]
