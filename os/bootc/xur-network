@@ -29,24 +29,33 @@ while IFS=: read -r device kind extra; do
         continue
     fi
     # Only confirmed autoconnect profiles may win. Failed queries never justify DHCP.
-    if ! available=$(nm --escape no -g CONNECTIONS.AVAILABLE-CONNECTIONS device show "$device"); then
+    # nmcli renders saved D-Bus paths separated by commas, without profile names.
+    # AVAILABLE-CONNECTIONS mixes UUIDs with arbitrary profile names; never parse it.
+    if ! available=$(nm -g CONNECTIONS.AVAILABLE-CONNECTION-PATHS device show "$device"); then
         diagnostic "$device: could not read saved connections; skipping adapter."
         continue
     fi
-    selected=""; best_priority=-1000; best_time=-1; uncertain=false; found=false
-    while [[ "$available" =~ ($uuid_pattern) ]]; do
-        uuid=${BASH_REMATCH[1]}; available=${available#*"$uuid"}; found=true
-        if ! enabled=$(nm -g connection.autoconnect connection show uuid "$uuid"); then
-            diagnostic "$device: could not read saved profile $uuid; skipping adapter."
+    paths=()
+    path_prefix=/org/freedesktop/NetworkManager/Settings
+    if [[ "$available" =~ ^$path_prefix/[0-9]+(,$path_prefix/[0-9]+)*$ ]]; then
+        IFS=, read -r -a paths <<< "$available"
+    elif [[ -n "$available" && "$available" != -- ]]; then
+        diagnostic "$device: malformed saved connection inventory; skipping adapter."
+        continue
+    fi
+    selected=""; best_priority=-1000; best_time=-1; uncertain=false
+    for path in "${paths[@]}"; do
+        if ! enabled=$(nm -g connection.autoconnect connection show path "$path"); then
+            diagnostic "$device: could not read saved profile $path; skipping adapter."
             uncertain=true; break
         fi
         if test "$enabled" = no; then continue; fi
         if test "$enabled" != yes; then
-            diagnostic "$device: malformed autoconnect setting for $uuid; skipping adapter."
+            diagnostic "$device: malformed autoconnect setting for $path; skipping adapter."
             uncertain=true; break
         fi
-        if ! priority=$(nm -g connection.autoconnect-priority connection show uuid "$uuid") ||
-           ! timestamp=$(nm -g connection.timestamp connection show uuid "$uuid"); then
+        if ! priority=$(nm -g connection.autoconnect-priority connection show path "$path") ||
+           ! timestamp=$(nm -g connection.timestamp connection show path "$path"); then
             diagnostic "$device: could not read saved profile ordering; skipping adapter."
             uncertain=true; break
         fi
@@ -56,16 +65,12 @@ while IFS=: read -r device kind extra; do
             uncertain=true; break
         fi
         if test -z "$selected" || (( priority > best_priority || priority == best_priority && timestamp > best_time )); then
-            selected=$uuid; best_priority=$priority; best_time=$timestamp
+            selected=$path; best_priority=$priority; best_time=$timestamp
         fi
     done
     if $uncertain; then continue; fi
-    if ! $found && [[ -n "$available" && "$available" != -- ]]; then
-        diagnostic "$device: malformed saved connection inventory; skipping adapter."
-        continue
-    fi
     if test -n "$selected"; then
-        nm --wait 0 connection up uuid "$selected" ifname "$device" || diagnostic "$device: could not activate saved connection."
+        nm --wait 0 connection up path "$selected" ifname "$device" || diagnostic "$device: could not activate saved connection."
     else
         connection="xur-dhcp-$device"
         nm connection show "$connection" >/dev/null
