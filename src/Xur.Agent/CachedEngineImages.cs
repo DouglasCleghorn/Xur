@@ -5,9 +5,9 @@ namespace Xur.Agent;
 
 public sealed class CachedEngineImages(Func<string,string[],int,Task<ProcessResult>> run)
 {
-    public async Task<string?> Newest(Recipe recipe)
+    public async Task<string?> Newest(Recipe recipe,string? reference=null)
     {
-        var reference=EngineImages.For(recipe);var split=reference.LastIndexOf(':');
+        reference??=EngineImages.For(recipe);var split=reference.LastIndexOf(':');
         var repository=reference[..split];var channel=reference[(split+1)..];
         bool Matches(string name)
         {

@@ -60,6 +60,8 @@ await ModelImageUpdaterTests.Run(Check);
 await CachedEngineImagesTests.Run(Check);
 await ModelGpuTests.Run(Check);
 await OmniXpuImageTests.Run(Check);
+AmdGpuTargetTests.Run(Check);
+await NativeAmdImageTests.Run(Check);
 await AutomaticModelsTests.Run(Check);
 await EngineRestartPolicyTests.Run(Check);
 await ParallelStopGateTests.Run(Check);

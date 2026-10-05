@@ -7,28 +7,31 @@ public record ModelImageSelection(string Image,bool Recreate,string? Warning=nul
 
 // A tag update does not change an existing container's image. Resolve the pull
 // to its actual ID, then replace a stopped container only if its image differs.
-public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResult>>? execute=null,string buildRoot="/var/lib/xur/engine-builds")
+public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResult>>? execute=null,string buildRoot="/var/lib/xur/engine-builds",string sysRoot="/sys")
 {
     readonly Func<string,string[],int,Task<ProcessResult>> run=execute??((exe,args,seconds)=>Processes.Run(exe,args,seconds));
     public async Task<ModelImageSelection?> Refresh(Workload workload,RuntimeInstance? instance)
     {
         if(instance?.State=="running")return null;
-        var reference=EngineImages.For(workload.Recipe);
-        var build=workload.Recipe.Engine=="vLLM-Omni"&&workload.Recipe.Vendor=="Intel";
+        var native=workload.Recipe.Engine=="vLLM"&&workload.Recipe.Vendor=="AMD"&&AmdGpuTarget.NeedsNativeVllm(workload.Gpus,sysRoot);
+        var reference=native?EngineImages.Image("vllm-rocm-gfx1103"):EngineImages.For(workload.Recipe);
+        var resource=native?"Xur.VllmGfx1103":workload.Recipe.Engine=="vLLM-Omni"&&workload.Recipe.Vendor=="Intel"?"Xur.OmniXpu":null;
+        var build=resource!=null;
         ProcessResult pulled;
-        try{pulled=build?await BuildOmniXpu(reference):await run("podman",["pull","--quiet","--policy=always","--arch=amd64",reference],900);}
+        try{pulled=build?await Build(reference,resource!):await run("podman",["pull","--quiet","--policy=always","--arch=amd64",reference],900);}
         catch(OperationCanceledException){pulled=new(124,"Engine image preparation timed out.");}
         string? warning=null;string image;
         if(pulled.ExitCode==0)image=Identity(pulled.Output.Split('\n')[0].Trim());
         else
         {
             var log=Redaction.Logs(pulled.Output);log=log[^Math.Min(1800,log.Length)..];
-            var cached=await new CachedEngineImages(run).Newest(workload.Recipe);
+            var cached=await new CachedEngineImages(run).Newest(workload.Recipe,reference);
             if(cached==null && instance!=null)
             {
                 // A stopped container retains its last usable image even if its
                 // tag was removed.
-                cached=await StoppedImage(workload,instance);
+                var stopped=await StoppedImage(workload,instance);
+                if(!native || await NativeImage(stopped,reference))cached=stopped;
             }
             var failure=build?"Engine image build failed":"Latest engine image download failed";
             if(cached==null)throw new InvalidOperationException(failure+" for "+reference+" and no cached image is available: "+log);
@@ -44,19 +47,25 @@ public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResul
         if(removed.ExitCode!=0)throw new InvalidOperationException("Could not replace the stopped engine with its latest image: "+Redaction.Logs(removed.Output));
         return new(image,true,warning);
     }
-    async Task<ProcessResult> BuildOmniXpu(string reference)
+    async Task<ProcessResult> Build(string reference,string resource)
     {
         // A private context and iidfile avoid shared-tag races between starts.
         var context=Path.Combine(buildRoot,Guid.NewGuid().ToString("N"));Directory.CreateDirectory(context);
         try
         {
-            using var stream=typeof(ModelImageUpdater).Assembly.GetManifestResourceStream("Xur.OmniXpu")!;
+            using var stream=typeof(ModelImageUpdater).Assembly.GetManifestResourceStream(resource)!;
             using var reader=new StreamReader(stream);var file=Path.Combine(context,"Containerfile");
             await File.WriteAllTextAsync(file,await reader.ReadToEndAsync());var iid=Path.Combine(context,"image.id");
             var result=await run("podman",["build","--pull=always","--arch=amd64","--tag",reference,"--iidfile",iid,"--file",file,context],1800);
             return result.ExitCode==0?new(0,await File.ReadAllTextAsync(iid)):result;
         }
         finally{Directory.Delete(context,true);}
+    }
+    async Task<bool> NativeImage(string image,string reference)
+    {
+        var result=await run("podman",["image","inspect",image],15);if(result.ExitCode!=0)return false;
+        using var doc=JsonDocument.Parse(result.Output);var value=doc.RootElement[0];
+        return value.GetProperty("Architecture").GetString()=="amd64" && value.GetProperty("Os").GetString()=="linux" && value.TryGetProperty("Config",out var config) && config.TryGetProperty("Labels",out var labels) && labels.ValueKind==JsonValueKind.Object && labels.TryGetProperty("io.xur.engine-image",out var label) && label.GetString()==reference;
     }
     async Task<string> StoppedImage(Workload workload,RuntimeInstance instance)
     {

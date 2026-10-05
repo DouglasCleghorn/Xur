@@ -50,6 +50,16 @@ source using `catalog/engines/omni-xpu.Containerfile`; upstream has no prebuilt
 Omni XPU image. The first Intel Omni start needs network access and disk space
 for the base image and build layers. Later starts reuse those layers. These
 two pinned Omni variants are updated through changes to their manifests.
+Radeon 780M (`gfx1103`) text vLLM uses a separate native image built on the
+host from `catalog/engines/vllm-rocm-gfx1103.Containerfile`. Xur matches the
+selected PCI address to the kernel's KFD compute target. The pinned AMD
+TheRock SDK and PyTorch device packages provide native kernels, and vLLM
+`v0.31.0` is compiled for the same target. The first build needs network
+access and additional disk space; later starts reuse build layers. All GPUs
+selected for this variant must use `gfx1103`. GPU memory checks still apply.
+This native variant has its own entry on Updates and its own compatible
+cached-image fallback. A failed build cannot reuse a stock ROCm image that
+lacks the target. Omni continues to use its separate upstream image.
 Before each model-container start, Xur refreshes the chosen image or builds the
 Intel Omni layer. This includes restarting a stopped container or loading an
 older saved selection. If the
