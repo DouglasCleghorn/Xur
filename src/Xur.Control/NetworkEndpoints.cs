@@ -29,15 +29,16 @@ public static class NetworkEndpoints
             using var response=await device.Agent.PostAsJsonAsync("/computer-name",new ComputerNameRequest(form["name"].ToString()));
             return response.IsSuccessStatusCode?Results.Redirect("/tailscale"):Results.Content(await response.Content.ReadAsStringAsync(),"application/json",statusCode:(int)response.StatusCode);
         });
-        app.MapGet("/local/network/wifi",async Task<IResult>()=>{
-            using var result=await device.Agent.GetAsync("/network/wifi");
-            return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
-        });
-        app.MapPost("/local/network/wifi/scan",(WifiScanRequest request)=>Send("/network/wifi/scan",request));
-        app.MapPost("/local/network/wifi/connect",(WifiConnectRequest request)=>Send("/network/wifi/connect",request));
-        app.MapPost("/local/network/wifi/enable",()=>Send("/network/wifi/enable",new{}));
+        app.MapPost("/settings/network/wifi/enable",()=>Send("/network/wifi/enable",new{},true));
         foreach(var prefix in new[]{"/api","/local"})
         {
+            app.MapGet(prefix+"/network/wifi",async Task<IResult>()=>{
+                using var result=await device.Agent.GetAsync("/network/wifi");
+                return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
+            });
+            app.MapPost(prefix+"/network/wifi/scan",(WifiScanRequest request)=>Send("/network/wifi/scan",request));
+            app.MapPost(prefix+"/network/wifi/connect",(WifiConnectRequest request)=>Send("/network/wifi/connect",request));
+            app.MapPost(prefix+"/network/wifi/enable",()=>Send("/network/wifi/enable",new{}));
             app.MapGet(prefix+"/network/settings",Read);
             app.MapPost(prefix+"/network/settings",(NetworkConfiguration request)=>Send("/network/settings",request));
             foreach(var action in new[]{"keep","revert"})app.MapPost(prefix+"/network/"+action,(NetworkChangeRequest request)=>Send("/network/"+action,request));

@@ -8,7 +8,7 @@ const assert=require('assert/strict');
  let process,browser,agent;const tls='https://127.0.0.1:19063',plain='http://127.0.0.1:18700';
  const local=(socket,url,headers={})=>new Promise((resolve,reject)=>{http.get({socketPath:path.join(root,socket),path:url,headers},r=>{let body='';r.on('data',x=>body+=x);r.on('end',()=>resolve({status:r.statusCode,body,headers:r.headers}));}).on('error',reject);});
  const start=async(request)=>{
-  process=spawn(path.resolve('.build/context/publish/control/Xur.Control'),[],{env:{...global.process.env,XUR_MODE:'Installed',XUR_STATE:root,PATH:path.join(root,'bin')+':'+global.process.env.PATH,XUR_RUN:root,XUR_PORT:'18700',XUR_CONSOLE:'stdio'},stdio:['pipe','ignore','ignore'],detached:true});
+  process=spawn(path.resolve(global.process.env.XUR_CONTROL_BINARY||'.build/context/publish/control/Xur.Control'),[],{env:{...global.process.env,XUR_MODE:'Installed',XUR_STATE:root,PATH:path.join(root,'bin')+':'+global.process.env.PATH,XUR_RUN:root,XUR_PORT:'18700',XUR_CONSOLE:'stdio'},stdio:['pipe','ignore','ignore'],detached:true});
   for(let n=0;n<100;n++){try{if((await request.get(tls+'/health')).ok())return;}catch{}await new Promise(r=>setTimeout(r,100));}
   throw Error('HTTPS host did not start');
  };
@@ -16,7 +16,16 @@ const assert=require('assert/strict');
  try{
   browser=await chromium.launch({headless:true});const context=await browser.newContext({ignoreHTTPSErrors:true});const request=context.request;
   const logBody='Synthetic workload log line without credentials.\n'.repeat(6000);
-  agent=http.createServer((req,res)=>{if(req.url==='/logs'){res.setHeader('Content-Type','text/plain');res.end(logBody);}else{res.statusCode=404;res.end('{}');}});
+  const wifiRequests=[];
+  agent=http.createServer(async(req,res)=>{
+   if(req.url==='/logs'){res.setHeader('Content-Type','text/plain');return res.end(logBody);}
+   if(req.url.startsWith('/network/wifi')){
+    let body='';for await(const chunk of req)body+=chunk;
+    wifiRequests.push({path:req.url,body:body?JSON.parse(body):null});res.setHeader('Content-Type','application/json');
+    return res.end(JSON.stringify(req.url.endsWith('/scan')?[{ssid:'Example Home',bssid:'02:00:00:00:00:20',security:'WPA2',signal:80,keyManagement:'wpa-psk',supported:true,needsPassword:true}]:req.url.endsWith('/connect')?{stage:'Kept',addresses:['192.0.2.30/24']}:{enabled:true,hardwareEnabled:true,adapters:[{interface:'wlan0',macAddress:'02:00:00:00:00:30',state:'disconnected',connection:null,devicePath:'/device/1'}]}));
+   }
+   res.statusCode=404;res.end('{}');
+  });
   await new Promise(resolve=>agent.listen(path.join(root,'agent.sock'),resolve));
   await start(request);
   const redirect=await request.get(plain+'/login',{maxRedirects:0});assert.equal(redirect.status(),308);assert.equal(redirect.headers().location,tls+'/login');
@@ -99,6 +108,32 @@ const assert=require('assert/strict');
   const blockedForm=await request.post(tls+'/profiles/load',{headers:{...htmlHeaders,Origin:'https://evil.example'},form:{}});
   await assertRecovery(blockedForm,403,'Request blocked','/profiles','Return to Profiles');
   const csrf=await page.locator('meta[name=xur-csrf]').getAttribute('content');
+  const wifiIdentity={interface:'wlan0',macAddress:'02:00:00:00:00:30'};
+  const wifiConnect={...wifiIdentity,ssid:'Example Home',bssid:'02:00:00:00:00:20',keyManagement:'wpa-psk',password:'  fixture password '};
+  const anonymous=await browser.newContext({ignoreHTTPSErrors:true});
+  for(const action of ['scan','connect','enable']){
+   const data=action==='scan'?wifiIdentity:action==='connect'?wifiConnect:{};
+   const before=wifiRequests.length;
+   assert.equal((await anonymous.request.post(tls+'/api/network/wifi/'+action,{data})).status(),401);
+   assert.equal((await request.post(tls+'/api/network/wifi/'+action,{data})).status(),400);
+   assert.equal((await request.post(tls+'/api/network/wifi/'+action,{headers:{RequestVerificationToken:csrf,Origin:'https://evil.example'},data})).status(),403);
+   assert.equal(wifiRequests.length,before,'Rejected Wi-Fi mutations must not reach the agent');
+   assert.equal((await request.post(tls+'/api/network/wifi/'+action,{headers:{RequestVerificationToken:csrf},data})).status(),200);
+  }
+  assert.equal(wifiRequests.find(r=>r.path.endsWith('/connect')).body.password,'  fixture password ');
+  assert.equal((await anonymous.request.get(tls+'/local/network/wifi',{maxRedirects:0})).status(),404);await anonymous.close();
+  assert.equal((await request.get(tls+'/api/network/wifi')).status(),200);
+  await page.goto(tls+'/settings/network');await page.getByRole('heading',{name:'Wi-Fi',exact:true}).waitFor();
+  const wifiCsrf=await page.locator('meta[name=xur-csrf]').getAttribute('content');
+  assert(wifiCsrf);
+  const originalWifiCount=wifiRequests.length;
+  await page.getByRole('button',{name:'Scan for networks'}).click();await page.locator('.wifi-connect').waitFor();
+  await page.getByLabel('Wi-Fi password').fill('  fixture password ');await page.getByRole('button',{name:'Connect to Wi-Fi'}).click();await page.locator('.wifi-message').filter({hasText:'Saved for automatic reconnection'}).waitFor();
+  assert.equal(wifiRequests.length,originalWifiCount+2,'The real authenticated page must forward one scan and one connection');
+  assert.equal(await page.getByLabel('Wi-Fi password').inputValue(),'');
+  // A development build serves source assets; published compression checks below
+  // require the release bundle. Allow Wi-Fi validation without publishing it.
+  if(global.process.argv.includes('--wifi-only')){console.log(JSON.stringify({suite:'WifiWebSecurity',https:true,authenticatedPage:true,anonymousDenied:true,csrfRequired:true,crossOriginDenied:true,privateConsoleHidden:true,passwordPrivacy:true}));return;}
   const headers={RequestVerificationToken:csrf,'Accept-Encoding':'gzip'};
   const first=await request.get(tls+'/api/status',{headers});assert.equal(first.status(),200);assert.equal(first.headers()['content-encoding'],'gzip');assert(first.headers().etag);assert((await first.json()).bootId);
   const same=await request.get(tls+'/api/status',{headers:{...headers,'If-None-Match':first.headers().etag}});assert.equal(same.status(),304);assert.equal((await same.body()).length,0);

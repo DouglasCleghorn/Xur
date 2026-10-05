@@ -49,6 +49,14 @@ readability; key actions are also described in text.
 
 ## Change log
 
+- 2026-10-04: Captured web Wi-Fi setup at desktop and phone widths in
+  `.build/evidence/network-ui/wifi-{1440,390,320}.png`. Working-tree Wi-Fi web
+  controls, rendered from synthetic Razor fixtures; shows a saved open-network
+  connection and a WPA3 connection error with a cleared password field. Reviewed
+  for layout and privacy: example SSIDs, adapter MACs and documentation-only IP
+  addresses; no live hardware, credentials or account details. Private regression
+  evidence, not publication assets. Regenerate when web network controls change.
+
 - 2026-10-04: Captured the two-stick keyboard overlay in
   `.build/evidence/console-overlay/` in the `xbox-controller` worktree, based on
   PR #22 at `32dae01` plus overlay changes. `preview-{100x40,80x25,40x20,40x12}`,

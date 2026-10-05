@@ -1,0 +1,52 @@
+@inject Appliance Device
+<link rel="stylesheet" href="/wifi-settings.css" />
+<section class="panel" id="wifi-settings" data-pending="@ChangePending.ToString().ToLowerInvariant()" data-port="@(Device.Port+363)">
+    <h2>Wi-Fi</h2>
+    <p>Set up Wi-Fi while connected through Ethernet or another reachable connection. Successful connections are saved for automatic reconnection.</p>
+    @if(ChangePending) { <p>Keep or revert the pending network change before connecting to Wi-Fi.</p> }
+    @if(state==null) { <p role="alert">Could not read Wi-Fi adapters. Check NetworkManager and refresh.</p> }
+    else if(state.Adapters.Length==0) { <p>No Wi-Fi adapters found. Check the adapter and driver.</p> }
+    else if(!state.HardwareEnabled) { <p role="alert">Wi-Fi is blocked by a hardware switch or airplane mode. Unblock it on the machine and refresh.</p> }
+    else if(!state.Enabled)
+    {
+        <p>Wi-Fi is turned off.</p>
+        <form method="post" action="/settings/network/wifi/enable"><AntiforgeryToken /><button disabled="@ChangePending">Enable Wi-Fi</button></form>
+    }
+    @if(state!=null)
+    {
+        @foreach(var adapter in state.Adapters)
+        {
+            var id="wifi-"+adapter.Interface;
+            var available=state.Enabled && state.HardwareEnabled && adapter.UnavailableMessage.Length==0;
+            <article class="wifi-adapter" data-interface="@adapter.Interface" data-mac="@adapter.MacAddress" data-available="@available.ToString().ToLowerInvariant()">
+                <h3>@adapter.Interface @adapter.Model</h3>
+                <p><code>@adapter.MacAddress</code> · <span class="wifi-state">@adapter.State</span></p>
+                <details><summary>Adapter details</summary><p>Driver: @(adapter.Driver.Length>0?adapter.Driver:"Unknown") · Firmware: @(adapter.FirmwareMissing?"Missing":adapter.Firmware.Length>0?adapter.Firmware:"Unknown")</p>@if(adapter.Reason.Length>0) { <p>NetworkManager reason: @adapter.Reason</p> }</details>
+                @if(adapter.UnavailableMessage.Length>0) { <p role="alert">@adapter.UnavailableMessage Check the radio switch, driver and network logs, then refresh.</p> }
+                <button type="button" class="secondary wifi-scan" disabled>Scan for networks</button>
+                <p class="wifi-message" role="status" aria-live="polite"></p>
+                <form method="post" action="/api/network/wifi/connect" class="wifi-connect" hidden>
+                    <AntiforgeryToken />
+                    <label for="@(id+"-network")">Network</label>
+                    <select id="@(id+"-network")" class="wifi-network" required disabled aria-describedby="@(id+"-security")"></select>
+                    <p id="@(id+"-security")" class="wifi-security secondary-text"></p>
+                    <div class="wifi-password-field" hidden>
+                        <label for="@(id+"-password")">Wi-Fi password</label>
+                        <input id="@(id+"-password")" class="wifi-password" type="password" autocomplete="new-password" maxlength="64" disabled />
+                    </div>
+                    <button class="wifi-submit" disabled>Connect to Wi-Fi</button>
+                </form>
+                <div class="wifi-addresses"></div>
+            </article>
+        }
+    }
+    <p class="secondary-text">Changing the Wi-Fi connection you are using can disconnect this browser. WEP, enterprise authentication and hidden networks require separate configuration.</p>
+    <a class="button secondary" href="/settings/network">Refresh adapters</a>
+    <noscript><p>Enable JavaScript to scan and connect to Wi-Fi networks.</p></noscript>
+</section>
+<script src="/wifi-settings.js" defer></script>
+@code {
+    [Parameter] public bool ChangePending {get;set;}
+    WifiStatus? state;
+    protected override async Task OnInitializedAsync(){try{state=await Device.Agent.GetFromJsonAsync<WifiStatus>("/network/wifi");}catch{}}
+}

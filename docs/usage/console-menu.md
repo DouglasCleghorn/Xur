@@ -112,6 +112,16 @@ Disk installation still requires its own explicit approval.
 
 ## Wi-Fi
 
+On the installed system, you can also configure Wi-Fi in the web manager under
+**Settings → Manage Wi-Fi and IP settings → Wi-Fi** (`/settings/network`).
+Keep Ethernet or another reachable connection active while setting it up. Enable
+Wi-Fi if needed, choose **Scan for networks** for the adapter you want, select an
+SSID, and enter its password. Open networks connect without a password. The page
+shows connection errors and the new address after a successful connection. If
+you change the Wi-Fi connection used by your browser, reconnect at the new address
+and refresh to check its status. Wi-Fi setup uses the same saved profiles and
+failure recovery as the console.
+
 Choose **Network settings → Wi-Fi setup**. With one adapter, Xur opens the nearby
 network list directly. With multiple adapters, choose the interface first. If
 Wi-Fi is off, select **Enable Wi-Fi**; hardware airplane-mode switches must be

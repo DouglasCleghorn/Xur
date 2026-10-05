@@ -1,0 +1,6 @@
+.wifi-adapter{border-top:1px solid var(--rule);margin-top:20px;padding-top:4px;min-width:0}
+.wifi-adapter h3,.wifi-adapter p{overflow-wrap:anywhere}
+.wifi-connect{max-width:620px;min-width:0}
+.wifi-connect label{display:block;margin-top:12px}
+.wifi-connect input,.wifi-connect select{display:block;width:100%;max-width:100%;min-width:0;margin:6px 0 14px}
+.wifi-addresses a{overflow-wrap:anywhere}

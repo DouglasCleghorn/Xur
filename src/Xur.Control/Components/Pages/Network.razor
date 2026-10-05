@@ -49,7 +49,7 @@
 </section>
 <section class="panel"><h2>Configuration backup</h2><p>Download a recovery ZIP with the database, settings, accounts, API credentials, network configuration and streaming identities. Includes timestamps, file checksums, permissions and a restore guide.</p><p><strong>Contains passwords and private keys. Store securely.</strong> The ZIP is not encrypted. Download requires HTTPS.</p><a class="button secondary" href="/settings/backup">Download config backup</a><p class="secondary-text">Models, games, home directories and container images/volumes need separate backups. Automatic restore is not available yet.</p></section>
 <section class="panel"><h2>IP addresses</h2>
-<p><a class="button secondary" href="/settings/network">Manage automatic and static IPs</a></p>
+<p><a class="button secondary" href="/settings/network">Manage Wi-Fi and IP settings</a></p>
 @foreach (var adapter in Device.Network())
 {
     <article class="network-adapter" data-interface="@adapter.Name">

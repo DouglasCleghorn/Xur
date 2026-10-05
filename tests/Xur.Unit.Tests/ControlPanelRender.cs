@@ -22,6 +22,8 @@ static class ControlPanelRender
         agent.MapGet("/storage-usage",()=>new StorageUsageSnapshot(DateTimeOffset.UtcNow,false,[new("/dev/nvme0n1p2","btrfs",["/"],500L<<30,120L<<30,380L<<30)],[new("/dev/nvme0n1","System SSD",500L<<30,["/dev/nvme0n1p2"],["/"]),new("/dev/sda","USB archive",2L<<40,[],[])],[]));
         agent.MapGet("/timezone",()=>new TimezoneStatus("America/Denver",["UTC","America/Denver"],true));
         agent.MapGet("/network/settings",()=>new NetworkSettingsStatus([new("eno1","02:00:00:00:00:10","Connected",["192.0.2.10/24"],"uuid",new("manual",["192.0.2.10/24"],"192.0.2.1",["192.0.2.53"]),new("auto"),true)],null));
+        WifiStatus? wifi=new(true,true,[new("wlan0","02:00:00:00:00:30","disconnected",null,"/device/1","Example Wi-Fi adapter","example_wifi","1.0"),new("wlan1","02:00:00:00:00:31","disconnected",null,"/device/2","USB Wi-Fi adapter","example_usb","1.0")]);
+        agent.MapGet("/network/wifi",IResult()=>wifi==null?Results.Conflict(new{error="Unavailable"}):Results.Json(wifi));
         agent.MapGet("/ntp",()=>new NtpStatus(true,true,true,["time.cloudflare.com"],""));
         agent.MapGet("/storage/trim",()=>new TrimStatus(false,"ActiveState=active","Result=success",[new("ssd","/etc","/dev/nvme0n1p2[/ostree/deploy/default/deploy/"+new string('a',64)+".0/etc]","btrfs",1000,400,500,true,true,false),new("readonly","/boot","/dev/nvme1n1p1","ext4",1000,400,500,true,false,true)],[]));
         agent.MapGet("/updates",()=>new OsUpdateStatus(null,new("new","digest","image",false),null,null,false,true,false,null,""));
@@ -55,9 +57,19 @@ static class ControlPanelRender
                 // Static rendering has no HTTP request from which to generate antiforgery tokens.
                 // Supply a fixture token for browser tests; production renders AntiforgeryToken normally.
                 if(page=="profile-edit") html=html.Replace("<div id=\"workload-rows\"", "<input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"fixture-only\"><div id=\"workload-rows\"");
+                if(page=="network-settings")html=System.Text.RegularExpressions.Regex.Replace(html,"(<form\\b[^>]*>)","$1<input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"fixture-only\">");
                 await File.WriteAllTextAsync(Path.Combine(output,page+".html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><meta name=xur-csrf content=fixture-only><script src='/app-fetch.js'></script><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/workstations.css'><link rel=stylesheet href='/files.css'><link rel=stylesheet href='/profile-editor.css'><link rel=stylesheet href='/profile-switcher.css'></head><body>"+html+"</body></html>");
                 observer.Snapshot=priorSnapshot;
             }
+            var availableWifi=wifi!;
+            foreach(var (name,status,pending) in new (string,WifiStatus?,bool)[]{("off",availableWifi with{Enabled=false},false),("blocked",availableWifi with{HardwareEnabled=false},false),("missing",availableWifi with{Adapters=[]},false),("unavailable",availableWifi with{Adapters=[availableWifi.Adapters[0] with{State="20 (unavailable)",Reason="42 (The supplicant is not available)"}]},false),("error",null,false),("pending",availableWifi,true)})
+            {
+                wifi=status;
+                var html=await renderer.Dispatcher.InvokeAsync(async()=> (await renderer.RenderComponentAsync<Xur.Control.Components.WifiSettings>(ParameterView.FromDictionary(new Dictionary<string,object?>{{"ChangePending",pending}}))).ToHtmlString());
+                html=System.Text.RegularExpressions.Regex.Replace(html,"(<form\\b[^>]*>)","$1<input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"fixture-only\">");
+                await File.WriteAllTextAsync(Path.Combine(output,"wifi-"+name+".html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><link rel=stylesheet href='/setup.css'></head><body><main>"+html+"</main></body></html>");
+            }
+            wifi=availableWifi;
             // Exercise the actual workstation renderer with running, shared, stopped and unassigned desktops.
             var gaming=new Workload("w1","Gaming workstation",stationRecipe,[gpu.Pci],"desktop",new("doug",1000,false));
             var studio=new Workload("w2","Studio desktop",stationRecipe,[gpu.Pci],"desktop",new("doug",1000,false));
