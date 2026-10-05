@@ -57,6 +57,10 @@ TheRock SDK and PyTorch device packages provide native kernels, and vLLM
 `v0.31.0` is compiled for the same target. The first build needs network
 access and additional disk space; later starts reuse build layers. All GPUs
 selected for this variant must use `gfx1103`. GPU memory checks still apply.
+Xur starts this variant with `--enforce-eager`: the compiled warm-up caused
+GPU hangs on the physical Radeon 780M, while eager inference passed. This
+disables graph compilation and capture, so do not assume a throughput benefit
+over llama.cpp. When running the native image directly, include this flag.
 This native variant has its own entry on Updates and its own compatible
 cached-image fallback. A failed build cannot reuse a stock ROCm image that
 lacks the target. Omni continues to use its separate upstream image.
