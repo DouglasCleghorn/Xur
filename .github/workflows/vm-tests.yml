@@ -1,0 +1,97 @@
+name: Installer VM qualification
+on:
+  workflow_call:
+    inputs:
+      candidate_artifact:
+        description: Inspected ISO candidate from this workflow run
+        required: true
+        type: string
+      scenario:
+        description: VM selection; installer publication requires all
+        required: false
+        default: all
+        type: string
+  workflow_dispatch:
+    inputs:
+      installer_release:
+        description: Immutable installer release tag, for example nightly-26.10.007-installer
+        required: true
+        type: string
+      scenario:
+        description: Full qualification, boot/approval smoke checks, or installation only
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - smoke
+          - install
+permissions:
+  contents: read
+  actions: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare disposable VM runner
+        run: |
+          export XUR_BUILD_ROOT="$RUNNER_TEMP/xur-vm-test"
+          bash eng/ci-iso-prepare.sh
+          echo 'XUR_QEMU_ROOT=/usr' >> "$GITHUB_ENV"
+      - name: Download inspected candidate from this run
+        if: github.event_name != 'workflow_dispatch' || inputs.candidate_artifact != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_ARTIFACT: ${{ inputs.candidate_artifact }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "$CANDIDATE_ARTIFACT" --dir .build/vm-input
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          root=pathlib.Path('.build/vm-input')
+          receipt=json.loads((root/'installer-build.json').read_text())
+          iso=root/'xur-installer-x86_64.iso'
+          if receipt['commit']!=os.environ['GITHUB_SHA']:
+              raise SystemExit('Candidate commit mismatch')
+          if receipt['iso']['bytes']!=iso.stat().st_size or receipt['iso']['sha256']!=hashlib.file_digest(iso.open('rb'),'sha256').hexdigest():
+              raise SystemExit('Candidate ISO receipt mismatch')
+          with open(os.environ['GITHUB_ENV'],'a') as env:
+              env.write('XUR_TEST_ISO='+str(iso)+'\nXUR_TEST_ISO_SHA256='+receipt['iso']['sha256']+'\n')
+          PY
+      - name: Download published installer and signed descriptor
+        if: github.event_name == 'workflow_dispatch' && inputs.candidate_artifact == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSTALLER_RELEASE: ${{ inputs.installer_release }}
+        run: |
+          python3 - <<'PY'
+          import os,re
+          if not re.fullmatch(r'(?:nightly-|v)[0-9]+(?:\.[0-9]+)+-installer',os.environ['INSTALLER_RELEASE']):
+              raise SystemExit('Select an immutable versioned installer tag')
+          PY
+          gh release download "$INSTALLER_RELEASE" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'xur-*-x86_64.iso' --pattern xur-update.json --dir .build/vm-input
+      - name: Run unchanged ISO VM checks
+        env:
+          VM_SCENARIO: ${{ inputs.scenario || 'all' }}
+        run: |
+          if [[ -n "${XUR_TEST_ISO:-}" ]]; then
+            python3 eng/test-vm.py "$XUR_TEST_ISO" --sha256 "$XUR_TEST_ISO_SHA256" --scenario "$VM_SCENARIO" --run-id ci --refresh-kvm-access
+          else
+            python3 - <<'PY'
+          import os,pathlib,subprocess
+          root=pathlib.Path('.build/vm-input');isos=list(root.glob('*.iso'))
+          if len(isos)!=1:raise SystemExit('Expected exactly one release ISO')
+          subprocess.run(['python3','eng/test-vm.py',str(isos[0]),'--descriptor',str(root/'xur-update.json'),'--scenario',os.environ['VM_SCENARIO'],'--run-id','ci','--refresh-kvm-access'],check=True)
+          PY
+          fi
+      - name: Retain credential-free VM results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-vm-results-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: .build/evidence/vm-tests/

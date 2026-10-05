@@ -9,6 +9,7 @@ PYTHONPATH=.build/checks python3 eng/check-dependency-coverage.py > .build/fast/
 PYTHONPATH=.build/checks python3 tests/Xur.Integration.Tests/dependency-coverage.py >> .build/fast/dependency-coverage.log
 python3 eng/check-web-assets.py > .build/fast/web-assets.log
 python3 tests/Xur.Integration.Tests/web-assets.py >> .build/fast/web-assets.log
+python3 tests/Xur.Integration.Tests/vm-testing.py > .build/fast/vm-harness.log 2>&1
 cc -O2 -Wall -Wextra -Werror tests/Xur.Unit.Tests/SeatInputTest.c -ldl -o .build/fast/seat-input-test
 .build/fast/seat-input-test
 c++ -std=c++20 -O2 -Wall -Wextra -Werror tests/Xur.Unit.Tests/ProfileSwitcherInputTest.cpp -o .build/fast/profile-switcher-input-test

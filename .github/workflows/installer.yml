@@ -82,3 +82,12 @@ jobs:
                           result=json.loads(stream.readline())
                           if 'return' in result or 'error' in result:break
           PY
+  vm:
+    needs: installer
+    uses: ./.github/workflows/vm-tests.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      candidate_artifact: installer-candidate-${{ inputs.channel }}-${{ github.sha }}
+      scenario: all

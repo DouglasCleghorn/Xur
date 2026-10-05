@@ -72,7 +72,11 @@ inspection only. If this release includes new installer media, request a fresh
 ISO and run boot/install/reboot tests on that exact artifact, including protected
 configuration media, offline/late networking, progress/failure, manual retry,
 diagnostic SSH opt-in, USB boot selection and settings persistence. ISO inspection
-alone does not establish those outcomes. Keep evidence in ignored
+alone does not establish those outcomes. The [automated VM suite](vm-testing.md)
+covers unchanged-ISO boot, permissions, answer ambiguity, erase cancellation and
+online install/reboot persistence; installer publication requires its full run.
+Its receipt lists the hardware, upgrade and network-boot checks still absent.
+Keep evidence in ignored
 `.build/evidence/`; packaging and publication follow the user's release instruction.
 
 ## Publication-time documentation checks
