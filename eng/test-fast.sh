@@ -26,6 +26,7 @@ python3 tests/Xur.Integration.Tests/bootstrap.py > .build/fast/control.json
 python3 tests/Xur.Integration.Tests/bootstrap.py --diagnostics > .build/fast/installer-diagnostics.json
 python3 tests/Xur.Integration.Tests/installed-management.py > .build/fast/installed-management.json
 python3 tests/Xur.Integration.Tests/account-api.py > .build/fast/account-api.json
+python3 tests/Xur.Integration.Tests/browser-sessions.py > .build/fast/browser-sessions.json
 node tests/Xur.Integration.Tests/https-login.cjs > .build/fast/https-login.json
 node tests/Xur.Integration.Tests/updates-ui.cjs > .build/fast/updates-ui.json
 node tests/Xur.Integration.Tests/control-panel-ui.cjs > .build/fast/control-panel-ui.json

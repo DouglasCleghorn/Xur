@@ -5,6 +5,7 @@ public static class AccountTests
     public static void Run(Action<bool,string> check)
     {
         AccountPersistenceTests.Run(check);
+        BrowserSessionTests.Run(check);
         var directory=Path.Combine(Path.GetTempPath(),"xur-account-"+Guid.NewGuid());Directory.CreateDirectory(directory);
         try
         {

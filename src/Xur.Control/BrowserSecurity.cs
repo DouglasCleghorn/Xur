@@ -5,6 +5,11 @@ namespace Xur.Control;
 public sealed class PublicStaticAsset;
 public static class BrowserSecurity
 {
+    // Browsers cap persistent cookies at 400 days. Renew on each authenticated
+    // visit; the signed manager-browser token itself has no time limit.
+    public static void SetSession(HttpContext context,string session,bool persistent)=>context.Response.Cookies.Append("xur.session",session,
+        new CookieOptions { HttpOnly=true,SameSite=SameSiteMode.Strict,Secure=true,MaxAge=persistent?TimeSpan.FromDays(400):TimeSpan.FromHours(8),Path="/" });
+
     public static bool ServeOrigin(HttpContext context)
     {
         if(context.Features.Get<EndpointIdentity>()?.Kind!="serve")return true;

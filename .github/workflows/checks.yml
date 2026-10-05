@@ -22,6 +22,7 @@ jobs:
           python3 eng/check-web-assets.py
           python3 tests/Xur.Integration.Tests/web-assets.py
           dotnet run --project tests/Xur.Unit.Tests -c Release
+          XUR_CONTROL_BINARY="$PWD/src/Xur.Control/bin/Release/net10.0/Xur.Control" python3 tests/Xur.Integration.Tests/browser-sessions.py
           XUR_DOTNET="$(command -v dotnet)" python3 tests/Xur.Integration.Tests/profile-access.py
           python3 tests/Xur.Integration.Tests/desktop-timezone.py
           python3 tests/Xur.Integration.Tests/os-update.py

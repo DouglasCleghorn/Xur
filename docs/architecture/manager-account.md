@@ -16,8 +16,15 @@ the existing rate limit.
 
 The account stores a salted ASP.NET Core Identity password hash in
 `/var/lib/xur/manager-account.json`, with owner-only permissions. The live installer has no web listener or administrator-account form. The
-installed system generates its signing and form-protection keys on first start. Account sessions use the existing eight-hour signed cookie and
-survive application updates and reboots. Corrupt account state fails closed.
+installed system generates its signing and form-protection keys on first start.
+Browser account sessions are signed with the distinct `manager-browser` purpose
+and have no server expiry. Their Secure, HttpOnly, SameSite=Strict cookie lasts
+400 days and is renewed on authenticated visits, preserving sign-in across browser
+restarts, application updates and reboots. A valid eight-hour cookie from an older
+bundle upgrades on its next authenticated visit; expired cookies require login.
+Browsers can still remove cookies, including after prolonged inactivity or when
+site data is cleared. Sign out removes this browser's cookie. Setup and API bearer
+sessions retain their eight-hour expiry. Corrupt account state fails closed.
 Updates refuse older bundles that cannot understand manager accounts.
 
 Automation:
@@ -34,13 +41,28 @@ Bootstrap sessions can create the account and download redacted setup logs at
 profiles, or other sensitive APIs. Browser forms require CSRF tokens. The LAN manager uses HTTPS on port 8443 with a persistent machine certificate.
 Port 8080 redirects GET requests to HTTPS and rejects plaintext mutations.
 Session and form cookies are Secure. Form-protection keys persist alongside the
-account, so a restart does not invalidate an open
-login form. Stale forms return to sign-in with a retry message.
+account, so a restart does not invalidate an open login form. A restored page's
+antiforgery cookie or identity can still change. Before submission, `login.js`
+refreshes its request token from the same-origin, uncached `GET /auth/login-token`
+endpoint. Where `PasswordCredential` is supported, it submits the form with JSON
+response negotiation and asks `navigator.credentials.store()` to save the password
+only after successful authentication. Xur keeps credentials in page memory,
+never in URLs, localStorage or sessionStorage; persistence belongs to the browser's
+password manager. Save failures do not block login. Other
+browsers submit the native form for password-manager detection. Both paths retain
+server antiforgery validation and preserve input on token-refresh failures. Without
+JavaScript, stale forms return to sign-in with a retry message.
 Tailscale Serve terminates trusted HTTPS and proxies through its private Unix
 socket; it does not need to trust the LAN certificate.
 
 Account setup has browser/password-manager hints (`username`, `new-password`,
 and length rules) and an accessible eye toggle; Xur does not generate passwords.
+Password saving is controlled by the browser. Certificate errors can prevent
+password-manager prompts; bypassing a LAN certificate warning does not establish
+certificate trust. Use the trusted Tailscale HTTPS address or explicitly trust
+the machine certificate. Both forms explain password-manager settings and trust.
+With a trusted certificate, a missing prompt still depends on browser settings,
+site exclusions and detection. The application cannot force a native save prompt.
 If setup fails, its error page includes a request ID and a protected log download.
 If the account has not been published, the same setup session can return to the
 form to retry. Once the account file is published, bootstrap access is disabled

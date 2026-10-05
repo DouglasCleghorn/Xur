@@ -82,13 +82,31 @@ const assert=require('assert/strict');
   assert.equal((await request.post(tls+'/api/bootstrap',{data:{token:code}})).status(),401);
   const logoutToken=await signup.locator('meta[name=xur-csrf]').getAttribute('content');
   await request.post(tls+'/auth/logout',{headers:{RequestVerificationToken:logoutToken}});await signup.close();
-  const page=await context.newPage();await page.goto(tls+'/login#code=ABC-DEF');assert.equal(await page.locator('#code').count(),0);assert.equal(new URL(page.url()).hash,'');await page.locator('[name=username]').fill('owner@example.test');await page.locator('[name=password]').fill(password);
+  let passwordSaves=0;
+  const page=await context.newPage();
+  await page.exposeFunction('verifyPasswordSave',async credential=>{
+   assert.equal(credential.id,'owner@example.test');assert.equal(credential.password,password);
+   assert.equal((await request.get(tls+'/api/api-keys')).status(),200,'Saving must follow successful authentication');
+   passwordSaves++;
+  });
+  await page.addInitScript(()=>{
+   if(typeof PasswordCredential==='function'&&navigator.credentials?.store)
+    navigator.credentials.store=async credential=>{await window.verifyPasswordSave({id:credential.id,password:credential.password});throw Error('Synthetic declined save');};
+  });
+  await page.goto(tls+'/login#code=ABC-DEF');assert.equal(await page.locator('#code').count(),0);assert.equal(new URL(page.url()).hash,'');
+  const explicitSave=await page.evaluate(()=>typeof PasswordCredential==='function'&&!!navigator.credentials?.store);
+  await page.locator('[name=username]').fill('owner@example.test');await page.locator('[name=password]').fill('wrong password');
+  const wrongLogin=page.waitForResponse(r=>r.url()===tls+'/auth/login');await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  assert.equal((await wrongLogin).status(),explicitSave?401:302);await page.getByRole('alert').filter({hasText:'Invalid username or password.'}).waitFor();
+  assert.equal(passwordSaves,0,'Failed authentication cannot ask to save a password');
+  await page.locator('[name=username]').fill('owner@example.test');await page.locator('[name=password]').fill(password);
   // Submit a form rendered by the previous manager process, using its cookie.
   await stop();await start(request);
   const posted=page.waitForResponse(r=>r.url()===tls+'/auth/login');
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
-  const loginResponse=await posted;assert.equal(loginResponse.status(),302,'Login form must redirect after authentication');
+  const loginResponse=await posted;assert([200,302].includes(loginResponse.status()),'Login form must confirm authentication or redirect');
   await page.waitForURL(tls+'/');
+  assert.equal(passwordSaves,explicitSave?1:0,'Declining an explicit save must not block sign-in');
   const cookies=await context.cookies();assert(cookies.find(c=>c.name==='xur.session')?.secure);assert(cookies.find(c=>c.name==='xur.csrf.https')?.secure);
   const htmlHeaders={Accept:'text/html'};
   for(const action of ['/profiles/load','/profiles/cancel','/storage/trim','/settings/ntp']) {

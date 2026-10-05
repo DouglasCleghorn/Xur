@@ -6,12 +6,14 @@
 @if(!Auth.AccountConfigured) { <p>Use the access code shown on your machine.</p> }
 <section class="panel narrow">
     @if(Error!=null) { <p role="alert">@(Error=="refresh"?"The sign-in form expired. Please sign in again.":Error=="limited"?"Too many attempts. Wait 30 seconds.":Auth.AccountConfigured?"Invalid username or password.":"Invalid access code.")</p> }
-    <form method="post" action="/auth/login">
+    <p id="login-error" role="alert" hidden></p>
+    <form id="login-form" name="login" method="post" action="/auth/login" autocomplete="on">
         <AntiforgeryToken />
         @if(Auth.AccountConfigured)
         {
-            <label for="username">Username or email</label><input id="username" name="username" autocomplete="username" maxlength="254" autofocus required />
-            <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required />
+            <label for="username">Username or email</label><input id="username" name="username" autocomplete="username" maxlength="254" autocapitalize="none" spellcheck="false" autofocus required />
+            <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" autocapitalize="none" autocorrect="off" spellcheck="false" required />
+            <small>Sign-in is remembered across browser restarts, reboots and updates.</small>
         }
         else
         {
@@ -20,5 +22,6 @@
         <button type="submit">Sign in</button>
     </form>
 </section>
+@if(Auth.AccountConfigured) { <PasswordSavingHelp /> }
 <script src="/login.js"></script>
 @code { [SupplyParameterFromQuery(Name="error")] public string? Error { get; set; } }
