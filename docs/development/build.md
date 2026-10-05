@@ -342,8 +342,8 @@ bash eng/test-xurutil.sh
 
 The first command tests service migration, journal setup, signed metadata,
 archives, compatibility, activation/recovery, installer preflight, Update All,
-virtual display modes and HTTP/stream failures using temporary
-fixtures and mocked system commands. It also runs an authentic frozen previous
+virtual display modes, bounded file browsing/scans, ZIP streaming and HTTP/stream
+failures using temporary fixtures and mocked system commands. It also runs an authentic frozen previous
 updater to verify the first upgrade reaches the new agent's startup repair. The
 second publishes and exercises the actual native executable, including offline
 configuration, with no SDK in its execution environment. Evidence goes under
@@ -362,6 +362,11 @@ xurutil update-all status|run
 xurutil display status
 xurutil display resize <width> <height> <fps>
 xurutil display moonlight
+xurutil files list <root> [path] [query]
+xurutil files size|scan <root> [path]
+xurutil files download|stored|compressed <root> <path>
+xurutil files move <root> <path> <destination>
+xurutil files delete <root> <path> confirm
 xurutil app-update status|check|update|rollback|recover
 xurutil app-update configure <server>
 xurutil app-update channel <stable|nightly|local> [server] [-- <public-key-pem>]
@@ -369,8 +374,8 @@ xurutil app-update development <true|false>
 xurutil app-update compatibility <installed-bundle-id>
 ```
 
-Installed operations require root. The agent runs host migration before exposing
-health and applies journal defaults afterward; logging failures retry on the next
+Host migration, installer maintenance and application updates require root. The
+agent runs host migration before exposing health and applies journal defaults afterward; logging failures retry on the next
 start. Fresh installations keep a root-private recovery copy under
 `/var/lib/xur/updater/xurutil`. The first upgrade also migrates the recognized
 legacy recovery unit, installs its executable SELinux label, and retains an
@@ -410,8 +415,8 @@ The `host/app-update`, `host/host-service-migrate`, `host/log-compression` and
 `host/update-all` Python files are small compatibility launchers for older agents
 that explicitly invoke Python. Installer compatibility paths are shell launchers;
 current production callers invoke the native utility directly. `StationDisplay.py`
-is removed. Other agent Python workers, the OS updater and distro Python dependencies
-remain separate migration work.
+is removed. Steam storage deduplication, the OS updater and distro Python
+dependencies remain separate migration work.
 Source size comparison against the previous Python implementations (physical
 lines, including comments and blank lines; excludes tests and compatibility
 launchers):
@@ -429,7 +434,43 @@ launchers):
 These are source counts, not binary size estimates. Explicit native filesystem
 and SQLite interop, command dispatch and durable-file helpers are additional
 shared code. `Xur.IO` adds about 202 lines reused by the CLI and services. One
-Linux x64 executable contains all commands: the measured Native AOT build is
-8,902,176 bytes (8.49 MiB), up 358,048 bytes from the initial startup-only utility.
+Linux x64 executable contains all commands. Before the file-worker migration
+below, the measured Native AOT build was 8,902,176 bytes (8.49 MiB), up 358,048 bytes from the initial startup-only utility.
 Debug symbols remain separate and do not ship. Tests run without building an
 installer image or deploying the application.
+
+The file browser and legacy storage explorer now run `xurutil files` instead of
+embedded Python. File commands return a newline-terminated JSON header; successful
+downloads then stream their file or ZIP body. Listings remain fresh and bounded
+at 500 matches; only root/immediate-child allocated folder sizes enter the cache.
+Scans deduplicate hard links, count allocated blocks and stop at their time,
+entry and depth budgets. `DirectoryTree` and `FolderScanner` in `Xur.IO` share
+Linux descriptor-relative access: `openat2` rejects symlink traversal and nested
+mounts, including bind mounts. No unsafe fallback is used on older kernels.
+Recursive deletion requires `confirm`; moves use atomic `renameat2(NOREPLACE)`.
+Downloads use TeeForge and reject changed files; ZIP recompression checks each
+entry's declared length and CRC-32 in the same copy pass. Empty ZIP directories
+may use the stored method even in compressed archives. Search uses .NET ordinal
+case-insensitive matching, and filenames must be valid UTF-8.
+
+The shared station helper installer copies the executable and notices to
+`/var/lib/xur-virtual-display/<bundle-id>/utility/`, with the existing persistent
+SELinux executable label. This subfolder avoids colliding with the virtual-output
+helper's version directory. Home operations still run as the workstation user;
+authorized storage operations run as root. Arguments beginning with `-` use the
+standard `--` delimiter.
+
+Source size for this migration, excluding tests and command registration:
+
+| Replaced Python worker | Before | C# implementation after |
+| --- | ---: | ---: |
+| `StationFiles.py` | 192 lines / 10,437 bytes | `FileOperations.cs`: 161 lines / 10,651 bytes |
+| `StorageExplorer.py` | 101 lines / 4,572 bytes | `FolderScanner.cs`: 96 lines / 5,504 bytes |
+| Shared safe file access | Included in both workers | `DirectoryTree.cs`: 158 lines / 9,994 bytes |
+
+The native Linux x64 executable measured 8,902,176 bytes (8.49 MiB) before and
+9,270,224 bytes (8.84 MiB) after: an increase of 368,048 bytes (359 KiB, 4.1%).
+These are local Release Native AOT measurements, excluding separate debug symbols
+and license notices; compiler/platform changes can change the result. Run
+`bash eng/test-xurutil.sh` to publish and repeat the native file fixtures, including
+a 128 MiB streamed ZIP with backpressure and resident memory below 50,000 KiB.

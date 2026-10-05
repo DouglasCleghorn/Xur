@@ -1,12 +1,16 @@
 import json,os,pathlib,subprocess,tempfile
-script=pathlib.Path('src/Xur.Agent/StationFiles.py').read_text()
-with tempfile.TemporaryDirectory() as temp:
+repo=pathlib.Path(__file__).resolve().parents[2]
+native=pathlib.Path(os.environ.get('XUR_UTIL',repo/'.build/xurutil/xurutil'))
+if not native.is_file():
+    raise SystemExit('Publish xurutil first with bash eng/test-xurutil.sh (or set XUR_UTIL).')
+evidence=repo/'.build/evidence/station-files';evidence.mkdir(parents=True,exist_ok=True)
+with tempfile.TemporaryDirectory(dir=evidence) as temp:
     root=pathlib.Path(temp)/'home';root.mkdir()
     (root/'.hidden').mkdir();payload=bytes(range(256))*513
     (root/'.hidden'/'steam-测试.log').write_bytes(payload)
     (root/'link').symlink_to('/etc');(root/'filelink').symlink_to('/etc/passwd');os.mkfifo(root/'fifo')
     def run(mode,path='',q='',home=root):
-        r=subprocess.run(['python3','-I','-c',script,mode,str(home),path,q],capture_output=True,timeout=5)
+        r=subprocess.run([str(native),'files',mode,'--',str(home),path,q],capture_output=True,timeout=5)
         header,_,body=r.stdout.partition(b'\n');return json.loads(header),body,r.returncode
     listing,_,code=run('list');assert code==0 and listing['entries'][0]['name']=='.hidden'
     result,data,code=run('download','.hidden/steam-测试.log');assert code==0 and result['size']==len(payload) and data==payload
@@ -21,11 +25,11 @@ print(json.dumps({'suite':'StationFiles','result':'Passed','binaryDownload':True
 
 # Archive contents, mutation boundaries and immediate-child size preloading.
 import io,zipfile
-with tempfile.TemporaryDirectory() as temp:
+with tempfile.TemporaryDirectory(dir=evidence) as temp:
     root=pathlib.Path(temp)/'home';root.mkdir();folder=root/'folder';folder.mkdir();(folder/'child').mkdir()
     (folder/'child'/'payload.bin').write_bytes(payload);(folder/'empty').mkdir();(folder/'outside').symlink_to('/etc');os.mkfifo(folder/'fifo')
     def run(mode,path='',q=''):
-        r=subprocess.run(['python3','-I','-c',script,mode,str(root),path,q],capture_output=True,timeout=20)
+        r=subprocess.run([str(native),'files',mode,'--',str(root),path,q],capture_output=True,timeout=20)
         header,_,body=r.stdout.partition(b'\n');return json.loads(header),body,r.returncode
     header,body,code=run('download','folder');assert code==0 and header['size'] is None
     with zipfile.ZipFile(io.BytesIO(body)) as z:
@@ -38,7 +42,7 @@ with tempfile.TemporaryDirectory() as temp:
         assert z.read('folder/child/payload.bin')==payload and all(e.compress_type==zipfile.ZIP_STORED for e in z.infolist())
     header,compressed,code=run('compressed','archive.zip');assert code==0
     with zipfile.ZipFile(io.BytesIO(compressed)) as z:
-        assert z.read('folder/child/payload.bin')==payload and all(e.compress_type==zipfile.ZIP_DEFLATED for e in z.infolist())
+        assert z.read('folder/child/payload.bin')==payload and all(e.compress_type==zipfile.ZIP_DEFLATED for e in z.infolist() if e.file_size)
     data,_,code=run('size','folder');assert code==0 and set(data['sizes'])=={'folder','folder/child','folder/empty'}
     assert data['sizes']['folder/child']['bytes']>=len(payload) and 'entries' not in data
     # Listing is a new scan on every request.
@@ -53,7 +57,7 @@ with tempfile.TemporaryDirectory() as temp:
     # A large archive must produce bytes before completion with bounded resident memory.
     big=root/'big';big.mkdir()
     with (big/'data').open('wb') as f:f.truncate(128*1024*1024)
-    p=subprocess.Popen(['python3','-I','-c',script,'stored',str(root),'big',''],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    p=subprocess.Popen([str(native),'files','stored','--',str(root),'big',''],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     try:
         assert json.loads(p.stdout.readline())['ok'];assert p.stdout.read(65536).startswith(b'PK')
         rss=int(next(line for line in pathlib.Path(f'/proc/{p.pid}/status').read_text().splitlines() if line.startswith('VmRSS:')).split()[1])

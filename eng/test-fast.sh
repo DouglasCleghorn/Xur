@@ -20,7 +20,6 @@ bash eng/publish.sh > .build/fast/publish.log 2>&1
 XUR_DOTNET="$sdk" python3 tests/Xur.Integration.Tests/desktop-timezone.py > .build/fast/desktop-timezone.json
 python3 tests/Xur.Integration.Tests/station-display.py > .build/fast/station-display.log 2>&1
 python3 tests/Xur.Integration.Tests/storage-explorer.py > .build/fast/storage-explorer.log 2>&1
-python3 tests/Xur.Integration.Tests/station-files.py > .build/fast/station-files.json
 python3 tests/Xur.Integration.Tests/steam-storage.py > .build/fast/steam-storage.json
 python3 tests/Xur.Integration.Tests/bootstrap.py > .build/fast/control.json
 python3 tests/Xur.Integration.Tests/bootstrap.py --diagnostics > .build/fast/installer-diagnostics.json
@@ -47,6 +46,7 @@ python3 tests/Xur.Integration.Tests/host-service-migration.py > .build/fast/host
 python3 tests/Xur.Integration.Tests/log-compression.py > .build/fast/log-compression.json
 python3 tests/Xur.Integration.Tests/application-update.py > .build/fast/application-updates.json
 bash eng/test-xurutil.sh > .build/fast/xurutil-native.log 2>&1
+cp .build/evidence/xurutil/native-files.json .build/fast/station-files.json
 python3 tests/Xur.Integration.Tests/online-installer.py > .build/fast/online-installer.json
 python3 tests/Xur.Integration.Tests/installer-preflight.py > .build/fast/installer-preflight.json
 python3 tests/Xur.Integration.Tests/installer-progress.py > .build/fast/installer-progress.json
