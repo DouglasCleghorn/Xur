@@ -3,31 +3,32 @@
 <PageTitle>Network settings · Xur</PageTitle>
 <h1>Network settings</h1>
 <p><a href="/settings">Back to Settings</a></p>
-<p>Configure wired adapters with automatic or static IPv4 and IPv6 addresses. Saved settings survive reboot and installation.</p>
+<p>Connect to Wi-Fi or configure wired adapters with automatic or static IPv4 and IPv6 addresses. Saved settings survive reboot and installation.</p>
 @if(Error!=null) { <p role="alert">@Error</p> }
+@if(state?.Pending is {} pending)
+{
+    <section class="panel" id="network-change" data-id="@pending.Id" data-stage="@pending.Stage">
+        <h2>@pending.Interface · @pending.Stage</h2><p role="status">@pending.Message</p>
+        @if(pending.Stage is "Applying" or "Confirm")
+        {
+            <p>Keep the change by <time datetime="@pending.Expires.ToString("O")">@pending.Expires.ToString("HH:mm:ss 'UTC'")</time>. Otherwise the previous connection returns automatically.</p>
+            <p>The browser may disconnect. Open the new address, sign in if needed, and choose Keep settings. The local console can also keep or revert the change.</p>
+            @foreach(var address in pending.Addresses)
+            {
+                var ip=address.Split('/')[0];var host=ip.Contains(':')?"["+ip+"]":ip;var url=$"https://{host}:{Device.Port+363}/settings/network";
+                <p><a href="@url">@url</a></p>
+            }
+            <div class="actions">
+                <form method="post" action="/settings/network/keep"><AntiforgeryToken /><input type="hidden" name="id" value="@pending.Id" /><button disabled="@(pending.Stage!="Confirm")">Keep settings</button></form>
+                <form method="post" action="/settings/network/revert"><AntiforgeryToken /><input type="hidden" name="id" value="@pending.Id" /><button class="secondary" disabled="@(pending.Stage!="Confirm")">Revert</button></form>
+            </div>
+        }
+    </section>
+}
+<WifiSettings ChangePending="@(state?.Pending?.Stage is "Applying" or "Confirm")" />
 @if(state==null) { <p role="alert">Could not read network settings. <a href="/settings/network">Refresh</a></p> }
 else
 {
-    @if(state.Pending is {} pending)
-    {
-        <section class="panel" id="network-change" data-id="@pending.Id" data-stage="@pending.Stage">
-            <h2>@pending.Interface · @pending.Stage</h2><p role="status">@pending.Message</p>
-            @if(pending.Stage is "Applying" or "Confirm")
-            {
-                <p>Keep the change by <time datetime="@pending.Expires.ToString("O")">@pending.Expires.ToString("HH:mm:ss 'UTC'")</time>. Otherwise the previous connection returns automatically.</p>
-                <p>The browser may disconnect. Open the new address, sign in if needed, and choose Keep settings. The local console can also keep or revert the change.</p>
-                @foreach(var address in pending.Addresses)
-                {
-                    var ip=address.Split('/')[0];var host=ip.Contains(':')?"["+ip+"]":ip;var url=$"https://{host}:{Device.Port+363}/settings/network";
-                    <p><a href="@url">@url</a></p>
-                }
-                <div class="actions">
-                    <form method="post" action="/settings/network/keep"><AntiforgeryToken /><input type="hidden" name="id" value="@pending.Id" /><button disabled="@(pending.Stage!="Confirm")">Keep settings</button></form>
-                    <form method="post" action="/settings/network/revert"><AntiforgeryToken /><input type="hidden" name="id" value="@pending.Id" /><button class="secondary" disabled="@(pending.Stage!="Confirm")">Revert</button></form>
-                </div>
-            }
-        </section>
-    }
     @if(state.Devices.Length==0) { <p>No wired adapters are available.</p> }
     @foreach(var adapter in state.Devices)
     {
