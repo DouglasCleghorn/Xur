@@ -19,9 +19,10 @@ import urllib.parse
 from http.cookies import SimpleCookie
 
 repo = pathlib.Path(__file__).resolve().parents[2]
-evidence = repo / '.build/evidence/auth'
-evidence.mkdir(parents=True, exist_ok=True)
-with tempfile.TemporaryDirectory(prefix='sessions-', dir=evidence) as tmp:
+# Keep runtime paths short enough for the manager's longest Unix socket name.
+runtime = repo / '.build/auth'
+runtime.mkdir(parents=True, exist_ok=True)
+with tempfile.TemporaryDirectory(prefix='s-', dir=runtime) as tmp:
     root = pathlib.Path(tmp)
     state, run = root / 'state', root / 'run'
     (root / 'bin').mkdir()
