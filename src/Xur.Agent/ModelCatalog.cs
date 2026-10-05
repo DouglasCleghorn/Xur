@@ -153,6 +153,7 @@ public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=n
             {
                 if(available.Length==0)throw new InvalidOperationException("No compatible GPU is available.");
                 long perGpu=available.Min(g=>g.MemoryMiB)*85/100;
+                if(perGpu<=0)throw new InvalidOperationException("Dedicated GPU memory is unavailable. Check the graphics driver and choose a GPU with observed dedicated memory.");
                 count=(int)Math.Max(1,(totalMiB+perGpu-1)/perGpu);if(count>available.Length)throw new InvalidOperationException("This checkpoint exceeds the observed GPU capacity. Choose a smaller model or quantization.");
                 minimum=(totalMiB+count-1)/count;
             }

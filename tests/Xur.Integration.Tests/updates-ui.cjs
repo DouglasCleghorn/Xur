@@ -11,9 +11,11 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
    return route.fulfill({body:fs.readFileSync(file),contentType:url.pathname.endsWith('.css')?'text/css':url.pathname.endsWith('.ttf')?'font/ttf':url.pathname.endsWith('.svg')?'image/svg+xml':'text/html'});
   });
   await page.goto('http://updates.test/');
-  assert.equal(await page.locator('.tool-update-row').count(),13);
+  assert.equal(await page.locator('.tool-update-row').count(),17);
   assert.equal(await page.locator('.tool-update-row form, .tool-update-row button, .tool-update-row a').count(),0);
-  assert.equal(await page.locator('.tool-update-row strong').count(),13);
+  assert.equal(await page.locator('.tool-update-row strong').count(),17);
+  for(const name of ['vLLM · AMD','vLLM · Intel','vLLM-Omni · AMD','vLLM-Omni · Intel'])
+   assert.equal(await page.getByText(name,{exact:true}).count(),1);
   assert.equal(await page.getByRole('button',{name:'Update Xur',exact:true}).count(),1);
   assert.equal(await page.locator('#os-update').getByRole('button',{name:'Update',exact:true}).count(),1);
   for(const [label,width,height] of [['desktop',1440,1000],['mobile',390,844]]){
@@ -22,6 +24,6 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
    await page.screenshot({path:path.join(out,'updates-'+label+'.png'),fullPage:true});
    await page.locator('.tool-update-row summary').first().click();
   }
-  console.log(JSON.stringify({suite:'UpdatesUi',result:'Passed',render:'Real Razor component with test inventory',toolCount:13,versionsOnlyForBundledTools:true,desktopAndMobile:true}));
+  console.log(JSON.stringify({suite:'UpdatesUi',result:'Passed',render:'Real Razor component with test inventory',toolCount:17,versionsOnlyForBundledTools:true,desktopAndMobile:true}));
  }finally{await browser.close();}
 })().catch(e=>{console.error(e.message);process.exitCode=1;});
