@@ -15,7 +15,9 @@ def build():
   for name in ['build.sh','patch.py','client.c','test-power.c']:shutil.copy2(console/name,c/name)
   for name in ['client.c','screencast.xml']:shutil.copy2(virtual/name,v/name)
   script='''set -euo pipefail
-  dnf install -y gcc gcc-c++ cmake qt6-qtbase-devel qt6-qtwayland kf6-kglobalaccel-devel libevdev-devel libinput-devel meson ninja-build ncurses libdrm-devel libxkbcommon-devel systemd-devel zlib-devel libtsm-devel libcurl-devel wayland-devel python3 tar gzip
+  # Fedora's container defaults omit docs, including COPYING files marked %doc.
+  # Retain those original notices for the bundled native runtime dependencies.
+  dnf --setopt=tsflags= install -y gcc gcc-c++ cmake qt6-qtbase-devel qt6-qtwayland kf6-kglobalaccel-devel libevdev-devel libinput-devel meson ninja-build ncurses libdrm-devel libxkbcommon-devel systemd-devel zlib-devel libtsm-devel libcurl-devel wayland-devel python3 tar gzip
   cd /work/console
   mkdir kmscon
   tar -xzf kmscon.tar.gz --strip-components=1 -C kmscon

@@ -319,6 +319,11 @@ uses `eng/build-console.py` in the disposable Fedora VM; subsequent app builds
 reuse the verified native cache when source inputs match. See
 [display consoles](../architecture/display-consoles.md) for its pinned source and runtime receipt.
 
+Hosted native builds enable RPM documentation when installing build dependencies.
+The Fedora container's default `tsflags=nodocs` also omits some dependency
+COPYING files marked as documentation. Retaining them lets the native runtime
+builders collect the original license notices for the application bundle.
+
 For local installer application tests, add `xur.app-update=off` to the boot command line. The bundled app will run without fetching a newer public app; Bazzite installation still needs the network. See [online installer](../architecture/online-installer.md) for signature checks and fallback behavior.
 
 See [dependency updates](dependencies.md) for Dependabot coverage and the manual
