@@ -1,12 +1,14 @@
 # Headless workstation input
 
-Included in application update 2026.09.18.3.
+The headless input fix first appeared in application update 2026.09.18.3.
+The current session and device boundary is described below and in
+[multiple workstations](multiple-workstations.md).
 
 The former `kwin_wayland --virtual` launch selected KWin's virtual backend,
 which does not create its libinput backend. Sunshine's uinput devices could
 therefore exist while the displayed desktop ignored their events.
 
-Headless startup now uses the same PlasmaLogin/logind session as a local
+Headless startup uses the same dedicated PAM/logind session as a local
 workstation, pins KWin's DRM backend to the assigned GPU, and keeps a
 1920×1080 virtual output alive through KDE's screencast protocol. An output is
 necessary: KWin's no-monitor placeholder deliberately filters input. The small
@@ -14,9 +16,10 @@ necessary: KWin's no-monitor placeholder deliberately filters input. The small
 Its desktop entry grants only the required screencast interface; global KWin
 permission checks stay enabled. Helper startup failures appear in workstation logs.
 
-The uinput module is loaded before installing the user slice's device allowlist.
-Streaming checks access to `/dev/uinput` as the workstation user in that slice.
-Existing desktops need to be unloaded and loaded after installing this update.
+Streaming loads the uinput module and verifies access to `/dev/uinput` as the
+workstation user inside Sunshine's separate device-restricted service. Desktop
+applications do not inherit that service's uinput/UHID access. Existing desktops
+need to be unloaded and loaded to adopt changed session/input setup.
 
 ## Validation
 
@@ -31,6 +34,8 @@ DRM connectors disconnected before starting Plasma, then verifies:
 - The original display configuration and agent are restored afterward.
 
 The VM test does not exercise Moonlight's network transport or an RTX 3090.
+It provisions a test session and a temporary user-slice uinput grant, so it also
+does not validate the current production streaming boundary or multiseat loader.
 Those still require an end-to-end test on the physical workstation.
 
 Implementation references: [KWin backend selection](https://github.com/KDE/kwin/blob/master/src/main_wayland.cpp),

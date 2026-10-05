@@ -18,7 +18,8 @@ Workstations page and approve its pending request using the four-digit PIN.
 Pairing requires the HTTPS manager (port 8443 by default) or Tailscale HTTPS.
 The LAN HTTPS certificate is generated locally and persisted; browser trust
 requires accepting or importing that certificate. Settings lists HTTPS URLs.
-Windows, Linux and macOS launch shortcuts are available after pairing.
+After pairing, choose **Desktop** in Moonlight. Change or retry streaming from
+the workstation card; profile loading is handled on Home, Profiles or Switch profile.
 
 Sunshine 2026.914.233613 is included in the signed application bundle. Its exact
 upstream checksum is in `tools/Xur.Streaming/upstream-lock.json`. Both LAN and WAN
@@ -58,8 +59,8 @@ uses `nvidia-smi topo -m` and NVLink status, resolving indices to PCI identities
 Unknown or inactive links are never reported as active. Profile selection shows
 NVLink peer hints without silently changing allocations.
 
-Manager usernames may be email addresses. Account setup offers a local password
-generator as well as browser password-manager autocomplete. GPU release failures
+Manager usernames may be email addresses. Account setup supports browser and
+password-manager suggestions with a new-password field. GPU release failures
 now identify owning processes/services. Xur's own display console is released
 before desktop ownership is checked; verified driver persistence handles alone
 are not treated as a workload.

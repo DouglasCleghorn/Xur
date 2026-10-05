@@ -1,9 +1,9 @@
 # Models and gaming workstation
 
-Create a profile and choose Gaming workstation, or type a model name in the
-Workload selector. Names, workload IDs and routes are generated automatically.
-The initial catalog combines the local workstation with Unsloth’s GGUF models.
-Changing Catalog exposes Hugging Face text-generation models for vLLM or the
+Create a profile and choose **Workstation**, **llama.cpp**, **vLLM**,
+**vLLM-Omni**, or **Container** under **Workload type**. Names, workload IDs and
+routes are generated automatically. The model selector searches Unsloth’s GGUF
+models for llama.cpp, Hugging Face text-generation models for vLLM, or the
 upstream vLLM-Omni supported-model list. Search returns up to 100 matches, ordered
 by upstream downloads where available; typing narrows the upstream search.
 
@@ -44,7 +44,8 @@ image changed, Xur recreates the stopped container and keeps its model-cache
 volume. Running engines continue using their current image until their next
 start. If the pull fails, Xur uses the newest downloaded image for the same
 engine and device variant. If no tagged base remains locally, it can reuse the
-image retained by the stopped container, including a prepared Fish runtime.
+image retained by the stopped container. Model-specific Fish runtime preparation
+was removed; the generic Omni channel does not supply that former integration.
 The workload logs record the failed pull and cached image identity. Startup
 fails only if no usable image is available locally.
 Model weights and launch settings remain the selected versions.

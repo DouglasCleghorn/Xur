@@ -1,8 +1,8 @@
 # Multiple workstations
 
 Profiles support simultaneous native Plasma desktops on separate GPUs, with a
-distinct Unix user and logind seat for each workstation. These changes are in
-source; this development pass does not package or deploy an update.
+distinct Unix user and logind seat for each workstation. Source implementation
+and physical isolation acceptance are tracked separately below.
 
 ## Sessions and streaming
 
@@ -63,6 +63,11 @@ nodes, refreshes exact cgroup permissions/ACLs and udev seat properties, and
 records allocations under `/run/xur/seats`. Device inode changes trigger ACL
 renewal after hotplug. Workstations and Diagnostics report allocation problems;
 `GET /api/station-allocations` is also available with monitoring API scope.
+
+Physical input rules assign both `/dev/input/eventN` and its sysfs `inputN`
+parent to the same workstation seat: libinput reads the event node's seat while
+logind checks access against the parent. Regression coverage checks both rules;
+physical keyboard/controller routing still needs acceptance on the candidate.
 
 An assignment or effective-primary change restarts the existing desktops before
 transferring peripherals: changing cgroup rules alone cannot revoke an already

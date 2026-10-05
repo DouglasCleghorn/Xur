@@ -113,9 +113,11 @@ clearly labeled). It checks up to 300 recent releases, requires an actual ISO as
 `/download/?start=1` additionally requests one automatic ISO download after the page
 loads; normal navigation to `/download/` does not start one. Downloads go directly
 from GitHub, never through Cloudflare or browser-memory blobs. Empty releases,
-rate limits, missing media and multipart media have explicit fallback messages.
-Multipart media must be assembled according to the release instructions. A direct link to the verified September 21 installer remains usable without
-JavaScript or when the API is unavailable; successful lookups select newer media.
+rate limits and missing media have explicit fallback messages. An ISO download
+link appears only after a successful lookup of published media. Without JavaScript
+or when the API is unavailable, the page links to GitHub Releases; it does not
+offer a hardcoded retired installer. Split media is ignored by discovery; current
+publication requires one ISO smaller than 2 GiB.
 
 Only the download page contacts GitHub's API. CSP permits that API origin for
 connections and retains strict local script/style rules. No tracking is added.

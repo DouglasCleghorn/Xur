@@ -1,4 +1,4 @@
-# Answer YAML and static networking
+# Wi-Fi, IP settings and answer YAML
 
 An answer file can configure wired networking and optionally set the post-install bootstrap
 login code. **It does not approve disk installation.** Select the exact target disk, review it, and approve installation in the
@@ -87,7 +87,7 @@ are copied, bound to the adapter's MAC, and persist across reboot and OS updates
 
 ## Change networking after boot
 
-Open **Settings → IP addresses → Manage automatic and static IPs**, or select
+Open **Settings → Manage Wi-Fi and IP settings**, or select
 **Network settings** in the local console / interactive `xur` menu. Select a
 wired adapter, edit IPv4 and IPv6, then apply the draft.
 
@@ -103,6 +103,24 @@ Typing replaces the selected field value; Backspace edits it, Enter saves the
 draft field, and Escape cancels. The line-oriented `xur` menu accepts comma-separated
 addresses and `/cancel` to leave a field. Blank gateway/DNS fields clear those values.
 
+### Wi-Fi
+
+After installation, open the **Wi-Fi** section of
+**Settings → Manage Wi-Fi and IP settings**. Enable Wi-Fi if needed, choose
+**Scan for networks** for an adapter, select the SSID and enter its password.
+Open, WPA2-Personal and WPA3-Personal networks are supported; hidden and
+enterprise networks are outside this form. Connection errors stay visible and
+the password field is cleared after submission.
+
+Successful connections are saved for automatic reconnection. Wi-Fi connection
+changes do not use the wired IP editor's two-minute rollback window. If you
+change the connection carrying your browser session, reconnect at the new
+address and refresh its status. Before installation, use
+**Network settings → Wi-Fi setup** on the console. Answer YAML supports wired
+IP configuration only; see [console Wi-Fi](console-menu.md#wi-fi).
+
+### API
+
 Authenticated automation uses `GET /api/network/settings`,
 `POST /api/network/settings` with the same interface/IP structure as one YAML
 adapter entry, and `POST /api/network/keep` or `/api/network/revert` with
@@ -111,8 +129,8 @@ requests require an authenticated bearer token or browser session with CSRF
 protection. Local equivalents are under `/local/network/` on the root-private
 control socket.
 
-See [API initialization](../architecture/api-initialization.md) for the account,
-post-install account steps. Disk review and approval take place in the console. Network rollback uses NetworkManager's
+See [API initialization](../architecture/api-initialization.md) for post-install
+account setup. Disk review and approval take place in the console. Network rollback uses NetworkManager's
 [checkpoint API](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.html).
 
 For opt-in boot diagnostics and remote console testing, put a separate

@@ -1,10 +1,36 @@
 # Implementation and validation checklist
 
-Updated October 4, 2026 against pushed commit `c9ef907` and the reviewed
-follow-up changes recorded below. Checked items below
+Source status reviewed October 4, 2026 through merged commit `0c3346c`.
+The October 2 checks and October 4 validation against `c9ef907` are retained
+below with their original evidence. Checked items below
 mean source work and the stated local checks are complete, not that the H 255
 has received or validated the change. The older planning snapshot is retained
 below separately.
+
+See [release preparation](release-preparation.md) for documentation corrections,
+screenshot refreshes and evidence needed for the next candidate.
+
+## Merged since the October 2 review
+
+- Application publication is independent of manually requested installer builds;
+  Nightly is automatic and Stable requires approval. Public ext4 updater bridges
+  are retired and new installations require Btrfs root storage.
+- Model starts refresh rolling engine channels, use compatible cached images
+  after pull failures and automatically recover the committed loaded profile.
+  Model-specific Fish runtime preparation has been removed.
+- Startup/maintenance operations use Native AOT `xurutil`, including independent
+  app recovery. Hosted native builds retain dependency license documentation.
+- Installer progress includes native bootc/Anaconda output; manual retry and
+  opt-in diagnostic SSH have explicit handling and warnings. Bazzite installs
+  directly from its signed stable channel. Setup codes no longer expire by time.
+- Existing FAT32 installer USBs can be updated with streamed ISO extraction.
+- Console Xbox navigation/two-stick entry, web/native profile switching and web
+  Wi-Fi setup are implemented. Physical input seat rules now cover input parents.
+- Workstations pass a named timezone for Steam Big Picture. Boot networking
+  selects saved profiles by NetworkManager object path, without parsing names.
+
+These are merged source changes, not new live acceptance results. The validation
+items below remain open until checked on the intended candidate and host.
 
 ## Reviewed and pushed
 
@@ -64,9 +90,9 @@ none closes a live acceptance item below.
   20 recovery cycles, and 437 managed utility checks passed. Account HTTP/restart
   checks preserved manager sessions, password login, revoked keys and closed
   bootstrap access. These were local isolated tests, not live lifecycle tests.
-- [ ] Saved-profile identity fix: the October 3 test pass on `f8d27c0` reproduced
+- [ ] Deploy and verify the saved-profile identity fix: the October 3 test pass on `f8d27c0` reproduced
   UUID-looking connection names affecting boot profile selection. A path-based
-  fix and adversarial regression cases are under PR review; deployment remains
+  fix and adversarial regression cases are merged in `0c3346c`; deployment remains
   pending.
 
 ## Live verification still open
@@ -76,8 +102,8 @@ none closes a live acceptance item below.
   Read-only authenticated observation on October 4 found installed and available
   versions both `nightly26.10.013`, with the same bundle ID and a completed app
   update. This establishes the deployed version, not physical acceptance or
-  successful migration of the installed service unit. The profile-identity fix
-  under review is not part of that release.
+  successful migration of the installed service unit. The path-based
+  profile-identity fix was not part of that observed release.
 - [ ] **V2 — Workstation recovery:** stop/start Workstation 1 and switch profiles;
   verify devices are released, ownership checks remain effective and failures
   contain useful details. October 4 read-only snapshots showed a running
@@ -121,6 +147,13 @@ none closes a live acceptance item below.
   sleep change and is preserved by the follow-up tests.
 - [ ] **V17 — Update all:** exercise success, partial failure and reboot-required
   reporting on a real installed system.
+- [ ] **V18 — Profile shortcuts/controllers:** verify the web and native Plasma
+  picker, fullscreen focus, workstation gamepad ownership, Moonlight input and
+  console two-stick typing/masking on real hardware.
+- [ ] **V19 — Btrfs/Steam:** verify block sharing across two users, independent
+  writes and reboot behavior on the candidate's Btrfs installation.
+- [ ] **V20 — Model recovery:** verify latest-engine startup, cached fallback,
+  automatic recovery after exit/reboot, endpoint refresh and intentional unload.
 
 Suggested live order: V1 → V2 → V3/V4, then V5/V9. Installation and failure
 checks need a disposable target or a separately reviewed test plan; do not erase

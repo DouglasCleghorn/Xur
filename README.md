@@ -67,18 +67,22 @@ shared memory pool for every application.
    after installation.
 4. **Create a profile.** Open **Profiles**, add a workstation or model workload,
    select its GPUs, and save. Use the expanded profile picker on **Home** to load it.
-   The first model start downloads its pinned engine and model files.
-5. **Use it.** Open **Workstations** for Moonlight pairing and launch instructions,
+   The first model start downloads its selected model files and current engine image.
+5. **Use it.** Open **Workstations → Connect with Moonlight** for pairing instructions,
    **LLM endpoints** for client URLs, or **Model lab** for test chat and benchmarks.
 
 Follow the [complete guide](docs/usage/getting-started.md) for persistent desktop
 users, headless streaming, USB assignment, API authentication, and updates.
+Use **Switch profile** or **Ctrl + Alt + P** in the web manager to review and load
+another profile. Workstations also provide a native Plasma switcher; see
+[profile shortcuts and controller controls](docs/usage/profiles.md).
 
 ## Documentation
 
 | Task | Guide |
 | --- | --- |
-| Install and write USB media | [Installation](docs/usage/install.md), [Rufus](docs/usage/rufus.md) |
+| Install and write USB media | [Installation](docs/usage/install.md), [Rufus](docs/usage/rufus.md), [refresh an installer USB](docs/usage/update-installer-usb.md) |
+| Configure Wi-Fi or static IPs | [Network settings and answer YAML](docs/usage/answer-file.md) |
 | Workstation identity and Moonlight | [Named workstations](docs/usage/workstation-identities.md), [workstations and models](docs/usage/workstations-and-models.md) |
 | Profiles and inference APIs | [Profiles](docs/usage/profiles.md), [API keys](docs/usage/api-keys.md) |
 | Model selection | [Model catalog](docs/usage/model-catalog.md) |
@@ -109,6 +113,9 @@ The public project site and short guides live in [`website/`](website/README.md)
 configured for Cloudflare Workers Static Assets at **xur.app**, without a Worker script. Release candidates build on every push
 to `main` (Nightly) or `release` (Stable). Nightlies publish automatically after
 all checks and builds pass; Stable requires maintainer approval in GitHub. See [release channels](docs/usage/application-updates.md).
+Installer media is built only when manually requested and published separately.
+The [release preparation checklist](docs/development/release-preparation.md)
+tracks documentation and acceptance work for the next candidate.
 
 ## License
 

@@ -38,6 +38,24 @@ All five JPEGs were visually reviewed and have no EXIF or location metadata.
 Guide captions identify their example data. Full-resolution images are linked for
 readability; key actions are also described in text.
 
+## Release review — 2026-10-04
+
+Source review through `92fdea6` identifies the following refresh work. This is a
+comparison with changed UI controls, not a new image capture or privacy approval.
+The capture dates and privacy reviews in the table above remain unchanged.
+
+| Image | Work before the next release |
+| --- | --- |
+| `docs/assets/profile-editor.jpg` | Refresh: predates inline rename, conditional workstation fields, Add user placement and shared Switch profile navigation. |
+| `docs/assets/workstations.jpg` | Refresh: predates current Settings/display controls and the removal of profile-loading and launch shortcuts. |
+| `docs/assets/control-panel.jpg` | Review and refresh if needed for the current Home picker and shared Switch profile navigation. |
+| `docs/assets/model-lab.jpg` | Review and refresh if needed for shared navigation; preserve blank prompts/results and synthetic fixtures. |
+| `docs/assets/update-channel.jpg` | Compare the cropped selector with current Settings; refresh if its controls or wording differ. |
+
+Regenerate from synthetic fixtures, review each image and its metadata, then
+record the actual source commit, date and privacy outcome before publication.
+See [release preparation](development/release-preparation.md).
+
 ## Development captures
 
 | Capture family | Purpose | Storage / usage | Review |
@@ -48,6 +66,16 @@ readability; key actions are also described in text.
 | User-supplied bug screenshots | Reproduce reported defects | T3 attachments; referenced in conversation, not copied into source | Keep private; add a sanitized published-image entry before reuse |
 
 ## Change log
+
+- 2026-10-04: Regenerated `.build/website/` responsive site capture families
+  (`home`, `guide` and named guide/download pages at 1440, 768, 390 and 320 px)
+  from source based on `92fdea6` plus the release-documentation edits. Static
+  project content and synthetic examples only; no live account, password, model
+  prompt or filesystem data is injected. Privacy review: fixture/site source
+  checked, captures remain private regression evidence; review images before
+  external sharing. Collaborative browser snapshots of the same local website
+  may contain the development server address in metadata and remain private.
+  Public JPEGs were not refreshed by this pass.
 
 - 2026-10-04: Captured web Wi-Fi setup at desktop and phone widths in
   `.build/evidence/network-ui/wifi-{1440,390,320}.png`. Working-tree Wi-Fi web

@@ -18,9 +18,9 @@ disposable desktop data still follows the temporary-account lifecycle. Multiple 
 [multiple workstations](../architecture/multiple-workstations.md) for assignment
 rules and the remaining physical validation.
 
-Manage entries on **Workstations → Manage workstations**: create a workstation,
-rename it for all profiles, or delete an unused entry. Remove profile references
-and unload it before deletion. Deletion keeps user files and pairing data; IDs
+Use **Workstations → New workstation** to create an entry. Open a workstation's
+**Settings** to rename it for all profiles or delete an unused entry. Remove
+profile references and unload it before deletion. Deletion keeps user files and pairing data; IDs
 are never reused. Existing entries in the profile editor only select the
 workstation. Name and user fields appear when creating a new entry.
 

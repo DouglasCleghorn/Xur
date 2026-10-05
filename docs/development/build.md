@@ -185,7 +185,7 @@ the bounded screen every 500 ms independently of status/log collection.
 
 The `--profiles` option also runs the installed profile API and browser tests,
 real llama.cpp inference during a profile switch, a second reboot with an active
-profile, and complete workload teardown. It downloads the pinned CPU engine and
+profile, and complete workload teardown. It downloads the current CPU engine and
 model into the disposable VM. It also searches the live Unsloth catalog, serves
 a selected GGUF, starts a native Plasma workstation, renders a Vulkan/XWayland
 exercise, and verifies teardown and workstation recovery after reboot.
@@ -284,7 +284,7 @@ application update or its channel pointer.
 Hosted build/inspection success is not an install/reboot test. The local commands
 above remain available independently of CI. See
 [installer release automation](installer-releases.md) for candidate retention,
-runner resources, approval and multipart ISO downloads.
+runner resources, approval and signed ISO verification.
 
 The console guard uses TIOCL_SETKMSGREDIRECT to pin kernel messages to VT1 and
 restores console verbosity after installer tools change it. The kernel ring and

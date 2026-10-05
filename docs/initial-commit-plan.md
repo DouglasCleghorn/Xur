@@ -1,4 +1,9 @@
-# Initial GitHub commit preparation
+# Historical initial GitHub commit preparation
+
+This is the archived initial-source preparation plan. Its size estimates,
+validation results and recorded authorizations apply to that past task. Use
+[release preparation](development/release-preparation.md) and
+[repository rules](../AGENTS.md) for current work.
 
 Status: layout and ignore policy approved; source-only initial commit and push authorized. The staged manifest is audited against the packaging manifest before committing. Generated evidence stays in `.build/evidence/`. Xur is MIT licensed; the root LICENSE covers original project work and third-party notices remain intact. GitHub release publication remains an explicit separate command.
 

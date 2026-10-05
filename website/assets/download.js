@@ -7,12 +7,10 @@
   const download = document.getElementById('download-iso');
   const retry = document.getElementById('download-retry');
   const releaseLink = document.getElementById('download-release');
-  const parts = document.getElementById('download-parts');
   const api = 'https://api.github.com/repos/DouglasCleghorn/Xur/releases';
   const base = 'https://github.com/DouglasCleghorn/Xur/releases/';
   let autoStart = new URLSearchParams(location.search).get('start') === '1';
   let busy = false;
-  const fallback = {href: download.href, meta: meta.textContent, release: releaseLink.href};
   function releaseUrl(value, section) {
     try {
       const url = new URL(value);
@@ -29,8 +27,9 @@
   async function check() {
     if (busy) return;
     busy = true;
-    retry.hidden = true; parts.hidden = true;
-    download.href = fallback.href; meta.textContent = fallback.meta; releaseLink.href = fallback.release;
+    retry.hidden = true; download.hidden = true;
+    download.removeAttribute('href'); meta.textContent = '';
+    releaseLink.href = base.slice(0, -1); releaseLink.textContent = 'Browse GitHub Releases';
 
     status.textContent = 'Checking GitHub for the latest published installer…';
     const controller = new AbortController();
@@ -53,7 +52,7 @@
         .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at));
       const release = candidates[0];
       if (!release) {
-        status.textContent = 'No newer installer was found. The published installer below is still available.';
+        status.textContent = 'No installer ISO was found in the recent releases. Browse GitHub Releases for available media.';
         retry.hidden = false;
         return;
       }
@@ -76,7 +75,7 @@
         download.click();
       }
     } catch {
-      status.textContent = 'Could not check GitHub for a newer installer. The published installer below is still available; try again to check for updates.';
+      status.textContent = 'Could not check GitHub for an installer. Browse GitHub Releases or try again.';
       retry.hidden = false;
     } finally {
       clearTimeout(timeout); busy = false;

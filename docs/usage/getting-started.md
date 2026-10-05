@@ -26,14 +26,18 @@ screenshots and issue reports.
 1. Open **Profiles → Create profile**, name it, and add workloads.
 2. Choose a workload type, recipe and GPUs. Check VRAM capacity and any NVLink hints
    on the GPU page. Each GPU belongs to one workload at a time.
-3. Save, return to **Home**, select the profile preview, and load it.
+3. Save, return to **Home**, select the profile preview, and load it. You can also
+   use **Switch profile** or **Ctrl + Alt + P** to open the profile picker.
 4. Watch each action. Independent workloads start in parallel. Failed actions have
    their own errors; successful siblings remain available. **Resume** retries
    unfinished actions. **Cancel change** stops queued work and lets claimed actions
    finish; it does not undo actions that already completed.
 
-Profiles store pinned model/engine selections. Loading a large model for the first
-time can take substantially longer while downloading and warming up.
+Profiles retain selected model revisions and launch settings. Each model start
+checks for the latest engine image; a failed pull can use a compatible local
+image. Running engines keep their current image until restarted. Loading a large
+model for the first time can take substantially longer while downloading and
+warming up. See [model updates and automatic recovery](model-catalog.md).
 
 ## Workstations, USB and sound
 
@@ -54,7 +58,7 @@ before relying on isolation between multiple people.
 
 A connected screen is optional. Disconnected GPUs show **No display detected.**
 The workstation can create a virtual monitor for streaming. Open **Workstations**
-for its current status, Sunshine pairing instructions and **Open Moonlight** link.
+for its current status and **Connect with Moonlight** instructions.
 Install Moonlight on the client, pair it, and start the desktop. Streaming requires
 encryption. Use the graphics report and workstation logs for capture, encoding or
 input failures.
@@ -85,6 +89,11 @@ folders. Both use the same grid and breadcrumb navigation, with search, filters,
 streamed downloads, rename/move and confirmed deletion. Folder sizes are cached;
 directory listings refresh on navigation. See [Files](files.md) before moving or
 deleting data. **Storage** shows capacity, category usage and eligible SSD TRIM.
+
+For Wi-Fi or wired IP changes after installation, open
+**Settings → Manage Wi-Fi and IP settings**. See
+[network settings](answer-file.md#change-networking-after-boot) for Wi-Fi scans,
+supported security types and confirmation of wired IP changes.
 
 In **Settings**, save HF credentials, choose manual or automatic timezone, and
 configure NTP. Automatic timezone uses the server's public IP, with a refresh
