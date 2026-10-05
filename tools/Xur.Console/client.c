@@ -8,6 +8,8 @@
 #include <string.h>
 #include <strings.h>
 #include <signal.h>
+#include <time.h>
+static double monotonic(void){struct timespec now;clock_gettime(CLOCK_MONOTONIC,&now);return now.tv_sec+now.tv_nsec/1e9;}
 static volatile sig_atomic_t running=1;
 static void stop(int sig){(void)sig;running=0;}
 struct frame {char data[524288];size_t length;int power;};
@@ -60,6 +62,9 @@ int main(int argc,char **argv){
     curl_easy_setopt(c,CURLOPT_HEADERFUNCTION,header);
     struct frame current={0},previous={0};
     int power=-1;
+    double wake_at=0,check_at=0;
+    size_t retry=0;
+    const double wake_retries[]={1,3,7};
     struct winsize last_size={0};
     fputs("\033[?1049h\033[2J\033[?25l",stdout);fflush(stdout);
     while(running){
@@ -70,13 +75,20 @@ int main(int argc,char **argv){
         current.length=0;current.power=-1;curl_easy_setopt(c,CURLOPT_URL,url);curl_easy_setopt(c,CURLOPT_WRITEDATA,&current);curl_easy_setopt(c,CURLOPT_HEADERDATA,&current);
         CURLcode result=curl_easy_perform(c);long status=0;curl_easy_getinfo(c,CURLINFO_RESPONSE_CODE,&status);
         if(result==CURLE_OK&&status==200){
-            // The shared keyboard timer owns DPMS; frame polling never wakes it.
-            if(current.power==1&&power!=1){fputs("\033]xurDpmsOn\007",stdout);previous.length=0;}
+            // Retry only an explicitly awake display, then leave unchanged frames
+            // cached. Reconnection, missing headers and sleep cannot cause a wake.
+            double now=monotonic();
+            if(current.power==1&&power!=1){wake_at=now;retry=0;check_at=now;}
+            if(current.power==1&&(power!=1||(retry<sizeof(wake_retries)/sizeof(*wake_retries)&&now-wake_at>=wake_retries[retry]))){
+                fputs("\033]xurDpmsOn\007",stdout);previous.length=0;
+                if(power==1)retry++;
+            }
             if(current.length!=previous.length||memcmp(current.data,previous.data,current.length)){
                 if(!draw(&current,&previous))break;
                 previous=current;
             }
             if(current.power==0&&power!=0)fputs("\033]xurDpmsOff\007",stdout);
+            if(current.power==1&&now>=check_at){fputs("\033]xurDisplayCheck\007",stdout);check_at=now+1;}
             if(current.power>=0)power=current.power;
             fflush(stdout);
         }

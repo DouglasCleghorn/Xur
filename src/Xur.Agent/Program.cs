@@ -45,7 +45,7 @@ var stateDir = installer ? run : "/var/lib/xur";
 if(!installer)_=Task.Run(async()=>{try{if((await Processes.Run("systemctl",["is-active","firewalld"],5)).ExitCode==0)await Processes.Run("firewall-cmd",["--add-port=8443/tcp"],10);}catch{}});
 Directory.CreateDirectory(stateDir);
 RegistryMirror.Ensure();
-var displayConsoles=new DisplayConsoles(Path.Combine(stateDir,"workloads"),run,installer:installer);
+var displayConsoles=new DisplayConsoles(Path.Combine(stateDir,"workloads"),run);
 var operationFile = Path.Combine(stateDir,"install-operation.json");
 Operation? operation = File.Exists(operationFile) ? JsonSerializer.Deserialize<Operation>(File.ReadAllText(operationFile)) : null;
 var gate = new SemaphoreSlim(1, 1);

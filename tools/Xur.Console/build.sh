@@ -10,7 +10,7 @@ meson setup kmscon/build kmscon --buildtype=release --prefix=/usr --libdir=lib \
 meson compile -C kmscon/build
 cc -O2 -Wall -Wextra -Werror -Wno-unused-parameter -I. -Ikmscon/src \
   test-power.c -o test-power $(pkg-config --cflags --libs libtsm)
-./test-power
+./test-power "$PWD/test-fault"
 mkdir -p output/lib output/licenses
 install -m755 kmscon/build/src/kmscon output/kmscon
 install -m755 kmscon/build/src/font/mod-unifont.so output/lib/
