@@ -82,7 +82,8 @@ async Task StartHost()
     builder.Services.AddSingleton(appliance); builder.Services.AddSingleton(auth);builder.Services.AddSingleton(apiKeys);
     var catalog=new RecipeCatalog(Environment.GetEnvironmentVariable("XUR_CATALOG") ?? "/usr/share/xur/catalog",Path.Combine(appliance.StateDirectory,"catalog-selected"));
     var profileStore=new ProfileStore(appliance.Installer?Path.Combine(appliance.StateDirectory,"profiles"):appliance.StateDirectory);
-    var runtimeClient=LocalClient.Create(Path.Combine(appliance.RunDirectory,"agent.sock"));runtimeClient.Timeout=TimeSpan.FromMinutes(45);
+    // Native HIP compilation may take an hour, followed by engine health checks.
+    var runtimeClient=LocalClient.Create(Path.Combine(appliance.RunDirectory,"agent.sock"));runtimeClient.Timeout=TimeSpan.FromMinutes(75);
     var gatewayClient=LocalClient.Create(Path.Combine(appliance.RunDirectory,"gateway-admin.sock"));
     var profileManager=new ProfileManager(profileStore,new AgentWorkloadRuntime(runtimeClient),new LocalWorkloadGateway(gatewayClient),catalog,async()=>await runtimeClient.GetFromJsonAsync<StationAccount[]>("/station-users") ?? [],
         entry=>applicationLog.Write("ProfileSwitch",LogLevel.Information,JsonSerializer.Serialize(entry,new JsonSerializerOptions(JsonSerializerDefaults.Web))));

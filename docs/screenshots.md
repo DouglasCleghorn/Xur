@@ -67,6 +67,15 @@ See [release preparation](development/release-preparation.md).
 
 ## Change log
 
+- 2026-10-05: Source review for the native Radeon 780M vLLM change, based on
+  `c750b2a`. The private `.build/fast/updates-{desktop,mobile}.png` captures
+  with 17 tools predate the new native gfx1103 engine row and are retired as
+  current release evidence; regenerate this family for the 18-tool inventory
+  before reuse. The published update-channel crop does not include the engine
+  inventory. No new screenshots were captured or published during the live
+  AMD kernel and inference tests; their text evidence remains private under
+  `.build/evidence/amd-fix/`.
+
 - 2026-10-04: Regenerated `.build/fast/updates-{desktop,mobile}.png` from the
   synthetic Updates Razor fixture, based on `a72a66e` plus the GPU-capacity and
   browser-regression fixes. Covers all 17 tools, including AMD/Intel vLLM and

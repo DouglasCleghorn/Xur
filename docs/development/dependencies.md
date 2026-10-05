@@ -14,6 +14,7 @@ configured directories and copied version information that needs refreshing.
 | GitHub Actions | `.github/workflows/*.yml` | `github-actions` |
 | llama.cpp variants, vLLM and Omni | `catalog/engines/Containerfile`, embedded by `EngineImages`; rolling channels refresh on start, with a pinned Omni ROCm release | `docker` |
 | Intel Omni layer | `catalog/engines/omni-xpu.Containerfile`, embedded by the agent; builds on the mirrored, matching vLLM XPU release | `docker` for the base; manual source/package pins |
+| Native gfx1103 vLLM layer | `catalog/engines/vllm-rocm-gfx1103.Containerfile`, embedded by the agent; AMD TheRock device wheels and source-built vLLM | `docker` for the base; manual source/package pins |
 | Hosted Fedora native builder | `eng/Containerfile`, read by `eng/ci-native.py` | `docker` |
 | Live installer Fedora base | `os/bootc/Containerfile`; resolved once to a digest in a private build recipe | `docker` |
 | Playwright and axe-core | `eng/browser/package.json` and lock | `npm` |
@@ -67,6 +68,7 @@ release; they are deliberately manual checks, with no companion update service.
 | Source | Manual review |
 | --- | --- |
 | `catalog/engines/omni-xpu.Containerfile` | Keep the vLLM XPU base, pinned Omni Git commit, Triton XPU version and `omni-xpu` local tag in `catalog/engines/Containerfile` aligned. Follow the corresponding upstream Omni XPU build, retain its source/license files in the image, and run Intel GPU acceptance tests after updates. The AMD Omni release uses its separately published ROCm image; verify its tags before changing the manifest. |
+| `catalog/engines/vllm-rocm-gfx1103.Containerfile` | Keep the vLLM source commit, matching base release, AMD TheRock PyTorch/vision/audio/Triton/SDK versions, native device extra and local image tag aligned. Install AMD SMI bindings from that SDK, retain upstream notices, and verify allocation, GEMM and inference on a physical gfx1103 device. Do not use an architecture override or substitute the stock ROCm image when a native build fails. |
 | `eng/update-usb/app.cs` | Review the pinned TeeForge, LibArchive.Net and System.CommandLine `#:package` versions with upstream releases, keeping System.CommandLine aligned with `tools/Xur.Cli/Xur.Cli.csproj`, then run `tests/Xur.Integration.Tests/update-usb.cs` against disposable FAT32 media. Check ISO hardlinks and forward-only extraction when updating LibArchive.Net; the small metadata adapter uses its public SafeHandle and protected Entry constructor. The file-based app's package directives are maintained explicitly. |
 | `src/Xur.Control/libman.json` | Check AG Grid Community releases during the weekly dependency review; update the library version, build Control to restore JavaScript and its MIT notice, and run Files UI checks. LibMan manifests are unsupported by Dependabot. |
 | `eng/toolchain-lock.json` | Refresh the SDK archive URL/checksum whenever `global.json` changes; also review Fedora cloud builder images/checksums, Image Builder source releases, Tailscale archives and recorded toolchain metadata. Historical host/engine version records do not select runtime images. |
