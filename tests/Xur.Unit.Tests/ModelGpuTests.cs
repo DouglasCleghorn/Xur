@@ -44,6 +44,15 @@ static class ModelGpuTests
             check(await Rejected("CPU")&&await Rejected("NVIDIA"),"GPU engines reject CPU execution and absent GPU vendors");
             hardware=hardware.Select(g=>g with{Problems=["Intel graphics driver is unavailable"]}).ToArray();
             check(await Rejected("Intel"),"Unhealthy Intel devices cannot produce model recipes");
+            foreach(var engine in new[]{"vLLM","vLLM-Omni"})
+            foreach(var vendor in new[]{"AMD","Intel"})
+            {
+                hardware=[Gpu(vendor,1),Gpu(vendor,2) with{MemoryMiB=0}];
+                string? error=null;
+                try{await catalog.Resolve(new(model,revision,"upstream",engine,vendor));}
+                catch(InvalidOperationException e){error=e.Message;}
+                check(error?.StartsWith("Dedicated GPU memory is unavailable.")==true,engine+" / "+vendor+" rejects unobserved dedicated memory with an actionable error");
+            }
         }
         finally{Directory.Delete(root,true);}
 

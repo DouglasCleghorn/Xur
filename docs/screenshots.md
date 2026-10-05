@@ -67,6 +67,14 @@ See [release preparation](development/release-preparation.md).
 
 ## Change log
 
+- 2026-10-04: Regenerated `.build/fast/updates-{desktop,mobile}.png` from the
+  synthetic Updates Razor fixture, based on `a72a66e` plus the GPU-capacity and
+  browser-regression fixes. Covers all 17 tools, including AMD/Intel vLLM and
+  Omni, at 1440 and 390 px. Visually reviewed layout and privacy: fixture
+  versions and public image references only; no live host, account, credentials
+  or model prompts. Private regression evidence; regenerate after Updates UI
+  or engine inventory changes.
+
 - 2026-10-04: Regenerated `.build/website/` responsive site capture families
   (`home`, `guide` and named guide/download pages at 1440, 768, 390 and 320 px)
   from source based on `92fdea6` plus the release-documentation edits. Static
