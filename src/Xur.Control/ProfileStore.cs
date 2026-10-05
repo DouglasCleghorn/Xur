@@ -120,7 +120,7 @@ public sealed class ProfileStore : IDisposable
     public void Dispose()=>db.Dispose();
 }
 public record Journal(ProfilePlan Plan,RuntimeObservation Source,int Completed,string Stage,string? Error,DateTimeOffset Updated,
-    int[]? CompletedSteps=null,Dictionary<int,string>? StepErrors=null,int[]? RunningSteps=null)
+    int[]? CompletedSteps=null,Dictionary<int,string>? StepErrors=null,int[]? RunningSteps=null,ProfileSwitchOrigin? Origin=null)
 {
     // Completed remains the contiguous prefix for older journals/readers. New
     // unloads additionally persist exact out-of-order completion receipts.

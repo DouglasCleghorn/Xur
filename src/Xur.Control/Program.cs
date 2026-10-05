@@ -28,7 +28,7 @@ async Task Root()
         var choice=Console.ReadLine()?.Trim();if(choice is null or "0")return;
         if(!int.TryParse(choice,out var selected) || selected<1 || selected>LocalConsole.RootOptions(installer).Length)continue;
         var key=LocalConsole.RootKey(selected-1,installer);
-        if(key is 'u' or 'w' or 'j' or 'm' or 'i'){await InteractiveMaintenance(menu,key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":key=='i'?"setup":"power");continue;}
+        if(key is 'u' or 'w' or 'j' or 'm' or 'i' or 'f'){await InteractiveMaintenance(menu,key=='f'?"profiles":key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":key=='i'?"setup":"power");continue;}
         var action=key switch { '1'=>"status", '2'=>"qr", '3'=>"network", '4'=>"hardware", '5'=>"logs", _=>"" };
         if(action.Length>0)await RunCommand(action,false);
         if(key=='1')await RunCommand("login",false);
@@ -84,8 +84,10 @@ async Task StartHost()
     var profileStore=new ProfileStore(appliance.Installer?Path.Combine(appliance.StateDirectory,"profiles"):appliance.StateDirectory);
     var runtimeClient=LocalClient.Create(Path.Combine(appliance.RunDirectory,"agent.sock"));runtimeClient.Timeout=TimeSpan.FromMinutes(45);
     var gatewayClient=LocalClient.Create(Path.Combine(appliance.RunDirectory,"gateway-admin.sock"));
-    var profileManager=new ProfileManager(profileStore,new AgentWorkloadRuntime(runtimeClient),new LocalWorkloadGateway(gatewayClient),catalog,async()=>await runtimeClient.GetFromJsonAsync<StationAccount[]>("/station-users") ?? []);
+    var profileManager=new ProfileManager(profileStore,new AgentWorkloadRuntime(runtimeClient),new LocalWorkloadGateway(gatewayClient),catalog,async()=>await runtimeClient.GetFromJsonAsync<StationAccount[]>("/station-users") ?? [],
+        entry=>applicationLog.Write("ProfileSwitch",LogLevel.Information,JsonSerializer.Serialize(entry,new JsonSerializerOptions(JsonSerializerDefaults.Web))));
     builder.Services.AddSingleton(profileManager);builder.Services.AddSingleton(catalog);
+    var profileAccess=new ProfileAccessSettings(Path.Combine(appliance.StateDirectory,"profile-access.json"));builder.Services.AddSingleton(profileAccess);
     builder.Services.AddResponseCompression(o=>{o.EnableForHttps=true;});
     builder.Services.AddRazorComponents(); builder.Services.AddHttpContextAccessor();
     var formKeys=Path.Combine(identityDirectory,"form-keys");
@@ -181,12 +183,10 @@ async Task StartHost()
         try{await next();}finally{maintenance.Exit();}
     });
     app.MapGet("/local/application-health",()=>Results.Json(new {id=ApplicationIdentity.Id,active=maintenance.Active,profileBusy=profileManager.UpdateBusy}));
-    // Only public TLS material is provisioned to the desktop helper. It uses
-    // the normal authenticated API and never receives a privileged local token.
-    app.MapGet("/local/profile-switcher/connection",()=> {
-        if(appliance.Installer)return Results.Conflict();
-        using var certificate=LocalTls.Load(identityDirectory);
-        return Results.Json(new {url="https://localhost:"+(appliance.Port+363),certificate=certificate.ExportCertificatePem()});
+    app.MapConsoleProfiles(appliance,profileManager,profileAccess);
+    app.MapPost("/settings/profile-access",async Task<IResult>(HttpContext context)=> {
+        try {var form=await context.Request.ReadFormAsync();profileAccess.Save(form["mode"].ToString());return Results.Redirect("/settings?profileAccessSaved=true");}
+        catch(InvalidOperationException e){return Results.Redirect("/settings?profileAccessError="+Uri.EscapeDataString(e.Message));}
     });
     app.UseProtectedCompression(Path.Combine(identityDirectory,"response-spool"));
     app.MapStaticAssets().WithMetadata(new PublicStaticAsset());
@@ -402,6 +402,12 @@ async Task StartHost()
         finally{networkRefreshGate.Release();}
     });
     await app.StartAsync();
+    await using var switcher=new ProfileSwitcherBroker(profileManager,async(uid,cancellation)=> {
+        using var response=await runtimeClient.GetAsync("/profile-switcher/session/"+uid,cancellation);
+        if(response.StatusCode==System.Net.HttpStatusCode.NotFound)return null;
+        response.EnsureSuccessStatusCode();return await response.Content.ReadFromJsonAsync<ProfileSwitcherSession>(cancellation);
+    },maintenance.Enter,maintenance.Exit,profileAccess);
+    if(!appliance.Installer)switcher.Start(ProfileSwitcherTransport.SocketPath(appliance.RunDirectory),app.Lifetime.ApplicationStopping);
     if(!appliance.Installer && !File.Exists(ApplicationMaintenance.Marker))await profileManager.Resume(automatic:true);
     if(!appliance.Installer)_=Task.Run(()=>profileManager.WatchModels(app.Lifetime.ApplicationStopping));
     File.SetUnixFileMode(socket,UnixFileMode.UserRead|UnixFileMode.UserWrite);
@@ -438,18 +444,19 @@ async Task StartHost()
             case '0': case '1':LocalConsole.Status(appliance,auth);break;
             case '2':if(!await appliance.StartQr()){await consoleMenu.Open("computer-name");ShowConsoleMenu();}break;
             case '4':LocalConsole.Show("Hardware",await appliance.Agent.GetStringAsync("/hardware"));break;
-            case 'u':case 'w':case 'j':case 'm':case 'i':
-                await consoleMenu.Open(key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":key=='i'?"setup":"power");ShowConsoleMenu();break;
+            case 'u':case 'w':case 'j':case 'm':case 'i':case 'f':
+                await consoleMenu.Open(key=='f'?"profiles":key=='u'?"updates":key=='j'?"network":key=='m'?"computer-name":key=='i'?"setup":"power");ShowConsoleMenu();break;
             case '5':LocalConsole.UpdateLogs(await diagnosticLogs.Read(console:true));LocalConsole.OpenLogs();break;
             case 'n':LocalConsole.Page(1);break;
             case 'p':LocalConsole.Page(-1);break;
         }
     }
     // Call while holding the same gate for keyboard, serial and gamepad input.
-    async Task HandleConsoleInput(bool plain,string? line,ConsoleKeyAction action,char? typed,bool logTerminal)
+    async Task HandleConsoleInput(bool plain,string? line,ConsoleKeyAction action,char? typed,bool logTerminal,string trigger="console-keyboard")
     {
         try
         {
+            consoleMenu.ProfileTrigger=trigger;
             if(LocalConsole.ConsumeWakeInput(plain,typed,action))return;
             LocalConsole.ConsumeDiagnosticRevision();
             char? key;
@@ -515,7 +522,7 @@ async Task StartHost()
             await gamepads.Run(async(input,logTerminal)=>{
                 if(input.Activity && LocalConsole.Wake()){LocalConsole.SetControllerPreview(null);return true;}
                 LocalConsole.ApplyControllerInput(input);
-                if(input.Action!=ConsoleKeyAction.None)await HandleConsoleInput(false,null,input.Action,null,logTerminal);
+                if(input.Action!=ConsoleKeyAction.None)await HandleConsoleInput(false,null,input.Action,null,logTerminal,"console-controller");
                 return false;
             },networkRefreshGate,app.Lifetime.ApplicationStopping);
         });

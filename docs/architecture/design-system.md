@@ -101,3 +101,9 @@ and repeat the existing management page. Use a single vertical list instead.
 Spend visual emphasis on the focused profile; keep shortcut hints and secondary
 actions quiet. The desktop picker and web dialog share the same vocabulary,
 palette and review flow. No animated decorations or remote rendering assets.
+
+The access setting uses three labeled radio rows with short explanations so
+the full scope stays readable on phones. All workstations is the default;
+the console and web-only rows make the restriction explicit. Local pickers
+open directly without a login form. Unload all is a final list action with the
+same workload review, desktop warning, Back default and separate confirmation.

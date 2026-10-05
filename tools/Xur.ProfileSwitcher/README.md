@@ -7,15 +7,19 @@ The Plasma launcher entry invokes the same running helper over that user's
 session bus. The Shortcuts dialog changes the keyboard combination, controller
 combination and hold duration; KDE also exposes the registered shortcut.
 
-The picker uses Xur's normal authenticated HTTPS API. Sign in with the existing
-administrator account; passwords are cleared immediately and the session token
-stays in process memory. The agent provisions only the manager's public
-certificate and local URL. TLS exceptions accept only that exact certificate's
-self-signing error; redirects and different certificates remain rejected.
+The picker needs no Xur login. It uses the dedicated local Unix socket at
+`/run/xur-profile-switcher/switcher.sock`. Linux supplies the caller's UID; the
+agent verifies that it belongs to an active, registered workstation. The helper
+also checks that the service runs as root. The transport accepts only state,
+preview and exact-plan approval actions, and returns display data without private
+recipes. An approval belongs to the workstation and user that reviewed it.
+Settings → Profile access can disable workstation controls immediately.
 
-Selection previews the actual workload changes. Load profile separately
+Selection previews the actual workload changes. Load profile or Unload all separately
 approves the returned plan ID and digest. The helper never loads a profile on
 opening or navigation. Closing, expiry and failed requests discard stale plans.
+Accepted switches and their outcomes record the user, workstation and opening
+trigger in Xur logs. The transition journal retains that origin across recovery.
 
 While visible, it exclusively grabs the workstation's evdev controllers and
 uses D-pad, A and B for navigation. Releasing all buttons arms navigation after

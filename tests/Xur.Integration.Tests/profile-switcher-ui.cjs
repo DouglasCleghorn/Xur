@@ -18,8 +18,8 @@ const {execFileSync}=require('node:child_process'),fs=require('node:fs'),path=re
     if(name==='/test/state')return json({requests,mode});
     if(name==='/api/profiles')return mode==='offline'?json({error:'Manager unavailable. Try again.'},503):json({...state,...(mode==='empty'?{profiles:[],active:null}:mode==='busy'?{operation:{stage:'Applying'}}:{})});
     if(request.method()==='POST'){
-     const body=request.postDataJSON(),csrf=request.headers()['requestverificationtoken'];requests.push({path:name,body,csrf});if(csrf!=='fixture-only')return json({error:'CSRF required'},400);
-     if(name.endsWith('/preview'))return json({id:'plan-2',digest:'fixture-digest',target:profiles[1],expires:new Date(Date.now()+(mode==='expired'?-5000:120000)).toISOString(),steps:[{kind:'Keep',workloadId:'assistant'},{kind:'Stop',workloadId:'gaming'},{kind:'Start',workloadId:'studio'}]});
+     const body=request.postDataJSON(),csrf=request.headers()['requestverificationtoken'],trigger=request.headers()['x-xur-switch-trigger'];requests.push({path:name,body,csrf,trigger});if(csrf!=='fixture-only')return json({error:'CSRF required'},400);
+     if(name.endsWith('/preview')){const unload=name==='/api/profiles/unload/preview';return json({id:unload?'plan-unload':'plan-2',digest:'fixture-digest',unload,target:unload?{...profiles[0],workloads:[]}:profiles[1],expires:new Date(Date.now()+(mode==='expired'?-5000:120000)).toISOString(),steps:unload?[{kind:'Stop',workloadId:'assistant'},{kind:'Stop',workloadId:'gaming'}]:[{kind:'Keep',workloadId:'assistant'},{kind:'Stop',workloadId:'gaming'},{kind:'Start',workloadId:'studio'}]});}
      return json({error:'The running workloads changed. Review again.'},409);
     }
     if(name.startsWith('/api/'))return json({},503);

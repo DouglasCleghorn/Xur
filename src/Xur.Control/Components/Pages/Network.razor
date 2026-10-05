@@ -2,11 +2,26 @@
 @page "/settings"
 @inject Appliance Device
 @inject Bootstrap Auth
+@inject ProfileAccessSettings ProfileAccess
 <PageTitle>Settings · Xur</PageTitle>
 
 <h1>Settings</h1>
 <p class="secondary-text">Xur is MIT-licensed open source. <a href="https://github.com/DouglasCleghorn/Xur">Source code</a> · <a href="https://github.com/DouglasCleghorn/Xur/blob/main/LICENSE">MIT license</a> · <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/licensing.md">Third-party notices</a></p>
 <section class="panel"><h2>API access</h2><p>Give scripts and assistants their own revocable credentials with optional expiration.</p><a class="button secondary" href="/settings/api-keys">Manage API keys</a></section>
+@if(!Device.Installer) {
+<section class="panel" id="profile-access"><h2>Profile access</h2>
+<p>Choose where saved profiles can be loaded or all running workloads unloaded.</p>
+<form method="post" action="/settings/profile-access"><AntiforgeryToken />
+<fieldset class="profile-access-options"><legend>Allow profile controls from</legend>
+<label><input type="radio" name="mode" value="web" checked="@(ProfileAccess.Mode==ProfileAccessSettings.Web)" /><span><strong>Web manager only</strong><small>Use the administrator account in the browser.</small></span></label>
+<label><input type="radio" name="mode" value="console" checked="@(ProfileAccess.Mode==ProfileAccessSettings.Console)" /><span><strong>Web manager and server console</strong><small>Also allow switching at the server’s local console.</small></span></label>
+<label><input type="radio" name="mode" value="workstations" checked="@(ProfileAccess.Mode==ProfileAccessSettings.Workstations)" /><span><strong>Web manager, server console, and all workstations</strong><small>Also allow every active workstation to switch profiles.</small></span></label>
+</fieldset><button>Save profile access</button></form>
+<p class="secondary-text">Local controls need no Xur login. Web access uses your administrator account. Creating, editing, and deleting saved profiles stays in the web manager. Changes take effect immediately, including for open switchers.</p>
+@if(ProfileAccessSaved) {<p role="status">Profile access saved.</p>}
+@if(!string.IsNullOrEmpty(ProfileAccessError)) {<p role="alert">@ProfileAccessError</p>}
+</section>
+}
 @if(Auth.AccountConfigured) { <section class="panel"><h2>Account</h2><p>@Auth.Username</p><form method="post" action="/auth/logout"><AntiforgeryToken /><button class="secondary">Sign out</button></form></section> }
 <section class="panel"><h2>Hugging Face</h2>
 <p>@(hfConfigured ? "Access token saved." : "No access token saved.")</p>
@@ -93,6 +108,8 @@
 @code {
     ApplicationUpdateStatus? application;TimezoneStatus? timezone;NtpStatus? ntp;bool hfConfigured;
     [SupplyParameterFromQuery] public bool HfSaved {get;set;}
+    [SupplyParameterFromQuery] public bool ProfileAccessSaved {get;set;}
+    [SupplyParameterFromQuery] public string? ProfileAccessError {get;set;}
     [SupplyParameterFromQuery] public bool NtpSaved {get;set;}
     [SupplyParameterFromQuery] public bool TimezoneSaved {get;set;}
     [SupplyParameterFromQuery] public string? Error {get;set;}

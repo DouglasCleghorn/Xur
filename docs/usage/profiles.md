@@ -13,17 +13,34 @@ focus; hold the Xbox controller's **View + Menu** buttons together for one
 second. Use arrow keys or D-pad to move, Enter or A to review, and Escape or B
 to go back. Release the opening buttons before navigating. Selecting a profile
 never loads it: review the workloads, then choose **Load profile** separately.
+**Unload all** reviews stopping every running workstation and AI service, then
+requires a separate confirmation. Saved profiles and user data are retained.
 
 Each workstation also has **Xur profile switcher** in its Plasma application
 launcher. Its desktop helper registers the same keyboard shortcut and watches
 controllers assigned to that workstation, including Sunshine's virtual input.
-Sign in once with the Xur administrator account; its session stays in memory.
+No Xur login is needed for the desktop picker. Linux identifies the workstation
+user locally; the web manager continues to use the administrator account.
 **Shortcuts** changes the keyboard binding, controller combination and hold
 duration. The desktop helper starts with the next workstation session after an
 application update; reload existing workstations to install the new entry.
 Controller navigation is captured through evdev while its window is open.
 The opening chord can still reach the game, and direct hidraw input is outside
 that capture boundary. See [native helper behavior and acceptance limits](../../tools/Xur.ProfileSwitcher/README.md).
+
+**Settings → Profile access** chooses where profiles can be loaded or all
+workloads unloaded:
+
+- **Web manager only**
+- **Web manager and server console**
+- **Web manager, server console, and all workstations** (default)
+
+The server console offers **Switch profile**, with D-pad/arrow navigation and
+a separate confirmation. Local controls need no Xur account login. Access
+changes apply immediately, including to open reviews. Creating, editing and
+deleting saved profiles stays in the web manager. Profile-switch logs include
+the user, local workstation when applicable, trigger and result; recovery keeps
+the original trigger. The access setting is included in configuration backups.
 
 The Profiles page shows the loaded profile, searchable saved profiles, and running
 workloads. Choose **Load profile** beside a saved profile to review its changes.

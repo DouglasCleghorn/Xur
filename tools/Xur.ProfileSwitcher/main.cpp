@@ -2,18 +2,22 @@
 #include <QtWidgets>
 #include <QtNetwork>
 #include <QtDBus>
+#include <QtEndian>
 #include <KGlobalAccel>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include <functional>
 #include <memory>
 
 using Object = QJsonObject;
+#ifndef XUR_SWITCHER_UI_TEST
 static const char *service = "dev.xur.ProfileSwitcher";
+#endif
 
 class Inputs {
     struct Pad {
@@ -114,22 +118,21 @@ public:
 };
 
 class Switcher : public QDialog {
-    QNetworkAccessManager network;
+    friend struct SwitcherChecks;
     QSettings preferences;
     Inputs input;
     QAction shortcut{this};
     QStackedWidget *pages = new QStackedWidget;
     QLabel *current = new QLabel, *error = new QLabel;
-    QLineEdit *search = new QLineEdit, *username = new QLineEdit, *password = new QLineEdit;
+    QLineEdit *search = new QLineEdit;
     QListWidget *profiles = new QListWidget;
     QVBoxLayout *changes = new QVBoxLayout;
     QPushButton *apply = new QPushButton("Load profile"), *back = new QPushButton("Back"), *retry = new QPushButton("Try again");
     QLabel *reviewTitle = new QLabel, *warning = new QLabel;
-    QUrl server;
-    QSslCertificate certificate;
-    QByteArray token;
+    QString server = "/run/xur-profile-switcher/switcher.sock", trigger = "plasma-menu";
+    uint trustedServerUid;
     Object state, plan, selected;
-    bool applying = false;
+    bool applying = false, controllerConfirm = false, controllerRetry = false;
     int revision = 0;
     static QLabel *label(const QString &text, const char *name = nullptr) {
         auto result = new QLabel(text); result->setTextFormat(Qt::PlainText); result->setWordWrap(true);
@@ -138,35 +141,44 @@ class Switcher : public QDialog {
     }
     void message(const QString &text) { error->setText(text); error->setVisible(!text.isEmpty()); }
     void request(const QString &path, const Object *body, std::function<void(Object)> completed) {
-        if (server.scheme() != "https" || server.host() != "localhost" || certificate.isNull()) {
-            message("The local manager connection is unavailable. Reload this workstation after updating Xur."); return;
-        }
-        QNetworkRequest request(server.resolved(QUrl(path)));
-        auto tls = QSslConfiguration::defaultConfiguration(); tls.setCaCertificates({certificate}); request.setSslConfiguration(tls);
-        request.setTransferTimeout(20000);
-        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
-        request.setRawHeader("Content-Type", "application/json");
-        if (!token.isEmpty()) request.setRawHeader("Authorization", "Bearer " + token);
-        auto reply = body ? network.post(request, QJsonDocument(*body).toJson(QJsonDocument::Compact)) : network.get(request);
+        Object payload = body ? *body : Object{};
+        payload["action"] = path == "/api/profiles" ? "state" : path == "/api/profiles/apply" ? "apply" : path == "/api/profiles/unload/preview" ? "preview-unload" : "preview";
+        if (payload["action"] == "preview") payload["id"] = path.section('/', 3, 3);
+        if (payload["action"] == "apply") payload["trigger"] = trigger;
+        const QByteArray data = QJsonDocument(payload).toJson(QJsonDocument::Compact);
+        auto reply = new QLocalSocket(this); auto timer = new QTimer(reply); timer->setSingleShot(true);
+        auto received = std::make_shared<QByteArray>(); auto finished = std::make_shared<bool>(false);
         const int version = revision;
-        connect(reply, &QNetworkReply::sslErrors, this, [this, reply](const QList<QSslError> &errors) {
-            // Trust only the exact public certificate provisioned by the agent.
-            if (reply->sslConfiguration().peerCertificate() != certificate) return;
-            for (const auto &error : errors) if (error.error() != QSslError::SelfSignedCertificate && error.error() != QSslError::CertificateUntrusted) return;
-            reply->ignoreSslErrors(errors);
-        });
-        connect(reply, &QNetworkReply::finished, this, [this, reply, completed, version] {
-            const auto data = QJsonDocument::fromJson(reply->readAll()).object();
-            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        auto finish = [this, reply, timer, completed, version, finished](Object envelope) {
+            if (*finished) return;
+            *finished = true; timer->stop();
             if (version == revision && isVisible()) {
-                if (status == 401 && !token.isEmpty()) { applying = false; back->setEnabled(true); apply->setText("Load profile"); plan = {}; token.clear(); pages->setCurrentIndex(0); message("Your session expired. Sign in again."); username->setFocus(); }
-                else if (reply->error() != QNetworkReply::NoError || status < 200 || status >= 300) {
-                    if (applying) { applying = false; back->setEnabled(true); apply->setText("Load profile"); plan = {}; }
-                    message(data["error"].toString("Could not contact the local manager. Try again.")); apply->setEnabled(false);
-                } else completed(data);
+                if (!envelope["ok"].toBool()) {
+                    if (applying) { applying = false; back->setEnabled(true); apply->setText(plan["unload"].toBool() ? "Unload all" : "Load profile"); plan = {}; }
+                    message(envelope["error"].toString("Could not contact the local manager. Try again.")); apply->setEnabled(false);
+                    if (pages->currentIndex() == 0) { controllerRetry = true; retry->setFocus(); }
+                } else completed(envelope["data"].toObject());
             }
-            reply->deleteLater();
+            reply->abort(); reply->deleteLater();
+        };
+        connect(reply, &QLocalSocket::connected, this, [this, reply, data, finish] {
+            ucred peer{}; socklen_t size = sizeof(peer);
+            if (getsockopt(reply->socketDescriptor(), SOL_SOCKET, SO_PEERCRED, &peer, &size) != 0 || peer.uid != trustedServerUid) {
+                finish(Object{{"error", "The local profile service is not trusted. Reload the workstation."}}); return;
+            }
+            QByteArray frame(4, '\0'); qToBigEndian<quint32>(data.size(), frame.data()); reply->write(frame + data);
         });
+        connect(reply, &QLocalSocket::readyRead, this, [reply, received, finished, finish] {
+            if (*finished) return;
+            received->append(reply->readAll());
+            if (received->size() < 4) return;
+            const auto size = qFromBigEndian<quint32>(received->constData());
+            if (!size || size > 4 * 1024 * 1024 || received->size() > 4 + qint64(size)) { finish(Object{}); return; }
+            if (received->size() == 4 + qint64(size)) finish(QJsonDocument::fromJson(received->mid(4)).object());
+        });
+        connect(reply, &QLocalSocket::errorOccurred, this, [finish](QLocalSocket::LocalSocketError) { finish(Object{}); });
+        connect(timer, &QTimer::timeout, this, [finish] { finish(Object{}); });
+        timer->start(20000); reply->connectToServer(server);
     }
     bool isCurrent(const Object &profile) const {
         auto active = state["active"].toObject();
@@ -199,22 +211,28 @@ class Switcher : public QDialog {
             item->setData(Qt::UserRole, profile); item->setSizeHint(QSize(0, 82));
             if (busy || isCurrent(profile)) item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
         }
-        if (!profiles->count()) message(saved.isEmpty() ? "No profiles yet. Create one in the Xur web manager." : "No profiles match your search.");
+        if (QStringLiteral("Unload all running workloads").contains(filter, Qt::CaseInsensitive)) {
+            auto item = new QListWidgetItem("Unload all\nStop all running workstations and AI services", profiles);
+            item->setData(Qt::UserRole, Object{{"unload", true}, {"name", "Unload all"}}); item->setSizeHint(QSize(0, 82));
+            if (busy || state["runtime"].toObject()["instances"].toArray().isEmpty()) item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+        }
+        if (saved.isEmpty()) message("No profiles yet. Create one in the Xur web manager.");
+        else if (!profiles->count()) message("No profiles match your search.");
         else if (busy) message(operation == "Failed" ? "A profile change needs attention. Resume or cancel it in the Xur web manager." : "A profile change is in progress. Wait for it to finish.");
         for (int n = 0; n < profiles->count(); ++n) if (profiles->item(n)->flags() & Qt::ItemIsEnabled) { profiles->setCurrentRow(n); break; }
     }
     void refresh() {
-        ++revision; message(""); plan = {}; pages->setCurrentIndex(1); current->setText("Loading profiles…"); profiles->clear(); search->clear();
+        ++revision; message(""); plan = {}; controllerRetry = false; pages->setCurrentIndex(0); current->setText("Loading profiles…"); profiles->clear(); search->clear();
         request("/api/profiles", nullptr, [this](Object data) { state = data; auto active = state["active"].toObject();
             current->setText(active.isEmpty() ? "No complete profile loaded" : "Loaded: " + active["name"].toString()); render(); profiles->setFocus(); });
     }
     void choose(QListWidgetItem *item) {
         if (!item || !(item->flags() & Qt::ItemIsEnabled) || applying) return;
         selected = item->data(Qt::UserRole).toJsonObject(); ++revision; message(""); plan = {}; apply->setEnabled(false);
-        pages->setCurrentIndex(2); reviewTitle->setText(selected["name"].toString()); warning->hide();
+        pages->setCurrentIndex(1); reviewTitle->setText(selected["name"].toString()); apply->setText(selected["unload"].toBool() ? "Unload all" : "Load profile"); warning->hide();
         while (auto child = changes->takeAt(0)) { delete child->widget(); delete child; }
-        back->setFocus(); Object body;
-        request("/api/profiles/" + selected["id"].toString() + "/preview", &body, [this](Object data) {
+        controllerConfirm = false; back->setFocus(); Object body;
+        request(selected["unload"].toBool() ? "/api/profiles/unload/preview" : "/api/profiles/" + selected["id"].toString() + "/preview", &body, [this](Object data) {
             plan = data; QMap<QString, Object> definitions;
             for (auto p : state["profiles"].toArray()) for (auto w : p.toObject()["workloads"].toArray()) definitions[w.toObject()["id"].toString()] = w.toObject();
             for (auto w : state["active"].toObject()["workloads"].toArray()) definitions[w.toObject()["id"].toString()] = w.toObject();
@@ -226,7 +244,7 @@ class Switcher : public QDialog {
                 if (kind == "Stop" && w["recipe"].toObject()["kind"] == "Workstation") warning->show();
             }
             if (!changes->count()) changes->addWidget(label("No workloads need to start or stop."));
-            apply->setEnabled(true);
+            apply->setEnabled(true); back->setFocus();
         });
     }
     void approve() {
@@ -234,13 +252,13 @@ class Switcher : public QDialog {
         if (QDateTime::fromString(plan["expires"].toString(), Qt::ISODateWithMs) <= QDateTime::currentDateTimeUtc()) {
             message("This review expired. Go back and select the profile again."); apply->setEnabled(false); return;
         }
-        applying = true; apply->setEnabled(false); back->setEnabled(false); apply->setText("Loading…");
+        applying = true; apply->setEnabled(false); back->setEnabled(false); apply->setText(plan["unload"].toBool() ? "Unloading…" : "Loading…");
         Object approval{{"id", plan["id"]}, {"digest", plan["digest"]}};
         request("/api/profiles/apply", &approval, [this](Object) { applying = false; back->setEnabled(true); apply->setText("Load profile"); refresh(); });
     }
     void goBack() {
         if (applying) return;
-        if (pages->currentIndex() == 2) { ++revision; plan = {}; pages->setCurrentIndex(1); message(""); profiles->setFocus(); }
+        if (pages->currentIndex() == 1) { ++revision; plan = {}; pages->setCurrentIndex(0); message(""); profiles->setFocus(); }
         else reject();
     }
     void controls() {
@@ -266,16 +284,13 @@ protected:
         QDialog::keyPressEvent(event);
     }
 public:
-    Switcher() {
+    explicit Switcher(uint serverUid = 0) : trustedServerUid(serverUid) {
         for (auto text : {current, error, reviewTitle, warning}) text->setTextFormat(Qt::PlainText);
         setWindowTitle("Switch profile · Xur"); setWindowFlag(Qt::WindowStaysOnTopHint); resize(640, 590); setMinimumSize(420, 420);
         auto layout = new QVBoxLayout(this); layout->setContentsMargins(24, 24, 24, 20); layout->setSpacing(14);
         auto heading = new QHBoxLayout; heading->addWidget(label("Switch profile", "title")); heading->addStretch();
         auto settings = new QPushButton("Shortcuts"); auto close = new QPushButton("Close"); heading->addWidget(settings); heading->addWidget(close); layout->addLayout(heading); layout->addWidget(current);
         error->setObjectName("error"); error->setWordWrap(true); error->hide(); layout->addWidget(error);
-        auto login = new QWidget; auto form = new QFormLayout(login); form->setContentsMargins(0, 0, 0, 0);
-        form->addRow(label("Sign in with your Xur administrator account. Your password is not saved.")); form->addRow("Username or email", username); password->setEchoMode(QLineEdit::Password); form->addRow("Password", password);
-        auto signIn = new QPushButton("Sign in"); form->addRow(signIn); pages->addWidget(login);
         auto picker = new QWidget; auto pickLayout = new QVBoxLayout(picker); pickLayout->setContentsMargins(0, 0, 0, 0); search->setPlaceholderText("Search profiles"); search->setAccessibleName("Search profiles"); profiles->setAccessibleName("Saved profiles"); pickLayout->addWidget(search); pickLayout->addWidget(profiles); pickLayout->addWidget(retry); pages->addWidget(picker);
         auto review = new QWidget; auto reviewLayout = new QVBoxLayout(review); reviewLayout->setContentsMargins(0, 0, 0, 0); reviewTitle->setObjectName("reviewTitle"); reviewLayout->addWidget(reviewTitle); reviewLayout->addWidget(label("Review what stays running, stops and starts."));
         auto scroll = new QScrollArea; scroll->setWidgetResizable(true); auto rows = new QWidget; rows->setLayout(changes); scroll->setWidget(rows); reviewLayout->addWidget(scroll);
@@ -283,22 +298,28 @@ public:
         auto actions = new QHBoxLayout; actions->addStretch(); actions->addWidget(back); actions->addWidget(apply); apply->setObjectName("primary"); reviewLayout->addLayout(actions); pages->addWidget(review); layout->addWidget(pages, 1);
         layout->addWidget(label("↑ ↓ / D-pad: Move     Enter / A: Select     Esc / B: Back", "hint"));
         QFile connection(QDir::homePath() + "/.config/xur-profile-switcher/connection.json"); if (connection.open(QIODevice::ReadOnly)) {
-            auto data = QJsonDocument::fromJson(connection.readAll()).object(); server = QUrl(data["url"].toString()); certificate = QSslCertificate(data["certificate"].toString().toUtf8());
+            auto data = QJsonDocument::fromJson(connection.readAll()).object(); if (data["socket"].isString()) server = data["socket"].toString();
         }
         input.shoulders = preferences.value("controllerShoulders", false).toBool(); input.hold = qBound(500, preferences.value("holdMilliseconds", 1000).toInt(), 3000);
-        input.open = [this] { showPicker(); }; input.failure = [this](QString text) { message(text); };
+        input.open = [this] { showPicker("controller"); }; input.failure = [this](QString text) { message(text); };
+        // Controller selection survives fullscreen apps retaining desktop focus;
+        // ordinary Tab/mouse focus changes still select the visible action.
+        connect(qApp, &QApplication::focusChanged, this, [this](QWidget *, QWidget *now) {
+            if (now == apply) controllerConfirm = true; else if (now == back) controllerConfirm = false;
+            if (now == retry) controllerRetry = true; else if (now == profiles || now == search) controllerRetry = false;
+        });
         input.action = [this](QString action) {
             if (QApplication::activeModalWidget() && QApplication::activeModalWidget() != this) return;
             if (action == "back") { goBack(); return; }
-            if (pages->currentIndex() == 1) {
-                if (action == "accept") choose(profiles->currentItem());
+            if (pages->currentIndex() == 0) {
+                if (action == "accept") { if (controllerRetry || retry->hasFocus()) refresh(); else choose(profiles->currentItem()); }
                 else if (action == "up" || action == "down") {
-                    const int count = profiles->count(); if (!count) return; int index = profiles->currentRow();
-                    for (int n = 0; n < count; ++n) { index = (index + (action == "up" ? -1 : 1) + count) % count; if (profiles->item(index)->flags() & Qt::ItemIsEnabled) { profiles->setCurrentRow(index); break; } }
+                    const int count = profiles->count(); if (!count) { controllerRetry = true; retry->setFocus(); return; } int index = profiles->currentRow();
+                    for (int n = 0; n < count; ++n) { index = (index + (action == "up" ? -1 : 1) + count) % count; if (profiles->item(index)->flags() & Qt::ItemIsEnabled) { controllerRetry = false; profiles->setCurrentRow(index); profiles->setFocus(); break; } }
                 }
-            } else if (pages->currentIndex() == 2) {
-                if (action == "accept") { if (apply->hasFocus() && apply->isEnabled()) approve(); else if (back->hasFocus()) goBack(); }
-                else if (action == "up" || action == "down") { if (apply->hasFocus() || !apply->isEnabled()) back->setFocus(); else apply->setFocus(); }
+            } else if (pages->currentIndex() == 1) {
+                if (action == "accept") { if (controllerConfirm && apply->isEnabled()) approve(); else if (!controllerConfirm) goBack(); }
+                else if (action == "up" || action == "down") { controllerConfirm = !controllerConfirm && apply->isEnabled(); if (controllerConfirm) apply->setFocus(); else back->setFocus(); }
             }
         };
         connect(search, &QLineEdit::textChanged, this, [this] { if (!state.isEmpty()) { message(""); render(); } });
@@ -306,25 +327,22 @@ public:
         connect(profiles, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) { choose(item); });
         connect(close, &QPushButton::clicked, this, &Switcher::reject); connect(back, &QPushButton::clicked, this, [this] { goBack(); }); connect(retry, &QPushButton::clicked, this, [this] { refresh(); });
         connect(settings, &QPushButton::clicked, this, [this] { controls(); }); connect(apply, &QPushButton::clicked, this, [this] { approve(); });
-        auto authenticate = [this, signIn] { if (!signIn->isEnabled()) return; Object account{{"username", username->text()}, {"password", password->text()}}; password->clear(); message("");
-            request("/api/auth/login", &account, [this](Object data) { token = data["accessToken"].toString().toUtf8(); refresh(); }); };
-        connect(signIn, &QPushButton::clicked, this, authenticate); connect(password, &QLineEdit::returnPressed, this, authenticate);
         shortcut.setObjectName("open-profile-switcher"); shortcut.setText("Switch profile");
         shortcut.setProperty("componentName", "xur-profile-switcher"); shortcut.setProperty("componentDisplayName", "Xur profile switcher");
         KGlobalAccel::self()->setDefaultShortcut(&shortcut, {QKeySequence("Ctrl+Alt+P")});
         if (!KGlobalAccel::self()->setShortcut(&shortcut, {QKeySequence("Ctrl+Alt+P")})) qWarning("Xur profile switcher: global keyboard shortcut unavailable");
         auto keys = KGlobalAccel::self()->shortcut(&shortcut); shortcut.setProperty("shortcut", QVariant::fromValue(keys.isEmpty() ? QKeySequence("Ctrl+Alt+P") : keys.first()));
-        connect(&shortcut, &QAction::triggered, this, [this] { showPicker(); });
+        connect(&shortcut, &QAction::triggered, this, [this] { showPicker("keyboard"); });
         input.scan();
     }
-    void showPicker() {
+    void showPicker(const QString &source = "plasma-menu") {
         if (isVisible()) { raise(); activateWindow(); return; }
         show(); raise(); activateWindow(); input.capture(true);
-        if (token.isEmpty()) { pages->setCurrentIndex(0); current->setText("Sign in to switch profiles"); username->setFocus(); }
-        else refresh();
+        trigger = source; refresh();
     }
 };
 
+#ifndef XUR_SWITCHER_UI_TEST
 int main(int argc, char **argv) {
     QApplication app(argc, argv); app.setQuitOnLastWindowClosed(false);
     app.setOrganizationName("Xur"); app.setApplicationName("xur-profile-switcher"); app.setDesktopFileName("dev.xur.ProfileSwitcher");
@@ -335,7 +353,7 @@ int main(int argc, char **argv) {
     if (fontFile.exists()) { const int id = QFontDatabase::addApplicationFont(fontFile.fileName()); auto families = QFontDatabase::applicationFontFamilies(id); if (!families.isEmpty()) app.setFont(QFont(families.first(), 12)); }
     app.setStyleSheet("QWidget{background:#20252d;color:#edf1f7;font-size:15px;} QLabel#title{font-size:26px;font-weight:600;} QLabel#reviewTitle{font-size:22px;} QLabel#hint{color:#b0bac8;font-size:13px;} QLabel#error{color:#e7a6a1;border:1px solid #7c494b;padding:12px;} QLabel#warning{color:#e6c387;background:#393022;padding:12px;} QLabel#change{border-bottom:1px solid #373f4b;padding:12px;} QPushButton,QLineEdit{min-height:36px;padding:4px 12px;border:1px solid #373f4b;border-radius:5px;} QPushButton:focus,QLineEdit:focus{border:2px solid #99c5ff;} QPushButton#primary{background:#99c5ff;color:#17283d;} QPushButton:disabled{color:#8190a3;} QLineEdit,QListWidget{background:#15181d;} QListWidget{border:0;} QListWidget::item{padding:12px;border:1px solid #373f4b;border-radius:6px;margin-bottom:8px;font-size:19px;} QListWidget::item:selected{background:#293649;border:2px solid #99c5ff;} QScrollArea{border:0;} ");
     Switcher window;
-    // The only exported session-bus action opens an authenticated UI.
+    // The only exported session-bus action opens the local picker.
     class Bridge : public QDBusVirtualObject {
         Switcher &window;
     public:
@@ -350,3 +368,4 @@ int main(int argc, char **argv) {
     if (!background) window.showPicker();
     return app.exec();
 }
+#endif

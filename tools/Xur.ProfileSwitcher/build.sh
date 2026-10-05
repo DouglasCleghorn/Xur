@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "${1:?Build directory}"
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DXUR_BUILD_TESTS=ON
 cmake --build build --parallel 2
+QT_QPA_PLATFORM=offscreen dbus-run-session -- build/profile-switcher-ui-checks
 rm -rf output
 mkdir -p output/lib output/plugins output/licenses output/fonts
 install -m755 build/xur-profile-switcher output/xur-profile-switcher

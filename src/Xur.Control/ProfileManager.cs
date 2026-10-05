@@ -1,7 +1,7 @@
 using Xur.Domain;
 namespace Xur.Control;
 
-public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime runtime,IWorkloadGateway gateway,RecipeCatalog? catalog=null,Func<Task<StationAccount[]>>? users=null)
+public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime runtime,IWorkloadGateway gateway,RecipeCatalog? catalog=null,Func<Task<StationAccount[]>>? users=null,Action<ProfileSwitchEvent>? audit=null)
 {
     readonly SemaphoreSlim gate=new(1,1);
     Task? worker;
@@ -158,7 +158,7 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
     }
     public async Task<ProfilePlan?> Plan(string id)
     {await gate.WaitAsync();try{return store.Get<ProfilePlan>("plan",id);}finally{gate.Release();}}
-    public async Task<Transition> Apply(Approval approval)
+    public async Task<Transition> Apply(Approval approval,ProfileSwitchOrigin? origin=null)
     {
         await gate.WaitAsync();try
         {
@@ -168,7 +168,8 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
             var now=await runtime.Observe();
             if(now.Generation!=plan.ObservationGeneration)throw new InvalidOperationException("Workloads or GPU inventory changed. Review again.");
             ProfilePolicy.Validate(plan.Target,now);await ValidateUsers(plan.Target);
-            var journal=new Journal(plan,now,0,"Applying",null,DateTimeOffset.UtcNow);store.Put("journal","current",journal);
+            var journal=new Journal(plan,now,0,"Applying",null,DateTimeOffset.UtcNow,Origin:origin);store.Put("journal","current",journal);
+            Audit(journal,"accepted");
             worker=Task.Run(Run);return View(journal)!;
         }finally{gate.Release();}
     }
@@ -179,7 +180,7 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
             var j=store.Get<Journal>("journal","current");
             if(j==null || j.Stage is "Complete" or "Cancelled" || worker is {IsCompleted:false} || automatic && j.Stage=="Failed")return;
             if(j.Stage!="Cancelling" && !j.Plan.Unload)j=await RepairForResume(j);
-            store.Put("journal","current",j with {Stage=j.Stage=="Cancelling"?"Cancelling":"Applying",Error=null,RunningSteps=[],Updated=DateTimeOffset.UtcNow});worker=Task.Run(Run);
+            store.Put("journal","current",j with {Stage=j.Stage=="Cancelling"?"Cancelling":"Applying",Error=null,RunningSteps=[],Updated=DateTimeOffset.UtcNow});Audit(j,"resumed");worker=Task.Run(Run);
         }finally{gate.Release();}
     }
     public async Task Cancel(string? operationId=null)
@@ -192,7 +193,7 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
             if(j.Stage=="Complete")throw new InvalidOperationException("This profile change has already completed.");
             if(worker is {IsCompleted:false})
                 store.Put("journal","current",j with {Stage="Cancelling",Updated=DateTimeOffset.UtcNow});
-            else store.Cancel(j with {Stage="Cancelled",Updated=DateTimeOffset.UtcNow});
+            else {store.Cancel(j with {Stage="Cancelled",Updated=DateTimeOffset.UtcNow});Audit(j,"cancelled");}
         }finally{gate.Release();}
     }
     public async Task Wait() {var task=worker;if(task!=null)await task;}
@@ -200,8 +201,16 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
     {
         await gate.WaitAsync();bool unload;
         try{unload=store.Get<Journal>("journal","current")!.Plan.Unload;}finally{gate.Release();}
-        if(unload){await RunUnload();return;}
-        await RunLoad();
+        try {if(unload)await RunUnload();else await RunLoad();}
+        finally
+        {
+            await gate.WaitAsync();try {if(store.Get<Journal>("journal","current") is {} journal)Audit(journal,journal.Stage.ToLowerInvariant());}finally{gate.Release();}
+        }
+    }
+    void Audit(Journal journal,string result)
+    {
+        try {audit?.Invoke(new(DateTimeOffset.UtcNow,journal.Plan.Id,journal.Plan.Unload?"unload":"load",journal.Plan.Target.Id,journal.Plan.Target.Name,result,journal.Origin??new("internal","system")));}
+        catch(Exception e){Console.Error.WriteLine("Profile switch logging failed: "+Redaction.Logs(e.Message));}
     }
 }
 public record WorkloadSelection(string? Id,string Recipe,string[] Gpus,StationUser? User=null,string? StationId=null,string? StationName=null,StationDevices? Devices=null);

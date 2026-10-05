@@ -236,6 +236,11 @@ app.MapPost("/workstations/{id}/pair",async Task<IResult>(string id,StationPairR
 app.MapPost("/workstations/{id}/stream",async Task<IResult>(string id)=>{if(installer)return Results.Conflict();try{await workloads.StartStreaming(id);return Results.Ok();}catch(Exception e) when(e is InvalidOperationException or IOException){return Results.Conflict(new{error=e.Message});}});
 app.MapPost("/workstations/{id}/stream/restart",async Task<IResult>(string id)=>{if(installer)return Results.Conflict();try{await workloads.StartStreaming(id,restart:true);return Results.Ok();}catch(Exception e) when(e is InvalidOperationException or IOException){return Results.Conflict(new{error=e.Message});}});
 app.MapGet("/station-allocations",()=>Results.Json(StationSeats.Status()));
+app.MapGet("/profile-switcher/session/{uid:int}",async Task<IResult>(int uid)=> {
+    var session=installer?null:StationSeats.SwitcherSession(uid);
+    if(session==null || (await Processes.Run("systemctl",["is-active","xur-station-"+session.WorkloadId+".service"],5)).ExitCode!=0)return Results.NotFound();
+    return Results.Json(session);
+});
 app.MapGet("/station-devices",async Task<IResult>()=>installer?Results.Conflict():Results.Json(StationDeviceInventoryReader.Read(await GpuInventory.Observe())));
 StationFiles.Map(app,installer);
 var steamStorage=new SteamStorage(Path.Combine(stateDir,"steam-storage"));
