@@ -141,3 +141,14 @@ capture date, privacy review, and the features whose next changes require a refr
   as the browser error redesign baseline (HTTP 409 and excessive navigation).
   No credentials or personal data visible; kept private, not published. The
   supplied capture predates the working-tree error message and recovery changes.
+
+- 2026-10-04: Profile-switcher capture family: private collaborative T3 browser
+  snapshots and `.build/evidence/profile-switcher/switcher-*.png`, covering the
+  picker, workload review and responsive menu at 1280 and 390 px. Captured from
+  the profile-switcher feature branch based on `0b95f64`; no released bundle.
+  Uses synthetic workstation/model/profile fixtures, including a literal HTML
+  string during the escaping check. Privacy review: no credentials, personal
+  files or production state; development host addresses may appear in browser
+  metadata, so keep these captures private. Regenerate after changes to the
+  dialog, shortcuts or navigation. Review existing public UI screenshots for
+  the new Switch profile navigation entry before the next release.

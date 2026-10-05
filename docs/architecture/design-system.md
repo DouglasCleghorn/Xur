@@ -63,3 +63,41 @@ Review against the brief: an always-visible profile-name form duplicated the
 title, and placing user selection beside workload type made related fields
 harder to follow. Keep one title and follow the assignment order, without new
 decorative cards or a separate visual theme for this page.
+
+## Profile switcher (2026-10-04)
+
+Verified the latest Anthropic `frontend-design` skill: commit
+`41bbe19d1a1a7eaab5e7bb9050a417e5c6cffc8f` (2026-09-03). The switcher is a
+short, focused interaction for keyboard, controller and touch users, including
+people sitting farther from a gaming display.
+
+Retain Graphite `#15181d`, Surface `#20252d`, Rule `#373f4b`, Text `#edf1f7`,
+Secondary `#b0bac8` and Action `#99c5ff`; green retains its running-state meaning.
+Use locally bundled IBM Plex Sans, with 26px titles, 20px profile names and 15px
+supporting text. Center the dialog while keeping its contents left aligned.
+Profile rows are at least 76px high, with a clear focus outline and a compact
+loaded badge. Keep the list scrollable and the controls visible on small screens.
+
+```
+Switch profile                                      Close
+Loaded: Gaming desk
+Search profiles
+
+Gaming desk                          Loaded
+Gaming workstation, Assistant
+Studio desk
+Studio workstation, Speech
+
+Arrow keys / D-pad: move       Enter / A: review
+```
+
+Selecting a row opens a second view with the actual Keep, Stop and Start
+workloads, followed by Load profile and Back. Opening or selecting never applies
+a profile. The opening controller chord must be released before navigation.
+Errors retain a recovery action; an empty list links to profile creation.
+
+Review against the brief: a grid would spread controller focus across two axes
+and repeat the existing management page. Use a single vertical list instead.
+Spend visual emphasis on the focused profile; keep shortcut hints and secondary
+actions quiet. The desktop picker and web dialog share the same vocabulary,
+palette and review flow. No animated decorations or remote rendering assets.

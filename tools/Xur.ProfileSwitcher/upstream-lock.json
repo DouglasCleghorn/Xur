@@ -1,0 +1,10 @@
+{
+  "xcb-util-keysyms": {
+    "version": "0.4.1",
+    "url": "https://xcb.freedesktop.org/dist/xcb-util-keysyms-0.4.1.tar.xz",
+    "sha256": "7c260a5294412aed429df1da2f8afd3bd07b7cba3fec772fba15a613a6d5c638",
+    "archiveNotice": "xcb-util-keysyms-0.4.1/COPYING",
+    "notice": "xcb-util-keysyms-0.4.1-COPYING",
+    "noticeSha256": "d499c1bf2c2a5f0a0498e5204d998388e308dcf2273dfbe2250a5b9a73f66537"
+  }
+}

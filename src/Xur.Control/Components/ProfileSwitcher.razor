@@ -1,0 +1,17 @@
+<dialog id="profile-switcher" class="profile-switcher" aria-labelledby="switcher-title">
+    <header class="switcher-header"><div><h2 id="switcher-title">Switch profile</h2><p id="switcher-current">Loading profiles…</p></div><button type="button" class="quiet" data-switcher-close aria-label="Close profile switcher">Close</button></header>
+    <p id="switcher-error" class="notice error" role="alert" hidden></p>
+    <div id="switcher-picker">
+        <label class="sr-only" for="switcher-search">Search profiles</label><input id="switcher-search" type="search" placeholder="Search profiles" autocomplete="off" />
+        <div id="switcher-profiles" class="switcher-profiles" aria-label="Saved profiles" aria-busy="true"></div>
+        <p id="switcher-empty" class="switcher-empty" hidden></p>
+        <div id="switcher-recovery" class="actions" hidden><button type="button" id="switcher-retry" class="secondary">Try again</button><a class="button quiet" href="/profiles">Manage profiles</a></div>
+    </div>
+    <section id="switcher-review" hidden aria-labelledby="switcher-review-title">
+        <h3 id="switcher-review-title"></h3><p>Review what stays running, stops and starts.</p>
+        <div id="switcher-changes" class="switcher-changes"></div>
+        <p class="switcher-warning" id="switcher-desktop-warning" hidden>Your current desktop may stop. Save your work before loading.</p>
+        <div class="actions"><button type="button" id="switcher-back" class="secondary">Back</button><button type="button" id="switcher-apply">Load profile</button></div>
+    </section>
+    <footer class="switcher-footer"><span><kbd>↑</kbd> <kbd>↓</kbd> / D-pad <span class="secondary-text">Move</span></span><span><kbd>Enter</kbd> / A <span class="secondary-text" id="switcher-accept-label">Review</span></span><span><kbd>Esc</kbd> / B <span class="secondary-text">Back</span></span></footer>
+</dialog>

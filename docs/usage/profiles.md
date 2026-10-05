@@ -7,6 +7,24 @@ recipe and GPU allocation in another profile reuses its workload identity; dupli
 also retains those identities. Unload profile stops all managed workloads and clears the loaded state while retaining saved profiles.
 Saving a profile does not change the running set until Load profile is approved.
 
+Choose **Switch profile** in Xur's navigation for a keyboard, controller and
+touch-friendly picker. **Ctrl + Alt + P** opens it while the web manager has
+focus; hold the Xbox controller's **View + Menu** buttons together for one
+second. Use arrow keys or D-pad to move, Enter or A to review, and Escape or B
+to go back. Release the opening buttons before navigating. Selecting a profile
+never loads it: review the workloads, then choose **Load profile** separately.
+
+Each workstation also has **Xur profile switcher** in its Plasma application
+launcher. Its desktop helper registers the same keyboard shortcut and watches
+controllers assigned to that workstation, including Sunshine's virtual input.
+Sign in once with the Xur administrator account; its session stays in memory.
+**Shortcuts** changes the keyboard binding, controller combination and hold
+duration. The desktop helper starts with the next workstation session after an
+application update; reload existing workstations to install the new entry.
+Controller navigation is captured through evdev while its window is open.
+The opening chord can still reach the game, and direct hidraw input is outside
+that capture boundary. See [native helper behavior and acceptance limits](../../tools/Xur.ProfileSwitcher/README.md).
+
 The Profiles page shows the loaded profile, searchable saved profiles, and running
 workloads. Choose **Load profile** beside a saved profile to review its changes.
 Choose **Unload profile** in the loaded strip to drain requests and stop the set.

@@ -76,6 +76,7 @@ release; they are deliberately manual checks, with no companion update service.
 | `os/bootc/upstream-lock.json` | Historical Bazzite reference metadata; online installation and OS updates follow the upstream signed stable channel and record the resolved digest for each operation. |
 | Documentation links to upstream versioned source | Reference snapshots; refresh links when changing the corresponding runtime or source dependency. |
 | OS packages, firmware and drivers; CI runner tools | Managed by Fedora/Bazzite or the hosted runner, rather than package versions in source manifests. Review the selected Fedora/runner release and test new deployments. |
+| `tools/Xur.ProfileSwitcher/CMakeLists.txt`, `build.sh` and `tools/Xur.ProfileSwitcher/upstream-lock.json` | Qt 6, KDE KGlobalAccel, libevdev and libudev come from the Fedora native builder. Rebuild with updated packages, retain the generated dependency/license receipt, and check native keyboard/controller behavior on the supported Plasma host. The lock records the matching XCB keysyms notice omitted by Fedora; refresh it with that package's version. |
 
 GitHub's [supported ecosystems reference](https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories)
 describes the supported manifest formats. Download/package checksums and signed
