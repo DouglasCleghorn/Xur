@@ -62,7 +62,8 @@ typing gesture; start a fresh gesture to type.
 Update All progress and results. Choose **Update All** to check and stage OS
 updates, then check and update Xur. Each component reports its own result, even
 if the other fails. The job survives manager restarts. It never reboots
-automatically and does not replace the engine versions pinned by saved workloads.
+automatically or restart running model engines. Engines check their latest
+upstream image at the next start; selected model weights and settings are retained.
 An existing queued OS deployment is preserved.
 
 The screen refreshes every five seconds while open. After a manager restart,

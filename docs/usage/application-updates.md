@@ -255,5 +255,5 @@ and `<bundle-id>.tar.gz`, using the contributor's configured public key. Legacy
 files and signed schema-1 fallback remain supported only for local repositories
 that lack `current` (HTTP 404). Invalid metadata and other HTTP failures never
 trigger fallback. `eng/package-update.py` still
-prepares local test updates; public publication goes through GitHub's approval-gated
-release workflow.
+prepares local test updates; public publication goes through the checked release
+workflow, with automatic Nightly publication and maintainer approval for Stable.

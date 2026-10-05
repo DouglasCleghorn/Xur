@@ -59,8 +59,12 @@ worker does not retain authenticated pages or API responses.
 - **Static assets:** fixed CSS, JS, fonts, icons and the app manifest are public
   and precompressed without antiforgery; they contain no runtime secrets.
 
-The settings HF_TOKEN is stored in an owner-only file, never returned by an API,
-shown in a form, embedded in a recipe or included in config backups. Direct model
+The settings HF_TOKEN is stored in an owner-only file and is not returned by the
+token settings API, shown in a form or embedded in a recipe. The lightweight
+configuration JSON excludes it; the HTTPS-only
+[recovery ZIP](../usage/configuration-backup.md) includes Hugging Face credentials
+and other private identities and must be stored as a private, unencrypted backup.
+Direct model
 requests attach it only to HTTPS `huggingface.co` on the default port. Redirects
 use .NET's authorization-stripping behavior; signed CDN URLs need no bearer.
 Model containers receive a read-only token file through `HF_TOKEN_PATH`, not the

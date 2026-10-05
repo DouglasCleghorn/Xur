@@ -19,13 +19,18 @@ reboots. On startup, unfinished runs become Interrupted and retain partial data.
 The page lists the latest 100 runs; older files remain on disk. JSON export
 includes the original settings and all recorded context:
 
-- Model recipe, pinned repository revision or model files, immutable engine
-  image, launch arguments, workload fingerprint and instance identity.
+- Model recipe, pinned repository revision or model files, the recipe's engine
+  image reference, launch arguments, workload fingerprint and instance identity.
 - Profile, Xur bundle, GPU hardware, and other workloads at the start and end.
 - GPU VRAM, utilization, power, driver version and process readings approximately
   every two seconds, with simultaneous workload snapshots.
 - Individual timing, server input/output token counts, finish reason, response,
   reasoning output, and request failures.
+
+The recorded engine image comes from the saved recipe. With rolling engine
+channels, it does not identify the actual image digest resolved at startup.
+Record the running container's image identity separately when comparing engine
+versions; the benchmark export alone does not establish that identity.
 
 Time to first token is measured at the first nonempty content/reasoning chunk,
 not at a role-only event. Output throughput is server-reported completion tokens

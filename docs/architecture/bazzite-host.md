@@ -5,9 +5,10 @@ separate application bundles. This replaces the former custom Fedora host and
 supersedes the intermediate uCore and Aurora proposals. Storage footprint is
 not a constraint; idle RAM/VRAM and exact workload isolation are.
 
-The installer starts Xur's existing console and web setup. Anaconda installs
-the unmodified, verified Bazzite payload on the approved disk, then installs
-the Xur bundle, identity and service configuration under /var and /etc.
+The installer starts Xur's local console; web setup begins after installation
+and reboot. Anaconda downloads the signed Bazzite stable image onto the approved
+disk, then installs the Xur bundle, identity and service configuration under
+/var and /etc.
 The installed system follows Bazzite's signed stable update stream directly.
 
 The installed default target is multi-user. Display-manager, Plasma Login, SDDM and GDM are
@@ -30,7 +31,7 @@ smaller non-NVIDIA payload is optional future packaging, not required for use.
 
 Preserve the upstream image's license files. Bazzite's repository uses Apache
 2.0, but that does not relicense its packaged software. Public redistribution
-must account for the pinned image's individual component licenses and source
+must account for the selected image's individual component licenses and source
 obligations. Xur branding must not imply upstream endorsement.
 
 Relevant sources:

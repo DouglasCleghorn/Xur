@@ -1,7 +1,9 @@
 # Account initialization after installation
 
 Device setup runs locally through **Setup and installation** or `xur setup`.
-The live installer has no HTTP/HTTPS listener or Tailscale enrollment.
+The live installer has no web-manager listener or Tailscale enrollment. An
+explicit [diagnostic configuration](../usage/installer-diagnostics.md) can enable
+a separate HTTPS API on port 9443 and optional root SSH for that live boot.
 Web disk-plan, disk-approval and installation-progress endpoints have been removed.
 
 After rebooting into the installed system, open the displayed HTTPS address and
@@ -34,6 +36,7 @@ For account automation after installation:
 
 Use HTTPS on port 8443 or the installed Tailscale Serve URL. Browser mutations
 require CSRF protection; JSON automation uses explicit bearer headers.
-The live installer exposes installation controls only on its root-private
-Unix socket, used by the local console. Disk approval always requires a reviewed
+The local console uses the root-private Unix socket. Opt-in diagnostics with
+`allowControl: true` can drive that same console through its authenticated API.
+Disk approval always requires a reviewed
 plan with the exact target identity and digest.

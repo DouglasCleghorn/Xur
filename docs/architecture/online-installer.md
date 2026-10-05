@@ -78,10 +78,12 @@ timeouts; adapter and profile errors are logged without preventing other
 adapters or local setup from working. If a saved profile cannot be inspected,
 the helper leaves that adapter alone rather than replacing its settings with DHCP.
 
-New media and installations include this service ordering. Application updates
-replace the helper on existing installations, but do not replace their copied
-systemd units; changing that ordering on an existing installation requires a
-separate unit migration.
+New media and installations include this service ordering. The native utility's
+startup migration repairs the recognized legacy installer-owned agent unit on
+the first successful application upgrade, including upgrades started by the old
+updater. Custom units and administrator drop-ins remain authoritative. A host
+whose existing dependencies prevent the agent from starting needs local recovery
+first. See [application update recovery](../usage/application-updates.md).
 
 A separate service checks the signed GitHub release metadata in the background.
 Each attempt is bounded to 15 seconds and retries after 60 seconds, including when

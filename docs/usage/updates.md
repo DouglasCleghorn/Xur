@@ -74,17 +74,20 @@ manifest and host ABI version. Persistent systemd units in `/etc` start these
 services after boot; local SELinux mappings cover their executable paths.
 
 `python3 eng/build-app-bundle.py` produces `dist/xur-app-x86_64.tar.gz` and its
-checksum without building an OS image. The application GitHub Actions workflow
-builds this archive and attaches it to published GitHub releases. The separate
-manual ISO workflow requires a Linux x86-64 runner labeled `xur-iso`, with the
-KVM/Fedora-builder prerequisites in `docs/development/build.md` and sufficient disk space.
-Neither workflow participates in installed OS updates. Adding workflow files
-locally does not activate them until they are pushed to GitHub.
+checksum without building an OS image. **Build and publish release** builds and
+checks application candidates on `main` and `release`; Nightly publishes
+automatically and Stable requires maintainer approval. A manual dispatch with
+`build_iso` builds media in an isolated Fedora VM on a disposable GitHub-hosted
+Ubuntu runner. It publishes a separate installer release after inspection and
+the matching app publication.
+Neither path participates in installed OS updates. See
+[installer release automation](../development/installer-releases.md).
 
 Signed application download, activation and rollback are implemented separately
-from OS updates. Clients configure the development computer's IP or domain on
-the Updates page. The terminal menu and authenticated API expose the same
-operations. The updater drains requests, preserves running workloads, and has
+from OS updates. Public GitHub releases are the default source; select a channel
+in **Settings → Update channel**. Local build testing accepts a development
+server address and its signing public key. The terminal menu and authenticated
+API expose the same operations. The updater drains requests, preserves running workloads, and has
 health-check rollback and interrupted-activation recovery. Schema 1 bundles
 are supported; incompatible schema changes are rejected until an explicit
 migration is supplied. See [Application updates](application-updates.md) for

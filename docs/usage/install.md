@@ -85,7 +85,9 @@ Choose **Workstation**, **llama.cpp**, **vLLM**, **vLLM-Omni**, or **Container**
 **Workload type**. Workstation offers the local Plasma gaming desktop; the model
 types search Unsloth GGUF, Hugging Face, and the upstream Omni supported-model
 list respectively. Each type shows only its own choices. Model format and GPU
-selectors have defaults. First start downloads the pinned model and engine.
+selectors have defaults. First start downloads the selected model files and
+current engine image. Later starts refresh the engine, with a compatible cached
+image available when a pull fails; see [model lifecycle](model-catalog.md).
 Workstations offer existing users, adding a user, or a temporary user. Named
 users retain their home and Steam logins. Prepare container images or Dockerfiles
 on **Containers**; persistent volumes also appear on **Storage**.
@@ -128,8 +130,10 @@ examples are in `docs/usage/application-updates.md` in the source archive.
 
 ## Release download verification
 
-Current releases contain one ISO, one app archive and one signed JSON descriptor, with the ISO
-checksum in the release notes and authenticated metadata inside the JSON.
-See [verification instructions](../development/installer-releases.md#download-and-verify). Historical ISOs larger
-than the per-file upload limit are split into numbered parts; assemble and verify
-them before writing a USB drive. See [download and verification instructions](../development/installer-releases.md#download-and-verify).
+Application releases contain an app archive and signed `xur-update.json`.
+Separately published installer releases also contain one ISO, with its checksum
+in the release notes and authenticated metadata inside that release's JSON.
+Download the ISO and descriptor from the same installer release; see
+[verification instructions](../development/installer-releases.md#download-and-verify).
+Current publication requires an ISO smaller than 2 GiB. Historical ext4-root
+downloads, including split media, were retired; use current Btrfs media.

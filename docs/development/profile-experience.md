@@ -2,8 +2,10 @@
 
 This records the broader requested profile experience. The current editor already
 opens directly on creation, assigns default names and integer IDs, and presents
-searchable workload/GPU selectors. The shipped single-station and external-catalog implementation is described in
-`model-catalog.md`. This document retains the broader multi-seat direction.
+searchable workload/GPU selectors. The current catalog and workstation behavior
+is described in [Model catalog](../usage/model-catalog.md) and
+[multiple workstations](../architecture/multiple-workstations.md).
+This document retains broader product goals rather than serving as a feature list.
 
 Workstations and AI are equally central. A profile describes which workstations
 and AI services should run together. Adding a workstation must be a main action.
@@ -90,5 +92,7 @@ not by itself a complete managed deployment path for all three engines.
 
 Live Unsloth/Hugging Face search and the current upstream vLLM-Omni supported-model list
 are now integrated directly. LocalAI was investigated but is not used. Recipe-
-specific vLLM tuning, Omni deployment configurations, gated downloads, and
-multi-seat device selection remain beyond the current implementation.
+specific vLLM tuning and custom Omni deployment configurations remain future
+work. Saved Hugging Face credentials, gated downloads and multi-seat device/hub
+selection are implemented; publisher authorization and physical isolation checks
+still apply. See [remaining acceptance work](remaining-work.md).
