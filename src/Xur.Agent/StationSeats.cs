@@ -82,6 +82,11 @@ public static class StationSeats
             var path=resolve(node);if(path==null)return;
             if(!Regex.IsMatch(path,@"^/devices/[a-zA-Z0-9_./:+-]+$"))throw new InvalidOperationException("Invalid peripheral sysfs path.");
             lines.Add("DEVPATH==\""+path+"\", ENV{ID_SEAT}:=\""+seat+"\", TAG+=\"seat\", TAG+=\"uaccess\"");
+            // libinput reads the event node's seat, but logind verifies access
+            // against its inputN parent. Both must belong to the same station.
+            var input=Regex.Match(path,@"^(.*/input\d+)/event\d+$");
+            if(node.StartsWith("/dev/input/")&&input.Success)
+                lines.Add("DEVPATH==\""+input.Groups[1].Value+"\", ENV{ID_SEAT}:=\""+seat+"\", TAG+=\"seat\", TAG+=\"uaccess\"");
         }
         foreach(var w in desired)
         {
