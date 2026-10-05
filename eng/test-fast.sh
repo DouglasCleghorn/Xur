@@ -17,6 +17,7 @@ python3 tests/Xur.Integration.Tests/source-manifest.py > .build/fast/source-mani
 python3 tests/Xur.Integration.Tests/cleanup-build.py > .build/fast/cleanup.log
 bash eng/publish.sh > .build/fast/publish.log 2>&1
 "$sdk" run --project tests/Xur.Unit.Tests -c Release > .build/fast/unit.log
+XUR_DOTNET="$sdk" python3 tests/Xur.Integration.Tests/desktop-timezone.py > .build/fast/desktop-timezone.json
 python3 tests/Xur.Integration.Tests/station-display.py > .build/fast/station-display.log 2>&1
 python3 tests/Xur.Integration.Tests/storage-explorer.py > .build/fast/storage-explorer.log 2>&1
 python3 tests/Xur.Integration.Tests/station-files.py > .build/fast/station-files.json

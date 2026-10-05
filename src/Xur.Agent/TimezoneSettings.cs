@@ -78,5 +78,7 @@ public sealed class TimezoneSettings(string directory,Func<string,string[],int,T
     // Explicit TZ overrides images that bake in UTC. Containers are recreated by
     // profile stop/start; changing the setting never kills continuing workloads.
     public static string[] ContainerArguments()=>["--tz=local","--env=TZ=:/etc/localtime"];
-    public const string StationEnvironment="TZ=:/etc/localtime";
+    // Desktop apps using ICU/Chromium need an IANA name; a zonefile pathname
+    // can become Etc/Unknown in Steam Big Picture. Resolve again on each launch.
+    public static string StationEnvironment=>"TZ="+TimeZoneInfo.Local.Id;
 }

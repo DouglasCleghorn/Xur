@@ -51,7 +51,7 @@ public sealed class StationRuntime(DisplayConsoles? consoles=null)
             if(allocation.Problems.Any(p=>!p.Contains("disconnected")))throw new InvalidOperationException(string.Join(" ",allocation.Problems));
             // Write user configuration as that user, so symlinks in their home
             // cannot turn a profile change into privileged file writes.
-            await Run("runuser",["-u",user,"--","/bin/bash","-c",UserConfiguration,"xur",home,gpu.Cards![0],headless?"headless":"local",string.Join("\n",StationGraphics.LaunchEnvironment(gpu)),StationSeats.Seat(w.Id)]);
+            await Run("runuser",["-u",user,"--","/bin/bash","-c",UserConfiguration,"xur",home,gpu.Cards![0],headless?"headless":"local",string.Join("\n",StationGraphics.LaunchEnvironment(gpu)),StationSeats.Seat(w.Id),TimezoneSettings.StationEnvironment]);
             await StationProfileSwitcher.Prepare(user,home);
             await StationPower.Apply(user,headless);
             await Run("restorecon",["-RF",home]);
@@ -134,7 +134,7 @@ public sealed class StationRuntime(DisplayConsoles? consoles=null)
         else
           rm -f "$1/.config/systemd/user/plasma-kwin_wayland.service.d/90-xur-headless.conf"
         fi
-        printf 'TZ=:/etc/localtime\nKWIN_DRM_DEVICES=%s\nXDG_SEAT=%s\n' "$2" "$5" > "$1/.config/environment.d/90-xur-gpu.conf"
+        printf '%s\nKWIN_DRM_DEVICES=%s\nXDG_SEAT=%s\n' "$6" "$2" "$5" > "$1/.config/environment.d/90-xur-gpu.conf"
         printf '%s\n' "$4" >> "$1/.config/environment.d/90-xur-gpu.conf"
         printf '[Daemon]\nAutolock=false\nLockOnResume=false\n' > "$1/.config/kscreenlockerrc"
         """;
