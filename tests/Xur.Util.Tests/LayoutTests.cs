@@ -28,7 +28,8 @@ static class LayoutTests
             fixture.Write(relative, "fixture " + name);
             File.SetUnixFileMode(fixture.PathOf(relative), (UnixFileMode)0x1ed);
         }
-        foreach (var name in new[] { "console", "virtual-display", "streaming" }) fixture.Write("checkout/.build/" + name + "-runtime/fixture", name);
+        foreach (var name in new[] { "console", "virtual-display", "profile-switcher", "streaming" }) fixture.Write("checkout/.build/" + name + "-runtime/fixture", name);
+        fixture.Write("checkout/.build/profile-switcher-runtime/licenses/vendor/COPYING", "vendor notice");
         foreach (var name in new[] { "tailscale", "tailscaled" }) fixture.Write("checkout/.build/context/tailscale/" + name, name);
         CopyTree(publish, Path.Combine(checkout, ".build/context/publish/util"));
         await new Runtime().Run(["python3", Path.Combine(checkout, "eng/prepare-rootfs.py")]);
@@ -36,6 +37,11 @@ static class LayoutTests
         var bundle = Path.Combine(root, "usr/share/xur/app-bundle");
         Verify.That(File.ReadAllBytes(Path.Combine(bundle, "host/xurutil")).SequenceEqual(File.ReadAllBytes(Path.Combine(publish, "xurutil"))), "Application bundle contains the published native utility");
         Verify.That(File.ReadAllBytes(Path.Combine(root, "usr/libexec/xurutil")).SequenceEqual(File.ReadAllBytes(Path.Combine(publish, "xurutil"))), "Live OS contains the same native utility");
+        foreach (var helper in new[] { Path.Combine(root, "usr/lib/xur/agent/profile-switcher"), Path.Combine(bundle, "agent/profile-switcher") })
+        {
+            Verify.That(File.ReadAllText(Path.Combine(helper, "fixture")) == "profile-switcher", "Profile switcher runtime ships in both agent layouts");
+            Verify.That(File.ReadAllText(Path.Combine(helper, "licenses/vendor/COPYING")) == "vendor notice", "Profile switcher dependency notices ship in both layouts");
+        }
         Verify.That((File.GetUnixFileMode(Path.Combine(bundle, "host/xurutil")) & (UnixFileMode.GroupWrite | UnixFileMode.OtherWrite)) == 0, "Bundled native utility is protected before installation");
         Verify.That(!Directory.EnumerateFiles(bundle, "*.dbg", SearchOption.AllDirectories).Any(), "Debug symbols are excluded from the shipped bundle");
         foreach (var name in new[] { "System.CommandLine-LICENSE.txt", "dotnet-LICENSE.txt", "dotnet-THIRD-PARTY-NOTICES.TXT", "TeeForge-LICENSE.txt", "TeeForge-THIRD-PARTY-NOTICES.txt" })
