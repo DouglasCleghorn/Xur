@@ -21,8 +21,12 @@ static class StationDeviceTests
         var remote=inventory with{Devices=[..inventory.Devices,new("/dev/input/event40","Input",Station:"2"),new("/dev/hidraw7","Hidraw",Station:"unassigned")]};
         var remotePlan=StationDevicePolicy.Plan([primary,secondary],remote);
         check(remotePlan[1].Nodes.Contains("/dev/input/event40")&&!remotePlan[0].Nodes.Contains("/dev/input/event40")&&!remotePlan.Any(a=>a.Nodes.Contains("/dev/hidraw7")),"Moonlight virtual input belongs only to its station; unknown stream identities never fall back to primary");
-        var rules=StationSeats.RulesText([primary,secondary],[],remote,remotePlan,node=>"/devices/test/"+Path.GetFileName(node));
-        check(rules.Contains("ATTRS{phys}==\""+StationSeats.Physical("2"))&&rules.Contains("DEVPATH==\"/devices/test/event5\", ENV{ID_SEAT}:=\""+StationSeats.Seat("2")),"Physical USB and virtual Moonlight input use the same dedicated logind seat");
+        string DevicePath(string node)=>node.StartsWith("/dev/input/")?"/devices/test/input/input"+Path.GetFileName(node)[5..]+"/"+Path.GetFileName(node):"/devices/test/"+Path.GetFileName(node);
+        var rules=StationSeats.RulesText([primary,secondary],[],remote,remotePlan,DevicePath);
+        check(rules.Contains("ATTRS{phys}==\""+StationSeats.Physical("2"))&&rules.Contains("DEVPATH==\""+DevicePath("/dev/input/event5")+"\", ENV{ID_SEAT}:=\""+StationSeats.Seat("2")),"Physical USB and virtual Moonlight input use the same dedicated logind seat");
+        foreach(var (number,owner) in new[]{(0,"1"),(5,"2"),(40,"2")})
+            check(rules.Contains("DEVPATH==\"/devices/test/input/input"+number+"\", ENV{ID_SEAT}:=\""+StationSeats.Seat(owner)),"Logind input parent and libinput event node share their allocated seat: event"+number);
+        check(!rules.Contains("DEVPATH==\"/devices/test/input\"")&&!rules.Contains("DEVPATH==\"/devices/test\""),"Input parent assignment does not grant shared ancestors to a workstation");
         check(rules.Contains("seat-xur-unassigned")&&StationSeats.Seat("1")!=StationSeats.Seat("2"),"Unclaimed input waits for reconciliation instead of entering another desktop");
         var card=new GpuDevice("0000:41:00.0","NVIDIA","GPU","nvidia","",24576,["/dev/dri/renderD130"],[],["/dev/dri/card3"]);
         var launch=StationRuntime.SessionArguments(secondary,card,1002,"/var/home/user2");
