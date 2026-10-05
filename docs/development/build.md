@@ -466,7 +466,7 @@ Source size for this migration, excluding tests and command registration:
 | --- | ---: | ---: |
 | `StationFiles.py` | 192 lines / 10,437 bytes | `FileOperations.cs`: 161 lines / 10,651 bytes |
 | `StorageExplorer.py` | 101 lines / 4,572 bytes | `FolderScanner.cs`: 96 lines / 5,504 bytes |
-| Shared safe file access | Included in both workers | `DirectoryTree.cs`: 158 lines / 9,994 bytes |
+| Shared safe file access | Included in both workers | `DirectoryTree.cs`: 158 lines / 9,993 bytes |
 
 The native Linux x64 executable measured 8,902,176 bytes (8.49 MiB) before and
 9,270,224 bytes (8.84 MiB) after: an increase of 368,048 bytes (359 KiB, 4.1%).

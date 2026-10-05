@@ -89,7 +89,7 @@ public sealed partial class DirectoryTree : IDisposable
     { if (Parts(name).Length != 1) throw new ArgumentException("Invalid child name."); }
     public static void Delete(SafeFileHandle folder, string name, bool directory = false)
     { SingleName(name); Check(Unlinkat(folder, name, directory ? 0x200 : 0), "Could not delete item"); }
-    public static void Move(SafeFileHandle source, string name, SafeFileHandle destination, string target) 
+    public static void Move(SafeFileHandle source, string name, SafeFileHandle destination, string target)
     { SingleName(name); SingleName(target); Check(Renameat2(source, name, destination, target, 1), "Could not move item without overwriting"); }
     public static void Verify(Metadata expected, SafeFileHandle actual)
     {
