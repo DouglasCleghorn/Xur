@@ -194,8 +194,10 @@ from behavior implemented but not yet exercised on the four-3090 machine.
   starts now refresh the latest upstream channel automatically, including vLLM
   and vLLM-Omni; failed pulls use the newest compatible local image. Rollback
   controls remain future work.
-- vLLM ROCm and Intel XPU engine choices. llama.cpp has CPU/CUDA/ROCm/Vulkan image
-  choices; vLLM and Omni currently choose NVIDIA images.
+- Physical AMD ROCm and Intel XPU acceptance tests for vLLM and Omni, including
+  model-specific compatibility and multi-GPU serving. Vendor image selection,
+  dedicated Intel memory queries and the host-built Intel Omni layer are
+  implemented; successful NVIDIA tests do not validate these backends.
 - A managed benchmark recipe with measured GPU baseline return. Sunshine is now
   tied to workstation start/stop; headless capture on the physical GPUs remains
   to be exercised.

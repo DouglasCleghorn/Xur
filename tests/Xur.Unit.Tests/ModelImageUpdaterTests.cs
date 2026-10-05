@@ -51,7 +51,7 @@ static class ModelImageUpdaterTests
         identity="replacement";calls.Clear();check(await Rejected()&&!calls.Any(a=>a[0]=="rm"),"Engine replacement during the download is rejected");identity=stopped.InstanceId;
         fingerprint="different";calls.Clear();check(await Rejected()&&!calls.Any(a=>a[0]=="rm"),"An unrelated container cannot be removed during an engine update");fingerprint=workload.Fingerprint;
         removeFails=true;check(await Rejected(),"Removal failure prevents starting an old engine after a new image was downloaded");
-        foreach(var (engine,vendor,id) in new[]{("llama.cpp","CPU","server"),("llama.cpp","NVIDIA","server-cuda"),("llama.cpp","AMD","server-rocm"),("llama.cpp","Intel","server-vulkan"),("vLLM","NVIDIA","vllm"),("vLLM-Omni","NVIDIA","omni")})
+        foreach(var (engine,vendor,id) in new[]{("llama.cpp","CPU","server"),("llama.cpp","NVIDIA","server-cuda"),("llama.cpp","AMD","server-rocm"),("llama.cpp","Intel","server-vulkan"),("vLLM","NVIDIA","vllm"),("vLLM","AMD","vllm-rocm"),("vLLM","Intel","vllm-xpu"),("vLLM-Omni","NVIDIA","omni"),("vLLM-Omni","AMD","omni-rocm"),("vLLM-Omni","Intel","omni-xpu")})
             check(EngineImages.For(recipe with{Engine=engine,Vendor=vendor})==EngineImages.Image(id),"Latest startup selects the correct engine channel for "+engine+" / "+vendor);
     }
 }

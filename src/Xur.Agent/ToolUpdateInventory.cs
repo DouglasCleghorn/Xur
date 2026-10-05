@@ -16,11 +16,12 @@ public sealed class ToolUpdateInventory
     public async Task<ToolUpdateInfo[]> Read()
     {
         var result=new List<ToolUpdateInfo>();
-        foreach(var (id,name) in new[]{("server","llama.cpp · CPU"),("server-cuda","llama.cpp · NVIDIA"),("server-rocm","llama.cpp · AMD"),("server-vulkan","llama.cpp · Vulkan"),("vllm","vLLM"),("omni","vLLM-Omni")})
+        foreach(var (id,name) in new[]{("server","llama.cpp · CPU"),("server-cuda","llama.cpp · NVIDIA"),("server-rocm","llama.cpp · AMD"),("server-vulkan","llama.cpp · Vulkan"),("vllm","vLLM"),("vllm-rocm","vLLM · AMD"),("vllm-xpu","vLLM · Intel"),("omni","vLLM-Omni"),("omni-rocm","vLLM-Omni · AMD"),("omni-xpu","vLLM-Omni · Intel")})
         {
             var image=EngineImages.Image(id);
             var exists=await Probe("podman",["image","exists",image],10);
-            result.Add(new(id,name,EngineImages.Version(id),"Container start","Checks upstream for the latest image before each start. Running workloads keep their current image.",image,exists.ExitCode==0?true:exists.ExitCode==1?false:null));
+            var description=id=="omni-xpu"?"Builds the pinned Omni XPU image on this host before each start, reusing build layers. Running workloads keep their current image.":id=="omni-rocm"?"Checks the published ROCm release before each start. Running workloads keep their current image.":"Checks upstream for the latest image before each start. Running workloads keep their current image.";
+            result.Add(new(id,name,EngineImages.Version(id),"Container start",description,image,exists.ExitCode==0?true:exists.ExitCode==1?false:null));
         }
         using var sunshine=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root,"streaming-lock.json")));
         result.Add(new("sunshine","Sunshine",sunshine.RootElement.GetProperty("sunshine").GetProperty("version").GetString()!,"Xur","Bundled version. Running streams keep their current runtime until restarted."));

@@ -10,16 +10,12 @@ public record ModelSelection(string Model,string Revision,string Variant,string 
 
 // Discovery may change upstream. A saved choice is a separate immutable recipe;
 // catalog refresh never edits a profile or changes a running instance.
-public sealed class ModelCatalog(string state)
+public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=null)
 {
     static readonly HttpClient http=Xur.IO.HttpClients.Create(TimeSpan.FromSeconds(30), redirects:true);
     static ModelCatalog(){http.DefaultRequestHeaders.UserAgent.ParseAdd("Xur/1.0");}
     static readonly JsonSerializerOptions json=new(JsonSerializerDefaults.Web);
     readonly SemaphoreSlim gate=new(1,1);
-    static string Image(string vendor)=>EngineImages.Image(vendor switch {
-        "NVIDIA"=>"server-cuda","AMD"=>"server-rocm","Intel"=>"server-vulkan",_=>"server"});
-    static string Vllm=>EngineImages.Image("vllm");
-    static string Omni=>EngineImages.Image("omni");
     static string OmniModels=>"https://raw.githubusercontent.com/vllm-project/vllm-omni/main/docs/models/supported_models.md";
     static void Validate(string model,string? revision=null)
     {
@@ -146,10 +142,10 @@ public sealed class ModelCatalog(string state)
                 files=group.Select(f=>new ModelFile(Path.GetFileName(FileName(f)),new("https://huggingface.co/"+selection.Model+"/resolve/"+selection.Revision+"/"+string.Join('/',FileName(f).Split('/').Select(Uri.EscapeDataString)),f.GetProperty("lfs").GetProperty("sha256").GetString()!,f.GetProperty("size").GetInt64(),license,selection.Model,selection.Revision))).ToArray();bytes=files.Sum(f=>f.Asset.Bytes);
             }
             else {await ValidateCheckpoint(selection.Model,selection.Revision,selection.Engine);if(variant!="upstream")throw new InvalidOperationException("Select the upstream checkpoint.");bytes=WeightBytes(data);if(bytes==0)throw new InvalidOperationException("The model does not publish safetensors weights.");}
-            var hardware=await GpuInventory.Observe();var vendor=selection.Device;
+            var hardware=await (observe?.Invoke()??GpuInventory.Observe());var vendor=selection.Device;
             if(vendor=="Auto")vendor=hardware.FirstOrDefault(g=>g.Problems.Length==0 && g.MemoryMiB>0)?.Vendor??"CPU";
-            if(selection.Engine!="llama.cpp" && vendor!="NVIDIA")throw new InvalidOperationException("This vLLM engine image requires an available NVIDIA GPU.");
             if(vendor is not ("CPU" or "NVIDIA" or "AMD" or "Intel"))throw new InvalidOperationException("Select a supported execution device.");
+            var image=EngineImages.For(selection.Engine,vendor);
             var available=hardware.Where(g=>g.Vendor==vendor && g.Problems.Length==0).ToArray();
             // An explicit capacity estimate, not a claim of measured peak memory.
             long totalMiB=(bytes+1048575)/1048576+2048;int count=0;long minimum=0;
@@ -160,10 +156,10 @@ public sealed class ModelCatalog(string state)
                 count=(int)Math.Max(1,(totalMiB+perGpu-1)/perGpu);if(count>available.Length)throw new InvalidOperationException("This checkpoint exceeds the observed GPU capacity. Choose a smaller model or quantization.");
                 minimum=(totalMiB+count-1)/count;
             }
-            var args=new List<string>();string image;HubModel? hub=null;string? settingsSource=null;
+            var args=new List<string>();HubModel? hub=null;string? settingsSource=null;
             if(selection.Engine=="llama.cpp")
             {
-                image=Image(vendor);args.AddRange(["-m","/models/"+files![0].Name,"--host","0.0.0.0","--port","8080","--ctx-size","4096","--parallel","1","--alias","model"]);
+                args.AddRange(["-m","/models/"+files![0].Name,"--host","0.0.0.0","--port","8080","--ctx-size","4096","--parallel","1","--alias","model"]);
                 if(count>0)args.AddRange(["--n-gpu-layers","999"]);
                 var sampling=await Sampling(selection.Model);settingsSource=sampling.Source;
                 // Import numeric defaults as data. Never execute upstream scripts.
@@ -172,7 +168,7 @@ public sealed class ModelCatalog(string state)
             }
             else
             {
-                image=selection.Engine=="vLLM"?Vllm:Omni;hub=new(selection.Model,selection.Revision,license);
+                hub=new(selection.Model,selection.Revision,license);
                 args.AddRange(["serve",selection.Model,"--revision",selection.Revision,"--host","0.0.0.0","--port","8080"]);
                 if(selection.Engine=="vLLM")args.AddRange(ModelLaunchSettings.Vllm(selection.Model,count));
                 else args.Add("--omni");

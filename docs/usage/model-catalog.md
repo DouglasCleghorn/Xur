@@ -23,8 +23,13 @@ weights live under `/var/lib/xur`; immutable selected recipes are stored in
 profile or a running model. GGUF sampling provenance does not restart a model
 when the actual runtime arguments and files are unchanged.
 
-llama.cpp has current upstream CPU, CUDA, ROCm and Vulkan image channels. The current vLLM and
-vLLM-Omni images require NVIDIA. They invoke their real upstream `vllm serve`
+llama.cpp has current upstream CPU, CUDA, ROCm and Vulkan image channels. vLLM and
+vLLM-Omni support NVIDIA CUDA, AMD ROCm and Intel XPU. Choose **AMD GPUs** or
+**Intel GPUs** under **Run on**, or use **Automatic** to select an available
+GPU vendor. GPU engines require healthy devices with observed dedicated memory;
+Intel capacity comes from the i915/xe kernel memory-region query. Integrated
+GPUs without dedicated memory are not assigned capacity from system RAM.
+They invoke their upstream `vllm serve`
 commands with the selected checkpoint revision; Omni uses `--omni`. vLLM uses
 tensor parallelism across the allocated GPUs. Omni uses its upstream deployment
 defaults; Xur does not invent multi-stage parallelism settings. Models requiring
@@ -37,15 +42,26 @@ account does not already have. Review the linked model license before applying.
 Model weights are not bundled.
 
 `catalog/engines/Containerfile` selects the upstream rolling channels: `server`
-and its GPU variants for llama.cpp, and `latest` for vLLM and vLLM-Omni. Xur
-checks and pulls the latest image before every model-container start, including
-restarting a stopped container or loading an older saved selection. If the
+and its GPU variants for llama.cpp, and `latest` for vLLM's CUDA, ROCm and XPU
+images and vLLM-Omni's CUDA image. Omni ROCm uses the published `v0.28.0` image
+because upstream does not publish a ROCm `latest` tag. Intel Omni is built on
+the host from the mirrored vLLM XPU `v0.30.0` base and the matching pinned Omni
+source using `catalog/engines/omni-xpu.Containerfile`; upstream has no prebuilt
+Omni XPU image. The first Intel Omni start needs network access and disk space
+for the base image and build layers. Later starts reuse those layers. These
+two pinned Omni variants are updated through changes to their manifests.
+Before each model-container start, Xur refreshes the chosen image or builds the
+Intel Omni layer. This includes restarting a stopped container or loading an
+older saved selection. If the
 image changed, Xur recreates the stopped container and keeps its model-cache
 volume. Running engines continue using their current image until their next
 start. If the pull fails, Xur uses the newest downloaded image for the same
 engine and device variant. If no tagged base remains locally, it can reuse the
 image retained by the stopped container. Model-specific Fish runtime preparation
 was removed; the generic Omni channel does not supply that former integration.
+Intel Omni build failures use the same compatible-image fallback; a failed first
+build without a cached image fails clearly. Image downloads always use
+`mirror.gcr.io`, with no Docker Hub fallback.
 The workload logs record the failed pull and cached image identity. Startup
 fails only if no usable image is available locally.
 Model weights and launch settings remain the selected versions.
@@ -95,6 +111,13 @@ API clients should use an **Automation** API key for catalog resolution; see
 Sources: [Unsloth inference defaults](https://github.com/unslothai/unsloth/tree/main/studio/backend/assets/configs),
 [Hugging Face Hub API](https://huggingface.co/docs/hub/api),
 [vLLM-Omni supported models](https://github.com/vllm-project/vllm-omni/blob/main/docs/models/supported_models.md).
+
+GPU installation references: [vLLM CUDA/ROCm/XPU](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/),
+[Omni ROCm](https://github.com/vllm-project/vllm-omni/blob/main/docs/getting_started/installation/gpu/rocm.inc.md),
+and [Omni XPU build](https://github.com/vllm-project/vllm-omni/blob/v0.30.0/docker/Dockerfile.xpu).
+GPU backend support does not establish compatibility for every model or GPU
+architecture. AMD and Intel serving still need acceptance tests on physical
+hardware, including the Fish checkpoint shown in the reported configuration.
 
 ## Packed token embeddings
 
