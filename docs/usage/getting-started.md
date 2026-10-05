@@ -17,6 +17,16 @@ required administrator account in your browser. Use Chrome's suggested password
 or your password manager and save it. Future logins use this account; the token
 is disabled after signup. Web management and Tailscale are unavailable on live media.
 
+Your browser remembers sign-in across browser restarts, machine reboots and
+updates. Sign out or clearing site cookies ends that browser's sign-in. Browser
+cookie limits can also require login after prolonged inactivity.
+
+If Chrome or Safari does not offer to save your password, check that password
+saving is enabled and this address is not excluded. A certificate warning can
+disable password saving even after you click through it. Use the trusted Tailscale
+HTTPS address or a machine certificate trusted by your browser. You can also add
+the address, username and password directly in your browser's password manager.
+
 For remote access, open **Tailscale**, authorize the machine, and finish its setup.
 Use the resulting HTTPS Serve address. Keep credentials and setup QR codes out of
 screenshots and issue reports.

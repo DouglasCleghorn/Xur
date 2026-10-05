@@ -148,7 +148,7 @@ async Task StartHost()
         ctx.Items["setupSession"]=setupSession;
         if (authorized) ctx.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name,auth.Username ?? "xur")],"bootstrap"));
         var path = ctx.Request.Path.Value ?? "/";
-        bool publicPath=ctx.GetEndpoint()?.Metadata.GetMetadata<PublicStaticAsset>()!=null || path is "/login" or "/auth/login" or "/api/bootstrap" or "/api/auth/login" or "/health" or "/api/status" or "/setup.css" or "/login.js" or "/fonts/IBMPlexSans.ttf" or "/manifest.webmanifest" or "/install-app.js" or "/sw.js" or "/icons/xur-icon.svg" or "/icons/xur-icon-180.png" or "/icons/xur-icon-192.png" or "/icons/xur-icon-512.png";
+        bool publicPath=ctx.GetEndpoint()?.Metadata.GetMetadata<PublicStaticAsset>()!=null || path is "/login" or "/auth/login" or "/auth/login-token" or "/api/bootstrap" or "/api/auth/login" or "/health" or "/api/status" or "/setup.css" or "/login.js" or "/fonts/IBMPlexSans.ttf" or "/manifest.webmanifest" or "/install-app.js" or "/sw.js" or "/icons/xur-icon.svg" or "/icons/xur-icon-180.png" or "/icons/xur-icon-192.png" or "/icons/xur-icon-512.png";
         bool setupPath=path is "/setup-account" or "/setup-account/logs" or "/auth/setup" or "/api/auth/setup" or "/account-setup.js";
         if(setupSession!=null && path=="/login") { ctx.Response.Redirect("/setup-account");return; }
         if(!authorized && !publicPath && !(setupSession!=null && setupPath))
@@ -173,6 +173,10 @@ async Task StartHost()
                 ctx.Response.StatusCode=400;await ctx.Response.WriteAsJsonAsync(new{error="This form expired. Refresh the page and try again."});return;
             }
         }
+        if(ctx.Request.Method is "GET" or "HEAD" && ctx.GetEndpoint()?.Metadata.GetMetadata<PublicStaticAsset>()==null
+            && auth.RememberBrowserSession(cookie) is { } remembered)
+            BrowserSecurity.SetSession(ctx,remembered,persistent:true);
+        if(auth.Authorized(cookie) && path=="/login") { ctx.Response.Redirect("/");return; }
         await next();
     });
     app.Use(async(ctx,next)=> {
@@ -293,16 +297,25 @@ async Task StartHost()
         return result.Session is { } session ? Results.Json(new { accessToken=session, tokenType="Bearer", expiresIn=28800, setupRequired=true })
             : Results.Json(new { error=result.Status==503 ? "Setup is starting" : result.Status==429 ? "Wait 30 seconds before retrying" : "Invalid token" },statusCode:result.Status);
     });
-    void SetSession(HttpContext ctx,string session)=>ctx.Response.Cookies.Append("xur.session",session,new CookieOptions { HttpOnly=true,SameSite=SameSiteMode.Strict,Secure=true,MaxAge=TimeSpan.FromHours(8),Path="/" });
+    void SetSession(HttpContext ctx,string session)=>BrowserSecurity.SetSession(ctx,session,persistent:auth.AccountConfigured);
+    app.MapGet("/auth/login-token",(HttpContext ctx,IAntiforgery antiforgery)=> {
+        var tokens=antiforgery.GetAndStoreTokens(ctx);
+        return Results.Json(new {requestToken=tokens.RequestToken,fieldName=tokens.FormFieldName});
+    });
     app.MapPost("/auth/login",async (HttpContext ctx) => {
         var form=await ctx.Request.ReadFormAsync();
-        var result=auth.AccountConfigured ? auth.PasswordLogin(form["username"].ToString(),form["password"].ToString()) : auth.Login("xur",form["code"].ToString());
-        if(result.Session==null)return Results.Redirect("/login?error="+(result.Status==429?"limited":"invalid"));
-        SetSession(ctx,result.Session);return Results.Redirect(auth.AccountConfigured?"/":"/setup-account");
+        var result=auth.AccountConfigured ? auth.PasswordLogin(form["username"].ToString(),form["password"].ToString(),persistent:true) : auth.Login("xur",form["code"].ToString());
+        var json=ctx.Request.Headers.Accept.ToString().Contains("application/json",StringComparison.OrdinalIgnoreCase);
+        if(result.Session==null)return json
+            ? Results.Json(new {error=result.Status==429?"Too many attempts. Wait 30 seconds.":auth.AccountConfigured?"Invalid username or password.":"Invalid access code."},statusCode:result.Status)
+            : Results.Redirect("/login?error="+(result.Status==429?"limited":"invalid"));
+        SetSession(ctx,result.Session);
+        var redirectTo=auth.AccountConfigured?"/":"/setup-account";
+        return json ? Results.Json(new {signedIn=true,redirectTo}) : Results.Redirect(redirectTo);
     });
     app.MapPost("/auth/setup",async(HttpContext ctx)=> {
         var form=await ctx.Request.ReadFormAsync();
-        var result=auth.CreateAccount(ctx.Items["setupSession"] as string,form["username"].ToString(),form["password"].ToString());
+        var result=auth.CreateAccount(ctx.Items["setupSession"] as string,form["username"].ToString(),form["password"].ToString(),persistent:true);
         if(result.Session==null)return Results.Redirect("/setup-account?error="+Uri.EscapeDataString(result.Error ?? "Could not create account."));
         SetSession(ctx,result.Session);CompleteAccountSetup();return Results.Redirect("/");
     });

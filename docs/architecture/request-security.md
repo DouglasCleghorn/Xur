@@ -13,6 +13,15 @@ check are additional protections. They do not replace token validation. Login
 forms also require antiforgery. JSON bootstrap/login exchanges require JSON and
 pass the same browser-origin check; HTML forms cannot submit those exchanges.
 
+Browser account sessions have no server time limit; setup and API sessions expire
+after eight hours. The persistent session cookie renews on authenticated visits.
+Login refreshes only its antiforgery token through an uncached same-origin GET
+before form submission, so restored tabs and changed login state do not discard
+entered credentials. The POST still requires a valid token and cookie, including
+when it negotiates JSON for the browser's optional password-save API. Only
+successful password authentication can trigger that save request; a rejected save
+does not affect the session. Browsers without that API use native form navigation.
+
 `app-fetch.js` supplies the per-page request token on same-origin requests only.
 Authenticated read APIs can use gzip/Brotli over HTTPS only after the server
 validates that token and its cookie. Invalid tokens are rejected. No-token reads

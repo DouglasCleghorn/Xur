@@ -67,19 +67,19 @@ public sealed class Bootstrap
     {
         // No not-before: installer RTC correction must not invalidate the session.
         var jwt=new JwtSecurityToken("xur","xur-control",[new Claim("sub",subject),new Claim("purpose",purpose),new Claim("jti",Guid.NewGuid().ToString("N"))],
-            null,clock.GetUtcNow().AddHours(8).UtcDateTime,new SigningCredentials(new SymmetricSecurityKey(signingKey),SecurityAlgorithms.HmacSha256));
+            null,purpose=="manager-browser" ? null : clock.GetUtcNow().AddHours(8).UtcDateTime,new SigningCredentials(new SymmetricSecurityKey(signingKey),SecurityAlgorithms.HmacSha256));
         return new JwtSecurityTokenHandler().WriteToken(jwt);
     }
-    public (int Status,string? Session) PasswordLogin(string username,string password)
+    public (int Status,string? Session) PasswordLogin(string username,string password,bool persistent=false)
     {
         lock(sync)
         {
             if(Limited())return (429,null);
             if(!accounts.Verify(username,password))return (401,null);
-            return (200,Issue(accounts.Account!.Id,"manager"));
+            return (200,Issue(accounts.Account!.Id,persistent?"manager-browser":"manager"));
         }
     }
-    public (int Status,string? Session,string? Error) CreateAccount(string? setupSession,string username,string password)
+    public (int Status,string? Session,string? Error) CreateAccount(string? setupSession,string username,string password,bool persistent=false)
     {
         lock(sync)
         {
@@ -88,7 +88,7 @@ public sealed class Bootstrap
             try { accounts.Create(username,password); }
             catch(ArgumentException e){return (400,null,e.Message);}
             code="";
-            return (200,Issue(accounts.Account!.Id,"manager"),null);
+            return (200,Issue(accounts.Account!.Id,persistent?"manager-browser":"manager"),null);
         }
     }
     public bool CanSetup(string? token)
@@ -97,7 +97,19 @@ public sealed class Bootstrap
     }
     public bool Authorized(string? cookie)
     {
-        lock(sync) { var principal=Validate(cookie);return accounts.Account is { } account && principal?.FindFirst("sub")?.Value==account.Id && principal.FindFirst("purpose")?.Value=="manager"; }
+        lock(sync) { var principal=Validate(cookie);return IsManager(principal); }
+    }
+    bool IsManager(ClaimsPrincipal? principal)=>accounts.Account is { } account && principal?.FindFirst("sub")?.Value==account.Id && principal.FindFirst("purpose")?.Value is "manager" or "manager-browser";
+    public string? RememberBrowserSession(string? token)
+    {
+        lock(sync)
+        {
+            var principal=Validate(token);
+            if(!IsManager(principal))return null;
+            // Upgrade still-valid cookies from older bundles without extending
+            // expired tokens or changing the lifetime of API bearer sessions.
+            return principal!.FindFirst("purpose")!.Value=="manager-browser" ? token : Issue(accounts.Account!.Id,"manager-browser");
+        }
     }
     ClaimsPrincipal? Validate(string? cookie)
     {
@@ -106,9 +118,11 @@ public sealed class Bootstrap
         {
             var principal=new JwtSecurityTokenHandler { MapInboundClaims=false }.ValidateToken(cookie,new TokenValidationParameters {
                 ValidIssuer="xur",ValidAudience="xur-control",IssuerSigningKey=new SymmetricSecurityKey(signingKey),
-                ValidAlgorithms=[SecurityAlgorithms.HmacSha256],RequireSignedTokens=true,RequireExpirationTime=true,
+                ValidAlgorithms=[SecurityAlgorithms.HmacSha256],RequireSignedTokens=true,RequireExpirationTime=false,
                 ValidateIssuerSigningKey=true,ValidateLifetime=true,ClockSkew=TimeSpan.Zero,
-                LifetimeValidator=(start,end,_,_)=>end is { } expiry && expiry>clock.GetUtcNow().UtcDateTime && (start==null || start<=clock.GetUtcNow().UtcDateTime)
+                LifetimeValidator=(start,end,token,_)=>
+                    (end is { } expiry ? expiry>clock.GetUtcNow().UtcDateTime : token is JwtSecurityToken jwt && jwt.Claims.Any(c=>c.Type=="purpose" && c.Value=="manager-browser"))
+                    && (start==null || start<=clock.GetUtcNow().UtcDateTime)
             },out _);
             return principal;
         }
