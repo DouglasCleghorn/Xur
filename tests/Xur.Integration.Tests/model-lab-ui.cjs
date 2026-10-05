@@ -3,7 +3,7 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
 (async()=>{
  const out=path.resolve('.build/fast/model-lab');fs.mkdirSync(out,{recursive:true});
  execFileSync(process.env.XUR_DOTNET||path.join(process.env.HOME,'.local/share/xur-build/dotnet/dotnet'),['run','--project','tests/Xur.Unit.Tests','-c','Release','--','--control-panel-render',out],{stdio:'pipe'});
- let html=fs.readFileSync(path.join(out,'model-lab.html'),'utf8').replace(/(<form id="lab-token"[^>]*>)/, '$1<input name="__RequestVerificationToken" value="fixture-token">');
+ let html=fs.readFileSync(path.join(out,'model-lab.html'),'utf8').replace(/(<form id="lab-token"[^>]*>)/, '$1<input name="__RequestVerificationToken" value="fixture-only">');
  const id='123456789012345678901234567890abce',now=new Date().toISOString();
  const gpu={pci:'0000:01:00.0',name:'NVIDIA GeForce RTX 3090',vendor:'NVIDIA',memoryMiB:24576};
  const target={workload:{id:'1',name:'Qwen test',route:'qwen',gpus:[gpu.pci],recipe:{name:'Qwen benchmark model',engine:'vLLM',kind:'Model',hub:{repository:'owner/Qwen-long-model-name',revision:'a'.repeat(40)},image:'mirror.gcr.io/vllm/vllm-openai:latest',command:['--max-num-seqs','1']}},instance:{instanceId:'fixture-instance'}};
@@ -17,7 +17,7 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
   const u=new URL(r.request().url()),method=r.request().method();const json=v=>r.fulfill({body:JSON.stringify(v),contentType:'application/json'});
   if(u.pathname.startsWith('/icons/'))return r.fulfill({path:path.resolve('src/Xur.Control/wwwroot'+u.pathname)});
   if(method==='POST'){
-   assert.equal(r.request().headers().requestverificationtoken,'fixture-token');mutations.push({path:u.pathname,body:r.request().postDataJSON()});
+   assert.equal(r.request().headers().requestverificationtoken,'fixture-only');mutations.push({path:u.pathname,body:r.request().postDataJSON()});
    if(u.pathname==='/api/benchmarks'){run.state='Running';return json(run);}
    if(u.pathname.endsWith('/cancel')){run.state='Cancelled';return json({});}
    if(u.pathname==='/api/model-lab/chat'){

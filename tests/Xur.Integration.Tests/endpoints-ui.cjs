@@ -7,9 +7,9 @@ const fs=require('fs'),path=require('path'),assert=require('assert/strict');
   let targets=[{workload:{name:'Qwen <script>unsafe</script>',route:'chat',gpus:['0000:81:00.0'],recipe:{name:'Qwen',engine:'vLLM',hub:{repository:'owner/model'}}},instance:{instanceId:'ready-1'}}],fail=false,requests=0;
   await page.route('https://endpoints.test/**',async r=>{
    const u=new URL(r.request().url());
-   if(u.pathname==='/api/model-lab/targets'){requests++;assert.equal(r.request().headers().requestverificationtoken,'fixture-token');return r.fulfill({status:fail?503:200,contentType:'application/json',body:JSON.stringify(fail?{}:targets)});}
+   if(u.pathname==='/api/model-lab/targets'){requests++;assert.equal(r.request().headers().requestverificationtoken,'fixture-only');return r.fulfill({status:fail?503:200,contentType:'application/json',body:JSON.stringify(fail?{}:targets)});}
    if(/\.(css|js|ttf|svg)$/.test(u.pathname))return r.fulfill({path:path.resolve('src/Xur.Control/wwwroot'+u.pathname)});
-   const html=fs.readFileSync('.build/fast/control-panel/endpoints.html','utf8').replace('</head>','<meta name="xur-csrf" content="fixture-token"><script src="/app-fetch.js"></script></head>');
+   const html=fs.readFileSync('.build/fast/control-panel/endpoints.html','utf8');
    return r.fulfill({contentType:'text/html',body:html});
   });
   for(const [label,width,height] of [['desktop',1440,1000],['mobile',390,844]]){

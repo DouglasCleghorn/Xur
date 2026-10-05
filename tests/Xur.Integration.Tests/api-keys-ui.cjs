@@ -3,17 +3,16 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
 (async()=>{
  const out=path.resolve('.build/fast/api-keys');fs.mkdirSync(out,{recursive:true});
  execFileSync(process.env.XUR_DOTNET||path.join(process.env.HOME,'.local/share/xur-build/dotnet/dotnet'),['run','--project','tests/Xur.Unit.Tests','-c','Release','--','--control-panel-render',out],{stdio:'pipe'});
- const html=fs.readFileSync(path.join(out,'api-keys.html'),'utf8').replace(/(<form id="api-key-create"[^>]*>)/,'$1<input name="__RequestVerificationToken" value="fixture-token">');
+ const html=fs.readFileSync(path.join(out,'api-keys.html'),'utf8').replace(/(<form id="api-key-create"[^>]*>)/,'$1<input name="__RequestVerificationToken" value="fixture-only">');
  let keys=[],secret='test-only-secret',posts=[];
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('http://keys.test/**',async r=>{
    const u=new URL(r.request().url());const json=data=>r.fulfill({contentType:'application/json',body:JSON.stringify(data)});
-   if(u.pathname.startsWith('/icons/'))return r.fulfill({path:path.resolve('src/Xur.Control/wwwroot'+u.pathname)});
-   if(u.pathname==='/setup.css'||u.pathname==='/api-keys.js')return r.fulfill({path:path.resolve('src/Xur.Control/wwwroot'+u.pathname)});
+   if(/\.(css|js|ttf|svg)$/.test(u.pathname))return r.fulfill({path:path.resolve('src/Xur.Control/wwwroot'+u.pathname)});
    if(r.request().method()==='POST'){
-    assert.equal(r.request().headers().requestverificationtoken,'fixture-token');posts.push(u.pathname);
+    assert.equal(r.request().headers().requestverificationtoken,'fixture-only');posts.push(u.pathname);
     if(u.pathname.endsWith('/revoke')){keys[0].revokedAt=new Date().toISOString();return json({});}
     const body=r.request().postDataJSON();keys=[{...body,id:'test-key',createdAt:new Date().toISOString(),expiresAt:body.days===0?null:new Date(Date.now()+86400000).toISOString(),requests:0}];return json({key:keys[0],token:secret});
    }
