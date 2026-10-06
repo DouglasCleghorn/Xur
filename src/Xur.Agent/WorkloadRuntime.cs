@@ -154,7 +154,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 if(model!=null)args.AddRange(["--volume",model+":/model.gguf:ro,z"]);
                 if(modelFiles!=null)args.AddRange(["--volume",modelFiles+":/models:ro,z"]);
                 if(w.Recipe.Engine is "vLLM" or "vLLM-Omni")args.AddRange(["--entrypoint","vllm"]);
-                args.Add(image);args.AddRange(w.Recipe.Command);
+                args.Add(image);args.AddRange(engineImage?.Command(w.Recipe.Command)??w.Recipe.Command);
                 var created=await Processes.Run("podman",args,60);
                 if(created.ExitCode!=0)throw Failure("Container creation failed",created);
                 instance=await Inspect(w) ?? throw new IOException();
@@ -287,6 +287,16 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     public async Task<JsonElement> Display(string id,StationDisplayRequest? request)
     {
         await gate.WaitAsync();try{return await StationDisplay.Run(await RunningStation(id),request);}finally{gate.Release();}
+    }
+    public async Task<byte[]> Screenshot(string id,CancellationToken cancellation)
+    {
+        if(!ProfilePolicy.EntityIdentifier(id))throw new InvalidOperationException("Invalid workstation ID.");
+        await using var operation=await Stops.Enter();
+        // Match starts/stops on this workstation; other desktops can capture in
+        // parallel without racing a user/GPU handoff on the selected desktop.
+        await using var allocation=await Stops.Resources(["workload:"+id]);
+        cancellation.ThrowIfCancellationRequested();
+        return await StationScreenshot.Capture(await RunningStation(id),cancellation);
     }
     public async Task StartStreaming(string id,bool restart=false)
     {

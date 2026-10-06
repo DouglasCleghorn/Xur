@@ -23,6 +23,7 @@ if(args is ["--website-render",var websiteOutput]) { await ControlPanelRender.Ru
 if(args is ["--console-overlay-render",var overlayOutput]) { ConsoleKeyboardOverlayTests.Capture(overlayOutput);return; }
 var results = new List<string>();
 void Check(bool value,string name) { if(!value) throw new Exception(name); results.Add(name); }
+if(args is ["--profile-access"]){await ProfileAccessTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ProfileAccess",passed=results}));return;}
 if(args is ["--console-gamepad"]){await ConsoleGamepadTests.Run(Check);ConsoleStickKeyboardTests.Run(Check);ConsoleKeyboardOverlayTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ConsoleGamepad",passed=results}));return;}
 await InstallerDiagnosticsTests.Run(Check);
 await InstallerDiagnosticSshTests.Run(Check);
@@ -47,6 +48,8 @@ Check(Xur.Agent.ServerPower.Configuration.Contains("--what=sleep ")&&!Xur.Agent.
 Check(LocalConsole.WebAddresses([]).Contains("Waiting for network"),"Console explains network address acquisition instead of showing an empty list");
 Check(LocalConsole.WebAddresses(["https://192.0.2.1:8443/"]).Contains("192.0.2.1"),"Console shows acquired addresses immediately");
 await StationGraphicsTests.Run(Check);
+await StationScreenshotTests.Run(Check);
+await WorkstationPreviewEndpointTests.Run(Check);
 await StationUnitsTests.Run(Check);
 await HeadlessStationTests.Run(Check);
 await ModelLabTests.Run(Check);
@@ -60,6 +63,8 @@ await ModelImageUpdaterTests.Run(Check);
 await CachedEngineImagesTests.Run(Check);
 await ModelGpuTests.Run(Check);
 await OmniXpuImageTests.Run(Check);
+AmdGpuTargetTests.Run(Check);
+await NativeAmdImageTests.Run(Check);
 await AutomaticModelsTests.Run(Check);
 await EngineRestartPolicyTests.Run(Check);
 await ParallelStopGateTests.Run(Check);

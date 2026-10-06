@@ -21,6 +21,14 @@ requires accepting or importing that certificate. Settings lists HTTPS URLs.
 After pairing, choose **Desktop** in Moonlight. Change or retry streaming from
 the workstation card; profile loading is handled on Home, Profiles or Switch profile.
 
+Running workstations show a desktop preview captured when the Workstations page
+opens. Use **Refresh preview** for a new screenshot; the timestamp shows when
+the displayed preview was updated. Captures use the host's Spectacle tool in
+the workstation's Plasma session and work independently of Moonlight pairing.
+Images are served through the authenticated manager with caching disabled;
+temporary capture files are removed after each request. A stopped desktop has
+no preview, and a failed capture shows **Preview unavailable**.
+
 Sunshine 2026.914.233613 is included in the signed application bundle. Its exact
 upstream checksum is in `tools/Xur.Streaming/upstream-lock.json`. Both LAN and WAN
 encryption are mandatory, UPnP is disabled, and Sunshine's administration UI is

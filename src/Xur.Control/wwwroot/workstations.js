@@ -1,4 +1,16 @@
 (() => {
+ for(const preview of document.querySelectorAll('.station-preview')){
+  const image=preview.querySelector('img'),button=preview.querySelector('button'),status=preview.querySelector('[role=status]'),placeholder=preview.querySelector('.station-preview-placeholder');
+  const refresh=()=>{
+   if(button.disabled)return;
+   button.disabled=true;status.textContent='Capturing desktop…';placeholder.textContent='Capturing desktop…';
+   image.hidden=true;placeholder.hidden=false;
+   image.src=preview.dataset.url+'?t='+Date.now();
+  };
+  image.addEventListener('load',()=>{image.hidden=false;placeholder.hidden=true;button.disabled=false;status.textContent='Updated at '+new Date().toLocaleTimeString();});
+  image.addEventListener('error',()=>{image.hidden=true;placeholder.hidden=false;placeholder.textContent='Preview unavailable';button.disabled=false;status.textContent='Could not capture the desktop. Refresh to try again.';});
+  button.addEventListener('click',refresh);refresh();
+ }
  const dialog=document.querySelector('#station-display-dialog');
  if(dialog){
   const output=dialog.querySelector('#station-display-json'),status=dialog.querySelector('[role=status]'),copy=dialog.querySelector('#station-display-copy'),download=dialog.querySelector('#station-display-download'),retry=dialog.querySelector('#station-display-retry');

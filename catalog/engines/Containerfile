@@ -5,6 +5,8 @@ FROM ghcr.io/ggml-org/llama.cpp:server-rocm AS server-rocm
 FROM ghcr.io/ggml-org/llama.cpp:server-vulkan AS server-vulkan
 FROM mirror.gcr.io/vllm/vllm-openai:latest AS vllm
 FROM mirror.gcr.io/vllm/vllm-openai-rocm:latest AS vllm-rocm
+# Radeon 780M needs PyTorch, rocBLAS and vLLM kernels compiled for gfx1103.
+FROM localhost/xur/vllm-rocm-gfx1103:v0.31.0-rocm10.0.0 AS vllm-rocm-gfx1103
 FROM mirror.gcr.io/vllm/vllm-openai-xpu:latest AS vllm-xpu
 FROM mirror.gcr.io/vllm/vllm-omni:latest AS omni
 # Upstream has no ROCm latest tag or prebuilt XPU Omni image.

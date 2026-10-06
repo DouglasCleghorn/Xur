@@ -47,7 +47,7 @@ The capture dates and privacy reviews in the table above remain unchanged.
 | Image | Work before the next release |
 | --- | --- |
 | `docs/assets/profile-editor.jpg` | Refresh: predates inline rename, conditional workstation fields, Add user placement and shared Switch profile navigation. |
-| `docs/assets/workstations.jpg` | Refresh: predates current Settings/display controls and the removal of profile-loading and launch shortcuts. |
+| `docs/assets/workstations.jpg` | Refresh: predates desktop previews, current Settings/display controls and the removal of profile-loading and launch shortcuts. |
 | `docs/assets/control-panel.jpg` | Review and refresh if needed for the current Home picker and shared Switch profile navigation. |
 | `docs/assets/model-lab.jpg` | Review and refresh if needed for shared navigation; preserve blank prompts/results and synthetic fixtures. |
 | `docs/assets/update-channel.jpg` | Compare the cropped selector with current Settings; refresh if its controls or wording differ. |
@@ -66,6 +66,35 @@ See [release preparation](development/release-preparation.md).
 | User-supplied bug screenshots | Reproduce reported defects | T3 attachments; referenced in conversation, not copied into source | Keep private; add a sanitized published-image entry before reuse |
 
 ## Change log
+
+- 2026-10-05: Added desktop previews in the working tree based on `1fd77ac`.
+  The generated `.build/evidence/workstation-preview/desktop.png` fixture is a
+  synthetic desktop illustration for private collaborative browser checks;
+  its embedded window contains example text only, with no live desktop,
+  account, credentials or personal files. Browser assertions covered fresh
+  capture requests, failure/retry, and layouts at 1440, 390 and 320 px using
+  the actual Razor fixture. Collaborative screenshot capture was unavailable,
+  so no new page screenshots were saved or published. The published workstation
+  image and the older `.build/evidence/workstation-design/` capture family now
+  predate desktop previews and must be regenerated before release reuse.
+
+- 2026-10-05: Regenerated and visually reviewed the private
+  `.build/fast/updates-{desktop,mobile}.png` family from the synthetic Updates
+  Razor fixture, based on `404b1b2` plus the browser-test count correction.
+  The 1440 and 390 px captures show all 18 tools, including the native AMD
+  gfx1103 entry, without overflow. Privacy review: fixture versions and public
+  image references only; no live host, accounts, credentials or model prompts.
+  These replace the retired 17-tool captures as current regression evidence.
+  Regenerate after Updates UI or engine inventory changes; not published.
+
+- 2026-10-05: Source review for the native Radeon 780M vLLM change, based on
+  `c750b2a`. The private `.build/fast/updates-{desktop,mobile}.png` captures
+  with 17 tools predate the new native gfx1103 engine row and are retired as
+  current release evidence; regenerate this family for the 18-tool inventory
+  before reuse. The published update-channel crop does not include the engine
+  inventory. No new screenshots were captured or published during the live
+  AMD kernel and inference tests; their text evidence remains private under
+  `.build/evidence/amd-fix/`.
 
 - 2026-10-04: Regenerated `.build/fast/updates-{desktop,mobile}.png` from the
   synthetic Updates Razor fixture, based on `a72a66e` plus the GPU-capacity and
@@ -217,3 +246,15 @@ capture date, privacy review, and the features whose next changes require a refr
   and the console Switch profile entry. Collaborative browser assertions used
   synthetic fixtures at 1280 and 390 px; screenshot capture was unavailable
   during this follow-up, so no replacement images were published.
+
+- 2026-10-05: Desktop switcher hover capture family:
+  `.build/evidence/overlay-dpad/hover-buttons.png` and `hover-profiles.png`.
+  Private Qt Fusion renders from the Fedora builder, using the production
+  stylesheet in `t3code/fix-overlay-dpad`, based on `1fd77ac`. The button grid
+  compares normal, hovered, pressed and disabled states; profile rows compare
+  hovered and selected text. Purpose: check contrast after the desktop switcher
+  navigation and hover changes. Privacy review: synthetic control/profile names
+  only, with no credentials, personal files or production state. These are
+  focused style probes, not captures of a running workstation. Regenerate after
+  changes to desktop control colors or states; review full desktop picker and
+  review-screen captures before release.

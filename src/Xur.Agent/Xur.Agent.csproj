@@ -6,4 +6,5 @@
   </ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../os/containers/99-xur-docker-hub.conf" LogicalName="Xur.RegistryMirror" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../catalog/engines/omni-xpu.Containerfile" LogicalName="Xur.OmniXpu" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../../catalog/engines/vllm-rocm-gfx1103.Containerfile" LogicalName="Xur.VllmGfx1103" /></ItemGroup>
 </Project>

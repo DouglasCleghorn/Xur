@@ -25,6 +25,15 @@ user locally; the web manager continues to use the administrator account.
 duration. The desktop helper starts with the next workstation session after an
 application update; reload existing workstations to install the new entry.
 Controller navigation is captured through evdev while its window is open.
+The desktop picker stays usable during a profile load. Selecting another profile
+interrupts the current change, waits for its running action to finish safely,
+then reviews the replacement against the remaining workloads. Confirm **Load
+profile** to start it. **Stop all workloads** is a separate desktop action that
+also interrupts a pending load before reviewing what to stop. Saved profiles are
+kept. **Back to profiles** or B returns to the picker, and left/right selects
+Back or confirmation in a review. D-pad navigation also reaches **Try again**,
+**Shortcuts** and **Close**; Shortcuts uses up/down to move and left/right to
+adjust the controller binding and hold duration.
 The opening chord can still reach the game, and direct hidraw input is outside
 that capture boundary. See [native helper behavior and acceptance limits](../../tools/Xur.ProfileSwitcher/README.md).
 

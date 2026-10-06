@@ -82,7 +82,8 @@ async Task StartHost()
     builder.Services.AddSingleton(appliance); builder.Services.AddSingleton(auth);builder.Services.AddSingleton(apiKeys);
     var catalog=new RecipeCatalog(Environment.GetEnvironmentVariable("XUR_CATALOG") ?? "/usr/share/xur/catalog",Path.Combine(appliance.StateDirectory,"catalog-selected"));
     var profileStore=new ProfileStore(appliance.Installer?Path.Combine(appliance.StateDirectory,"profiles"):appliance.StateDirectory);
-    var runtimeClient=LocalClient.Create(Path.Combine(appliance.RunDirectory,"agent.sock"));runtimeClient.Timeout=TimeSpan.FromMinutes(45);
+    // Native HIP compilation may take an hour, followed by engine health checks.
+    var runtimeClient=LocalClient.Create(Path.Combine(appliance.RunDirectory,"agent.sock"));runtimeClient.Timeout=TimeSpan.FromMinutes(75);
     var gatewayClient=LocalClient.Create(Path.Combine(appliance.RunDirectory,"gateway-admin.sock"));
     var profileManager=new ProfileManager(profileStore,new AgentWorkloadRuntime(runtimeClient),new LocalWorkloadGateway(gatewayClient),catalog,async()=>await runtimeClient.GetFromJsonAsync<StationAccount[]>("/station-users") ?? [],
         entry=>applicationLog.Write("ProfileSwitch",LogLevel.Information,JsonSerializer.Serialize(entry,new JsonSerializerOptions(JsonSerializerDefaults.Web))));
@@ -241,6 +242,7 @@ async Task StartHost()
     app.MapPost("/models/scan",async()=>{await appliance.Agent.PostAsync("/models/scan",null);return Results.Redirect("/models");});
     app.MapGet("/api/network-usage",async(int? minutes,DateTimeOffset? since,HttpResponse response)=>TelemetryDelta.Filter((await appliance.Agent.GetFromJsonAsync<NetworkUsageSnapshot>("/network-usage?minutes="+Math.Clamp(minutes??15,1,1440)))!,since,response));
     app.MapGet("/api/workstations",async()=>WorkstationView.Build(await profileManager.State(),await appliance.Agent.GetFromJsonAsync<StationStreamStatus[]>("/workstations")??[]));
+    app.MapWorkstationPreviews(appliance.Agent);
     app.MapGet("/api/workstations/{id}/display",async(string id)=> {var r=await appliance.Agent.GetAsync("/workstations/"+Uri.EscapeDataString(id)+"/display");return Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);});
     app.MapPost("/api/workstations/{id}/display",async(string id,StationDisplayRequest request)=> {var r=await appliance.Agent.PostAsJsonAsync("/workstations/"+Uri.EscapeDataString(id)+"/display",request);return Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);});
     app.MapPost("/workstations/display",async(HttpContext ctx)=> {

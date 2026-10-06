@@ -3,12 +3,14 @@ const fs=require('fs'),assert=require('assert/strict');
 (async()=>{
  const browser=await chromium.launch({headless:true});
  try {
-  const page=await browser.newPage();const errors=[],requests=[];let displayFails=false;
+  const page=await browser.newPage();const errors=[],requests=[];let displayFails=false,screenshotFails=false,screenshotRequests=0;
+  const screenshot=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAIAAAC0SDtlAAAAF0lEQVR4nGN0LJvAQApgIkn1qAZaaQAAQcoBWfCjfbMAAAAASUVORK5CYII=','base64');
   const displayData={width:1920,height:1080,refreshRate:60,outputs:[{name:'Virtual-1',enabled:true}],note:'<script>not executable</script>'};
   await page.context().grantPermissions(['clipboard-read','clipboard-write']);
   page.on('pageerror',e=>errors.push(e.message));
   await page.route('https://stations.test/**',r=>{
    const u=new URL(r.request().url());
+   if(u.pathname.endsWith('/screenshot')){screenshotRequests++;return screenshotFails?r.fulfill({status:409,json:{error:'Display unavailable'}}):r.fulfill({body:screenshot,contentType:'image/png',headers:{'Cache-Control':'no-store'}});}
    if(u.pathname.endsWith('/display'))return displayFails?r.fulfill({status:503,json:{error:'Unavailable'}}):r.fulfill({json:displayData});
    if(u.pathname==='/api/station-users') { requests.push(r.request().postDataJSON());return r.fulfill({json:{name:'Alex',username:'xuruser-alex'}}); }
    if(u.pathname.endsWith('/pairings'))return r.fulfill({json:{pairings:[{id:'client1',name:'Laptop',address:'192.0.2.20'}]}});
@@ -30,6 +32,19 @@ const fs=require('fs'),assert=require('assert/strict');
    assert.equal(await page.getByText('Game troubleshooting',{exact:true}).count(),1);
    assert(await running.locator('.station-settings-body').isHidden());
    assert.equal(await stopped.locator('.station-connect').count(),0,'Pairing becomes available after loading');
+   assert.equal(await page.locator('.station-preview').count(),1,'Only running workstations capture a desktop');
+   const preview=running.locator('.station-preview'),previewImage=preview.locator('img');
+   await preview.getByText(/^Updated at /).waitFor();assert(await previewImage.isVisible());
+   assert(await previewImage.evaluate(image=>image.naturalWidth>0),'Preview decodes the captured image');
+   const firstSource=await previewImage.getAttribute('src'),beforeRefresh=screenshotRequests;
+   await preview.getByRole('button',{name:'Refresh preview',exact:true}).click();await preview.getByText(/^Updated at /).waitFor();
+   assert.equal(screenshotRequests,beforeRefresh+1,'Refresh requests a fresh capture');
+   assert.notEqual(await previewImage.getAttribute('src'),firstSource,'Refresh does not reuse the image URL');
+   screenshotFails=true;await preview.getByRole('button',{name:'Refresh preview',exact:true}).click();
+   await preview.getByText('Could not capture the desktop. Refresh to try again.',{exact:true}).waitFor();
+   assert(await previewImage.isHidden(),'A failed refresh never presents an older image as current');
+   assert(await preview.getByText('Preview unavailable',{exact:true}).isVisible());
+   screenshotFails=false;await preview.getByRole('button',{name:'Refresh preview',exact:true}).click();await preview.getByText(/^Updated at /).waitFor();
    assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),'Overview overflow at '+width);
    await page.screenshot({path:out+'/overview-'+width+'.png',fullPage:true});
    await running.locator('.station-connect>summary').focus();await page.keyboard.press('Enter');
@@ -73,6 +88,6 @@ const fs=require('fs'),assert=require('assert/strict');
   }
   assert(requests.some(r=>r.pairingId==='client1'&&r.pin==='1234'),'Pairing sends the selected client and PIN');
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({suite:'WorkstationsUi',result:'Passed',widths:[1440,390,320],pairing:true,displayDialog:true,profileControlsRemoved:true,createUserPreservesDraft:true}));
+  console.log(JSON.stringify({suite:'WorkstationsUi',result:'Passed',widths:[1440,390,320],pairing:true,displayDialog:true,desktopPreview:true,previewFailureRecovery:true,profileControlsRemoved:true,createUserPreservesDraft:true}));
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

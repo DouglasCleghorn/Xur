@@ -31,5 +31,47 @@ int main() {
     assert(!interrupted.tick(start + milliseconds(600), 1000));
     assert(!interrupted.tick(start + milliseconds(1500), 1000));
     assert(interrupted.tick(start + milliseconds(1600), 1000));
-    std::cout << "Controller chords: threshold, release latch, independent pads, interruption and alternative binding passed\n";
+
+    PadState queued;
+    queued.keys[BTN_SELECT] = queued.keys[BTN_START] = true;
+    assert(queued.read(EV_KEY, BTN_DPAD_DOWN, 1) == PadAction::None);
+    queued.read(EV_KEY, BTN_DPAD_DOWN, 0);
+    queued.read(EV_KEY, BTN_SELECT, 0); queued.read(EV_KEY, BTN_START, 0);
+    assert(!queued.armed);
+    queued.read(EV_SYN, SYN_REPORT, 0);
+    assert(queued.armed && queued.read(EV_KEY, BTN_DPAD_DOWN, 1) == PadAction::Down);
+    assert(queued.read(EV_KEY, BTN_DPAD_DOWN, 1) == PadAction::None);
+    assert(queued.read(EV_KEY, BTN_DPAD_DOWN, 2) == PadAction::None);
+    assert(queued.read(EV_KEY, BTN_DPAD_DOWN, 0) == PadAction::None);
+    assert(queued.read(EV_KEY, BTN_DPAD_UP, 1) == PadAction::Up);
+    queued.read(EV_KEY, BTN_DPAD_UP, 0);
+    assert(queued.read(EV_KEY, BTN_SOUTH, 1) == PadAction::Accept);
+    assert(queued.read(EV_KEY, BTN_SOUTH, 1) == PadAction::None);
+    assert(queued.read(EV_KEY, BTN_SOUTH, 2) == PadAction::None);
+    queued.read(EV_KEY, BTN_SOUTH, 0);
+    assert(queued.read(EV_KEY, BTN_EAST, 1) == PadAction::Back);
+
+    PadState hat;
+    hat.hatY = -1; hat.neutral(); assert(!hat.armed);
+    hat.read(EV_ABS, ABS_HAT0Y, 0); hat.read(EV_SYN, SYN_REPORT, 0);
+    assert(hat.armed && hat.read(EV_ABS, ABS_HAT0Y, 1) == PadAction::Down);
+    assert(hat.read(EV_KEY, BTN_DPAD_DOWN, 1) == PadAction::None);
+    assert(hat.read(EV_ABS, ABS_HAT0Y, 0) == PadAction::None);
+    assert(hat.read(EV_KEY, BTN_DPAD_DOWN, 0) == PadAction::None);
+    assert(hat.read(EV_KEY, BTN_DPAD_UP, 1) == PadAction::Up);
+    assert(hat.read(EV_ABS, ABS_HAT0Y, -1) == PadAction::None);
+    hat.read(EV_KEY, BTN_DPAD_UP, 0);
+    assert(hat.read(EV_ABS, ABS_HAT0Y, 0) == PadAction::None);
+    hat.armed = false; hat.hatX = 1; hat.neutral(); assert(!hat.armed);
+    hat.read(EV_ABS, ABS_HAT0X, 0); hat.read(EV_SYN, SYN_REPORT, 0); assert(hat.armed);
+
+    PadState contact;
+    contact.keys[BTN_TOUCH] = true; contact.neutral(); assert(contact.armed);
+    assert(contact.read(EV_ABS, ABS_HAT0Y, -1) == PadAction::Up);
+    assert(contact.read(EV_KEY, BTN_DPAD_LEFT, 1) == PadAction::Left);
+    assert(contact.read(EV_ABS, ABS_HAT0X, -1) == PadAction::None);
+    contact.read(EV_KEY, BTN_DPAD_LEFT, 0); contact.read(EV_ABS, ABS_HAT0X, 0);
+    assert(contact.read(EV_ABS, ABS_HAT0X, 1) == PadAction::Right);
+    assert(contact.read(EV_KEY, BTN_DPAD_RIGHT, 1) == PadAction::None);
+    std::cout << "Controller chords and input packets: release gate, digital/hat D-pad, duplicate mappings, fresh A/B and HID contact indicators passed\n";
 }

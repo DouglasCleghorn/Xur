@@ -71,7 +71,7 @@ public sealed class ProfileSwitcherBroker(ProfileManager manager,Func<int,Cancel
         if(request.Action=="state")
         {
             var state=await manager.State();
-            return new {profiles=state.Profiles.Select(Display),active=state.Active==null?null:Display(state.Active),runtime=new{instances=state.Runtime.Instances.Select(i=>new{i.Id,i.Fingerprint,i.State})},operation=state.Operation==null?null:new{state.Operation.Stage}};
+            return new {profiles=state.Profiles.Select(Display),active=state.Active==null?null:Display(state.Active),runtime=new{instances=state.Runtime.Instances.Select(i=>new{i.Id,i.Fingerprint,i.State})},busy=manager.UpdateBusy,operation=state.Operation==null?null:new{state.Operation.Id,state.Operation.Stage,state.Operation.CurrentAction}};
         }
         if(request.Action is "preview" or "preview-unload")
         {
@@ -81,16 +81,21 @@ public sealed class ProfileSwitcherBroker(ProfileManager manager,Func<int,Cancel
             plans[plan.Id]=(uid,actor.WorkloadId,plan.Expires);
             return new{plan.Id,plan.Digest,plan.Expires,plan.Unload,target=Display(plan.Target),plan.Steps};
         }
-        if(request.Action!="apply")throw new InvalidOperationException("Unknown profile switcher action.");
+        if(request.Action is not ("apply" or "cancel"))throw new InvalidOperationException("Unknown profile switcher action.");
         if(request.Trigger is not ("keyboard" or "controller" or "plasma-menu"))throw new InvalidOperationException("Specify how the profile switcher was opened.");
-        if(request.Id==null || !plans.TryGetValue(request.Id,out var owner) || owner.Uid!=uid || owner.Workstation!=actor.WorkloadId || owner.Expires<=DateTimeOffset.UtcNow)
+        if(request.Action=="apply" && (request.Id==null || !plans.TryGetValue(request.Id,out var owner) || owner.Uid!=uid || owner.Workstation!=actor.WorkloadId || owner.Expires<=DateTimeOffset.UtcNow))
             throw new InvalidOperationException("Review the profile again in this workstation.");
         if(enter!=null&&!enter())throw new InvalidOperationException("Application update in progress. Retry shortly.");
         try
         {
             if(access!=null&&!access.WorkstationsAllowed)throw new InvalidOperationException("Workstation profile controls are disabled. Change Profile access in Settings.");
-            var result=await manager.Apply(new(request.Id,request.Digest??""),new(request.Trigger,actor.User,uid,actor.WorkloadId,actor.Seat));
-            plans.TryRemove(request.Id,out _);return result;
+            if(request.Action=="cancel")
+            {
+                if(string.IsNullOrEmpty(request.Id))throw new InvalidOperationException("Specify the current operation ID.");
+                await manager.Cancel(request.Id,allowCompleted:true);return new{};
+            }
+            var result=await manager.Apply(new(request.Id!,request.Digest??""),new(request.Trigger,actor.User,uid,actor.WorkloadId,actor.Seat));
+            plans.TryRemove(request.Id!,out _);return result;
         }finally{exit?.Invoke();}
     }
     public static object Display(Profile profile)=>new{profile.Id,profile.Name,profile.Revision,workloads=profile.Workloads.Select(w=>new{w.Id,w.Name,w.Fingerprint,recipe=new{w.Recipe.Name,w.Recipe.Kind}})};
