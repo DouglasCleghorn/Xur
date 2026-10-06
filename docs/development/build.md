@@ -342,7 +342,8 @@ bash eng/test-xurutil.sh
 
 The first command tests service migration, journal setup, signed metadata,
 archives, compatibility, activation/recovery, installer preflight, Update All,
-virtual display modes, bounded file browsing/scans, ZIP streaming and HTTP/stream
+virtual display modes, OS update/power guards, installer progress and metadata,
+Steam sharing, device access, bounded file browsing/scans, ZIP streaming and HTTP/stream
 failures using temporary fixtures and mocked system commands. It also runs an authentic frozen previous
 updater to verify the first upgrade reaches the new agent's startup repair. The
 second publishes and exercises the actual native executable, including offline
@@ -358,6 +359,12 @@ xurutil logs configure [--root /absolute/offline/root]
 xurutil installer prepare|verify|check
 xurutil installer check-runtime [--root /absolute/offline/root]
 xurutil installer sync-clock
+xurutil installer bootc -- <original bootc arguments>
+xurutil installer bundle-id <bundle.json>
+xurutil installer save-metadata <absolute target root> [release.json]
+xurutil os-update status|power-status|check|stage|rollback|auto|enable|disable
+xurutil devices check -- <absolute device paths...>
+xurutil steam share [--minimum-age 120] -- <database> <accounts-json>
 xurutil update-all status|run
 xurutil display status
 xurutil display resize <width> <height> <fps>
@@ -415,8 +422,8 @@ The `host/app-update`, `host/host-service-migrate`, `host/log-compression` and
 `host/update-all` Python files are small compatibility launchers for older agents
 that explicitly invoke Python. Installer compatibility paths are shell launchers;
 current production callers invoke the native utility directly. `StationDisplay.py`
-is removed. Steam storage deduplication, the OS updater and distro Python
-dependencies remain separate migration work.
+is removed. The current agent has no embedded Python workers or Python process
+invocations. Distro Python dependencies and build/test tooling remain.
 Source size comparison against the previous Python implementations (physical
 lines, including comments and blank lines; excludes tests and compatibility
 launchers):
@@ -433,7 +440,7 @@ launchers):
 
 These are source counts, not binary size estimates. Explicit native filesystem
 and SQLite interop, command dispatch and durable-file helpers are additional
-shared code. `Xur.IO` adds about 202 lines reused by the CLI and services. One
+shared code. One
 Linux x64 executable contains all commands. Before the file-worker migration
 below, the measured Native AOT build was 8,902,176 bytes (8.49 MiB), up 358,048 bytes from the initial startup-only utility.
 Debug symbols remain separate and do not ship. Tests run without building an
@@ -474,3 +481,54 @@ These are local Release Native AOT measurements, excluding separate debug symbol
 and license notices; compiler/platform changes can change the result. Run
 `bash eng/test-xurutil.sh` to publish and repeat the native file fixtures, including
 a 128 MiB streamed ZIP with backpressure and resident memory below 50,000 KiB.
+
+The OS updater now runs `xurutil os-update`; its existing `host/os-update` path
+is a five-line shell launcher, preserving older agents and recovery callers.
+It retains signature enforcement, the single-operation lock, durable operation
+state and the separate live deployment power guard. Power recovery works without
+bootc, configuration or valid operation JSON. Both command pipes stream to disk
+with bounded memory, cancellation and time limits; a failed log stops the command.
+OS mutation commands are not retried or followed by an automatic reboot.
+
+Anaconda's `bootc-progress` path now launches `xurutil installer bootc`. Shared
+`TerminalProcess` gives only bootc stderr a PTY, preserves stdin/stdout and exact
+arguments, forwards Unix signals and preserves exit status. `DownloadProgress`
+bounds terminal redraw parsing and writes private counters; reporting failures
+leave the approved installation running. Other bootc commands pass through via
+`execv`. Installer JSON handling uses the live ISO's utility, so a selected older
+application bundle does not need these new commands. Channel and release sequence
+validation happens before metadata writes.
+
+Steam sharing runs at the existing idle I/O/reduced CPU priorities in a separate
+bounded process. `SteamSharing` reuses `DirectoryTree`; `ExtentSharing` invokes
+kernel-verified `FIDEDUPERANGE` without replacing inodes or writing user content.
+`NativeSqlite` serves both its checkpoint cache and the existing read-only profile
+compatibility queries. Cache keys and metadata fingerprints differ from the
+Python implementation, so the first native pass safely rechecks old pairs;
+old rows expire after thirty days. `DeviceAccess` replaces the streaming probe
+inside the same systemd user/device restrictions as Sunshine. See
+[Steam storage](../usage/steam-storage.md) for filesystem behavior and tests.
+
+Measured source sizes for this batch, including comments and blank lines:
+
+| Replaced Python | Before | C# implementation | After |
+| --- | ---: | --- | ---: |
+| `os/bootc/os-update` | 143 lines / 7,565 bytes | `OsUpdate` + shared `FileLease` | 152 lines / 9,982 bytes |
+| `os/installer/bootc-progress` | 128 lines / 4,603 bytes | shared `TerminalProcess` + `DownloadProgress` | 163 lines / 9,921 bytes |
+| `src/Xur.Agent/SteamStorage.py` | 264 lines / 11,856 bytes | shared `SteamSharing` + `ExtentSharing` | 215 lines / 13,637 bytes |
+| `StationStreaming.cs` device probe | 1 inline line / 85 bytes | shared `DeviceAccess` | 22 lines / 891 bytes |
+| `os/installer/install-manager` JSON snippets | 7 inline lines / 450 bytes | `InstallerMetadata` | 28 lines / 1,448 bytes |
+
+The shared SQLite wrapper adds 51 lines / 3,484 bytes and replaces the older
+profile-specific interop. CLI registration and changes to existing command/file
+helpers are additional; retained shell launchers are 192 and 153 bytes. These
+counts describe source, not standalone executables. All commands share one native
+Linux x64 binary: 9,525,120 bytes (9.08 MiB), compared with 9,270,224 bytes (8.84
+MiB) after the file-worker migration, an increase of 254,896 bytes (249 KiB).
+
+CI exercises the real PTY and signal behavior, a four-user file-backed Btrfs
+filesystem, and disposable systemd units that check permitted, missing and denied
+devices. The privileged fixtures keep their image/data in ignored evidence paths,
+use private mount namespaces for inaccessible checkout paths, and clean up mounts.
+They do not operate on physical installation disks. A fresh ISO install/reboot
+still needs media validation before release.

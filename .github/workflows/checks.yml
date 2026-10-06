@@ -13,7 +13,9 @@ jobs:
         with:
           global-json-file: global.json
       - name: Native AOT prerequisites
-        run: sudo apt-get install -y clang zlib1g-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang zlib1g-dev btrfs-progs
       - run: |
           mkdir -p .build/checks
           python3 -m pip install --target .build/checks -r eng/requirements.txt
@@ -36,6 +38,8 @@ jobs:
           python3 tests/Xur.Integration.Tests/compact-release.py
           python3 tests/Xur.Integration.Tests/steam-storage.py
           XUR_DOTNET="$(command -v dotnet)" bash eng/test-xurutil.sh
+          sudo bash eng/test-steam-btrfs.sh
+          sudo env XUR_UTIL="$PWD/.build/xurutil/xurutil" python3 tests/Xur.Integration.Tests/streaming-access.py
           python3 tests/Xur.Integration.Tests/online-installer.py
           python3 tests/Xur.Integration.Tests/installer-preflight.py
           python3 tests/Xur.Integration.Tests/install-failure.py

@@ -32,16 +32,16 @@ public sealed partial class DirectoryTree : IDisposable
         _ = new UTF8Encoding(false, true).GetBytes(path);
         return parts;
     }
-    public SafeFileHandle Open(string path, bool directory = false)
+    public SafeFileHandle Open(string path, bool directory = false, int access = 0)
     {
         Parts(path);
-        return path.Length == 0 ? Duplicate(Root) : Beneath(Root, path, directory);
+        return path.Length == 0 ? Duplicate(Root) : Beneath(Root, path, directory, access: access);
     }
-    public static SafeFileHandle Child(SafeFileHandle parent, string name, bool directory = false)
+    public static SafeFileHandle Child(SafeFileHandle parent, string name, bool directory = false, int access = 0)
     {
         var parts = Parts(name);
         if (parts.Length != 1) throw new ArgumentException("Invalid child name.");
-        return Beneath(parent, name, directory);
+        return Beneath(parent, name, directory, access: access);
     }
     public (SafeFileHandle Folder, string Name) Parent(string path)
     {
@@ -105,11 +105,12 @@ public sealed partial class DirectoryTree : IDisposable
         var fd = OpenNative(path, flags | CloseOnExec | NonBlock); Check(fd, "Could not open item");
         return new(fd, true);
     }
-    static SafeFileHandle Beneath(SafeFileHandle parent, string path, bool directory, bool crossMounts = false)
+    static SafeFileHandle Beneath(SafeFileHandle parent, string path, bool directory, bool crossMounts = false, int access = 0)
     {
         Parts(path);
         if (RuntimeInformation.ProcessArchitecture is not (Architecture.X64 or Architecture.Arm64)) throw new PlatformNotSupportedException("Safe file operations require Linux x64 or arm64.");
-        var how = new OpenHow { Flags = (ulong)(CloseOnExec | NoFollow | NonBlock | (directory ? DirectoryFlag : 0)), Resolve = 0x08 | 0x04 | (crossMounts ? 0UL : 0x01UL) };
+        if (access is not (0 or 2)) throw new ArgumentException("Only existing read or read/write files can be opened.");
+        var how = new OpenHow { Flags = (ulong)(access | CloseOnExec | NoFollow | NonBlock | (directory ? DirectoryFlag : 0)), Resolve = 0x08 | 0x04 | (crossMounts ? 0UL : 0x01UL) };
         var fd = Openat2(437, parent, path, ref how, 24);
         Check((long)fd, "Links and nested mounts are not followed; item unavailable or changed");
         return new(fd, true);

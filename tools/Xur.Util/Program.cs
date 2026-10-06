@@ -232,6 +232,54 @@ public static class Program
             });
             fileCommands.Subcommands.Add(command);
         }
+        var osUpdates = new Command("os-update", "Standalone upstream bootc updates and power guard");
+        root.Subcommands.Add(osUpdates);
+        foreach (var name in new[] { "status", "power-status", "check", "stage", "rollback", "auto", "enable", "disable" })
+        {
+            var command = new Command(name); osUpdates.Subcommands.Add(command);
+            Bind(command, async token =>
+            {
+                var result = await new OsUpdate("/var/lib/xur/updates", "/etc/xur/upstream.json", "/var/lib/xur/installed", runtime, files).Execute(name, token);
+                if (result is not null) Console.WriteLine(result.ToJsonString());
+            });
+        }
+        var bootc = new Command("bootc", "Capture native installer transfer progress without changing bootc arguments");
+        var bootcArguments = new Argument<string[]>("arguments") { Arity = ArgumentArity.ZeroOrMore };
+        bootc.Arguments.Add(bootcArguments); installer.Subcommands.Add(bootc);
+        bootc.SetAction(parsed =>
+        {
+            var values = parsed.GetValue(bootcArguments)!;
+            return values.Length >= 2 && values[0] == "install" && values[1] == "to-filesystem"
+                ? TerminalProcess.Run("/usr/bin/bootc", values, new DownloadProgress("/run/xur/install-download.json", Console.Error).Feed)
+                : TerminalProcess.Execute("/usr/bin/bootc", values);
+        });
+        var bundleId = new Command("bundle-id", "Read and validate the selected bundle identity");
+        var bundleMetadata = new Argument<string>("metadata"); bundleId.Arguments.Add(bundleMetadata); installer.Subcommands.Add(bundleId);
+        bundleId.SetAction(parsed => { try { Console.WriteLine(InstallerMetadata.BundleId(parsed.GetValue(bundleMetadata)!)); return 0; } catch(Exception error) { Console.Error.WriteLine(error.Message); return 1; } });
+        var metadata = new Command("save-metadata", "Save the selected installer channel and release sequence in the approved target");
+        var metadataRoot = new Argument<string>("root"); var metadataRelease = new Argument<string?>("release") { Arity = ArgumentArity.ZeroOrOne };
+        metadata.Arguments.Add(metadataRoot); metadata.Arguments.Add(metadataRelease); installer.Subcommands.Add(metadata);
+        metadata.SetAction(parsed => { try { InstallerMetadata.Save(parsed.GetValue(metadataRoot)!, "/usr/share/xur/installer-channel", parsed.GetValue(metadataRelease), files); return 0; } catch(Exception error) { Console.Error.WriteLine(error.Message); return 1; } });
+        var devices = new Command("devices", "Check actual device access inside the workstation's service boundary");
+        var deviceCheck = new Command("check"); var nodes = new Argument<string[]>("paths") { Arity = ArgumentArity.OneOrMore };
+        deviceCheck.Arguments.Add(nodes); devices.Subcommands.Add(deviceCheck); root.Subcommands.Add(devices);
+        deviceCheck.SetAction(parsed => { try { DeviceAccess.Check(parsed.GetValue(nodes)!); return 0; } catch(Exception error) { Console.Error.WriteLine(error.Message); return 1; } });
+        var steam = new Command("steam", "Share identical private Steam game extents across accounts");
+        var share = new Command("share"); var db = new Argument<string>("database"); var accounts = new Argument<string>("accounts");
+        var age = new Option<int>("--minimum-age") { DefaultValueFactory = _ => 120 };
+        share.Arguments.Add(db); share.Arguments.Add(accounts); share.Options.Add(age); steam.Subcommands.Add(share); root.Subcommands.Add(steam);
+        share.SetAction((parsed, token) =>
+        {
+            try
+            {
+                if(Linux.EffectiveUser()!=0) throw new UserError("Root is required");
+                var input=parsed.GetValue(accounts)!;
+                if(input.Length>65536||parsed.GetValue(age)<0)throw new ArgumentException("Invalid Steam sharing request.");
+                var users=JsonNode.Parse(input)!.AsArray().Select(a=>new SteamAccount(a!["uid"]!.GetValue<uint>(),a["home"]!.GetValue<string>())).ToArray();
+                Console.WriteLine(new SteamSharing(parsed.GetValue(db)!,minimumAge:parsed.GetValue(age)).Run(users, token).ToJsonString());return Task.FromResult(0);
+            }
+            catch(Exception) { Console.WriteLine(new JsonObject{["error"]="Steam block sharing could not complete; check storage and kernel support."}.ToJsonString());return Task.FromResult(1); }
+        });
         return root;
     }
 }

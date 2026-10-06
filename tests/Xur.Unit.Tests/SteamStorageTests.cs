@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Xur.Agent;
+using Xur.Domain;
+using Xur.IO;
 
 static class SteamStorageTests
 {
@@ -8,11 +10,18 @@ static class SteamStorageTests
         var directory=Path.GetFullPath(".build/evidence/steam-storage/worker-"+Guid.NewGuid().ToString("N"));
         try
         {
-            var worker=new SteamStorage(directory,()=>[]);
+            var worker=new SteamStorage(directory,()=>[],(exe,args,seconds,token)=>
+            {
+                var values=args.ToArray();
+                check(exe=="ionice"&&values.Take(5).SequenceEqual(new[]{"-c","3","nice","-n","19"})&&values.Skip(6).Take(3).SequenceEqual(new[]{"steam","share","--"})&&seconds==630,"Steam worker keeps low-priority native execution and a bounded process timeout");
+                check(values[^1]=="[]","Steam worker passes only the supplied accounts to its utility");
+                var result=new SteamSharing(values[^2]).Run([]);
+                return Task.FromResult(new ProcessResult(0,result.ToJsonString()));
+            });
             await worker.Scan(CancellationToken.None);
             using var data=JsonDocument.Parse(JsonSerializer.Serialize(worker.Status()));
             var status=data.RootElement;
-            check(!status.GetProperty("running").GetBoolean()&&status.GetProperty("error").ValueKind==JsonValueKind.Null&&status.GetProperty("finishedAt").ValueKind==JsonValueKind.String,"Embedded Steam sharing helper completes a pass and reports completion without reading host accounts");
+            check(!status.GetProperty("running").GetBoolean()&&status.GetProperty("error").ValueKind==JsonValueKind.Null&&status.GetProperty("finishedAt").ValueKind==JsonValueKind.String,"Native Steam sharing helper completes a pass and reports completion without reading host accounts");
             check(status.GetProperty("report").GetProperty("libraries").GetInt32()==0&&File.Exists(Path.Combine(directory,"pairs.sqlite")),"Steam sharing worker records its private cache and aggregate report");
             check(File.GetUnixFileMode(directory)==(UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute),"Steam sharing cache directory is owner-only");
         }

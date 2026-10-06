@@ -4,20 +4,15 @@ namespace Xur.Agent;
 
 // Low-priority, bounded passes. Game files remain separate Unix inodes and the
 // kernel verifies equality atomically before sharing any physical extents.
-public sealed class SteamStorage(string directory,Func<StationAccount[]>? accounts=null)
+public sealed class SteamStorage(string directory,Func<StationAccount[]>? accounts=null,Func<string,IEnumerable<string>,int,CancellationToken,Task<ProcessResult>>? run=null)
 {
     static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
-    static readonly string Script=ReadScript();
+    readonly Func<string,IEnumerable<string>,int,CancellationToken,Task<ProcessResult>> execute=run??((exe,args,seconds,token)=>Processes.Run(exe,args,seconds,token));
     readonly object gate=new();
     bool running;
     DateTimeOffset? finished;
     JsonElement? report;
     string? error;
-    static string ReadScript()
-    {
-        using var reader=new StreamReader(typeof(SteamStorage).Assembly.GetManifestResourceStream("Xur.Agent.SteamStorage.py")!);
-        return reader.ReadToEnd();
-    }
     public object Status(){lock(gate)return new{running,finishedAt=finished,report,error};}
     public async Task Run(CancellationToken stopping)
     {
@@ -40,7 +35,7 @@ public sealed class SteamStorage(string directory,Func<StationAccount[]>? accoun
             Directory.CreateDirectory(directory);
             File.SetUnixFileMode(directory,UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
             var accountData=JsonSerializer.Serialize(accounts?.Invoke()??StationAccounts.Read(includeTemporary:true),Json);
-            var result=await Processes.Run("ionice",["-c","3","nice","-n","19","/usr/bin/python3","-I","-c",Script,Path.Combine(directory,"pairs.sqlite"),accountData],630,stopping);
+            var result=await execute("ionice",["-c","3","nice","-n","19",StationUtility.SourcePath,"steam","share","--",Path.Combine(directory,"pairs.sqlite"),accountData],630,stopping);
             if(result.ExitCode!=0)throw new InvalidOperationException("Steam block sharing could not complete; check storage and kernel support.");
             using var data=JsonDocument.Parse(result.Output);
             lock(gate){report=data.RootElement.Clone();finished=DateTimeOffset.UtcNow;}

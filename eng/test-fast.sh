@@ -49,7 +49,7 @@ bash eng/test-xurutil.sh > .build/fast/xurutil-native.log 2>&1
 cp .build/evidence/xurutil/native-files.json .build/fast/station-files.json
 python3 tests/Xur.Integration.Tests/online-installer.py > .build/fast/online-installer.json
 python3 tests/Xur.Integration.Tests/installer-preflight.py > .build/fast/installer-preflight.json
-python3 tests/Xur.Integration.Tests/installer-progress.py > .build/fast/installer-progress.json
+cp .build/evidence/xurutil/native-installer-progress.json .build/fast/installer-progress.json
 python3 tests/Xur.Integration.Tests/install-failure.py > .build/fast/install-failure.json
 python3 tests/Xur.Integration.Tests/compact-update.py > .build/fast/compact-update.json
 python3 tests/Xur.Integration.Tests/compact-release.py > .build/fast/compact-release.json
