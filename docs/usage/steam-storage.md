@@ -31,7 +31,8 @@ are reconsidered. Interrupted passes keep successful sharing and retry uncached
 pairs on the next pass. Large-file comparisons checkpoint their progress so the
 next pass can continue from the last completed range.
 
-The worker discovers native Steam libraries and the default Flatpak Steam
+The native `xurutil steam share` worker uses reusable `SteamSharing`,
+`ExtentSharing` and descriptor-relative file access from `Xur.IO`. It discovers native Steam libraries and the default Flatpak Steam
 library, plus additional libraries listed in `steamapps/libraryfolders.vdf`.
 Only account-owned regular files of at least 4 KiB in `steamapps/common` qualify.
 Candidate copies must have the same path within `common` and the same size.
@@ -67,11 +68,14 @@ Local verification:
 
 ```bash
 python3 tests/Xur.Integration.Tests/steam-storage.py
+bash eng/test-xurutil.sh
+# Create, test and clean up a disposable file-backed Btrfs image (needs btrfs-progs).
+sudo bash eng/test-steam-btrfs.sh
 # A disposable, already-mounted Btrfs/XFS test filesystem; requires root for UIDs.
 sudo python3 tests/Xur.Integration.Tests/steam-storage.py --filesystem .build/test-mount
 ```
 
-The filesystem test creates four private user libraries, verifies physical extent
+The filesystem test runs the published native fixture, creates four private user libraries, verifies physical extent
 sharing, checks differing bytes, independent writes and deletion, and rejects a
 bind mount. Generated test data belongs under `.build/`. It does not install or
 launch Steam. Fresh Anaconda installation and real Steam workloads need separate

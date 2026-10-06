@@ -1,6 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup><ProjectReference Include="../Xur.Domain/Xur.Domain.csproj" /></ItemGroup>
-  <ItemGroup><EmbeddedResource Include="SteamStorage.py" /></ItemGroup>
   <ItemGroup>
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
     <Content Include="../../tools/Xur.Streaming/upstream-lock.json" Link="streaming-lock.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

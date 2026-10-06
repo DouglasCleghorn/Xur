@@ -44,7 +44,7 @@ sealed class Fixture : IDisposable
     public void Dispose() => Directory.Delete(Root, recursive: true);
 }
 
-sealed class FakeRuntime : Runtime
+class FakeRuntime : Runtime
 {
     public List<string[]> Commands { get; } = [];
     public Func<string[], int, Task<byte[]>>? OnRun { get; set; }

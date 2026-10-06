@@ -3,11 +3,12 @@
 
 Live application startup and fallback are covered by Xur.Util.Tests.
 """
-import importlib.machinery,importlib.util,json,os,pathlib,shlex,subprocess,tempfile
+import importlib.machinery,importlib.util,json,os,pathlib,re,shlex,subprocess,tempfile,types
 repo=pathlib.Path(__file__).resolve().parents[2]
 def load(name,path):
  loader=importlib.machinery.SourceFileLoader(name,str(repo/path));spec=importlib.util.spec_from_loader(name,loader);m=importlib.util.module_from_spec(spec);loader.exec_module(m);return m
-updater=load('os_update','os/bootc/os-update')
+channel=re.search(r'public const string Channel = "([^"]+)"', (repo/'tools/Xur.Util/OsUpdate.cs').read_text()).group(1)
+updater=types.SimpleNamespace(CHANNEL=channel,read=lambda p:json.loads(p.read_text()))
 ks=(repo/'os/installer/install-template.ks').read_text();calls=[]
 bootc=shlex.split(next(line for line in ks.splitlines() if line.startswith('bootc ')))
 assert bootc==['bootc','--source-imgref','registry:'+updater.CHANNEL,'--target-imgref',updater.CHANNEL]
@@ -37,7 +38,7 @@ with tempfile.TemporaryDirectory(dir=repo/'.build/evidence') as directory:
  # The installed update configuration no longer needs a resolver receipt.
  target=root/'installed-config';(target/'etc/xur').mkdir(parents=True)
  manager=(repo/'os/installer/install-manager').read_text()
- config=manager[manager.index("printf '%s\\n' '{\"channel\":"):manager.index('python3 - "$target"')]
+ config=manager[manager.index("printf '%s\\n' '{\"channel\":"):manager.index('if test -f "/run/xur/app/release-')]
  subprocess.run(['bash','-eu','-c','umask 077\n'+config],env={**os.environ,'target':str(target)},check=True)
  upstream=target/'etc/xur/upstream.json'
  assert updater.read(upstream)['channel']==updater.CHANNEL and upstream.stat().st_mode&0o777==0o644

@@ -16,6 +16,12 @@ public class Runtime
         return result.Output;
     }
 
+    public virtual async Task RunLogged(string[] command, Stream log, int seconds, CancellationToken token = default)
+    {
+        if (await Xur.IO.CommandRunner.RunLogged(command[0], command.Skip(1), log, seconds, token) != 0)
+            throw new IOException(command[0] + " failed; review the update log.");
+    }
+
     public virtual async Task<JsonObject> Local(string endpoint, string socket,
         CancellationToken cancellationToken = default)
     {

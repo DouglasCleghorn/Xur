@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Exercise installer transfer capture through a real PTY, without disk writes."""
-import importlib.machinery
-import importlib.util
 import json
 import os
 import pathlib
@@ -11,10 +9,8 @@ import tempfile
 import time
 
 repo = pathlib.Path(__file__).resolve().parents[2]
-loader = importlib.machinery.SourceFileLoader('bootc_progress', str(repo / 'os/installer/bootc-progress'))
-spec = importlib.util.spec_from_loader(loader.name, loader)
-capture = importlib.util.module_from_spec(spec)
-loader.exec_module(capture)
+native = pathlib.Path(os.environ.get('XUR_UTIL_TESTS',repo/'.build/xurutil-tests/Xur.Util.Tests'))
+if not native.is_file(): raise SystemExit('Publish native fixtures with bash eng/test-xurutil.sh first.')
 evidence = repo / '.build/evidence/installer-byte-progress'
 evidence.mkdir(parents=True, exist_ok=True)
 passed = []
@@ -22,24 +18,6 @@ passed = []
 with tempfile.TemporaryDirectory(prefix='fixture-', dir=evidence) as temp:
     root = pathlib.Path(temp)
     status = root / 'install-download.json'
-    progress = capture.Progress(status)
-    progress.feed('\x1b[2KFetching layers ▰▰▱ 32/128\r\n └ Fetching ▰ 8.00 MiB/16.00 MiB (2.00 MiB/s) ostree chunk abc')
-    assert json.loads(status.read_text()) == {'layerProgress': 'Fetching layers ▰▰▱ 32/128'}
-    progress.feed('\r\n')
-    assert json.loads(status.read_text())['byteProgress'] == '└ Fetching ▰ 8.00 MiB/16.00 MiB (2.00 MiB/s) ostree chunk abc'
-    progress.feed('\x1b[1A\r\x1b[2KFetching layers ▰▰▱ 33/128\r\n')
-    assert json.loads(status.read_text()) == {'layerProgress': 'Fetching layers ▰▰▱ 33/128'}, 'New layers must clear the previous layer counters'
-    progress.feed('Fetching layers █ 129/128\nFetching layers █ 1/0\nFetching layers █ 1/1000001\n')
-    assert json.loads(status.read_text()) == {'layerProgress': 'Fetching layers ▰▰▱ 33/128'}
-    progress.feed('x' * 10000)
-    assert len(progress.pending) <= 4096
-    passed.append('split terminal frames, layer changes and bounded invalid input')
-
-    unavailable = capture.Progress(root / 'missing-directory' / 'progress.json')
-    unavailable.feed('Fetching layers █ 0/128\n')
-    assert unavailable.disabled
-    passed.append('counter write failure does not fail installation')
-
     # Executable fixture has exactly bootc's upstream terminal progress templates.
     fake = root / 'real-bootc'
     fake.write_text('''#!/usr/bin/python3
@@ -62,9 +40,8 @@ sys.exit(int(os.environ.get('FIXTURE_EXIT', '0')))
     fake.chmod(0o700)
     (root / 'bin').mkdir()
     wrapper = root / 'bin/bootc'
-    wrapper.write_text((repo / 'os/installer/bootc-progress').read_text()
-        .replace("BOOTC = '/usr/bin/bootc'", 'BOOTC = ' + repr(str(fake)))
-        .replace("pathlib.Path('/run/xur/install-download.json')", 'pathlib.Path(' + repr(str(status)) + ')'))
+    import shlex
+    wrapper.write_text('#!/usr/bin/bash\nexec '+shlex.quote(str(native))+' --terminal-fixture '+shlex.quote(str(fake))+' '+shlex.quote(str(status))+' "$@"\n')
     wrapper.chmod(0o700)
     args_file = root / 'args.json'
     arguments = ['install', 'to-filesystem', '--source-imgref=registry:ghcr.io/test/os:stable',

@@ -8,7 +8,7 @@ test -d "$target/var"
 bundle=/usr/share/xur/app-bundle
 if test -f /run/xur/app/current/bundle.json; then bundle=$(readlink -e /run/xur/app/current); fi
 test -f "$bundle/bundle.json"
-release=$(python3 -c 'import json; print(json.load(open(__import__("sys").argv[1]))["id"])' "$bundle/bundle.json")
+release=$(/usr/libexec/xurutil installer bundle-id "$bundle/bundle.json")
 [[ "$release" =~ ^[a-f0-9]{64}$ ]]
 destination="$target/var/lib/xur/app/releases/$release"
 mkdir -p "$destination" "$target/etc/systemd/system" "$target/etc/xur"
@@ -36,16 +36,11 @@ install -m 644 /usr/lib/systemd/system/xur-app-recovery.service "$target/etc/sys
 systemctl --root="$target" enable xur-app-recovery.service
 printf '%s\n' '{"channel":"ghcr.io/ublue-os/bazzite-nvidia-open:stable"}' > "$target/etc/xur/upstream.json"
 chmod 644 "$target/etc/xur/upstream.json"
-python3 - "$target" <<'PYCHANNEL'
-import json,pathlib,sys
-source=pathlib.Path('/usr/share/xur/installer-channel')
-channel=source.read_text().strip() if source.exists() else 'stable'
-assert channel in ('stable','nightly')
-(pathlib.Path(sys.argv[1])/'etc/xur/application-updates.json').write_text(json.dumps({'channel':channel,'development':False})+'\n')
-PYCHANNEL
 if test -f "/run/xur/app/release-$release.json"; then
   install -m 600 "/run/xur/app/release-$release.json" "$target/var/lib/xur/app/release-$release.json"
-  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sequence"])' "/run/xur/app/release-$release.json" > "$target/var/lib/xur/app/highest-sequence.json"
+  /usr/libexec/xurutil installer save-metadata "$target" "/run/xur/app/release-$release.json"
+else
+  /usr/libexec/xurutil installer save-metadata "$target"
 fi
 install -m 644 /usr/share/xur/xur-os-update.service /usr/share/xur/xur-os-update.timer "$target/etc/systemd/system/"
 install -m 644 /usr/lib/systemd/system/xur-network.service "$target/etc/systemd/system/"

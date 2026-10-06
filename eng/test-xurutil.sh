@@ -38,6 +38,8 @@ stat --printf='%s\n' "$native" > .build/evidence/xurutil/native-size.txt
   -o .build/xurutil-tests > .build/evidence/xurutil/native-fixture-publish.log 2>&1
 env -i PATH=/usr/bin:/bin .build/xurutil-tests/Xur.Util.Tests \
   > .build/evidence/xurutil/native-fixture-tests.log 2>&1
+XUR_UTIL_TESTS="$(readlink -f .build/xurutil-tests/Xur.Util.Tests)" python3 tests/Xur.Integration.Tests/installer-progress.py \
+  > .build/evidence/xurutil/native-installer-progress.json
 # Native fixture publication enables compiler packages only for that invocation.
 # Restore the normal test lock afterward, keeping checked-in lock files consistent.
 "$sdk" restore tests/Xur.Util.Tests > .build/evidence/xurutil/test-restore.log 2>&1

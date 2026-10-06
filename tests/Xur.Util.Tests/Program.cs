@@ -7,6 +7,26 @@ using Xur.Util.Tests;
 
 Linux.Umask(0x3f);
 
+if (args is ["--tree-fixture", var root, var relative])
+{
+    try { using var tree = new Xur.IO.DirectoryTree(root); using var child = tree.Open(relative,true); }
+    catch(IOException error) { Console.Error.WriteLine(error.Message); Environment.Exit(1); }
+    return;
+}
+
+if (args is ["--terminal-fixture", var executable, var counters, ..var command])
+{
+    Environment.Exit(command.Length >= 2 && command[0] == "install" && command[1] == "to-filesystem"
+        ? Xur.IO.TerminalProcess.Run(executable, command, new Xur.IO.DownloadProgress(counters, Console.Error).Feed)
+        : Xur.IO.TerminalProcess.Execute(executable, command));
+    return;
+}
+if (args is ["--steam-fixture", var database, var accounts])
+{
+    var users = JsonNode.Parse(accounts)!.AsArray().Select(a => new Xur.IO.SteamAccount(a!["uid"]!.GetValue<uint>(), a["home"]!.GetValue<string>()));
+    Console.WriteLine(new Xur.IO.SteamSharing(database, minimumAge: 0).Run(users).ToJsonString()); return;
+}
+
 if (args is ["--layout", var publish])
 {
     await LayoutTests.Run(publish);
@@ -29,7 +49,10 @@ if (args is ["--migration-fixture", var unit])
     return;
 }
 
-if (args is ["--files"]) await FileTests.Run();
+if (args is ["--os-update"]) await RuntimeTests.OsUpdates();
+else if (args is ["--installer-progress"]) await RuntimeTests.Progress();
+else if (args is ["--steam"]) await SteamTests.Run();
+else if (args is ["--files"]) await FileTests.Run();
 else if (args is ["--boot"]) await BootTests.Run();
 else if (args is ["--updates"]) await UpdaterTests.Run();
 else if (args is ["--io"]) await IOTests.Run();
@@ -44,6 +67,9 @@ else
     await CliTests.Run();
     await IOTests.Run();
     await FileTests.Run();
+    await RuntimeTests.OsUpdates();
+    await RuntimeTests.Progress();
+    await SteamTests.Run();
     await ToolTests.Preflight();
     await ToolTests.Display();
     await ToolTests.Updates();
