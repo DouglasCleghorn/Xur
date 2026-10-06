@@ -1,3 +1,4 @@
+using System.CommandLine;
 using Xur.Util;
 
 namespace Xur.Util.Tests;
@@ -12,10 +13,18 @@ static class CliTests
             new[] { "unknown" }, new[] { "logs", "configure", "--root" }, new[] { "app-update", "channel" },
             new[] { "app-update", "channel", "stable", "extra", "extra", "extra" },
             new[] { "display", "resize", "1;id", "1080", "60" }, new[] { "display", "resize", "1920" },
-            new[] { "update-all", "unknown" }, new[] { "installer", "check-runtime", "--root" }
+            new[] { "update-all", "unknown" }, new[] { "installer", "check-runtime", "--root" },
+            new[] { "installer", "bundle-id" }, new[] { "installer", "save-metadata" },
+            new[] { "devices", "check" }, new[] { "steam", "share", "database" }
         }) Verify.That(command.Parse(invalid).Errors.Count != 0, "Microsoft command parser rejects malformed invocations before actions run");
         Verify.That(command.Parse(["app-update", "channel", "local", "192.0.2.10:8088", "fixture public key"]).Errors.Count == 0, "Channel arguments retain legacy positional contract");
         Verify.That(command.Parse(["app-update", "channel", "local", "192.0.2.10:8088", "--", "-----BEGIN PUBLIC KEY-----\nfixture\n-----END PUBLIC KEY-----"]).Errors.Count == 0, "PEM arguments beginning with dashes use the argument delimiter");
+        var bootc = command.Subcommands.Single(c => c.Name == "installer").Subcommands.Single(c => c.Name == "bootc");
+        var bootcValues = new[] { "install", "to-filesystem", "--source-imgref=registry:ghcr.io/test/os:stable", "/target with spaces", "literal;$(unchanged)" };
+        var bootcParsed = command.Parse(["installer", "bootc", "--", ..bootcValues]);
+        Verify.That(bootcParsed.Errors.Count == 0 && bootcParsed.GetValue((Argument<string[]>)bootc.Arguments.Single())!.SequenceEqual(bootcValues), "Microsoft command parser preserves every installer bootc argument after the delimiter");
+        Verify.That(command.Parse(["devices", "check", "--", "/dev/null", "/dev/uinput"]).Errors.Count == 0, "Device checks accept the production argument contract");
+        Verify.That(command.Parse(["steam", "share", "--", "/private/pairs.sqlite", "[{\"uid\":1000,\"home\":\"/var/home/user\"}]"]).Errors.Count == 0, "Steam sharing accepts the production JSON argument contract");
         using var fixture = new Fixture();
         Verify.That(await command.Parse(["logs", "configure", "--root", fixture.Root]).InvokeAsync() == 0, "CLI installs journal settings in an offline fixture root");
         Verify.That(File.Exists(fixture.PathOf("etc/systemd/journald.conf.d/.xur-log-compression.pending")), "Offline CLI keeps activation pending for the installed boot");
