@@ -235,3 +235,15 @@ capture date, privacy review, and the features whose next changes require a refr
   and the console Switch profile entry. Collaborative browser assertions used
   synthetic fixtures at 1280 and 390 px; screenshot capture was unavailable
   during this follow-up, so no replacement images were published.
+
+- 2026-10-05: Desktop switcher hover capture family:
+  `.build/evidence/overlay-dpad/hover-buttons.png` and `hover-profiles.png`.
+  Private Qt Fusion renders from the Fedora builder, using the production
+  stylesheet in `t3code/fix-overlay-dpad`, based on `1fd77ac`. The button grid
+  compares normal, hovered, pressed and disabled states; profile rows compare
+  hovered and selected text. Purpose: check contrast after the desktop switcher
+  navigation and hover changes. Privacy review: synthetic control/profile names
+  only, with no credentials, personal files or production state. These are
+  focused style probes, not captures of a running workstation. Regenerate after
+  changes to desktop control colors or states; review full desktop picker and
+  review-screen captures before release.

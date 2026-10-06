@@ -183,14 +183,18 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
             store.Put("journal","current",j with {Stage=j.Stage=="Cancelling"?"Cancelling":"Applying",Error=null,RunningSteps=[],Updated=DateTimeOffset.UtcNow});Audit(j,"resumed");worker=Task.Run(Run);
         }finally{gate.Release();}
     }
-    public async Task Cancel(string? operationId=null)
+    public async Task Cancel(string? operationId=null,bool allowCompleted=false)
     {
         await gate.WaitAsync();try
         {
             var j=store.Get<Journal>("journal","current");
             if(j==null || operationId!=null && j.Plan.Id!=operationId)throw new InvalidOperationException("This profile change is no longer current. Refresh the page.");
             if(j.Stage is "Cancelled" or "Cancelling")return;
-            if(j.Stage=="Complete")throw new InvalidOperationException("This profile change has already completed.");
+            if(j.Stage=="Complete")
+            {
+                if(allowCompleted)return;
+                throw new InvalidOperationException("This profile change has already completed.");
+            }
             if(worker is {IsCompleted:false})
                 store.Put("journal","current",j with {Stage="Cancelling",Updated=DateTimeOffset.UtcNow});
             else {store.Cancel(j with {Stage="Cancelled",Updated=DateTimeOffset.UtcNow});Audit(j,"cancelled");}
