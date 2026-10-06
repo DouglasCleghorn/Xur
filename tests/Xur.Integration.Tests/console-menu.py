@@ -7,7 +7,8 @@ sdk=os.environ.get('XUR_DOTNET',str(pathlib.Path.home()/'.local/share/xur-build/
 binary=repo/'src/Xur.Control/bin/Release/net10.0/Xur.Control.dll'
 evidence=repo/'.build/evidence';evidence.mkdir(parents=True,exist_ok=True)
 with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
-    posts=[]
+    posts=[];display_payloads=[]
+    display_status={'displays':[{'id':'console-tv','connector':'card0-HDMI-A-1','gpu':'0000:01:00.0','name':'Example TV','workstation':None,'adapter':'native','canControl':True,'power':'Unknown'}],'adapters':[]}
     deployment={'version':'1','digest':'old','image':'upstream','downloadOnly':False}
     os_status={'current':deployment,'available':deployment|{'version':'2','digest':'new'},'previous':None,'pending':None,'rollbackQueued':False,'automatic':True,'busy':False,'operation':None,'logs':''}
     app_status={'server':'https://updates.invalid','current':{'id':'old','version':'1'},'available':{'id':'new','version':'2'},'previous':None,'busy':False,'channel':'nightly'}
@@ -30,7 +31,7 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
                 if poll_reads>=2:
                     all_status['operation']={'id':'poll','stage':'Complete','message':'Background refresh observed','updated':0,'results':[]}
                     refreshed.set()
-            body={'/local/computer-name':{'name':'xur','configured':False},'/local/network/wifi':wifi_status,'/local/network/settings':network_status,'/local/status':{'installer':installer},'/local/updates':os_status,'/local/application-updates':app_status,'/local/update-all':all_status}.get(self.path)
+            body={'/local/displays':display_status,'/local/computer-name':{'name':'xur','configured':False},'/local/network/wifi':wifi_status,'/local/network/settings':network_status,'/local/status':{'installer':installer},'/local/updates':os_status,'/local/application-updates':app_status,'/local/update-all':all_status}.get(self.path)
             self.reply(200 if body is not None else 404,body or {})
         def do_POST(self):
             global network_payload,wifi_payload,server_name
@@ -40,6 +41,8 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
                     data+=self.rfile.read(size);self.rfile.read(2)
                 self.rfile.readline()
             posts.append(self.path)
+            if self.path=='/local/displays/power':
+                display_payloads.append(json.loads(data));self.reply(200,{'message':'CEC command acknowledged. Workloads keep running.'});return
             if self.path=='/local/network/wifi/scan':self.reply(200,wifi_networks);return
             if self.path=='/local/network/wifi/connect':wifi_payload=json.loads(data)
             if self.path=='/local/computer-name':
@@ -88,6 +91,11 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
         assert 'Confirm reboot' in output and 'Confirm shut down' in output, output
         assert posts==['/local/update-all/start','/local/poweroff'],posts
         posts.clear()
+        output=run('7\n3\n1\n1\n2\n0\n0\n0\n0\n')
+        assert 'Example TV' in output and 'CEC command acknowledged. Workloads keep running.' in output, output
+        assert posts==['/local/displays/power','/local/displays/power'],posts
+        assert [(p['id'],p['action'],p['consoleOnly']) for p in display_payloads]==[('console-tv','off',True),('console-tv','on',True)],display_payloads
+        posts.clear()
         output=run('6\n3\n3\n0\n2\n2\n0\n0\n0\n')
         assert 'Enable automatic updates' in output and 'Signature verification failed.' in output, output
         assert posts==['/local/updates/disable','/local/application-updates/update'],posts
@@ -124,4 +132,4 @@ with tempfile.TemporaryDirectory(dir=evidence,prefix='console-') as temp:
         output=run('5\n1\n0\n0\n0\n')
         assert '5. Power' in output and 'Updates' not in output and 'Confirm reboot' in output and not posts, output
     finally:server.shutdown();server.server_close()
-print(json.dumps({'suite':'ConsoleMenu','realCli':True,'updateAll':True,'powerConfirmationAndCancellation':True,'failureFeedback':True,'backgroundRefreshWhileReadingInput':True,'installerMode':True,'staticNetworkTextEntryAndKeep':True,'wifiAdapterSsidAndPassword':True,'serverName':True}))
+print(json.dumps({'suite':'ConsoleMenu','realCli':True,'updateAll':True,'powerConfirmationAndCancellation':True,'cecDisplayPower':True,'failureFeedback':True,'backgroundRefreshWhileReadingInput':True,'installerMode':True,'staticNetworkTextEntryAndKeep':True,'wifiAdapterSsidAndPassword':True,'serverName':True}))

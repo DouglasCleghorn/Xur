@@ -44,7 +44,7 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
                 case "power":
                     title="Power";body="Rebooting or shutting down stops all running workstations and AI services.";
                     if(Busy)body+="\nWait for the current update to finish.";
-                    options.AddRange([new('d',"Display power / CEC screen off"),new('r',"Reboot",!Busy),new('s',"Shut down",!Busy),new('0',"Back to menu")]);
+                    options.AddRange([new('r',"Reboot",!Busy),new('s',"Shut down",!Busy),new('d',"Display power / CEC screen off"),new('0',"Back to menu")]);
                     break;
                 case "confirm":
                     title=power=="reboot" ? "Confirm reboot" : "Confirm shut down";
