@@ -23,7 +23,8 @@ public static class Commands
         }
         var updates=new Command("updates");root.Subcommands.Add(updates);
         Add(updates,"status","updates",json:true);
-        foreach(var action in new[]{"check","stage","rollback","enable","disable"})Add(updates,action,"updates/"+action);
+        foreach(var action in new[]{"check","stage","rollback","enable","disable","skip"})Add(updates,action,"updates/"+action);
+        Add(updates,"schedule","update-schedule");
         var application=new Command("application-updates");root.Subcommands.Add(application);
         Add(application,"status","application-updates",json:true);
         foreach(var action in new[]{"check","update","rollback"})Add(application,action,"application-updates/"+action);

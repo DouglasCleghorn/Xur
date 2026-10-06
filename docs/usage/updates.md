@@ -15,7 +15,8 @@ change the Bazzite channel. See [online installer](../architecture/online-instal
 
 The installed web manager has an Updates page. The terminal menu has OS updates,
 and System.CommandLine exposes `xur updates status --json`, `check`, `stage`,
-`rollback`, `enable`, and `disable`.
+`rollback`, `enable`, `disable`, and `skip`. `xur updates schedule` opens the
+same schedule editor as the console's OS updates menu.
 
 Both interfaces use typed agent operations on the private Unix socket. Browser
 mutations require authentication and CSRF protection; bearer API clients use
@@ -29,12 +30,49 @@ finish uses the existing reconnect page and retains the session signing key.
 Rollback queues the previous OS deployment; it does not roll back application
 data. A pending deployment is never replaced automatically.
 
-A persistent `xur-os-update.timer` runs the small host update script daily,
+A persistent `xur-os-update.timer` runs the small host update script every minute,
 without the .NET manager or agent. It fetches directly from Bazzite's upstream
 registry. It needs neither Xur's GitHub repository nor a Xur server. The first
-check occurs 15–45 minutes after startup. Automatic staging is on by default;
-Pause automatic updates disables it. Reboot is always an explicit operator
-operation in this implementation. A scheduled reboot window is not implemented.
+timer tick occurs a minute after startup; update checks run only before a
+scheduled window. Automatic staging is on by default, scheduled for **03:00
+every day in the server timezone**, with **15 minutes of advance notice**.
+Existing installations keep their saved On/Paused setting and receive this
+schedule when the application is updated.
+
+Set the time, days and 5–120 minutes of advance notice under **Updates →
+Automatic update schedule**, or **Console → Updates → Operating system →
+Set automatic update schedule**. Saving a schedule preserves On/Paused.
+Pause automatic updates cancels an announced window and disables future windows.
+Reboot remains an explicit operator action.
+
+Before each window the host checks whether a newer OS deployment is available.
+Only an available update triggers an announcement: a live banner throughout the
+web manager, a notice on the physical/serial console, and an actionable Plasma
+notification on each running workstation. **Skip this window** cancels that one
+window for the whole host and leaves the recurring schedule enabled. On the
+console, open Updates and choose Skip this window; the CLI equivalent is
+`xur updates skip`. Workstation notifications run as the desktop user inside
+their existing device-restricted slice; their Skip action grants no administrator
+credentials or general management access.
+
+A late or slow availability check leaves the full configured notice period
+before staging. Skips survive service restarts and reboot. A missed window is
+not staged later without notice; the next scheduled window is used. The timer
+allows up to two minutes of dispatch delay for an already announced window.
+Changing the schedule cancels its old announcement. Queued deployments are
+never replaced automatically, and staging failures retain the operation log.
+
+The authenticated API uses the existing `POST /api/updates` route:
+
+```json
+{"action":"schedule","schedule":{"time":"03:00","days":[0,1,2,3,4,5,6],"warningMinutes":15}}
+```
+
+Days are Monday=0 through Sunday=6. `GET /api/updates` includes `schedule`,
+`timezone`, `nextWindow`, and the current `window` when one is announced. Times
+in window status are Unix seconds. Send `{"action":"skip","windowId":"…"}`
+with that window's ID; an expired or changed ID is rejected. Browser forms keep
+the existing authentication and CSRF protection.
 
 Home's Reboot control remains available during profile changes, failed operations
 and unavailable update status. Confirming reboot interrupts running workloads and
@@ -51,7 +89,8 @@ when upstream changes that script.
 
 The installer masks Bazzite's competing `uupd.timer` and bootc's auto-apply timer
 so they cannot bypass Xur's pause or trigger competing update operations. The
-installed update script invokes upstream bootc, enforces signatures, serializes
+installed scheduler invokes the bundled native `xurutil` OS updater for checks
+and staging. The native updater invokes upstream bootc, enforces signatures, serializes
 operations with a file lock, and retains a durable receipt. The manager observes
 actual bootc state after interruption instead of assuming a command succeeded.
 Staging first ensures the fixed channel has signature enforcement, then runs

@@ -2,4 +2,8 @@
 # Retain the legacy executable path; the application bundle pins its utility.
 set -euo pipefail
 root=$(dirname -- "$(readlink -f -- "$0")")
-exec "$root/xurutil" os-update "$@"
+case "${1:-}" in
+  auto|status|initialize|schedule|skip|enable|disable|notify)
+    exec /usr/bin/python3 "$root/update-schedule" "$@" ;;
+  *) exec "$root/xurutil" os-update "$@" ;;
+esac

@@ -35,6 +35,21 @@ public static class LocalConsole
     static int page;
     static int selection;
     static ConsoleScreen? maintenance;
+    static OsUpdateWindow? updateWindow;
+    public static void UpdateWindow(OsUpdateWindow? window)
+    {
+        lock(Sync)
+        {
+            if(window!=null && window.Id!=updateWindow?.Id)Idle.Touch();
+            updateWindow=window;Render();
+        }
+    }
+    static string UpdateNotice(string text)
+    {
+        if(updateWindow==null)return text;
+        var message=Components.UpdateWindowNotice.Message(updateWindow);
+        return text.Contains(message,StringComparison.Ordinal)?text:message+"\nOpen Updates to skip this window.\n\n"+text;
+    }
     static string textBuffer="";static bool replaceText;
     static long textGeneration;
     static ConsoleKeyboardOverlay keyboardOverlay=new();
@@ -60,7 +75,7 @@ public static class LocalConsole
             var options=screen?.Options ?? Options.Select((label,i)=>new ConsoleOption(RootKey(i,appliance?.Installer==true),label)).ToArray();
             if(view is "logs" or "qr")options=[new('0',"Back to menu")];
             var snapshot=new ConsoleDiagnosticSnapshot("",screen?.Id??view,title,
-                (DiagnosticsActive?InstallerDiagnosticWarning.Banner+"\n":"")+Redaction.Logs(screen?.Body??(view=="logs"?logs:body)),
+                (DiagnosticsActive?InstallerDiagnosticWarning.Banner+"\n":"")+Redaction.Logs(UpdateNotice(screen?.Body??(view=="logs"?logs:body))),
                 options.Select(o=>new ConsoleDiagnosticOption(o.Key,Redaction.Logs(o.Label),o.Enabled)).ToArray(),
                 selection,screen?.InputValue!=null,screen?.Secret==true,
                 screen?.InputValue!=null && screen.Secret==false?textBuffer:null);
@@ -342,7 +357,7 @@ public static class LocalConsole
             // the startup "Waiting for network addresses" text.
             RefreshLiveContent();
             bool logWindow=serialLogs;
-            var content=logWindow?logs:view=="qr"?QrText():body;
+            var content=UpdateNotice(logWindow?logs:view=="qr"?QrText():body);
             return CachedFrame(logWindow,content,columns,rows,sleeping);
         }
     }
@@ -380,7 +395,7 @@ public static class LocalConsole
     {
         if(Plain)
         {
-            var text=view=="qr"?QrText():body+(view=="status"&&ConnectedQr?"\n"+string.Join('\n',ServeQr()):"")+"\n"+string.Join('\n',CurrentOptions.Select((o,i)=>$"{i+1}. {o}"))+"\n0. Back";
+            var text=UpdateNotice(view=="qr"?QrText():body)+(view=="status"&&ConnectedQr?"\n"+string.Join('\n',ServeQr()):"")+"\n"+string.Join('\n',CurrentOptions.Select((o,i)=>$"{i+1}. {o}"))+"\n0. Back";
             if(DiagnosticsActive)text=InstallerDiagnosticWarning.Banner+"\n"+text;
             if(LastFrames.GetValueOrDefault("stdio")==text)return;
             LastFrames["stdio"]=text;Console.WriteLine("Xur setup\n"+text);return;
@@ -411,7 +426,7 @@ public static class LocalConsole
                 var size=new WindowSize();Ioctl(file.SafeFileHandle.DangerousGetHandle().ToInt32(),0x5413,ref size);
                 var columns=size.Columns==0?100:size.Columns;var rows=size.Rows==0?40:size.Rows;
                 bool isLog=path=="/dev/tty2" || serialLogs;
-                var frame=CachedFrame(isLog,isLog?logs:view=="qr"?QrText():body,columns,rows);
+                var frame=CachedFrame(isLog,UpdateNotice(isLog?logs:view=="qr"?QrText():body),columns,rows);
                 if(LastFrames.GetValueOrDefault(path)==frame)continue;
                 output.Add((path,file,frame,!LastFrames.ContainsKey(path)));
             }

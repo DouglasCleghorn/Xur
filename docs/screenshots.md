@@ -67,6 +67,16 @@ See [release preparation](development/release-preparation.md).
 
 ## Change log
 
+- 2026-10-06: Added the automatic update schedule and shared upcoming-window
+  notice in the working tree. The private `.build/fast/updates-{desktop,mobile}.png`
+  captures predate these controls and must be regenerated before release reuse.
+  Checked the actual Razor fixture and local notice script at 1280, 390 and
+  320 px in the collaborative browser with synthetic versions and a simulated
+  update API; no overflow or live host/account data. Preview navigation could
+  not reach the fixture server, so the rendered document was loaded directly.
+  Screenshot capture was unavailable; no new images were saved or published.
+  The published update-channel crop is unaffected by these Updates controls.
+
 - 2026-10-05: Added desktop previews in the working tree based on `1fd77ac`.
   The generated `.build/evidence/workstation-preview/desktop.png` fixture is a
   synthetic desktop illustration for private collaborative browser checks;

@@ -19,6 +19,7 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
     readonly ConsoleSetup setup=new(setupClient??client,installer);
     readonly ConsoleProfiles profiles=new(setupClient??client);
     readonly ConsoleDisplays displays=new(client,local);
+    readonly ConsoleUpdateSchedule schedule=new(client,local);
     public string ProfileTrigger {get=>profiles.Trigger;set=>profiles.Trigger=value;}
     string view="updates",notice="",power="",returnView="power";
     ApplicationUpdateStatus? application;
@@ -38,6 +39,7 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
             if(view=="network")return network.Screen;
             if(view=="profiles")return profiles.Screen;
             if(view=="displays")return displays.Screen;
+            if(view=="schedule")return schedule.Screen;
             var options=new List<ConsoleOption>();string title,body;
             switch(view)
             {
@@ -71,6 +73,8 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
                     options.AddRange([new('c',"Check for updates",Ready),
                         new('d',"Update OS",Ready && !RebootRequired && os?.Available!=null && os.Available.Digest!=os.Current?.Digest),
                         new('a',os?.Automatic==true?"Pause automatic updates":"Enable automatic updates",Ready)]);
+                    options.Add(new('l',"Set automatic update schedule",os!=null));
+                    if(os?.Schedule is {} timing)body+=$"\nSchedule: {timing.Time} · {os.Timezone}\nAdvance notice: {timing.WarningMinutes} minutes";
                     if(RebootRequired)options.Add(new('r',"Reboot to finish",Ready));
                     if(os?.Previous!=null && !RebootRequired)options.Add(new('b',"Roll back OS",Ready));
                     options.AddRange([new('v',"Refresh status"),new('0',"Back to updates")]);
@@ -94,6 +98,11 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
                     break;
             }
             if(view is "application" or "os" && Busy)body+="\nAn update is running. Actions will be available when it finishes.";
+            if(os?.Window is {} window)
+            {
+                body=Xur.Control.Components.UpdateWindowNotice.Message(window)+"\n\n"+body;
+                options.Add(new('k',"Skip this window"));
+            }
             if(notice.Length>0)body=notice+"\n\n"+body;
             return new(view,title,LocalConsole.Clean(body),options.ToArray());
         }
@@ -111,13 +120,14 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
             if(view=="profiles"){await profiles.Open();return;}
             if(view=="displays"){await displays.Open();return;}
             await ReadStatus();
+            if(view=="schedule")schedule.Open(os);
         }finally{gate.Release();}
     }
     public async Task Refresh()
     {
         await gate.WaitAsync();try{if(view=="computer-name")return;if(view=="setup")await setup.Refresh();else if(view=="network")await network.Refresh();else if(view=="profiles")await profiles.Refresh();else if(view=="displays")await displays.Refresh();else await ReadStatus();}finally{gate.Release();}
     }
-    public async Task Submit(string text){await gate.WaitAsync();try{if(view=="setup")await setup.Submit(text);else if(view=="computer-name")await computerName.Submit(text);else if(view=="network")await network.Submit(text);}finally{gate.Release();}}
+    public async Task Submit(string text){await gate.WaitAsync();try{if(view=="schedule")schedule.Submit(text);else if(view=="setup")await setup.Submit(text);else if(view=="computer-name")await computerName.Submit(text);else if(view=="network")await network.Submit(text);}finally{gate.Release();}}
     async Task ReadStatus()
     {
         if(installer)return;
@@ -144,6 +154,7 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
             if(view=="network"){await network.Select(key);Closed=network.Closed;return;}
             if(view=="profiles"){await profiles.Select(key);Closed=profiles.Closed;return;}
             if(view=="displays"){await displays.Select(key);if(displays.Closed)view="power";return;}
+            if(view=="schedule"){await schedule.Select(key);if(schedule.Closed){view="os";await ReadStatus();}return;}
             var option=Screen.Options.FirstOrDefault(o=>o.Key==key);
             if(option==null)return;
             if(!option.Enabled){notice="Action unavailable. Refresh status or wait for the current update to finish.";return;}
@@ -158,12 +169,21 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
             }
             if(key is 'h' or 'o'){view=key=='h'?"application":"os";await ReadStatus();return;}
             if(key=='v'){await ReadStatus();return;}
+            if(key=='l'){schedule.Open(os);view="schedule";return;}
             if(key is 'r' or 's'){power=key=='r'?"reboot":"poweroff";returnView=view;view="confirm";return;}
             // Re-observe before a mutation; another console or the web UI may have started work.
+            var selectedWindow=os?.Window?.Id;
             await ReadStatus();
             var current=Screen.Options.FirstOrDefault(o=>o.Key==key);
             if(current?.Enabled!=true || current.Label!=option.Label)
             {notice="Action unavailable. Status changed; review the current update state.";return;}
+            if(key=='k')
+            {
+                if(os?.Window?.Id!=selectedWindow){notice="The update window changed. Review the current notice.";return;}
+                using var skipped=await client.PostAsJsonAsync(local?"/local/updates/skip":"/updates",new OsUpdateAction("skip",WindowId:selectedWindow));
+                notice=skipped.IsSuccessStatusCode?"This update window was skipped. The recurring schedule is unchanged.":await Failure(skipped);
+                await ReadStatus();return;
+            }
             string path,action;
             if(key=='y'){path="power";action=power;}
             else if(key=='t'){path="update-all";action="start";}

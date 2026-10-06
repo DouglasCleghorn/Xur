@@ -46,7 +46,7 @@ copy(repo/'os/bootc/logging',bundle/'host/logging')
 copy(context/'publish/util/xurutil',bundle/'host/xurutil')
 (bundle/'host/xurutil').chmod(0o755)
 copy(context/'publish/util/licenses',bundle/'host/licenses')
-for name in ('os-update','app-update','update-all','xur-network','host-service-migrate','log-compression','hardware-hooks/reboot'):
+for name in ('os-update','update-schedule','app-update','update-all','xur-network','host-service-migrate','log-compression','hardware-hooks/reboot'):
     copy(repo/'os/bootc'/name,bundle/'host'/name)
     (bundle/'host'/name).chmod(0o755)
 files={str(p.relative_to(bundle)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(bundle.rglob('*')) if p.is_file()}

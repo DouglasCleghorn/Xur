@@ -39,6 +39,8 @@ node tests/Xur.Integration.Tests/files-ui.cjs > .build/fast/files-ui.json
 node tests/Xur.Integration.Tests/api-keys-ui.cjs > .build/fast/api-keys-ui.json
 node tests/Xur.Integration.Tests/model-lab-ui.cjs > .build/fast/model-lab-ui.json
 python3 tests/Xur.Integration.Tests/os-update.py > .build/fast/os-update.log
+python3 tests/Xur.Integration.Tests/update-schedule.py > .build/fast/update-schedule.log
+node tests/Xur.Integration.Tests/update-window.cjs > .build/fast/update-window.log
 python3 tests/Xur.Integration.Tests/update-all.py > .build/fast/update-all.json
 node tests/Xur.Integration.Tests/cancellation-ui.cjs > .build/fast/cancellation-ui.json
 "$sdk" run --project tests/Xur.Profile.Tests -c Release > .build/fast/profiles.log

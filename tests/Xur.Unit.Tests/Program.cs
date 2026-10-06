@@ -165,6 +165,7 @@ updateState=updateState with {Pending=null,Previous=null};updateBlocked=false;
 try{await updater.Start("rollback");}catch(InvalidOperationException){updateBlocked=true;}
 Check(updateBlocked,"Rollback requires an observed previous deployment");
 await ConsoleMaintenanceTests.Run(Check);
+await UpdateScheduleTests.Run(Check);
 await NetworkSettingsTests.Run(Check);
 await WifiTests.Run(Check);
 await NetworkPersistenceTests.Run(Check);

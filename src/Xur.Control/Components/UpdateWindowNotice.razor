@@ -1,0 +1,20 @@
+@inject Appliance Device
+<section id="update-window-notice" class="operation-strip" role="status" aria-live="polite" hidden="@(window==null)">
+    <strong>Automatic update approaching</strong>
+    <p data-update-window-message>@(window==null?"":Message(window))</p>
+    <form method="post" action="/updates/action"><AntiforgeryToken />
+        <input type="hidden" name="action" value="skip" />
+        <input type="hidden" name="windowId" value="@window?.Id" />
+        <button class="secondary">Skip this window</button> <a href="/updates#update-schedule">Update schedule</a>
+    </form>
+</section>
+<script src="/update-window.js" defer></script>
+@code {
+    OsUpdateWindow? window;
+    protected override async Task OnInitializedAsync()
+    {
+        try {window=(await Device.Agent.GetFromJsonAsync<OsUpdateStatus>("/updates"))?.Window;}catch{}
+    }
+    public static string When(double value)=>DateTimeOffset.FromUnixTimeSeconds((long)value).ToLocalTime().ToString("ddd, MMM d HH:mm zzz");
+    public static string Message(OsUpdateWindow window)=>$"OS update {window.Version} will be staged at {When(window.StartsAt)}. Reboot remains manual.";
+}
