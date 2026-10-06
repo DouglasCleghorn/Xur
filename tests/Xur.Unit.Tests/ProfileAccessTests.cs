@@ -58,6 +58,7 @@ static class ProfileAccessTests
             check(events.TakeLast(2).Select(e=>e.Result).SequenceEqual(["resumed","complete"])&&events.TakeLast(2).All(e=>e.Origin.Trigger=="plasma-menu"),"Resumed loads preserve the original switch trigger");
             await Framing(broker,root,check);
             await Console(manager,access,events,check);
+            await Replacing(manager,broker,runtime,access,recipe,check);
             LocalConsole.Show("Status","");check(LocalConsole.SelectLine("10")=='f',"Serial console option ten opens profile switching");
         }
         finally{Environment.SetEnvironmentVariable("XUR_MODE",oldMode);Directory.Delete(root,true);}
@@ -98,12 +99,42 @@ static class ProfileAccessTests
         finally{await app.StopAsync();}
         static bool runtimeRunning(ProfileState state)=>state.Runtime.Instances.Length>0;
     }
+    static async Task Replacing(ProfileManager manager,ProfileSwitcherBroker broker,Runtime runtime,ProfileAccessSettings access,Recipe recipe,Action<bool,string> check)
+    {
+        access.Save(ProfileAccessSettings.Workstations);
+        await manager.Save(new("replacement","Replacement",0,[new("replacement-model","Replacement model",recipe,[],"replacement")]));
+        runtime.Reached=new(TaskCreationOptions.RunContinuationsAsynchronously);runtime.Release=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        var plan=await Preview(broker);await broker.Handle(1000,new("apply",plan.Id,plan.Digest,"controller"));
+        await runtime.Reached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var state=JsonSerializer.SerializeToElement(await broker.Handle(1000,new("state")),Json);
+        check(state.GetProperty("busy").GetBoolean()&&state.GetProperty("operation").GetProperty("id").GetString()==plan.Id,"Desktop state identifies the running operation while a start is pending");
+        await Denied(()=>broker.Handle(1000,new("cancel","stale-operation",Trigger:"controller")),check,"Desktop interruption cannot cancel a different operation");
+        await Denied(()=>broker.Handle(1000,new("cancel",Trigger:"controller")),check,"Desktop interruption requires the displayed operation ID");
+        await Denied(()=>broker.Handle(1000,new("cancel",plan.Id,Trigger:"api")),check,"Desktop interruption validates its input trigger");
+        access.Save(ProfileAccessSettings.Web);
+        await Denied(()=>broker.Handle(1000,new("cancel",plan.Id,Trigger:"controller")),check,"Disabling workstation controls also revokes interruption");
+        access.Save(ProfileAccessSettings.Workstations);
+        await broker.Handle(1000,new("cancel",plan.Id,Trigger:"controller")).WaitAsync(TimeSpan.FromSeconds(2));
+        await broker.Handle(1000,new("cancel",plan.Id,Trigger:"controller"));
+        check((await manager.State()).Operation?.Stage=="Cancelling","Desktop interruption is prompt and idempotent while the running action finishes");
+        await Denied(()=>broker.Handle(1000,new("preview","replacement")),check,"A replacement cannot race the cancelled action before it reaches its safe boundary");
+        runtime.Release.SetResult();await manager.Wait();runtime.Reached=null;runtime.Release=null;
+        var replacement=JsonSerializer.SerializeToElement(await broker.Handle(1000,new("preview","replacement")),Json);
+        await broker.Handle(1000,new("apply",replacement.GetProperty("id").GetString(),replacement.GetProperty("digest").GetString(),"controller"));await manager.Wait();
+        check((await manager.State()).Active?.Id=="replacement"&&runtime.Instances.Keys.SequenceEqual(["replacement-model"]),"An exact reviewed replacement loads after interruption and removes the prior workload");
+        // Completion can race the picker reading state and sending interruption.
+        var completed=(await manager.State()).Operation!.Id;
+        await broker.Handle(1000,new("cancel",completed,Trigger:"controller"));
+        check((await manager.State()).Operation?.Stage=="Complete","Desktop interruption treats the same operation completing as idle without undoing it");
+        await Denied(()=>manager.Cancel(completed),check,"Other cancellation callers retain the completed-operation rejection");
+    }
     [DllImport("libc")]static extern uint geteuid();
     sealed class Runtime:IWorkloadRuntime
     {
         public readonly Dictionary<string,RuntimeInstance> Instances=new();public bool Fail;
+        public TaskCompletionSource? Reached,Release;
         public Task<RuntimeObservation> Observe()=>Task.FromResult(new RuntimeObservation("generation",[],Instances.Values.ToArray()));
-        public Task<RuntimeInstance> Start(Workload w){if(Fail)throw new InvalidOperationException("Fixture start failed");var i=new RuntimeInstance(w.Id,w.Fingerprint,w.Id,42,"boot","http://fixture/","running",[]);Instances[w.Id]=i;return Task.FromResult(i);}
+        public async Task<RuntimeInstance> Start(Workload w){if(Fail)throw new InvalidOperationException("Fixture start failed");var i=new RuntimeInstance(w.Id,w.Fingerprint,w.Id,42,"boot","http://fixture/","running",[]);Instances[w.Id]=i;Reached?.TrySetResult();if(Release!=null)await Release.Task;return i;}
         public Task Stop(RuntimeStop request){Instances.Remove(request.Id);return Task.CompletedTask;}
     }
     sealed class Gateway:IWorkloadGateway{public Task Drain(string id)=>Task.CompletedTask;public Task Publish(BackendRoute[] routes)=>Task.CompletedTask;}

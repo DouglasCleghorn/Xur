@@ -1,4 +1,5 @@
 #include "input.h"
+#include "style.h"
 #include <QtWidgets>
 #include <QtNetwork>
 #include <QtDBus>
@@ -20,19 +21,32 @@ static const char *service = "dev.xur.ProfileSwitcher";
 #endif
 
 class Inputs {
+    friend struct SwitcherChecks;
     struct Pad {
         QString path;
-        int fd;
-        libevdev *device;
+        int fd = -1;
+        libevdev *device = nullptr;
         PadState state;
-        int hat = 0;
         bool grabbed = false;
-        ~Pad() { libevdev_free(device); ::close(fd); }
+        ~Pad() { if (device) libevdev_free(device); if (fd >= 0) ::close(fd); }
     };
     std::vector<std::unique_ptr<Pad>> pads;
     QTimer scanTimer, readTimer;
     udev *context = udev_new();
     bool visible = false;
+    void event(Pad &pad, const input_event &event, bool syncing) {
+        QString command;
+        switch (pad.state.read(event.type, event.code, event.value)) {
+            case PadAction::Up: command = "up"; break;
+            case PadAction::Down: command = "down"; break;
+            case PadAction::Left: command = "left"; break;
+            case PadAction::Right: command = "right"; break;
+            case PadAction::Accept: command = "accept"; break;
+            case PadAction::Back: command = "back"; break;
+            case PadAction::None: break;
+        }
+        if (!syncing && visible && pad.grabbed && !command.isEmpty() && action) action(command);
+    }
 public:
     std::function<void()> open;
     std::function<void(QString)> action;
@@ -81,6 +95,8 @@ public:
             }
             auto pad = std::make_unique<Pad>(); pad->path = path; pad->fd = fd; pad->device = device;
             for (int code = 0; code <= KEY_MAX; ++code) pad->state.keys[code] = libevdev_get_event_value(device, EV_KEY, code) == 1;
+            pad->state.hatX = libevdev_get_event_value(device, EV_ABS, ABS_HAT0X);
+            pad->state.hatY = libevdev_get_event_value(device, EV_ABS, ABS_HAT0Y);
             if (visible) pad->grabbed = ioctl(fd, EVIOCGRAB, 1) == 0;
             pads.push_back(std::move(pad));
         }
@@ -91,22 +107,7 @@ public:
             bool syncing = false;
             while ((result = libevdev_next_event(pad.device, syncing ? LIBEVDEV_READ_FLAG_SYNC : LIBEVDEV_READ_FLAG_NORMAL, &event)) >= 0) {
                 if (result == LIBEVDEV_READ_STATUS_SYNC) { syncing = true; pad.state.armed = false; }
-                QString command;
-                if (event.type == EV_KEY && event.code <= KEY_MAX && event.value != 2) {
-                    const bool edge = event.value == 1 && !pad.state.keys[event.code];
-                    pad.state.keys[event.code] = event.value == 1;
-                    if (edge) {
-                        if (event.code == BTN_SOUTH) command = "accept";
-                        if (event.code == BTN_EAST) command = "back";
-                        if (event.code == BTN_DPAD_UP) command = "up";
-                        if (event.code == BTN_DPAD_DOWN) command = "down";
-                    }
-                }
-                if (event.type == EV_ABS && event.code == ABS_HAT0Y) {
-                    if (event.value != pad.hat && event.value != 0) command = event.value < 0 ? "up" : "down";
-                    pad.hat = event.value;
-                }
-                if (!syncing && visible && pad.grabbed && pad.state.armed && !command.isEmpty() && action) action(command);
+                this->event(pad, event, syncing);
             }
             if (result == -ENODEV || result == -EBADF) { it = pads.erase(it); continue; }
             if (syncing) { pad.state.held = {}; pad.state.latched = pad.state.chord(shoulders); }
@@ -127,24 +128,72 @@ class Switcher : public QDialog {
     QLineEdit *search = new QLineEdit;
     QListWidget *profiles = new QListWidget;
     QVBoxLayout *changes = new QVBoxLayout;
-    QPushButton *apply = new QPushButton("Load profile"), *back = new QPushButton("Back"), *retry = new QPushButton("Try again");
+    QPushButton *apply = new QPushButton("Load profile"), *back = new QPushButton("Back to profiles"), *retry = new QPushButton("Try again");
+    QPushButton *settings = new QPushButton("Shortcuts"), *close = new QPushButton("Close");
+    QPushButton *unload = new QPushButton("Stop all workloads");
     QLabel *reviewTitle = new QLabel, *warning = new QLabel;
+    QLabel *navigation = new QLabel;
     QString server = "/run/xur-profile-switcher/switcher.sock", trigger = "plasma-menu";
     uint trustedServerUid;
     Object state, plan, selected;
-    bool applying = false, controllerConfirm = false, controllerRetry = false;
+    enum class ControllerTarget { Profiles, StopAll, Retry, Shortcuts, Close, Back, Apply };
+    bool applying = false;
+    ControllerTarget controllerTarget = ControllerTarget::Profiles;
+    std::function<void(QString)> modalAction;
     int revision = 0;
     static QLabel *label(const QString &text, const char *name = nullptr) {
         auto result = new QLabel(text); result->setTextFormat(Qt::PlainText); result->setWordWrap(true);
         if (name) result->setObjectName(name);
         return result;
     }
+    void highlightSelection() {
+        for (auto [target, widget] : std::initializer_list<std::pair<ControllerTarget, QWidget *>>{
+                {ControllerTarget::Profiles, profiles}, {ControllerTarget::StopAll, unload}, {ControllerTarget::Retry, retry},
+                {ControllerTarget::Shortcuts, settings}, {ControllerTarget::Close, close}, {ControllerTarget::Back, back}, {ControllerTarget::Apply, apply}}) {
+            widget->setProperty("controllerSelected", controllerTarget == target);
+            widget->style()->unpolish(widget); widget->style()->polish(widget); widget->update();
+        }
+    }
+    void focusControl(ControllerTarget target) {
+        controllerTarget = target;
+        switch (target) {
+            case ControllerTarget::Profiles: profiles->setFocus(); break;
+            case ControllerTarget::StopAll: unload->setFocus(); break;
+            case ControllerTarget::Retry: retry->setFocus(); break;
+            case ControllerTarget::Shortcuts: settings->setFocus(); break;
+            case ControllerTarget::Close: close->setFocus(); break;
+            case ControllerTarget::Back: back->setFocus(); break;
+            case ControllerTarget::Apply: apply->setFocus(); break;
+        }
+        highlightSelection();
+    }
+    void moveControl(int direction) {
+        std::vector<std::pair<ControllerTarget, int>> choices;
+        if (settings->isEnabled()) choices.push_back({ControllerTarget::Shortcuts, -1});
+        if (close->isEnabled()) choices.push_back({ControllerTarget::Close, -1});
+        if (pages->currentIndex() == 0) {
+            for (int row = 0; row < profiles->count(); ++row)
+                if (profiles->item(row)->flags() & Qt::ItemIsEnabled) choices.push_back({ControllerTarget::Profiles, row});
+            if (unload->isEnabled()) choices.push_back({ControllerTarget::StopAll, -1});
+            if (retry->isEnabled()) choices.push_back({ControllerTarget::Retry, -1});
+        } else {
+            if (back->isEnabled()) choices.push_back({ControllerTarget::Back, -1});
+            if (apply->isEnabled()) choices.push_back({ControllerTarget::Apply, -1});
+        }
+        if (choices.empty()) return;
+        const auto selected = std::make_pair(controllerTarget, controllerTarget == ControllerTarget::Profiles ? profiles->currentRow() : -1);
+        const auto found = std::find(choices.begin(), choices.end(), selected);
+        const int count = choices.size(), index = found == choices.end() ? (direction > 0 ? -1 : 0) : std::distance(choices.begin(), found);
+        const auto next = choices[(index + direction + count) % count];
+        if (next.first == ControllerTarget::Profiles) profiles->setCurrentRow(next.second);
+        focusControl(next.first);
+    }
     void message(const QString &text) { error->setText(text); error->setVisible(!text.isEmpty()); }
     void request(const QString &path, const Object *body, std::function<void(Object)> completed) {
         Object payload = body ? *body : Object{};
-        payload["action"] = path == "/api/profiles" ? "state" : path == "/api/profiles/apply" ? "apply" : path == "/api/profiles/unload/preview" ? "preview-unload" : "preview";
+        payload["action"] = path == "/api/profiles" ? "state" : path == "/api/profiles/apply" ? "apply" : path == "/api/profiles/cancel" ? "cancel" : path == "/api/profiles/unload/preview" ? "preview-unload" : "preview";
         if (payload["action"] == "preview") payload["id"] = path.section('/', 3, 3);
-        if (payload["action"] == "apply") payload["trigger"] = trigger;
+        if (payload["action"] == "apply" || payload["action"] == "cancel") payload["trigger"] = trigger;
         const QByteArray data = QJsonDocument(payload).toJson(QJsonDocument::Compact);
         auto reply = new QLocalSocket(this); auto timer = new QTimer(reply); timer->setSingleShot(true);
         auto received = std::make_shared<QByteArray>(); auto finished = std::make_shared<bool>(false);
@@ -154,9 +203,9 @@ class Switcher : public QDialog {
             *finished = true; timer->stop();
             if (version == revision && isVisible()) {
                 if (!envelope["ok"].toBool()) {
-                    if (applying) { applying = false; back->setEnabled(true); apply->setText(plan["unload"].toBool() ? "Unload all" : "Load profile"); plan = {}; }
+                    if (applying) { applying = false; back->setEnabled(true); apply->setText(plan["unload"].toBool() ? "Stop all workloads" : "Load profile"); plan = {}; }
                     message(envelope["error"].toString("Could not contact the local manager. Try again.")); apply->setEnabled(false);
-                    if (pages->currentIndex() == 0) { controllerRetry = true; retry->setFocus(); }
+                    if (pages->currentIndex() == 0) focusControl(ControllerTarget::Retry);
                 } else completed(envelope["data"].toObject());
             }
             reply->abort(); reply->deleteLater();
@@ -191,13 +240,16 @@ class Switcher : public QDialog {
         }
         return true;
     }
+    static bool changing(const Object &data) {
+        const auto stage = data["operation"].toObject()["stage"].toString();
+        return data["busy"].toBool() || stage == "Applying" || stage == "Cancelling" || stage == "Failed";
+    }
     void render() {
         profiles->clear(); const QString filter = search->text();
-        auto operation = state["operation"].toObject()["stage"].toString();
-        const bool busy = operation == "Applying" || operation == "Cancelling" || operation == "Failed";
+        const bool busy = changing(state);
         auto saved = state["profiles"].toArray();
         std::vector<Object> sorted; for (auto value : saved) sorted.push_back(value.toObject());
-        const auto activeId = state["active"].toObject()["id"];
+        const QJsonValue activeId = state["active"].toObject()["id"];
         std::stable_sort(sorted.begin(), sorted.end(), [&](const auto &a, const auto &b) {
             if ((a["id"] == activeId) != (b["id"] == activeId)) return a["id"] == activeId;
             return QString::localeAwareCompare(a["name"].toString(), b["name"].toString()) < 0;
@@ -209,29 +261,59 @@ class Switcher : public QDialog {
             if (profile["id"] == activeId) text += isCurrent(profile) ? "    Loaded" : "    Saved changes";
             auto item = new QListWidgetItem(text + "\n" + (workloads.isEmpty() ? "No workloads" : workloads.join(", ")), profiles);
             item->setData(Qt::UserRole, profile); item->setSizeHint(QSize(0, 82));
-            if (busy || isCurrent(profile)) item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+            if (!busy && isCurrent(profile)) item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
         }
-        if (QStringLiteral("Unload all running workloads").contains(filter, Qt::CaseInsensitive)) {
-            auto item = new QListWidgetItem("Unload all\nStop all running workstations and AI services", profiles);
-            item->setData(Qt::UserRole, Object{{"unload", true}, {"name", "Unload all"}}); item->setSizeHint(QSize(0, 82));
-            if (busy || state["runtime"].toObject()["instances"].toArray().isEmpty()) item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
-        }
+        unload->setEnabled(busy || !state["runtime"].toObject()["instances"].toArray().isEmpty());
         if (saved.isEmpty()) message("No profiles yet. Create one in the Xur web manager.");
         else if (!profiles->count()) message("No profiles match your search.");
-        else if (busy) message(operation == "Failed" ? "A profile change needs attention. Resume or cancel it in the Xur web manager." : "A profile change is in progress. Wait for it to finish.");
+        else if (busy) message("A profile change is in progress. Choose another profile to interrupt it.");
         for (int n = 0; n < profiles->count(); ++n) if (profiles->item(n)->flags() & Qt::ItemIsEnabled) { profiles->setCurrentRow(n); break; }
     }
-    void refresh() {
-        ++revision; message(""); plan = {}; controllerRetry = false; pages->setCurrentIndex(0); current->setText("Loading profiles…"); profiles->clear(); search->clear();
-        request("/api/profiles", nullptr, [this](Object data) { state = data; auto active = state["active"].toObject();
-            current->setText(active.isEmpty() ? "No complete profile loaded" : "Loaded: " + active["name"].toString()); render(); profiles->setFocus(); });
+    void refresh(bool restoreSelection = false) {
+        const auto previousSearch = search->text();
+        ++revision; message(""); plan = {}; controllerTarget = ControllerTarget::Profiles; pages->setCurrentIndex(0); current->setText("Loading profiles…"); profiles->clear(); search->clear();
+        navigation->setText("D-pad / ↑ ↓: Move    Enter / A: Select    Esc / B: Close");
+        request("/api/profiles", nullptr, [this, restoreSelection, previousSearch](Object data) { state = data; auto active = state["active"].toObject();
+            if (restoreSelection) { const QSignalBlocker blocked(search); search->setText(previousSearch); }
+            current->setText(active.isEmpty() ? "No complete profile loaded" : "Loaded: " + active["name"].toString()); render();
+            if (restoreSelection && selected["unload"].toBool() && unload->isEnabled()) { focusControl(ControllerTarget::StopAll); return; }
+            if (restoreSelection) for (int row = 0; row < profiles->count(); ++row)
+                if (profiles->item(row)->data(Qt::UserRole).toJsonObject()["id"] == selected["id"] && profiles->item(row)->flags() & Qt::ItemIsEnabled) { profiles->setCurrentRow(row); break; }
+            focusControl(profiles->currentRow() >= 0 ? ControllerTarget::Profiles : ControllerTarget::Retry); });
     }
     void choose(QListWidgetItem *item) {
         if (!item || !(item->flags() & Qt::ItemIsEnabled) || applying) return;
-        selected = item->data(Qt::UserRole).toJsonObject(); ++revision; message(""); plan = {}; apply->setEnabled(false);
-        pages->setCurrentIndex(1); reviewTitle->setText(selected["name"].toString()); apply->setText(selected["unload"].toBool() ? "Unload all" : "Load profile"); warning->hide();
+        chooseTarget(item->data(Qt::UserRole).toJsonObject());
+    }
+    void chooseTarget(Object target) {
+        if (applying) return;
+        selected = target; ++revision; message(""); plan = {}; apply->setEnabled(false);
+        pages->setCurrentIndex(1); reviewTitle->setText(selected["name"].toString()); apply->setText(selected["unload"].toBool() ? "Stop all workloads" : "Load profile"); warning->hide();
+        navigation->setText("D-pad / ← →: Choose action    Enter / A: Select    Esc / B: Back to profiles");
         while (auto child = changes->takeAt(0)) { delete child->widget(); delete child; }
-        controllerConfirm = false; back->setFocus(); Object body;
+        focusControl(ControllerTarget::Back);
+        request("/api/profiles", nullptr, [this](Object data) {
+            state = data;
+            if (!changing(state)) { previewSelection(); return; }
+            const auto operation = state["operation"].toObject()["id"].toString();
+            if (operation.isEmpty()) { message("Refresh the picker before interrupting this change."); return; }
+            message("Stopping the current profile change…"); Object body{{"id", operation}};
+            request("/api/profiles/cancel", &body, [this, operation](Object) { waitForReview(operation); });
+        });
+    }
+    void waitForReview(const QString &operation) {
+        request("/api/profiles", nullptr, [this, operation](Object data) {
+            state = data;
+            if (!changing(state)) { message(""); previewSelection(); return; }
+            const auto current = state["operation"].toObject();
+            if (current["id"].toString() != operation) { message("Another profile change started. Go back and select again."); return; }
+            message("Stopping the current profile change. Waiting for its running action to finish: " + current["currentAction"].toString());
+            const int version = revision;
+            QTimer::singleShot(500, this, [this, operation, version] { if (version == revision && isVisible() && pages->currentIndex() == 1) waitForReview(operation); });
+        });
+    }
+    void previewSelection() {
+        Object body;
         request(selected["unload"].toBool() ? "/api/profiles/unload/preview" : "/api/profiles/" + selected["id"].toString() + "/preview", &body, [this](Object data) {
             plan = data; QMap<QString, Object> definitions;
             for (auto p : state["profiles"].toArray()) for (auto w : p.toObject()["workloads"].toArray()) definitions[w.toObject()["id"].toString()] = w.toObject();
@@ -244,7 +326,7 @@ class Switcher : public QDialog {
                 if (kind == "Stop" && w["recipe"].toObject()["kind"] == "Workstation") warning->show();
             }
             if (!changes->count()) changes->addWidget(label("No workloads need to start or stop."));
-            apply->setEnabled(true); back->setFocus();
+            apply->setEnabled(true); focusControl(ControllerTarget::Back);
         });
     }
     void approve() {
@@ -258,7 +340,7 @@ class Switcher : public QDialog {
     }
     void goBack() {
         if (applying) return;
-        if (pages->currentIndex() == 1) { ++revision; plan = {}; pages->setCurrentIndex(0); message(""); profiles->setFocus(); }
+        if (pages->currentIndex() == 1) { refresh(true); }
         else reject();
     }
     void controls() {
@@ -268,8 +350,30 @@ class Switcher : public QDialog {
         QSpinBox hold; hold.setRange(500, 3000); hold.setSingleStep(100); hold.setSuffix(" ms"); hold.setValue(input.hold);
         layout->addRow("Keyboard", &key); layout->addRow("Controller", &chord); layout->addRow("Hold duration", &hold);
         QDialogButtonBox buttons(QDialogButtonBox::Save | QDialogButtonBox::Cancel); layout->addRow(&buttons);
+        layout->addRow(label("D-pad ↑ ↓: Move    ← →: Adjust    A: Activate    B: Cancel"));
         connect(&buttons, &QDialogButtonBox::accepted, &settings, &QDialog::accept); connect(&buttons, &QDialogButtonBox::rejected, &settings, &QDialog::reject);
-        if (settings.exec() != QDialog::Accepted) return;
+        std::array<QWidget *, 5> fields{&key, &chord, &hold, buttons.button(QDialogButtonBox::Save), buttons.button(QDialogButtonBox::Cancel)};
+        int selectedField = 1;
+        auto focusField = [&] {
+            for (int index = 0; index < int(fields.size()); ++index) {
+                auto widget = fields[index]; widget->setProperty("controllerSelected", index == selectedField);
+                widget->style()->unpolish(widget); widget->style()->polish(widget); widget->update();
+            }
+            fields[selectedField]->setFocus();
+        };
+        modalAction = [&](QString action) {
+            if (action == "back") { settings.reject(); return; }
+            if (action == "up" || action == "down") { selectedField = (selectedField + (action == "up" ? -1 : 1) + int(fields.size())) % fields.size(); focusField(); }
+            else if (action == "left" || action == "right") {
+                const int direction = action == "left" ? -1 : 1;
+                if (selectedField == 1) chord.setCurrentIndex((chord.currentIndex() + direction + chord.count()) % chord.count());
+                if (selectedField == 2) hold.setValue(hold.value() + direction * hold.singleStep());
+            } else if (action == "accept" && selectedField >= 3) qobject_cast<QPushButton *>(fields[selectedField])->click();
+        };
+        QTimer::singleShot(0, &settings, focusField);
+        const int result = settings.exec(); modalAction = {};
+        highlightSelection();
+        if (result != QDialog::Accepted) return;
         if (key.keySequence().isEmpty() || key.keySequence().count() != 1) { message("Choose a single keyboard combination."); return; }
         if (!KGlobalAccel::self()->setShortcut(&shortcut, {key.keySequence()}, KGlobalAccel::NoAutoloading)) { message("That keyboard shortcut is unavailable. Choose another."); return; }
         shortcut.setProperty("shortcut", QVariant::fromValue(key.keySequence()));
@@ -289,14 +393,15 @@ public:
         setWindowTitle("Switch profile · Xur"); setWindowFlag(Qt::WindowStaysOnTopHint); resize(640, 590); setMinimumSize(420, 420);
         auto layout = new QVBoxLayout(this); layout->setContentsMargins(24, 24, 24, 20); layout->setSpacing(14);
         auto heading = new QHBoxLayout; heading->addWidget(label("Switch profile", "title")); heading->addStretch();
-        auto settings = new QPushButton("Shortcuts"); auto close = new QPushButton("Close"); heading->addWidget(settings); heading->addWidget(close); layout->addLayout(heading); layout->addWidget(current);
+        heading->addWidget(settings); heading->addWidget(close); layout->addLayout(heading); layout->addWidget(current);
         error->setObjectName("error"); error->setWordWrap(true); error->hide(); layout->addWidget(error);
-        auto picker = new QWidget; auto pickLayout = new QVBoxLayout(picker); pickLayout->setContentsMargins(0, 0, 0, 0); search->setPlaceholderText("Search profiles"); search->setAccessibleName("Search profiles"); profiles->setAccessibleName("Saved profiles"); pickLayout->addWidget(search); pickLayout->addWidget(profiles); pickLayout->addWidget(retry); pages->addWidget(picker);
+        auto picker = new QWidget; auto pickLayout = new QVBoxLayout(picker); pickLayout->setContentsMargins(0, 0, 0, 0); search->setPlaceholderText("Search profiles"); search->setAccessibleName("Search profiles"); profiles->setAccessibleName("Saved profiles"); pickLayout->addWidget(search); pickLayout->addWidget(profiles);
+        pickLayout->addWidget(unload); pickLayout->addWidget(label("Stops workstations and AI services. Saved profiles are kept.", "hint")); pickLayout->addWidget(retry); pages->addWidget(picker);
         auto review = new QWidget; auto reviewLayout = new QVBoxLayout(review); reviewLayout->setContentsMargins(0, 0, 0, 0); reviewTitle->setObjectName("reviewTitle"); reviewLayout->addWidget(reviewTitle); reviewLayout->addWidget(label("Review what stays running, stops and starts."));
         auto scroll = new QScrollArea; scroll->setWidgetResizable(true); auto rows = new QWidget; rows->setLayout(changes); scroll->setWidget(rows); reviewLayout->addWidget(scroll);
         warning->setText("Your current desktop may stop. Save your work before loading."); warning->setWordWrap(true); warning->setObjectName("warning"); reviewLayout->addWidget(warning);
         auto actions = new QHBoxLayout; actions->addStretch(); actions->addWidget(back); actions->addWidget(apply); apply->setObjectName("primary"); reviewLayout->addLayout(actions); pages->addWidget(review); layout->addWidget(pages, 1);
-        layout->addWidget(label("↑ ↓ / D-pad: Move     Enter / A: Select     Esc / B: Back", "hint"));
+        navigation->setObjectName("hint"); navigation->setWordWrap(true); navigation->setTextFormat(Qt::PlainText); layout->addWidget(navigation);
         QFile connection(QDir::homePath() + "/.config/xur-profile-switcher/connection.json"); if (connection.open(QIODevice::ReadOnly)) {
             auto data = QJsonDocument::fromJson(connection.readAll()).object(); if (data["socket"].isString()) server = data["socket"].toString();
         }
@@ -305,27 +410,40 @@ public:
         // Controller selection survives fullscreen apps retaining desktop focus;
         // ordinary Tab/mouse focus changes still select the visible action.
         connect(qApp, &QApplication::focusChanged, this, [this](QWidget *, QWidget *now) {
-            if (now == apply) controllerConfirm = true; else if (now == back) controllerConfirm = false;
-            if (now == retry) controllerRetry = true; else if (now == profiles || now == search) controllerRetry = false;
+            if (now == apply) controllerTarget = ControllerTarget::Apply;
+            else if (now == back) controllerTarget = ControllerTarget::Back;
+            else if (now == retry) controllerTarget = ControllerTarget::Retry;
+            else if (now == unload) controllerTarget = ControllerTarget::StopAll;
+            else if (now == settings) controllerTarget = ControllerTarget::Shortcuts;
+            else if (now == close) controllerTarget = ControllerTarget::Close;
+            else if (now == profiles || now == search) controllerTarget = ControllerTarget::Profiles;
+            else return;
+            highlightSelection();
         });
         input.action = [this](QString action) {
+            if (modalAction) { modalAction(action); return; }
             if (QApplication::activeModalWidget() && QApplication::activeModalWidget() != this) return;
             if (action == "back") { goBack(); return; }
-            if (pages->currentIndex() == 0) {
-                if (action == "accept") { if (controllerRetry || retry->hasFocus()) refresh(); else choose(profiles->currentItem()); }
-                else if (action == "up" || action == "down") {
-                    const int count = profiles->count(); if (!count) { controllerRetry = true; retry->setFocus(); return; } int index = profiles->currentRow();
-                    for (int n = 0; n < count; ++n) { index = (index + (action == "up" ? -1 : 1) + count) % count; if (profiles->item(index)->flags() & Qt::ItemIsEnabled) { controllerRetry = false; profiles->setCurrentRow(index); profiles->setFocus(); break; } }
-                }
-            } else if (pages->currentIndex() == 1) {
-                if (action == "accept") { if (controllerConfirm && apply->isEnabled()) approve(); else if (!controllerConfirm) goBack(); }
-                else if (action == "up" || action == "down") { controllerConfirm = !controllerConfirm && apply->isEnabled(); if (controllerConfirm) apply->setFocus(); else back->setFocus(); }
+            if (action == "up" || action == "down") { moveControl(action == "up" ? -1 : 1); return; }
+            if (pages->currentIndex() == 1 && (action == "left" || action == "right")) {
+                focusControl(action == "right" && apply->isEnabled() ? ControllerTarget::Apply : ControllerTarget::Back); return;
+            }
+            if (action != "accept") return;
+            switch (controllerTarget) {
+                case ControllerTarget::Profiles: choose(profiles->currentItem()); break;
+                case ControllerTarget::StopAll: if (unload->isEnabled()) chooseTarget(Object{{"unload", true}, {"name", "Stop all workloads"}}); break;
+                case ControllerTarget::Retry: refresh(); break;
+                case ControllerTarget::Shortcuts: controls(); break;
+                case ControllerTarget::Close: reject(); break;
+                case ControllerTarget::Back: goBack(); break;
+                case ControllerTarget::Apply: if (apply->isEnabled()) approve(); break;
             }
         };
         connect(search, &QLineEdit::textChanged, this, [this] { if (!state.isEmpty()) { message(""); render(); } });
         connect(profiles, &QListWidget::itemActivated, this, [this](QListWidgetItem *item) { choose(item); });
         connect(profiles, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) { choose(item); });
         connect(close, &QPushButton::clicked, this, &Switcher::reject); connect(back, &QPushButton::clicked, this, [this] { goBack(); }); connect(retry, &QPushButton::clicked, this, [this] { refresh(); });
+        connect(unload, &QPushButton::clicked, this, [this] { chooseTarget(Object{{"unload", true}, {"name", "Stop all workloads"}}); });
         connect(settings, &QPushButton::clicked, this, [this] { controls(); }); connect(apply, &QPushButton::clicked, this, [this] { approve(); });
         shortcut.setObjectName("open-profile-switcher"); shortcut.setText("Switch profile");
         shortcut.setProperty("componentName", "xur-profile-switcher"); shortcut.setProperty("componentDisplayName", "Xur profile switcher");
@@ -351,7 +469,7 @@ int main(int argc, char **argv) {
     if (!bus.registerService(service)) { if (!background) { QDBusMessage call = QDBusMessage::createMethodCall(service, "/Switcher", "dev.xur.ProfileSwitcher", "Show"); bus.call(call); } return 0; }
     QFile fontFile(QCoreApplication::applicationDirPath() + "/fonts/IBMPlexSans.ttf");
     if (fontFile.exists()) { const int id = QFontDatabase::addApplicationFont(fontFile.fileName()); auto families = QFontDatabase::applicationFontFamilies(id); if (!families.isEmpty()) app.setFont(QFont(families.first(), 12)); }
-    app.setStyleSheet("QWidget{background:#20252d;color:#edf1f7;font-size:15px;} QLabel#title{font-size:26px;font-weight:600;} QLabel#reviewTitle{font-size:22px;} QLabel#hint{color:#b0bac8;font-size:13px;} QLabel#error{color:#e7a6a1;border:1px solid #7c494b;padding:12px;} QLabel#warning{color:#e6c387;background:#393022;padding:12px;} QLabel#change{border-bottom:1px solid #373f4b;padding:12px;} QPushButton,QLineEdit{min-height:36px;padding:4px 12px;border:1px solid #373f4b;border-radius:5px;} QPushButton:focus,QLineEdit:focus{border:2px solid #99c5ff;} QPushButton#primary{background:#99c5ff;color:#17283d;} QPushButton:disabled{color:#8190a3;} QLineEdit,QListWidget{background:#15181d;} QListWidget{border:0;} QListWidget::item{padding:12px;border:1px solid #373f4b;border-radius:6px;margin-bottom:8px;font-size:19px;} QListWidget::item:selected{background:#293649;border:2px solid #99c5ff;} QScrollArea{border:0;} ");
+    app.setStyleSheet(SwitcherStyle());
     Switcher window;
     // The only exported session-bus action opens the local picker.
     class Bridge : public QDBusVirtualObject {
