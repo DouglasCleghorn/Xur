@@ -288,6 +288,16 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     {
         await gate.WaitAsync();try{return await StationDisplay.Run(await RunningStation(id),request);}finally{gate.Release();}
     }
+    public async Task<byte[]> Screenshot(string id,CancellationToken cancellation)
+    {
+        if(!ProfilePolicy.EntityIdentifier(id))throw new InvalidOperationException("Invalid workstation ID.");
+        await using var operation=await Stops.Enter();
+        // Match starts/stops on this workstation; other desktops can capture in
+        // parallel without racing a user/GPU handoff on the selected desktop.
+        await using var allocation=await Stops.Resources(["workload:"+id]);
+        cancellation.ThrowIfCancellationRequested();
+        return await StationScreenshot.Capture(await RunningStation(id),cancellation);
+    }
     public async Task StartStreaming(string id,bool restart=false)
     {
         await gate.WaitAsync();try

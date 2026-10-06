@@ -228,6 +228,13 @@ app.MapPost("/container-jobs",(ContainerPrepareRequest request)=> {
 });
 var modelCatalog=new ModelCatalog(stateDir);
 app.MapGet("/workstations/{id}/graphics",async Task<IResult>(string id)=>{if(installer)return Results.Conflict();try{return Results.Json(await workloads.Graphics(id));}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}});
+app.MapGet("/workstations/{id}/screenshot",async Task<IResult>(HttpContext context,string id)=>{
+    context.Response.Headers.CacheControl="no-store";context.Response.Headers["X-Content-Type-Options"]="nosniff";
+    if(installer)return Results.Conflict();
+    try{return Results.File(await workloads.Screenshot(id,context.RequestAborted),"image/png");}
+    catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
+    catch(Exception e) when(e is IOException or System.ComponentModel.Win32Exception or OperationCanceledException&&!context.RequestAborted.IsCancellationRequested){return Results.Conflict(new{error="Desktop capture is unavailable. Refresh the preview shortly."});}
+});
 app.MapGet("/workstations/{id}/display",async Task<IResult>(string id)=>{try{return Results.Json(await workloads.Display(id,null));}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}});
 app.MapPost("/workstations/{id}/display",async Task<IResult>(string id,StationDisplayRequest request)=>{if(installer)return Results.Conflict();try{return Results.Json(await workloads.Display(id,request));}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}});
 app.MapGet("/workstations",async Task<IResult>()=>installer?Results.Conflict():Results.Json(await workloads.StreamingStatus()));

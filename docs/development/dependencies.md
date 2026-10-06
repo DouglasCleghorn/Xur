@@ -61,6 +61,11 @@ their selected image and restart policy.
 
 ## Manual checks
 
+Workstation previews invoke the installed host's `/usr/bin/spectacle`; no copy
+is bundled with Xur. When updating the host image, verify Spectacle's background
+capture options against its Plasma/KWin version and check a running workstation's
+preview. An absent or failed capture tool must show an unavailable preview.
+
 Dependabot cannot interpret the following custom locks or update vendored source
 and model weights. Review these during the weekly dependency PR and before a
 release; they are deliberately manual checks, with no companion update service.

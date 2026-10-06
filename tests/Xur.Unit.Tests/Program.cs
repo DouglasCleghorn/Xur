@@ -48,6 +48,8 @@ Check(Xur.Agent.ServerPower.Configuration.Contains("--what=sleep ")&&!Xur.Agent.
 Check(LocalConsole.WebAddresses([]).Contains("Waiting for network"),"Console explains network address acquisition instead of showing an empty list");
 Check(LocalConsole.WebAddresses(["https://192.0.2.1:8443/"]).Contains("192.0.2.1"),"Console shows acquired addresses immediately");
 await StationGraphicsTests.Run(Check);
+await StationScreenshotTests.Run(Check);
+await WorkstationPreviewEndpointTests.Run(Check);
 await StationUnitsTests.Run(Check);
 await HeadlessStationTests.Run(Check);
 await ModelLabTests.Run(Check);

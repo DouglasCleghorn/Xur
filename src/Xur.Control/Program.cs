@@ -242,6 +242,7 @@ async Task StartHost()
     app.MapPost("/models/scan",async()=>{await appliance.Agent.PostAsync("/models/scan",null);return Results.Redirect("/models");});
     app.MapGet("/api/network-usage",async(int? minutes,DateTimeOffset? since,HttpResponse response)=>TelemetryDelta.Filter((await appliance.Agent.GetFromJsonAsync<NetworkUsageSnapshot>("/network-usage?minutes="+Math.Clamp(minutes??15,1,1440)))!,since,response));
     app.MapGet("/api/workstations",async()=>WorkstationView.Build(await profileManager.State(),await appliance.Agent.GetFromJsonAsync<StationStreamStatus[]>("/workstations")??[]));
+    app.MapWorkstationPreviews(appliance.Agent);
     app.MapGet("/api/workstations/{id}/display",async(string id)=> {var r=await appliance.Agent.GetAsync("/workstations/"+Uri.EscapeDataString(id)+"/display");return Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);});
     app.MapPost("/api/workstations/{id}/display",async(string id,StationDisplayRequest request)=> {var r=await appliance.Agent.PostAsJsonAsync("/workstations/"+Uri.EscapeDataString(id)+"/display",request);return Results.Content(await r.Content.ReadAsStringAsync(),"application/json",statusCode:(int)r.StatusCode);});
     app.MapPost("/workstations/display",async(HttpContext ctx)=> {

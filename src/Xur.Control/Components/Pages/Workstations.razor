@@ -48,12 +48,22 @@ else
             </header>
             @if(station!=null && w!=null)
             {
+                <div class="station-content">
+                @if(running)
+                {
+                    <div class="station-preview" data-url="/api/workstations/@w.Id/screenshot">
+                        <div class="station-preview-heading"><span>Desktop preview</span><button type="button" class="quiet station-preview-refresh">Refresh preview</button></div>
+                        <div class="station-preview-screen"><img alt="Current desktop of @entry.Name" hidden /><span class="station-preview-placeholder">Preview unavailable</span></div>
+                        <p class="secondary-text" role="status">Refresh to capture the current desktop.</p>
+                    </div>
+                }
                 <dl class="station-overview">
                     <div><dt>User</dt><dd>@(w.User?.Temporary==true?"Temporary user":UserLabel(w))</dd></div>
                     <div><dt>GPU</dt><dd>@(station.Gpu?.DisplayName??"GPU unavailable")</dd></div>
                     <div><dt>Display</dt><dd>@(station.Stream?.Headless==true?"Virtual display":station.Gpu?.Displays is {Length:>0}?string.Join(", ",station.Gpu.Displays):"No display connected")</dd></div>
                     <div><dt>@(station.Profiles.Length==1?"Profile":"Profiles")</dt><dd class="station-profile-links">@foreach(var profile in station.Profiles) { <a href="/profiles/edit?id=@profile.Id">@profile.Name</a> }</dd></div>
                 </dl>
+                </div>
                 @if(allocations.GetValueOrDefault(w.Id) is {} allocation) { @foreach(var problem in allocation.Problems) { <p class="notice error" role="alert">@problem</p> } }
                 @if(station.Stream?.Error!=null) { <p class="notice error" role="alert">@station.Stream.Error</p> }
             }
