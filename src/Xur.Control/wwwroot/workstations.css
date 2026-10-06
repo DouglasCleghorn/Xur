@@ -26,6 +26,16 @@
 .station-identity .state-label { flex-shrink: 0; }
 .station-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .station-actions { margin-left: auto; }
+.station-content { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; margin: 22px 0; }
+.station-content .station-overview { flex: 1; margin: 0; }
+.station-preview { flex: 0 1 320px; min-width: 0; }
+.station-preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 8px; }
+.station-preview-heading button { font-size: 13px; padding: 4px 8px; }
+.station-preview-screen { display: grid; place-items: center; aspect-ratio: 16 / 9; background: var(--canvas); border: 1px solid var(--rule); border-radius: 5px; overflow: hidden; }
+.station-preview-screen img { width: 100%; height: 100%; object-fit: contain; min-height: 0; }
+.station-preview-placeholder { color: var(--muted); font-size: 14px; }
+.station-preview p { font-size: 12px; margin: 8px 0 0; }
+.station-preview + .station-overview { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .station-overview { display: grid; grid-template-columns: minmax(100px,.7fr) minmax(180px,1.5fr) minmax(140px,1fr) minmax(120px,1fr); gap: 16px 24px; margin: 22px 0; }
 .station-overview > div { min-width: 0; }
 .station-overview dt { font-size: 13px; margin-bottom: 5px; }
@@ -62,6 +72,8 @@
     .station-identity { gap: 8px 12px; }
     .station-identity h2 { font-size: 19px; }
     .station-actions { margin-left: 0; width: 100%; }
+    .station-content { display: block; margin: 20px 0; }
+    .station-preview { width: 100%; max-width: 360px; margin-bottom: 20px; }
     .station-overview { margin: 20px 0; gap: 16px; }
     .station-create-body { padding: 18px 16px; }
     .station-create-form { align-items: stretch; flex-direction: column; }

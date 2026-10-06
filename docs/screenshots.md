@@ -47,7 +47,7 @@ The capture dates and privacy reviews in the table above remain unchanged.
 | Image | Work before the next release |
 | --- | --- |
 | `docs/assets/profile-editor.jpg` | Refresh: predates inline rename, conditional workstation fields, Add user placement and shared Switch profile navigation. |
-| `docs/assets/workstations.jpg` | Refresh: predates current Settings/display controls and the removal of profile-loading and launch shortcuts. |
+| `docs/assets/workstations.jpg` | Refresh: predates desktop previews, current Settings/display controls and the removal of profile-loading and launch shortcuts. |
 | `docs/assets/control-panel.jpg` | Review and refresh if needed for the current Home picker and shared Switch profile navigation. |
 | `docs/assets/model-lab.jpg` | Review and refresh if needed for shared navigation; preserve blank prompts/results and synthetic fixtures. |
 | `docs/assets/update-channel.jpg` | Compare the cropped selector with current Settings; refresh if its controls or wording differ. |
@@ -66,6 +66,17 @@ See [release preparation](development/release-preparation.md).
 | User-supplied bug screenshots | Reproduce reported defects | T3 attachments; referenced in conversation, not copied into source | Keep private; add a sanitized published-image entry before reuse |
 
 ## Change log
+
+- 2026-10-05: Added desktop previews in the working tree based on `1fd77ac`.
+  The generated `.build/evidence/workstation-preview/desktop.png` fixture is a
+  synthetic desktop illustration for private collaborative browser checks;
+  its embedded window contains example text only, with no live desktop,
+  account, credentials or personal files. Browser assertions covered fresh
+  capture requests, failure/retry, and layouts at 1440, 390 and 320 px using
+  the actual Razor fixture. Collaborative screenshot capture was unavailable,
+  so no new page screenshots were saved or published. The published workstation
+  image and the older `.build/evidence/workstation-design/` capture family now
+  predate desktop previews and must be regenerated before release reuse.
 
 - 2026-10-05: Regenerated and visually reviewed the private
   `.build/fast/updates-{desktop,mobile}.png` family from the synthetic Updates
