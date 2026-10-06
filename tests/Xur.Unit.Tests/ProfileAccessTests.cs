@@ -38,6 +38,16 @@ static class ProfileAccessTests
             check(state.Contains("Assistant")&&!state.Contains("private-command")&&!state.Contains("private-description")&&!state.Contains("sha256"),"Desktop transport returns display data without private recipes or commands");
             await Denied(()=>broker.Handle(0,new("state")),check,"Privileged and non-workstation users cannot use desktop transport");
             active=false;await Denied(()=>broker.Handle(1000,new("state")),check,"Inactive workstation users cannot switch profiles");active=true;
+            var displayCalls=new List<(ProfileSwitcherSession Actor,SwitcherRequest Request)>();
+            await using(var displayBroker=new ProfileSwitcherBroker(manager,Session,access:access,displayPower:(actor,request,_)=>{displayCalls.Add((actor,request));return Task.FromResult<object>(new DisplayPowerResult("Acknowledged",1));}))
+            {
+                access.Save(ProfileAccessSettings.Web);await displayBroker.Handle(1000,new("display-off","display-1"));
+                check(displayCalls.Single().Actor.WorkloadId=="desk-a"&&displayCalls.Single().Actor.Uid==1000,"Workstation CEC controls retain the authenticated seat independently of profile-loading permission");
+                active=false;await Denied(()=>displayBroker.Handle(1000,new("display-wake")),check,"Inactive users cannot invoke workstation CEC wake");active=true;
+                await Denied(()=>displayBroker.Handle(0,new("display-on","display-1")),check,"CEC desktop controls require an active unprivileged workstation user");
+                await Denied(()=>displayBroker.Handle(1000,new("display-raw","cec0")),check,"CEC broker rejects arbitrary command actions");
+                access.Save(ProfileAccessSettings.Workstations);
+            }
             await Denied(()=>broker.Handle(1000,new("delete", "p")),check,"Desktop transport rejects management and arbitrary actions");
             var plan=await Preview(broker);
             await Denied(()=>broker.Handle(1001,new("apply",plan.Id,plan.Digest,"controller")),check,"Reviewed plans belong to the requesting UID");

@@ -1,5 +1,10 @@
 # Home and monitoring
 
+Home also lists connected displays with separate **CEC screen on/off** controls.
+The **Displays** page assigns external CEC adapters; the **Switch profile** overlay
+offers the same power actions. Unsupported displays explain their missing CEC
+support. See [display sleep and HDMI-CEC](display-power.md).
+
 Installed Home is a compact control panel: Update All, confirmed reboot, a pending-reboot notice, and compact saved-profile cards with workload previews. Choosing an item does not mutate the system until Load profile is pressed. Loading uses the existing approval/observation/planner boundary. Active transitions link to Profiles and retain cancellation access.
 
 Storage-device/RAM/VRAM meters, charts, network traffic history, workloads and system services are under `/monitoring`. It is in desktop navigation and the phone's More menu. Installation runs in the local console; web management starts after reboot into the installed system. Unknown device telemetry is never displayed as zero.

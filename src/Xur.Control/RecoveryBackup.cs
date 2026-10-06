@@ -16,7 +16,7 @@ public sealed class RecoveryBackup(string root="/")
         "/var/lib/xur/administrator.json","/var/lib/xur/manager-account.json","/var/lib/xur/api-keys.json",
         "/var/lib/xur/session-signing.key","/var/lib/xur/manager-tls.pfx","/var/lib/xur/secrets",
         "/var/lib/xur/gpu-power.json","/var/lib/xur/gpu-labels.json","/var/lib/xur/timezone","/var/lib/xur/timezone-mode",
-        "/var/lib/xur/updates/settings.json","/var/lib/xur/profile-access.json","/var/lib/xur/catalog-selected","/var/lib/xur/station-users",
+        "/var/lib/xur/updates/settings.json","/var/lib/xur/profile-access.json","/var/lib/xur/display-adapters.json","/var/lib/xur/catalog-selected","/var/lib/xur/station-users",
         "/var/lib/xur/model-library.json","/var/lib/xur/installed",
         "/etc/xur","/etc/NetworkManager/system-connections","/etc/NetworkManager/conf.d",
         "/etc/machine-id","/var/lib/dbus/machine-id","/etc/hostname","/etc/hosts","/etc/resolv.conf","/etc/localtime","/etc/chrony.conf","/etc/chrony.d",

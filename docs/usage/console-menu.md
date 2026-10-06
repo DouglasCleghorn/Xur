@@ -6,6 +6,10 @@ The installer offers **Setup and installation**, **Network settings**, **Hardwar
 **Logs**, and **Power**. Web management and Tailscale begin after installation.
 The physical/serial console and the interactive `xur` command share the update
 and power screens.
+Under **Power → Display power / CEC screen off**, choose a console display and
+send **CEC screen off** or **CEC screen on**. Workloads keep running; the first
+controller action or key wakes a display put in standby through Xur. See
+[display sleep and HDMI-CEC](display-power.md) for adapter requirements.
 
 On the physical console, use arrows or a number to select a row, then Enter.
 Escape or 0 returns to the parent screen. PgUp/PgDn scroll long status content.

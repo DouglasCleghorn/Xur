@@ -364,6 +364,7 @@ async Task StartHost()
     });
     app.MapPost("/tailscale/confirm",async()=> { await appliance.ConfirmAdmin(); return Results.Redirect("/tailscale"); });
     app.MapReboot(appliance.Agent,appliance.BootId);
+    app.MapDisplayPower(appliance.Agent);
     app.MapGet("/local/console-frame",(HttpContext ctx,int? columns,int? rows)=>{
         var frame=LocalConsole.ExportFrame(columns??100,rows??40,out var sleeping);
         ctx.Response.Headers["X-Xur-Console-Power"]=sleeping?"off":"on";
@@ -421,7 +422,15 @@ async Task StartHost()
         using var response=await runtimeClient.GetAsync("/profile-switcher/session/"+uid,cancellation);
         if(response.StatusCode==System.Net.HttpStatusCode.NotFound)return null;
         response.EnsureSuccessStatusCode();return await response.Content.ReadFromJsonAsync<ProfileSwitcherSession>(cancellation);
-    },maintenance.Enter,maintenance.Exit,profileAccess);
+    },maintenance.Enter,maintenance.Exit,profileAccess,async(actor,request,cancellation)=>{
+        using var response=request.Action=="display-state"
+            ?await runtimeClient.GetAsync("/displays?workstation="+Uri.EscapeDataString(actor.WorkloadId),cancellation)
+            :await runtimeClient.PostAsJsonAsync(request.Action=="display-wake"?"/displays/wake":"/displays/power",
+                request.Action=="display-wake"?(object)new DisplayWakeRequest(actor.WorkloadId):new DisplayPowerRequest(request.Id??"",request.Action=="display-off"?"off":"on",actor.WorkloadId),cancellation);
+        var data=await response.Content.ReadFromJsonAsync<JsonElement>(cancellation);
+        if(!response.IsSuccessStatusCode)throw new InvalidOperationException(data.TryGetProperty("error",out var error)?error.GetString():"CEC request failed.");
+        return data;
+    });
     if(!appliance.Installer)switcher.Start(ProfileSwitcherTransport.SocketPath(appliance.RunDirectory),app.Lifetime.ApplicationStopping);
     if(!appliance.Installer && !File.Exists(ApplicationMaintenance.Marker))await profileManager.Resume(automatic:true);
     if(!appliance.Installer)_=Task.Run(()=>profileManager.WatchModels(app.Lifetime.ApplicationStopping));
@@ -467,12 +476,23 @@ async Task StartHost()
         }
     }
     // Call while holding the same gate for keyboard, serial and gamepad input.
+    async Task<bool> WakeConsoleDisplays()
+    {
+        try{using var response=await appliance.Agent.PostAsJsonAsync("/displays/wake",new DisplayWakeRequest(ConsoleOnly:true));
+            var result=response.IsSuccessStatusCode?await response.Content.ReadFromJsonAsync<DisplayPowerResult>():null;
+            return result?.ConsumeInput==true||result?.Woken>0;}
+        catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException){return false;}
+    }
     async Task HandleConsoleInput(bool plain,string? line,ConsoleKeyAction action,char? typed,bool logTerminal,string trigger="console-keyboard")
     {
         try
         {
             consoleMenu.ProfileTrigger=trigger;
-            if(LocalConsole.ConsumeWakeInput(plain,typed,action))return;
+            if(plain||typed.HasValue||action!=ConsoleKeyAction.None)
+            {
+                var cecWake=await WakeConsoleDisplays();
+                if(LocalConsole.ConsumeWakeInput(plain,typed,action)||cecWake)return;
+            }
             LocalConsole.ConsumeDiagnosticRevision();
             char? key;
             if(plain)
@@ -535,7 +555,11 @@ async Task StartHost()
         _ = Task.Run(async()=>{
             using var gamepads=new ConsoleGamepadInput(textContext:()=>LocalConsole.GamepadTextContext,clearPreview:()=>LocalConsole.SetControllerPreview(null));
             await gamepads.Run(async(input,logTerminal)=>{
-                if(input.Activity && LocalConsole.Wake()){LocalConsole.SetControllerPreview(null);return true;}
+                if(input.Activity)
+                {
+                    var cecWake=await WakeConsoleDisplays();
+                    if(LocalConsole.Wake()||cecWake){LocalConsole.SetControllerPreview(null);return true;}
+                }
                 LocalConsole.ApplyControllerInput(input);
                 if(input.Action!=ConsoleKeyAction.None)await HandleConsoleInput(false,null,input.Action,null,logTerminal,"console-controller");
                 return false;

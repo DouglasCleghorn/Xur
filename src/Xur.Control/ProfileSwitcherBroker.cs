@@ -8,7 +8,8 @@ namespace Xur.Control;
 
 // A separate, typed local transport: no manager cookies, credentials or HTTP
 // endpoints. Linux identifies the caller; the agent verifies its active desk.
-public sealed class ProfileSwitcherBroker(ProfileManager manager,Func<int,CancellationToken,Task<ProfileSwitcherSession?>> session,Func<bool>? enter=null,Action? exit=null,ProfileAccessSettings? access=null):IAsyncDisposable
+public sealed class ProfileSwitcherBroker(ProfileManager manager,Func<int,CancellationToken,Task<ProfileSwitcherSession?>> session,Func<bool>? enter=null,Action? exit=null,ProfileAccessSettings? access=null,
+    Func<ProfileSwitcherSession,SwitcherRequest,CancellationToken,Task<object>>? displayPower=null):IAsyncDisposable
 {
     static readonly JsonSerializerOptions json=new(JsonSerializerDefaults.Web);
     readonly ConcurrentDictionary<string,(int Uid,string Workstation,DateTimeOffset Expires)> plans=new();
@@ -65,9 +66,14 @@ public sealed class ProfileSwitcherBroker(ProfileManager manager,Func<int,Cancel
     }
     internal async Task<object> Handle(int uid,SwitcherRequest request,CancellationToken cancellation=default)
     {
-        if(access!=null&&!access.WorkstationsAllowed)throw new InvalidOperationException("Workstation profile controls are disabled. Change Profile access in the web manager’s Settings.");
         var actor=await session(uid,cancellation);
         if(actor==null || actor.Uid!=uid || uid<1000)throw new InvalidOperationException("This user does not have an active Xur workstation.");
+        if(request.Action is "display-state" or "display-on" or "display-off" or "display-wake")
+        {
+            if(displayPower==null)throw new InvalidOperationException("Display controls are unavailable.");
+            return await displayPower(actor,request,cancellation);
+        }
+        if(access!=null&&!access.WorkstationsAllowed)throw new InvalidOperationException("Workstation profile controls are disabled. Change Profile access in the web manager’s Settings.");
         if(request.Action=="state")
         {
             var state=await manager.State();

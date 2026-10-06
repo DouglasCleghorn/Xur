@@ -25,6 +25,8 @@ var results = new List<string>();
 void Check(bool value,string name) { if(!value) throw new Exception(name); results.Add(name); }
 if(args is ["--profile-access"]){await ProfileAccessTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ProfileAccess",passed=results}));return;}
 if(args is ["--console-gamepad"]){await ConsoleGamepadTests.Run(Check);ConsoleStickKeyboardTests.Run(Check);ConsoleKeyboardOverlayTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ConsoleGamepad",passed=results}));return;}
+if(args is ["--display-power"]){await DisplayPowerTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="DisplayPower",passed=results}));return;}
+await DisplayPowerTests.Run(Check);
 await InstallerDiagnosticsTests.Run(Check);
 await InstallerDiagnosticSshTests.Run(Check);
 await ApplicationLogTests.Run(Check);

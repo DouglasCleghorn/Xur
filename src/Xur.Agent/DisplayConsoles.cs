@@ -30,7 +30,8 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
     bool NeedsRecovery(GpuDevice gpu,string card)
     {
         var now=time.GetTimestamp();
-        var outputs=(gpu.Displays??[]).Where(d=>d.StartsWith(Path.GetFileName(card)+"-",StringComparison.Ordinal)).ToArray();
+        var outputs=(gpu.Displays??[]).Where(d=>d.StartsWith(Path.GetFileName(card)+"-",StringComparison.Ordinal)
+            && !File.Exists(DisplayPower.SleepMarker(runDirectory,d))).ToArray();
         if(outputs.Length==0){recovery.Remove(gpu.Pci);return false;}
         if(!File.Exists(Fault(gpu.Pci)) && !outputs.Any(d=>Read(Path.Combine(sysRoot,"class/drm",d,"enabled"))=="disabled" || Read(Path.Combine(sysRoot,"class/drm",d,"dpms")) is "Off" or "Standby" or "Suspend"))
         {
@@ -119,7 +120,8 @@ public sealed class DisplayConsoles(string directory,string runDirectory,
                 if((await RunProcess("systemctl",["is-active",Unit(gpu.Pci)],5)).ExitCode==0)
                 {
                     var environment=await RunProcess("systemctl",["show",Unit(gpu.Pci),"--property=Environment","--value"],5);
-                    var sleeping=File.Exists(Path.Combine(runDirectory,"console-sleep"));
+                    var sleeping=File.Exists(Path.Combine(runDirectory,"console-sleep"))
+                        || (gpu.Displays??[]).All(d=>File.Exists(DisplayPower.SleepMarker(runDirectory,d)));
                     if(sleeping)recovery.Remove(gpu.Pci);
                     var startup=!sleeping && await startupRecovery.Due(gpu,RunProcess);
                     var recover=(!sleeping && NeedsRecovery(gpu,card))||startup;

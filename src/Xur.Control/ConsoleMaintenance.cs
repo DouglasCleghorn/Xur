@@ -18,6 +18,7 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
     readonly ConsoleComputerName computerName=new(client,local);
     readonly ConsoleSetup setup=new(setupClient??client,installer);
     readonly ConsoleProfiles profiles=new(setupClient??client);
+    readonly ConsoleDisplays displays=new(client,local);
     public string ProfileTrigger {get=>profiles.Trigger;set=>profiles.Trigger=value;}
     string view="updates",notice="",power="",returnView="power";
     ApplicationUpdateStatus? application;
@@ -36,13 +37,14 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
             if(view=="setup")return setup.Screen;
             if(view=="network")return network.Screen;
             if(view=="profiles")return profiles.Screen;
+            if(view=="displays")return displays.Screen;
             var options=new List<ConsoleOption>();string title,body;
             switch(view)
             {
                 case "power":
                     title="Power";body="Rebooting or shutting down stops all running workstations and AI services.";
                     if(Busy)body+="\nWait for the current update to finish.";
-                    options.AddRange([new('r',"Reboot",!Busy),new('s',"Shut down",!Busy),new('0',"Back to menu")]);
+                    options.AddRange([new('d',"Display power / CEC screen off"),new('r',"Reboot",!Busy),new('s',"Shut down",!Busy),new('0',"Back to menu")]);
                     break;
                 case "confirm":
                     title=power=="reboot" ? "Confirm reboot" : "Confirm shut down";
@@ -107,12 +109,13 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
             if(view=="setup"){await setup.Open();return;}
             if(view=="network"){await network.Open();return;}
             if(view=="profiles"){await profiles.Open();return;}
+            if(view=="displays"){await displays.Open();return;}
             await ReadStatus();
         }finally{gate.Release();}
     }
     public async Task Refresh()
     {
-        await gate.WaitAsync();try{if(view=="computer-name")return;if(view=="setup")await setup.Refresh();else if(view=="network")await network.Refresh();else if(view=="profiles")await profiles.Refresh();else await ReadStatus();}finally{gate.Release();}
+        await gate.WaitAsync();try{if(view=="computer-name")return;if(view=="setup")await setup.Refresh();else if(view=="network")await network.Refresh();else if(view=="profiles")await profiles.Refresh();else if(view=="displays")await displays.Refresh();else await ReadStatus();}finally{gate.Release();}
     }
     public async Task Submit(string text){await gate.WaitAsync();try{if(view=="setup")await setup.Submit(text);else if(view=="computer-name")await computerName.Submit(text);else if(view=="network")await network.Submit(text);}finally{gate.Release();}}
     async Task ReadStatus()
@@ -140,10 +143,12 @@ public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bo
             if(view=="computer-name"){computerName.Select(key);Closed=computerName.Closed;return;}
             if(view=="network"){await network.Select(key);Closed=network.Closed;return;}
             if(view=="profiles"){await profiles.Select(key);Closed=profiles.Closed;return;}
+            if(view=="displays"){await displays.Select(key);if(displays.Closed)view="power";return;}
             var option=Screen.Options.FirstOrDefault(o=>o.Key==key);
             if(option==null)return;
             if(!option.Enabled){notice="Action unavailable. Refresh status or wait for the current update to finish.";return;}
             notice="";
+            if(view=="power"&&key=='d'){view="displays";await displays.Open();return;}
             if(key=='0')
             {
                 if(view=="confirm")view=returnView;

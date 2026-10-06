@@ -46,6 +46,15 @@ if(!installer)_=Task.Run(async()=>{try{if((await Processes.Run("systemctl",["is-
 Directory.CreateDirectory(stateDir);
 RegistryMirror.Ensure();
 var displayConsoles=new DisplayConsoles(Path.Combine(stateDir,"workloads"),run);
+var displayPower=new DisplayPower(stateDir,run);
+app.MapGet("/displays",async(string? workstation,bool? consoleOnly)=>Results.Json(await displayPower.Status(workstation,consoleOnly==true)));
+app.MapPost("/displays/power",async Task<IResult>(DisplayPowerRequest request)=>{
+    try{return Results.Json(await displayPower.Set(request));}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
+});
+app.MapPost("/displays/wake",async(DisplayWakeRequest request)=>Results.Json(await displayPower.Wake(request)));
+app.MapPost("/displays/adapter",async Task<IResult>(DisplayAdapterRequest request)=>{
+    try{await displayPower.Assign(request);return Results.Ok();}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
+});
 var operationFile = Path.Combine(stateDir,"install-operation.json");
 Operation? operation = File.Exists(operationFile) ? JsonSerializer.Deserialize<Operation>(File.ReadAllText(operationFile)) : null;
 var gate = new SemaphoreSlim(1, 1);

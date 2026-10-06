@@ -48,7 +48,7 @@ The capture dates and privacy reviews in the table above remain unchanged.
 | --- | --- |
 | `docs/assets/profile-editor.jpg` | Refresh: predates inline rename, conditional workstation fields, Add user placement and shared Switch profile navigation. |
 | `docs/assets/workstations.jpg` | Refresh: predates desktop previews, current Settings/display controls and the removal of profile-loading and launch shortcuts. |
-| `docs/assets/control-panel.jpg` | Review and refresh if needed for the current Home picker and shared Switch profile navigation. |
+| `docs/assets/control-panel.jpg` | Refresh: predates Home's per-display CEC controls and Displays navigation, as well as the current picker and shared Switch profile navigation. |
 | `docs/assets/model-lab.jpg` | Review and refresh if needed for shared navigation; preserve blank prompts/results and synthetic fixtures. |
 | `docs/assets/update-channel.jpg` | Compare the cropped selector with current Settings; refresh if its controls or wording differ. |
 
@@ -77,6 +77,15 @@ See [release preparation](development/release-preparation.md).
   so no new page screenshots were saved or published. The published workstation
   image and the older `.build/evidence/workstation-design/` capture family now
   predate desktop previews and must be regenerated before release reuse.
+
+- 2026-10-05: Regenerated and visually reviewed the private
+  `.build/fast/control-panel/{desktop,mobile}.png` family from the real Razor
+  renderer, based on `cf1a88b` plus the display-power changes. Covers the new
+  per-display CEC controls and Displays navigation at 1440 and 390 px widths.
+  Privacy review: synthetic Example TV, Desk TV and Office monitor fixtures,
+  example profiles and connector IDs only; no real host, account, credential or
+  personal address appears. Test evidence only; not published. Refresh this
+  family after Home or display-control changes.
 
 - 2026-10-05: Regenerated and visually reviewed the private
   `.build/fast/updates-{desktop,mobile}.png` family from the synthetic Updates
