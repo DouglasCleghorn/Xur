@@ -11,6 +11,6 @@
             <details class="mobile-nav-more"><summary>More</summary><div>@if(!Device.Installer) { <button type="button" class="nav-switcher" data-profile-switcher-open aria-haspopup="dialog" aria-controls="profile-switcher">Switch profile</button><NavLink href="/monitoring">Monitoring</NavLink> <NavLink href="/models">Models</NavLink><NavLink href="/endpoints">LLM endpoints</NavLink><NavLink href="/model-lab">Model lab</NavLink><NavLink href="/workstations">Workstations</NavLink><NavLink href="/displays">Displays</NavLink><NavLink href="/gpus" Match="NavLinkMatch.All">GPUs</NavLink><NavLink href="/gpus/power">GPU power</NavLink><NavLink href="/storage">Storage</NavLink><NavLink href="/files">Files</NavLink><NavLink href="/containers">Containers</NavLink> }<NavLink href="/settings">Settings</NavLink><NavLink href="/tailscale">Tailscale</NavLink><NavLink href="/diagnostics">Diagnostics</NavLink></div></details>
         </nav>
     </aside>
-    <main id="main-content">@Body</main>
+    <main id="main-content">@if(!Device.Installer) { <UpdateWindowNotice /> }@Body</main>
 </div>
 @if(!Device.Installer) { <ProfileSwitcher /><script src="/profile-switcher.js" defer></script> }

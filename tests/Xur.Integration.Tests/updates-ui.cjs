@@ -7,6 +7,9 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
  try{
   const page=await browser.newPage();await page.route('http://updates.test/**',route=>{
    const url=new URL(route.request().url());
+   if(url.pathname==='/api/updates')return route.fulfill({body:JSON.stringify({automatic:true,window:{id:'123',startsAt:Date.now()/1000+900,version:'45',state:'Waiting'}}),contentType:'application/json'});
+   if(url.pathname==='/api/application-updates')return route.fulfill({body:JSON.stringify({current:{id:'current'},busy:false}),contentType:'application/json'});
+   if(url.pathname.endsWith('.js'))return route.fulfill({body:fs.readFileSync('src/Xur.Control/wwwroot'+url.pathname),contentType:'application/javascript'});
    const file=url.pathname==='/setup.css'?'src/Xur.Control/wwwroot/setup.css':(url.pathname.startsWith('/fonts/')||url.pathname.startsWith('/icons/'))?'src/Xur.Control/wwwroot'+url.pathname:path.join(out,'updates.html');
    return route.fulfill({body:fs.readFileSync(file),contentType:url.pathname.endsWith('.css')?'text/css':url.pathname.endsWith('.ttf')?'font/ttf':url.pathname.endsWith('.svg')?'image/svg+xml':'text/html'});
   });
@@ -18,6 +21,10 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
    assert.equal(await page.getByText(name,{exact:true}).count(),1);
   assert.equal(await page.getByRole('button',{name:'Update Xur',exact:true}).count(),1);
   assert.equal(await page.locator('#os-update').getByRole('button',{name:'Update',exact:true}).count(),1);
+  assert.equal(await page.locator('input[name="time"]').inputValue(),'03:00');
+  assert.equal(await page.locator('input[name="days"]:checked').count(),7);
+  assert.equal(await page.locator('input[name="warningMinutes"]').inputValue(),'15');
+  await page.getByRole('button',{name:'Skip this window',exact:true}).waitFor({state:'visible'});
   for(const [label,width,height] of [['desktop',1440,1000],['mobile',390,844]]){
    await page.setViewportSize({width,height});await page.locator('.tool-update-row summary').first().click();
    assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),label+' layout overflows');

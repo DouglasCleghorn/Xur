@@ -331,6 +331,7 @@ var networkUsage=new NetworkUsage();if(!installer)_=Task.Run(()=>networkUsage.Ru
 app.MapGet("/network-usage",(int? minutes)=>Results.Json(networkUsage.Status(minutes??15)));
 var monitor=new SystemMonitor();
 var updates=new OsUpdates();
+if(!installer)_=Task.Run(async()=>{try{await updates.Initialize();}catch(Exception e){applicationLog.Write("UpdateSchedule",Microsoft.Extensions.Logging.LogLevel.Error,Redaction.Logs(e.Message));}});
 var updateAll=new UpdateAll();
 app.MapGet("/update-all",async Task<IResult>()=> {
     if(installer)return Results.Conflict();
@@ -349,7 +350,7 @@ app.MapGet("/updates",async Task<IResult>()=> {
 });
 app.MapPost("/updates",async Task<IResult>(OsUpdateAction request)=> {
     if(installer)return Results.Conflict();
-    try{await updates.Start(request.Action);return Results.Accepted();}
+    try{await updates.Start(request);return Results.Accepted();}
     catch(InvalidOperationException e){return Results.Conflict(new {error=e.Message});}
 });
 app.MapGet("/system",async()=>Results.Json(await monitor.Observe()));

@@ -59,6 +59,14 @@ async Task RunCommand(string action, bool json)
 {
     var run = Environment.GetEnvironmentVariable("XUR_RUN") ?? "/run/xur";
     using var client = LocalClient.Create(Path.Combine(run,"control.sock"));
+    if(action=="update-schedule"){await InteractiveMaintenance(new ConsoleMaintenance(client,local:true),"schedule");return;}
+    if(action=="updates/skip")
+    {
+        var status=await client.GetFromJsonAsync<OsUpdateStatus>("/local/updates");
+        if(status?.Window==null){Console.WriteLine("No automatic update window is awaiting a decision.");return;}
+        using var skipped=await client.PostAsJsonAsync("/local/updates/skip",new OsUpdateAction("skip",WindowId:status.Window.Id));
+        Console.WriteLine(await skipped.Content.ReadAsStringAsync());return;
+    }
     if(action=="setup"){var status=await client.GetFromJsonAsync<JsonElement>("/local/status");await InteractiveMaintenance(new ConsoleMaintenance(client,status.GetProperty("installer").GetBoolean(),local:true),"setup");return;}
     var result = action is "qr" or "poweroff" or "reboot" or "update-all/start" || (action.StartsWith("updates/",StringComparison.Ordinal) || action.StartsWith("application-updates/",StringComparison.Ordinal))
         ? await client.PostAsync("/local/"+action,null) : await client.GetAsync("/local/"+action);
@@ -592,6 +600,7 @@ async Task StartHost()
         while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {
             await Task.Delay(5000);
+            if(!appliance.Installer)try{LocalConsole.UpdateWindow((await appliance.Agent.GetFromJsonAsync<OsUpdateStatus>("/updates"))?.Window);}catch{}
             if(!await networkRefreshGate.WaitAsync(0))continue;
             try{if(LocalConsole.ViewingMaintenance)
             {

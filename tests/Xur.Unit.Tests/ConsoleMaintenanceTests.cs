@@ -64,8 +64,25 @@ static class ConsoleMaintenanceTests
         LocalConsole.OpenQr(false);LocalConsole.OpenMaintenance(menu.Screen,refreshOnly:true);
         check(!LocalConsole.ViewingMaintenance,"Background refresh cannot reopen a closed console screen");
         handler.All=handler.All with {Busy=false};
+        handler.Os=handler.Os with{Pending=null,Window=new("123",0,DateTimeOffset.UtcNow.AddMinutes(15).ToUnixTimeSeconds(),"3","Waiting"),Schedule=new("03:00",[0,1,2,3,4,5,6]),Timezone="UTC"};
+        await menu.Open("updates");
+        check(menu.Screen.Body.Contains("will be staged") && menu.Screen.Options.Any(o=>o.Key=='k'),"Console announces an available update and offers to skip that window");
+        LocalConsole.UpdateWindow(handler.Os.Window);
+        check(LocalConsole.Clean(LocalConsole.ExportFrame(100,40)).Contains("Open Updates to skip"),"Physical console shows the upcoming update outside its update submenu");
+        LocalConsole.UpdateWindow(null);
+        await menu.Select('k');
+        check(handler.LastUpdate is {Action:"skip",WindowId:"123"} && menu.Screen.Options.All(o=>o.Key!='k') && handler.Os.Automatic,"Console skip carries the announced window ID and leaves recurring updates enabled");
+        handler.Os=handler.Os with{Window=new("456",0,1000,"3","Waiting")};await menu.Refresh();
+        handler.Os=handler.Os with{Window=new("789",0,1000,"3","Waiting")};count=handler.Posts.Count;await menu.Select('k');
+        check(handler.Posts.Count==count && menu.Screen.Body.Contains("window changed"),"A stale console cannot skip a newly announced window");
+        await menu.Select('o');await menu.Select('l');await menu.Select('c');await menu.Submit("22:30");
+        await menu.Select('d');await menu.Submit("1,5");await menu.Select('n');await menu.Submit("30");
+        await menu.Select('y');
+        check(menu.Screen.Id=="os" && handler.LastUpdate is {Action:"schedule",Schedule.Time:"22:30",Schedule.WarningMinutes:30} && handler.LastUpdate.Schedule.Days.SequenceEqual([0,4]),"Console schedule editor saves a typed weekly schedule with advance notice");
         var local=new ConsoleMaintenance(client,local:true);await local.Open("updates");await local.Select('t');
         check(handler.Posts.Last()=="/local/update-all/start","Text menu invokes the root-private Update All route");
+        handler.All=handler.All with{Busy=false};await local.Open("schedule");await local.Select('y');
+        check(handler.Posts.Last()=="/local/updates/schedule" && handler.LastUpdate?.Schedule?.Time=="22:30","Text schedule editor forwards JSON through the root-private route");
         count=handler.Reads;var installer=new ConsoleMaintenance(client,installer:true);await installer.Open("updates");
         check(handler.Reads==count && installer.Screen.Options.Length==1 && !LocalConsole.RootOptions(true).Contains("Updates"),"Installer hides updates and never reads installed update state");
         await installer.Open("power");await installer.Select('s');await installer.Select('0');
@@ -75,6 +92,10 @@ static class ConsoleMaintenanceTests
         check(command=="update-all/start","Noninteractive CLI exposes Update All start");
         await Xur.Cli.Commands.Invoke(["update-all","status","--json"],()=>Task.CompletedTask,(action,_)=>{command=action;return Task.CompletedTask;});
         check(command=="update-all","Noninteractive CLI exposes Update All status");
+        await Xur.Cli.Commands.Invoke(["updates","skip"],()=>Task.CompletedTask,(action,_)=>{command=action;return Task.CompletedTask;});
+        check(command=="updates/skip","Noninteractive CLI exposes skipping the currently announced window");
+        await Xur.Cli.Commands.Invoke(["updates","schedule"],()=>Task.CompletedTask,(action,_)=>{command=action;return Task.CompletedTask;});
+        check(command=="update-schedule","CLI exposes the shared schedule editor");
     }
     sealed class Agent:HttpMessageHandler
     {
@@ -82,6 +103,7 @@ static class ConsoleMaintenanceTests
         public OsUpdateStatus Os=new(new("1","old","image",false),null,new("0","previous","image",false),new("2","new","image",false),false,true,false,null,"");
         public ApplicationUpdateStatus App=new("https://updates.test",new("old","1"),null,new("new","2"),null,false,Channel:"nightly");
         public List<string> Posts=[];public bool Reject,Offline;public int Reads;
+        public OsUpdateAction? LastUpdate;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token)
         {
             var path=request.RequestUri!.AbsolutePath;
@@ -90,10 +112,13 @@ static class ConsoleMaintenanceTests
                 Posts.Add(path);
                 if(Reject)return new(HttpStatusCode.Conflict){Content=JsonContent.Create(new{error="Wait for the OS update to finish."})};
                 if(path is "/update-all" or "/local/update-all/start")All=All with {Busy=true};
-                if(path=="/updates")
+                if(path=="/updates" || path.StartsWith("/local/updates/"))
                 {
                     var json=await request.Content!.ReadFromJsonAsync<OsUpdateAction>(token);
+                    LastUpdate=json;
                     if(json?.Action=="disable")Os=Os with {Automatic=false};
+                    if(json?.Action=="skip")Os=Os with {Window=null};
+                    if(json?.Action=="schedule")Os=Os with {Schedule=json.Schedule,Window=null};
                 }
                 return new(HttpStatusCode.Accepted);
             }

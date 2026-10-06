@@ -10,10 +10,10 @@ public static class UpdateEndpoints
             var result=await device.Agent.GetAsync("/updates");
             return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
         }
-        async Task<IResult> Act(string action,bool browser=false)
+        async Task<IResult> Act(OsUpdateAction request,bool browser=false)
         {
             if(device.Installer)return Results.Conflict();
-            var result=await device.Agent.PostAsJsonAsync("/updates",new OsUpdateAction(action));
+            var result=await device.Agent.PostAsJsonAsync("/updates",request);
             if(result.IsSuccessStatusCode && browser)return Results.Redirect("/updates");
             return Results.Content(await result.Content.ReadAsStringAsync(),"application/json",statusCode:(int)result.StatusCode);
         }
@@ -49,9 +49,22 @@ public static class UpdateEndpoints
         app.MapPost("/api/update-all",()=>UpdateAll(false));
         app.MapPost("/updates/all",()=>UpdateAll(true));
         app.MapGet("/api/updates",Status);
-        app.MapPost("/api/updates",(OsUpdateAction request)=>Act(request.Action));
-        app.MapPost("/updates/action",(Func<HttpContext,Task<IResult>>)(async c=>await Act((await c.Request.ReadFormAsync())["action"].ToString(),true)));
+        app.MapPost("/api/updates",(OsUpdateAction request)=>Act(request));
+        app.MapPost("/updates/action",(Func<HttpContext,Task<IResult>>)(async c=> {
+            var form=await c.Request.ReadFormAsync();
+            OsUpdateSchedule? schedule=null;
+            if(form["action"]=="schedule")
+            {
+                if(!int.TryParse(form["warningMinutes"],out var warning) || form["days"].Any(d=>!int.TryParse(d,out _)))
+                    return Results.BadRequest(new{error="Choose valid schedule days and advance notice."});
+                schedule=new(form["time"].ToString(),form["days"].Select(d=>int.Parse(d!)).ToArray(),warning);
+            }
+            return await Act(new(form["action"].ToString(),schedule,form["windowId"].ToString()),true);
+        }));
         app.MapGet("/local/updates",Status);
-        app.MapPost("/local/updates/{action}",(string action)=>Act(action));
+        app.MapPost("/local/updates/{action}",async Task<IResult>(string action,HttpContext context)=> {
+            var request=context.Request.HasJsonContentType()?await context.Request.ReadFromJsonAsync<OsUpdateAction>():null;
+            return await Act((request??new(action)) with{Action=action});
+        });
     }
 }

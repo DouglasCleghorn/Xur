@@ -55,6 +55,20 @@ else if(state!=null)
         }
         <p>Automatic OS updates: @(state.Automatic ? "On" : "Paused"). Updates take effect after reboot.</p>
         <form method="post" action="/updates/action"><AntiforgeryToken /><input type="hidden" name="action" value="@(state.Automatic ? "disable" : "enable")" /><button class="secondary" disabled="@state.Busy">@(state.Automatic ? "Pause automatic updates" : "Enable automatic updates")</button></form>
+        <details id="update-schedule" open>
+            <summary>Automatic update schedule</summary>
+            <p>Times use the server timezone: @state.Timezone. Checks start before the window; notice appears only when an update is available. Reboot remains manual.</p>
+            @if(state.NextWindow is {} next) { <p>Next window: @UpdateWindowNotice.When(next)</p> }
+            <form method="post" action="/updates/action" class="update-schedule-form">
+                <AntiforgeryToken /><input type="hidden" name="action" value="schedule" />
+                <label>Update time <input type="time" name="time" value="@Schedule.Time" required /></label>
+                <fieldset><legend>Days</legend><div class="update-schedule-days">
+                    @for(var i=0;i<7;i++) { var day=i;<label><input type="checkbox" name="days" value="@day" checked="@Schedule.Days.Contains(day)" /> @DayNames[day]</label> }
+                </div></fieldset>
+                <label>Advance notice (minutes) <input type="number" name="warningMinutes" min="5" max="120" value="@Schedule.WarningMinutes" required /></label>
+                <button class="secondary">Save schedule</button>
+            </form>
+        </details>
         @if(state.Previous!=null && state.Pending==null && !state.RollbackQueued)
         {
             <details><summary>Previous version: @state.Previous.Version</summary>
@@ -95,6 +109,8 @@ else if(state!=null)
     ToolUpdateInfo[]? tools;
     OsUpdateStatus? state;
     ApplicationUpdateStatus? application;
+    OsUpdateSchedule Schedule=>state?.Schedule??new("03:00",[0,1,2,3,4,5,6],15);
+    static readonly string[] DayNames=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
     protected override async Task OnInitializedAsync()
     {
         if(Device.Installer)return;
