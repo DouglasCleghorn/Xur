@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><IsAotCompatible>true</IsAotCompatible></PropertyGroup>
+  <PropertyGroup><IsAotCompatible>true</IsAotCompatible><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
   <ItemGroup><PackageReference Include="TeeForge" Version="0.1.0" GeneratePathProperty="true" /></ItemGroup>
   <ItemGroup>
     <Content Include="$(PkgTeeForge)/LICENSE" Link="licenses/TeeForge-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

@@ -4,9 +4,7 @@ namespace Xur.Agent;
 
 public static class StationFiles
 {
-    static readonly string Script=ReadScript();
     static readonly FolderSizeCache Sizes=new();
-    static string ReadScript(){using var reader=new StreamReader(typeof(StationFiles).Assembly.GetManifestResourceStream("Xur.Agent.StationFiles.py")!);return reader.ReadToEnd();}
     public record Change(string? Destination=null,bool Confirm=false);
     record Root(string User,string Home,bool ReadOnly,string Scope);
     public static void Map(WebApplication app,bool installer)
@@ -66,7 +64,7 @@ public static class StationFiles
                 try
                 {
                     if(format is not (null or "original" or "stored" or "compressed"))return Results.BadRequest(new{error="Unknown download format."});
-                    reader=Open(await Resolve(storage,user,id),path,"",format is "stored" or "compressed"?format:"download",ctx.RequestAborted);
+                    reader=await Open(await Resolve(storage,user,id),path,"",format is "stored" or "compressed"?format:"download",ctx.RequestAborted);
                     using var header=await reader.Header(ctx.RequestAborted);
                     if(!header.RootElement.GetProperty("ok").GetBoolean()){await reader.DisposeAsync();return Results.BadRequest(header.RootElement.Clone());}
                     var opened=reader;var metadata=header.RootElement;
@@ -99,15 +97,17 @@ public static class StationFiles
     }
     static async Task<JsonDocument> Json(Root root,string path,string query,string mode,CancellationToken cancellation)
     {
-        await using var reader=Open(root,path,query,mode,cancellation);
+        await using var reader=await Open(root,path,query,mode,cancellation);
         return await reader.Header(cancellation);
     }
-    static Reader Open(Root root,string path,string query,string mode,CancellationToken cancellation)
+    static async Task<Reader> Open(Root root,string path,string query,string mode,CancellationToken cancellation)
     {
         Validate(path);if(query.Length>4096)throw new InvalidOperationException("Input is too long.");
         cancellation.ThrowIfCancellationRequested();
+        await StationUtility.Install();
+        cancellation.ThrowIfCancellationRequested();
         var info=new ProcessStartInfo("runuser"){UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true};
-        foreach(var arg in new[]{"-u",root.User,"--","/usr/bin/python3","-I","-c",Script,mode,root.Home,path,query})info.ArgumentList.Add(arg);
+        foreach(var arg in new[]{"-u",root.User,"--",StationUtility.ExecutablePath,"files",mode,"--",root.Home,path,query})info.ArgumentList.Add(arg);
         return new Reader(Process.Start(info)!,mode=="delete"?TimeSpan.FromMinutes(2):TimeSpan.FromSeconds(20));
     }
     sealed class Reader(Process process,TimeSpan headerTimeout):IAsyncDisposable

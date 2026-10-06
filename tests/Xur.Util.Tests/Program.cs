@@ -29,7 +29,8 @@ if (args is ["--migration-fixture", var unit])
     return;
 }
 
-if (args is ["--boot"]) await BootTests.Run();
+if (args is ["--files"]) await FileTests.Run();
+else if (args is ["--boot"]) await BootTests.Run();
 else if (args is ["--updates"]) await UpdaterTests.Run();
 else if (args is ["--io"]) await IOTests.Run();
 else if (args is ["--preflight"]) await ToolTests.Preflight();
@@ -42,6 +43,7 @@ else
     await InstallerTests.Run();
     await CliTests.Run();
     await IOTests.Run();
+    await FileTests.Run();
     await ToolTests.Preflight();
     await ToolTests.Display();
     await ToolTests.Updates();

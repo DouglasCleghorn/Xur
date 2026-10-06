@@ -7,6 +7,7 @@ mkdir -p .build/evidence/xurutil
 "$sdk" publish tools/Xur.Util -c Release -r linux-x64 -o .build/xurutil \
   > .build/evidence/xurutil/native-publish.log 2>&1
 native="$(readlink -f .build/xurutil/xurutil)"
+XUR_UTIL="$native" python3 tests/Xur.Integration.Tests/station-files.py > .build/evidence/xurutil/native-files.json
 env -i PATH=/usr/bin:/bin "$native" --help > .build/evidence/xurutil/native-help.txt
 env -i PATH=/usr/bin:/bin "$native" display moonlight > .build/evidence/xurutil/native-moonlight.txt 2>&1
 fixture="$(mktemp -d .build/evidence/xurutil/native-root-XXXXXX)"

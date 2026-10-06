@@ -11,12 +11,16 @@ public sealed record TransferReceipt(long Bytes, string Sha256);
 public static class StreamTransfer
 {
     public static async Task<TransferReceipt> Copy(Stream source, Stream destination, long limit,
-        TimeSpan? idleTimeout = null, CancellationToken cancellationToken = default)
+        TimeSpan? idleTimeout = null, CancellationToken cancellationToken = default, uint? expectedCrc32 = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(limit);
         using var bounded = new BoundedReadStream(source, limit, idleTimeout);
         TeeHashResults hashes;
-        try { hashes = await bounded.CopyToAsync(TeeHashAlgorithm.SHA256, destination, cancellationToken: cancellationToken); }
+        try
+        {
+            TeeHashAlgorithm[] algorithms = expectedCrc32.HasValue ? [TeeHashAlgorithm.SHA256, TeeHashAlgorithm.Crc32] : [TeeHashAlgorithm.SHA256];
+            hashes = await bounded.CopyToAsync(algorithms, destination, cancellationToken: cancellationToken);
+        }
         catch (AggregateException error)
         {
             // TeeForge reports broadcast failures as aggregates. Preserve the
@@ -27,6 +31,10 @@ public static class StreamTransfer
             throw new IOException("Transfer failed", error);
         }
         if (!hashes.IsComplete) throw new IOException("Transfer did not reach source EOF");
+        // TeeForge/System.IO.Hashing expose the CRC-32 digest in little-endian order.
+        if (expectedCrc32 is { } checksum && (bounded.BytesRead != limit ||
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(hashes[TeeHashAlgorithm.Crc32].Bytes.Span) != checksum))
+            throw new InvalidDataException("ZIP entry length or CRC-32 does not match its contents");
         return new(bounded.BytesRead, hashes[TeeHashAlgorithm.SHA256].Hex.ToLowerInvariant());
     }
 

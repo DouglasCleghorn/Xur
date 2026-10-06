@@ -1,5 +1,7 @@
 using System.CommandLine;
 using System.Runtime.Versioning;
+using System.Text.Json.Nodes;
+using Xur.IO;
 
 [assembly: SupportedOSPlatform("linux")]
 
@@ -195,6 +197,41 @@ public static class Program
             catch (Exception error) { Console.Error.WriteLine("Xur virtual monitor: " + error.Message); }
             return 0; // A rejected client mode must not prevent streaming the existing desktop.
         });
+        var fileCommands = new Command("files", "Browse, measure and stream files within an authorized root");
+        root.Subcommands.Add(fileCommands);
+        foreach (var mode in new[] { "list", "size", "scan", "download", "stored", "compressed", "move", "delete" })
+        {
+            var command = new Command(mode);
+            var folder = new Argument<string>("root");
+            var path = new Argument<string>("path") { Arity = ArgumentArity.ZeroOrOne, DefaultValueFactory = _ => "" };
+            var query = new Argument<string>("query") { Arity = ArgumentArity.ZeroOrOne, DefaultValueFactory = _ => "" };
+            command.Arguments.Add(folder); command.Arguments.Add(path); command.Arguments.Add(query);
+            command.SetAction(async (parsed, token) =>
+            {
+                var operation = new FileOperations();
+                using var output = Console.OpenStandardOutput();
+                try
+                {
+                    var rootPath = parsed.GetValue(folder)!; var relative = parsed.GetValue(path)!;
+                    if (mode == "scan")
+                    {
+                        var result = FolderScanner.Scan(rootPath, relative, cancellationToken: token);
+                        var entries = new JsonArray();
+                        foreach (var row in result.Entries) entries.Add((JsonNode)new JsonObject { ["name"] = row.Name, ["kind"] = row.Kind, ["bytes"] = row.Bytes, ["partial"] = row.Partial });
+                        Console.WriteLine(new JsonObject { ["path"] = relative, ["entries"] = entries, ["bytes"] = result.Bytes, ["partial"] = result.Partial, ["errors"] = result.Errors, ["visited"] = result.Visited, ["truncated"] = result.Truncated }.ToJsonString());
+                    }
+                    else await operation.Run(mode, rootPath, relative, parsed.GetValue(query)!, output, token);
+                    return 0;
+                }
+                catch (Exception error)
+                {
+                    // Never append JSON to a download body after its success header.
+                    if (!operation.Started) Console.WriteLine(new JsonObject { ["ok"] = false, ["error"] = error.Message }.ToJsonString());
+                    Console.Error.WriteLine("xurutil: " + error.Message); return 1;
+                }
+            });
+            fileCommands.Subcommands.Add(command);
+        }
         return root;
     }
 }

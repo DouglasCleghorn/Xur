@@ -52,5 +52,5 @@ TeeForge license and third-party notices (including its .NET/System.IO.Hashing
 notices). The utility additionally carries the command-line library license,
 .NET license and runtime third-party notices. These ship in the
 application bundle under `host/licenses/` and in the installer under
-`/usr/share/licenses/xurutil/`; independent recovery and virtual-display helper
+`/usr/share/licenses/xurutil/`; independent recovery and shared station helper
 copies retain their notices too.
