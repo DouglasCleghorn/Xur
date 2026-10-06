@@ -38,6 +38,10 @@ static class ProfileAccessTests
             check(state.Contains("Assistant")&&!state.Contains("private-command")&&!state.Contains("private-description")&&!state.Contains("sha256"),"Desktop transport returns display data without private recipes or commands");
             await Denied(()=>broker.Handle(0,new("state")),check,"Privileged and non-workstation users cannot use desktop transport");
             active=false;await Denied(()=>broker.Handle(1000,new("state")),check,"Inactive workstation users cannot switch profiles");active=true;
+            access.Save(ProfileAccessSettings.Web);active=false;
+            try{await broker.Handle(1000,new("state"));check(false,"Disabled profile access is reported before inactive-session lookup");}
+            catch(InvalidOperationException e){check(e.Message.Contains("disabled"),"Disabled profile access is reported before inactive-session lookup");}
+            active=true;access.Save(ProfileAccessSettings.Workstations);
             var displayCalls=new List<(ProfileSwitcherSession Actor,SwitcherRequest Request)>();
             await using(var displayBroker=new ProfileSwitcherBroker(manager,Session,access:access,displayPower:(actor,request,_)=>{displayCalls.Add((actor,request));return Task.FromResult<object>(new DisplayPowerResult("Acknowledged",1));}))
             {
