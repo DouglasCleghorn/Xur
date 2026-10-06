@@ -19,7 +19,7 @@ struct SwitcherChecks {
         const Object loaded{{"id", "1"}, {"name", "Gaming"}, {"revision", 1}, {"workloads", QJsonArray{gaming, assistant}}};
         const Object other{{"id", "2"}, {"name", "Studio"}, {"revision", 1}, {"workloads", QJsonArray{studio, assistant}}};
         const QJsonArray instances{Object{{"id", "gaming"}, {"fingerprint", "gaming-v1"}, {"state", "running"}}, Object{{"id", "assistant"}, {"fingerprint", "assistant-v1"}, {"state", "running"}}};
-        bool busy = false, cancelling = false, denied = false, expired = false;
+        bool busy = false, cancelling = false, denied = false, expired = false, displayAvailable = false, remoteStandby = false;
         QVector<Object> calls;
         QObject::connect(&broker, &QLocalServer::newConnection, [&] {
             auto socket = broker.nextPendingConnection(); auto bytes = std::make_shared<QByteArray>();
@@ -29,7 +29,14 @@ struct SwitcherChecks {
                 auto size = qFromBigEndian<quint32>(bytes->constData()); if (bytes->size() < 4 + qint64(size)) return;
                 const Object request = QJsonDocument::fromJson(bytes->mid(4)).object(); calls.append(request); bytes->clear();
                 const auto action = request["action"].toString(); Object data;
-                if (action == "state") data = Object{{"profiles", QJsonArray{loaded, other}}, {"active", loaded}, {"runtime", Object{{"instances", instances}}}, {"busy", busy}, {"operation", busy ? QJsonValue(Object{{"id", "running-plan"}, {"stage", cancelling ? "Cancelling" : "Applying"}, {"currentAction", "Starting model"}}) : QJsonValue()}};
+                if (action == "display-state") data = Object{{"displays", displayAvailable ? QJsonArray{Object{{"id", "display-1"}, {"name", "Example TV"}, {"connector", "card0-HDMI-A-1"}, {"canControl", true}}} : QJsonArray{}}};
+                else if (action == "display-off" || action == "display-on" || action == "display-wake") {
+                    if (action == "display-off") remoteStandby = true;
+                    const bool consume = action == "display-wake" && remoteStandby;
+                    data = Object{{"message", "CEC command acknowledged"}, {"woken", consume ? 1 : 0}, {"consumeInput", consume}};
+                    if (action == "display-on" || consume) remoteStandby = false;
+                }
+                else if (action == "state") data = Object{{"profiles", QJsonArray{loaded, other}}, {"active", loaded}, {"runtime", Object{{"instances", instances}}}, {"busy", busy}, {"operation", busy ? QJsonValue(Object{{"id", "running-plan"}, {"stage", cancelling ? "Cancelling" : "Applying"}, {"currentAction", "Starting model"}}) : QJsonValue()}};
                 else if (action == "preview" || action == "preview-unload") {
                     const bool unload = action == "preview-unload"; Object target = unload ? loaded : other; if (unload) target["workloads"] = QJsonArray{};
                     QJsonArray steps;
@@ -46,7 +53,9 @@ struct SwitcherChecks {
         });
         auto applies = [&] { return std::count_if(calls.begin(), calls.end(), [](const auto &c) { return c["action"] == "apply"; }); };
         auto cancels = [&] { return std::count_if(calls.begin(), calls.end(), [](const auto &c) { return c["action"] == "cancel"; }); };
-        Switcher picker(geteuid()); picker.server = address; picker.showPicker("controller"); wait([&] { return picker.profiles->count() == 2; });
+        Switcher picker(geteuid()); picker.server = address;
+        const auto displayActivity = picker.input.activity; picker.input.activity = {};
+        picker.showPicker("controller"); wait([&] { return picker.profiles->count() == 2; });
         using Target = Switcher::ControllerTarget;
         check(picker.pages->count() == 2 && picker.pages->currentIndex() == 0, "Picker opens without a login page");
         check(picker.findChildren<QLineEdit *>().size() == 1, "No administrator credentials requested");
@@ -146,6 +155,24 @@ struct SwitcherChecks {
         button(BTN_EAST); check(!picker.isVisible(), "Controller B closes picker");
         hat(1); button(BTN_SOUTH);
         check(applies() == 1 && !picker.isVisible(), "Closed overlay ignores queued controller input");
+        picker.input.activity = displayActivity;
+        displayAvailable = true; picker.showPicker("controller"); wait([&] { return picker.profiles->count() == 4; });
+        picker.profiles->setCurrentRow(2); picker.focusControl(Target::Profiles); button(BTN_SOUTH);
+        wait([&] { return picker.cecStandby; });
+        check(calls.last()["action"] == "display-off" && calls.last()["id"] == "display-1" && applies() == 1, "CEC screen off targets the selected display without loading a profile");
+        button(BTN_SOUTH);
+        check(picker.waking && picker.pendingControllerAction.isEmpty(), "The first controller press after CEC standby is consumed by the picker");
+        wait([&] { return !picker.waking; });
+        check(!picker.cecStandby && calls.last()["action"] == "display-wake", "Controller wake works through the seat-scoped broker");
+        picker.profiles->setCurrentRow(1); picker.focusControl(Target::Profiles); remoteStandby = true;
+        button(BTN_SOUTH);
+        check(picker.waking && picker.pendingControllerAction == "accept", "Standby from the web manager does not depend on the picker's cached state");
+        wait([&] { return !picker.waking; });
+        check(picker.pages->currentIndex() == 0 && applies() == 1, "Controller wake after web standby cannot activate the selected row");
+        button(BTN_SOUTH); wait([&] { return !picker.waking && picker.apply->isEnabled() && picker.pages->currentIndex() == 1; });
+        check(picker.reviewTitle->text() == "Studio" && applies() == 1, "Awake controller presses resume navigation after the asynchronous wake check");
+        button(BTN_EAST); wait([&] { return !picker.waking && picker.pages->currentIndex() == 0; });
+        picker.reject(); displayAvailable = false;
         Switcher untrusted(geteuid() + 1); untrusted.server = address; untrusted.showPicker(); wait([&] { return !untrusted.error->isHidden(); });
         check(untrusted.error->text().contains("not trusted") && untrusted.profiles->count() == 0, "Kernel credentials reject an untrusted broker"); untrusted.reject();
         std::cout << "Native picker: " << checks << " checks passed\n";

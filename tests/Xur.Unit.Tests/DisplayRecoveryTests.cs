@@ -39,6 +39,10 @@ static class DisplayRecoveryTests
             check(starts==before&&console.Error==null,"Deliberate monitor sleep is excluded from display recovery even after its grace period");
             File.Delete(root+"/console-sleep");await console.Refresh();check(starts==before,"Keyboard wake gives the monitor a fresh recovery grace period");
             clock.Tick+=TimeSpan.FromSeconds(16).Ticks;await console.Refresh();check(starts==before+1,"A display that fails to wake still receives bounded recovery");
+            before=starts;File.WriteAllText(DisplayPower.SleepMarker(root,"card0-HDMI-A-1"),"");
+            await console.Refresh();clock.Tick+=TimeSpan.FromSeconds(120).Ticks;await console.Refresh();
+            check(starts==before,"CEC standby on one connector is excluded from recovery while other connectors remain healthy");
+            File.Delete(DisplayPower.SleepMarker(root,"card0-HDMI-A-1"));
             before=starts;await console.Release(gpu.Pci);await console.Refresh();check(starts==before,"Display recovery never restarts a console on a GPU being handed to a workstation");
             gpu=gpu with{Displays=["card0-HDMI-A-1"]};File.WriteAllText(connector+"/status","connected");File.WriteAllText(connector+"/enabled","enabled");File.WriteAllText(connector+"/dpms","On");
             var faultRun=root+"/fault";Directory.CreateDirectory(faultRun);

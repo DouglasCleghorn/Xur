@@ -22,6 +22,8 @@ public static class StationSeats
         if(uid<1000 || own.Length!=1)return null;
         var station=own[0];return new(uid,StationAccounts.Username(station.Workload),station.Workload.Id,Seat(station.Workload.Id));
     }
+    public static Dictionary<string,string> DisplayOwners()=>Intentions().Where(w=>w.Recipe.Kind=="Workstation")
+        .SelectMany(w=>w.Gpus.Select(gpu=>(gpu,w.Id))).GroupBy(p=>p.gpu).ToDictionary(g=>g.Key,g=>g.First().Id);
     static async Task Run(string exe,string[] args)
     {var r=await Processes.Run(exe,args,30);if(r.ExitCode!=0)throw new InvalidOperationException("Workstation seat configuration failed: "+exe+". "+Redaction.Logs(r.Output));}
     static void Save<T>(string file,T value)

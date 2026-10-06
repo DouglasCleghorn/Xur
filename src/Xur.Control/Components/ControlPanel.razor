@@ -38,6 +38,7 @@
     }
 </section>
 <dialog id="home-reboot-dialog" aria-labelledby="home-reboot-heading"><h2 id="home-reboot-heading">Reboot Xur?</h2><p>Running workloads and connected workstations will be interrupted.</p><div class="actions"><button class="secondary" type="button" id="home-reboot-cancel" autofocus>Cancel</button><form method="post" action="/power/reboot"><AntiforgeryToken /><button>Reboot</button></form></div></dialog>
+<DisplayControls />
 <script src="/control-panel.js" defer></script>
 @code {
     ProfileState? state;UpdateAllStatus? updates;OsUpdateStatus? osUpdates;

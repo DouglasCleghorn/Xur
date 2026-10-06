@@ -34,6 +34,10 @@ kept. **Back to profiles** or B returns to the picker, and left/right selects
 Back or confirmation in a review. D-pad navigation also reaches **Try again**,
 **Shortcuts** and **Close**; Shortcuts uses up/down to move and left/right to
 adjust the controller binding and hold duration.
+
+The picker also offers per-display **CEC screen off/on** actions. Workstation
+controller activity wakes sleeping displays without loading a profile. See
+[display sleep and HDMI-CEC](display-power.md) for hardware requirements and controls.
 The opening chord can still reach the game, and direct hidraw input is outside
 that capture boundary. See [native helper behavior and acceptance limits](../../tools/Xur.ProfileSwitcher/README.md).
 

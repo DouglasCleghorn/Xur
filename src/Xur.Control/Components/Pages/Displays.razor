@@ -1,0 +1,30 @@
+@page "/displays"
+@inject Appliance Device
+<PageTitle>Displays · Xur</PageTitle>
+<h1>Display power</h1>
+@if(Error!=null) { <p class="notice error" role="alert">@Error</p> }
+@if(Message!=null) { <p class="notice" role="status">@Message</p> }
+<DisplayControls />
+<section class="panel"><h2>External CEC adapters</h2>
+<p>Native CEC adapters are matched to their HDMI connector automatically. For an external adapter, choose the display whose HDMI cable it connects to. Each adapter can control one display.</p>
+@if(status!=null) {
+    @foreach(var display in status.Displays) {
+        @if(!status.Adapters.Any(a=>a.Id==display.Adapter&&a.Card!=null)) {
+            <form method="post" action="/displays/adapter" class="display-control"><AntiforgeryToken /><input type="hidden" name="id" value="@display.Id" />
+                <label>@display.Name · @display.Connector<select name="adapter"><option value="">No external adapter</option>
+                    @foreach(var adapter in status.Adapters.Where(a=>a.Card==null&&a.CanTransmit)) { <option value="@adapter.Id" selected="@(adapter.Id==display.Adapter)">@adapter.Name · @adapter.Device</option> }
+                </select></label><button class="secondary">Save adapter</button>
+            </form>
+        }
+    }
+    @if(status.Adapters.Length==0) { <p>No Linux CEC adapters detected. A compatible TV and CEC-capable HDMI hardware or an external CEC adapter are required.</p> }
+    @foreach(var adapter in status.Adapters.Where(a=>a.Error!=null)) { <p role="alert">@adapter.Name: @adapter.Error</p> }
+}
+<p>Enable HDMI-CEC in the TV settings. Acknowledgement confirms the command was received; some TVs may take a few seconds to change power. DisplayPort and many PC HDMI ports do not provide CEC.</p>
+</section>
+@code {
+    [SupplyParameterFromQuery(Name="error")]public string? Error {get;set;}
+    [SupplyParameterFromQuery(Name="message")]public string? Message {get;set;}
+    DisplayPowerStatus? status;
+    protected override async Task OnInitializedAsync(){try{status=await Device.Agent.GetFromJsonAsync<DisplayPowerStatus>("/displays");}catch{}}
+}

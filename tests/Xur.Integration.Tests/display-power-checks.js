@@ -1,0 +1,23 @@
+window.runDisplayPowerChecks=async()=>{
+ const passed=[],check=(value,name)=>{if(!value)throw Error(name);passed.push(name);},wait=async predicate=>{const until=Date.now()+5000;while(!predicate()){if(Date.now()>until)throw Error('Display UI timed out');await new Promise(resolve=>setTimeout(resolve,20));}};
+ const dialog=document.getElementById('profile-switcher'),displays=document.getElementById('switcher-displays');
+ await fetch('/test/mode?value=normal');
+ const open=document.querySelector('[data-profile-switcher-open]');open.click();await wait(()=>displays.querySelectorAll('button').length===6);
+ check(displays.querySelectorAll('button:disabled').length===2,'Unsupported display on/off controls are disabled');
+ check(displays.textContent.includes('Example TV')&&displays.textContent.includes('Desk TV')&&displays.textContent.includes('Office monitor'),'Web overlay lists each connected display');
+ let button=displays.querySelector('button[aria-label="CEC screen off: Desk TV"]');button.click();
+ await wait(()=>document.getElementById('switcher-error').textContent.includes('acknowledged'));
+ let requests=(await (await fetch('/test/state')).json()).requests;
+ check(requests.length===1&&requests[0].path==='/api/displays/power'&&requests[0].body.id==='display-station'&&requests[0].body.action==='off','Overlay screen off targets the chosen display without a profile mutation');
+ check(requests[0].csrf==='fixture-only','CEC browser requests retain CSRF protection');
+ check(displays.querySelectorAll('button:disabled').length===2,'Successful power requests restore only supported controls');
+ await fetch('/test/mode?value=cec-failure');button.click();await wait(()=>document.getElementById('switcher-error').textContent.includes('did not acknowledge'));
+ check(displays.querySelectorAll('button:disabled').length===2,'Failed CEC request displays the error and permits retry');
+ await fetch('/test/mode?value=normal');
+ const lastProfile=document.querySelector('#switcher-profiles button:not(:disabled):last-child');lastProfile.focus();
+ document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
+ check(document.activeElement===displays.querySelector('button:not(:disabled)'),'Arrow/D-pad navigation reaches CEC controls after profiles');
+ check(document.documentElement.scrollWidth<=innerWidth+1,'Display controls fit the viewport');
+ dialog.querySelector('[data-switcher-close]').click();check(!dialog.open,'Overlay closes after screen power actions');
+ return {suite:'DisplayPowerUI',passed,width:innerWidth,height:innerHeight};
+};

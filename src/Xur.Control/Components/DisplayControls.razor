@@ -1,0 +1,21 @@
+@inject Appliance Device
+<section class="panel" aria-labelledby="display-heading">
+    <div class="section-heading"><h2 id="display-heading">Displays</h2><a href="/displays">Display settings</a></div>
+    <p class="secondary-text">CEC screen off puts the TV in standby. Workstations and workloads keep running.</p>
+    @if(status==null) { <p role="alert">Display controls unavailable. <a href="/displays">Refresh displays</a></p> }
+    else if(status.Displays.Length==0) { <p>No connected displays found.</p> }
+    else {
+        @foreach(var display in status.Displays) {
+            <div class="display-control">
+                <div><strong>@display.Name</strong><small>@display.Connector · @(display.Workstation==null?"Console":"Workstation") · @display.Power</small>
+                @if(!display.CanControl) { <small>@display.UnavailableReason</small> }</div>
+                <div class="actions"><form method="post" action="/displays/power"><AntiforgeryToken /><input type="hidden" name="id" value="@display.Id" /><input type="hidden" name="action" value="on" /><button class="secondary" disabled="@(!display.CanControl)" aria-label="CEC screen on: @display.Name">CEC screen on</button></form>
+                <form method="post" action="/displays/power"><AntiforgeryToken /><input type="hidden" name="id" value="@display.Id" /><input type="hidden" name="action" value="off" /><button class="secondary" disabled="@(!display.CanControl)" aria-label="CEC screen off: @display.Name">CEC screen off</button></form></div>
+            </div>
+        }
+    }
+</section>
+@code {
+    DisplayPowerStatus? status;
+    protected override async Task OnInitializedAsync(){try{status=await Device.Agent.GetFromJsonAsync<DisplayPowerStatus>("/displays");}catch{}}
+}

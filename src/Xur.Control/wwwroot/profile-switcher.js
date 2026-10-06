@@ -30,8 +30,31 @@
   recovery.hidden=!busy&&state.profiles.length>0;byId('switcher-retry').hidden=!busy;
   if(busy)message(state.operation.stage==='Failed'?'A profile change needs attention. Open Manage profiles to resume or cancel it.':'A profile change is in progress. Wait for it to finish or open Manage profiles.');
  }
+ async function loadDisplays(version,signal){
+  const container=byId('switcher-displays');if(!container)return;
+  container.replaceChildren(textNode('p','Loading displays…'));
+  try{
+   const status=await api('/api/displays',undefined,signal);if(version!==revision||!dialog.open)return;
+   container.replaceChildren();
+   if(!status.displays.length)container.append(textNode('p','No connected displays found.'));
+   for(const display of status.displays){
+    const row=textNode('div','','display-control'),description=textNode('div','');description.append(textNode('strong',display.name),textNode('small',display.connector+' · '+display.power));
+    if(!display.canControl)description.append(textNode('small',display.unavailableReason));row.append(description);
+    const actions=textNode('div','','actions');
+    for(const action of ['off','on']){const button=textNode('button','CEC screen '+action,'secondary');button.type='button';button.disabled=!display.canControl;button.setAttribute('aria-label','CEC screen '+action+': '+display.name);
+     button.addEventListener('click',async()=>{
+      const buttons=[...container.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);
+      try{const result=await api('/api/displays/power',{id:display.id,action});if(version===revision&&dialog.open)message(result.message);}
+      catch(e){if(version===revision&&dialog.open)message(e.message);}
+      finally{buttons.forEach(b=>b.disabled=b.dataset.unavailable==='true');}
+     });button.dataset.unavailable=String(!display.canControl);actions.append(button);
+    }row.append(actions);container.append(row);
+   }
+  }catch(e){if(e.name!=='AbortError'&&version===revision&&dialog.open)container.replaceChildren(textNode('p','Display controls unavailable. Open Display settings to retry.'));}
+ }
  async function load(){
   request?.abort();request=new AbortController();const version=++revision;
+  loadDisplays(version,request.signal);
   state=undefined;plan=undefined;selected=undefined;picker.hidden=false;review.hidden=true;byId('switcher-accept-label').textContent='Review';search.value='';list.replaceChildren();list.setAttribute('aria-busy','true');empty.hidden=true;recovery.hidden=true;message('');byId('switcher-current').textContent='Loading profiles…';
   try{const data=await api('/api/profiles',undefined,request.signal);if(version!==revision||!dialog.open)return;state=data;byId('switcher-current').textContent=state.active?'Loaded: '+state.active.name:state.runtime.instances.length?'Partially loaded workloads':'No profile loaded';render();search.focus();}
   catch(e){if(e.name!=='AbortError'&&version===revision&&dialog.open){message(e.message);byId('switcher-current').textContent='Profiles unavailable';recovery.hidden=false;byId('switcher-retry').hidden=false;byId('switcher-retry').focus();}}
@@ -58,7 +81,7 @@
   catch(e){message(e.message+' Go back to refresh the review.');plan=undefined;}
   finally{applying=false;apply.textContent=selected?.unload?'Unload all':'Load profile';byId('switcher-back').disabled=false;}
  }
- function move(direction){const choices=[...list.querySelectorAll('button:not(:disabled)')];if(!choices.length)return;const index=choices.indexOf(document.activeElement);choices[(index<0?(direction>0?0:choices.length-1):(index+direction+choices.length)%choices.length)].focus();}
+ function move(direction){const choices=[...picker.querySelectorAll('#switcher-profiles button:not(:disabled),#switcher-displays button:not(:disabled)')];if(!choices.length)return;const index=choices.indexOf(document.activeElement);choices[(index<0?(direction>0?0:choices.length-1):(index+direction+choices.length)%choices.length)].focus();}
  function control(action){if(!dialog.open)return;if(action==='back'){back();return;}if(!review.hidden){if(action==='accept'){if(document.activeElement===apply&&!apply.disabled)approve();else if(document.activeElement===byId('switcher-back'))back();}else if(action==='up'||action==='down'){(document.activeElement===apply?byId('switcher-back'):apply.disabled?byId('switcher-back'):apply).focus();}return;}if(action==='up'||action==='down')move(action==='up'?-1:1);else if(action==='accept')document.activeElement?.click();}
  document.querySelectorAll('[data-profile-switcher-open]').forEach(button=>button.addEventListener('click',()=>open(button)));
  document.querySelectorAll('[data-switcher-close]').forEach(button=>button.addEventListener('click',close));byId('switcher-back').addEventListener('click',back);apply.addEventListener('click',approve);byId('switcher-retry').addEventListener('click',load);search.addEventListener('input',()=>state&&render());dialog.addEventListener('cancel',e=>{e.preventDefault();back();});

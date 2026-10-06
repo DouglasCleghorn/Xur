@@ -11,6 +11,7 @@ Xur remains a preview; implemented behavior and hardware validation are separate
 | Install, sign in and load a profile | [Getting started](usage/getting-started.md), [installation](usage/install.md), [Rufus](usage/rufus.md) |
 | Create profiles and recover partial changes | [Profiles](usage/profiles.md), [Home and Monitoring](usage/control-panel.md) |
 | Configure desktops, pairing and peripherals | [Workstation identities](usage/workstation-identities.md), [multiple workstations](architecture/multiple-workstations.md) |
+| Wake displays and control TV power | [Display sleep and HDMI-CEC](usage/display-power.md) |
 | Choose models, connect clients and benchmark | [Model catalog](usage/model-catalog.md), [model lab](usage/model-lab.md), [API keys](usage/api-keys.md) |
 | Browse, download and manage files | [Files](usage/files.md), [storage and TRIM](usage/storage.md) |
 | Configure networking and time | [Wi-Fi, IP settings and answer YAML](usage/answer-file.md), [timezone and NTP](usage/timezone.md) |

@@ -6,7 +6,7 @@ public static class ConfigExport
     public static Dictionary<string,JsonElement> Read(string directory,string configDirectory="/etc/xur")
     {
         var files=new Dictionary<string,JsonElement>();
-        foreach(var relative in new[]{"gpu-power.json","updates/settings.json"})Add(relative);
+        foreach(var relative in new[]{"gpu-power.json","updates/settings.json","display-adapters.json"})Add(relative);
         var catalog=Path.Combine(directory,"catalog-selected");
         if(Directory.Exists(catalog))foreach(var file in Directory.EnumerateFiles(catalog,"*.json",SearchOption.TopDirectoryOnly))Add("catalog-selected/"+Path.GetFileName(file));
         Add("application-updates.json",configDirectory);

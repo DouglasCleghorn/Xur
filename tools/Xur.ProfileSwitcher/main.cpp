@@ -35,6 +35,11 @@ class Inputs {
     udev *context = udev_new();
     bool visible = false;
     void event(Pad &pad, const input_event &event, bool syncing) {
+        const bool button = event.type == EV_KEY && event.value == 1 && event.code <= KEY_MAX && !pad.state.keys[event.code]
+            && ((event.code >= BTN_GAMEPAD && event.code <= BTN_THUMBR) || (event.code >= BTN_DPAD_UP && event.code <= BTN_DPAD_RIGHT));
+        const bool hat = event.type == EV_ABS && event.value != 0
+            && ((event.code == ABS_HAT0X && event.value != pad.state.hatX) || (event.code == ABS_HAT0Y && event.value != pad.state.hatY));
+        if (!syncing && (button || hat) && activity && activity()) pad.state.armed = false;
         QString command;
         switch (pad.state.read(event.type, event.code, event.value)) {
             case PadAction::Up: command = "up"; break;
@@ -49,6 +54,7 @@ class Inputs {
     }
 public:
     std::function<void()> open;
+    std::function<bool()> activity;
     std::function<void(QString)> action;
     std::function<void(QString)> failure;
     bool shoulders = false;
@@ -135,11 +141,15 @@ class Switcher : public QDialog {
     QLabel *navigation = new QLabel;
     QString server = "/run/xur-profile-switcher/switcher.sock", trigger = "plasma-menu";
     uint trustedServerUid;
-    Object state, plan, selected;
+    Object state, plan, selected, displayState;
     enum class ControllerTarget { Profiles, StopAll, Retry, Shortcuts, Close, Back, Apply };
     bool applying = false;
     ControllerTarget controllerTarget = ControllerTarget::Profiles;
     std::function<void(QString)> modalAction;
+    bool cecStandby = false, waking = false;
+    QString pendingControllerAction;
+    int pendingControllerRevision = 0;
+    QElapsedTimer controllerActivity;
     int revision = 0;
     static QLabel *label(const QString &text, const char *name = nullptr) {
         auto result = new QLabel(text); result->setTextFormat(Qt::PlainText); result->setWordWrap(true);
@@ -189,19 +199,23 @@ class Switcher : public QDialog {
         focusControl(next.first);
     }
     void message(const QString &text) { error->setText(text); error->setVisible(!text.isEmpty()); }
-    void request(const QString &path, const Object *body, std::function<void(Object)> completed) {
+    void request(const QString &path, const Object *body, std::function<void(Object)> completed, bool background = false) {
         Object payload = body ? *body : Object{};
-        payload["action"] = path == "/api/profiles" ? "state" : path == "/api/profiles/apply" ? "apply" : path == "/api/profiles/cancel" ? "cancel" : path == "/api/profiles/unload/preview" ? "preview-unload" : "preview";
+        payload["action"] = path.startsWith("display-") ? path : path == "/api/profiles" ? "state" : path == "/api/profiles/apply" ? "apply" : path == "/api/profiles/cancel" ? "cancel" : path == "/api/profiles/unload/preview" ? "preview-unload" : "preview";
         if (payload["action"] == "preview") payload["id"] = path.section('/', 3, 3);
         if (payload["action"] == "apply" || payload["action"] == "cancel") payload["trigger"] = trigger;
         const QByteArray data = QJsonDocument(payload).toJson(QJsonDocument::Compact);
         auto reply = new QLocalSocket(this); auto timer = new QTimer(reply); timer->setSingleShot(true);
         auto received = std::make_shared<QByteArray>(); auto finished = std::make_shared<bool>(false);
         const int version = revision;
-        auto finish = [this, reply, timer, completed, version, finished](Object envelope) {
+        auto finish = [this, reply, timer, completed, version, finished, background](Object envelope) {
             if (*finished) return;
             *finished = true; timer->stop();
-            if (version == revision && isVisible()) {
+            if (background) {
+                waking = false;
+                if (envelope["ok"].toBool()) completed(envelope["data"].toObject());
+                else { pendingControllerAction.clear(); qWarning("Xur controller display wake: %s", qPrintable(envelope["error"].toString("Local display service unavailable"))); }
+            } else if (version == revision && isVisible()) {
                 if (!envelope["ok"].toBool()) {
                     if (applying) { applying = false; back->setEnabled(true); apply->setText(plan["unload"].toBool() ? "Stop all workloads" : "Load profile"); plan = {}; }
                     message(envelope["error"].toString("Could not contact the local manager. Try again.")); apply->setEnabled(false);
@@ -263,17 +277,28 @@ class Switcher : public QDialog {
             item->setData(Qt::UserRole, profile); item->setSizeHint(QSize(0, 82));
             if (!busy && isCurrent(profile)) item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
         }
+        for (const auto value : displayState["displays"].toArray()) {
+            const auto display = value.toObject();
+            for (const auto &mode : {QStringLiteral("off"), QStringLiteral("on")}) {
+                const auto title = "CEC screen " + mode + ": " + display["name"].toString();
+                if (!title.contains(filter, Qt::CaseInsensitive)) continue;
+                auto item = new QListWidgetItem(title + "\n" + display["connector"].toString() + " · " + (display["canControl"].toBool() ? "Workloads keep running" : display["unavailableReason"].toString()), profiles);
+                item->setData(Qt::UserRole, Object{{"display", true}, {"id", display["id"]}, {"mode", mode}}); item->setSizeHint(QSize(0, 82));
+                if (!display["canControl"].toBool()) item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+            }
+        }
         unload->setEnabled(busy || !state["runtime"].toObject()["instances"].toArray().isEmpty());
-        if (saved.isEmpty()) message("No profiles yet. Create one in the Xur web manager.");
-        else if (!profiles->count()) message("No profiles match your search.");
+        if (saved.isEmpty() && state.contains("profiles")) message("No profiles yet. Create one in the Xur web manager.");
+        else if (state.contains("profiles") && !profiles->count()) message("No profiles match your search.");
         else if (busy) message("A profile change is in progress. Choose another profile to interrupt it.");
         for (int n = 0; n < profiles->count(); ++n) if (profiles->item(n)->flags() & Qt::ItemIsEnabled) { profiles->setCurrentRow(n); break; }
     }
     void refresh(bool restoreSelection = false) {
         const auto previousSearch = search->text();
-        ++revision; message(""); plan = {}; controllerTarget = ControllerTarget::Profiles; pages->setCurrentIndex(0); current->setText("Loading profiles…"); profiles->clear(); search->clear();
+        ++revision; message(""); plan = {}; state = {}; displayState = {}; controllerTarget = ControllerTarget::Profiles; pages->setCurrentIndex(0); current->setText("Loading profiles…"); profiles->clear(); search->clear();
         navigation->setText("D-pad / ↑ ↓: Move    Enter / A: Select    Esc / B: Close");
-        request("/api/profiles", nullptr, [this, restoreSelection, previousSearch](Object data) { state = data; auto active = state["active"].toObject();
+        request("display-state", nullptr, [this](Object data) { displayState = data; render(); });
+        request("/api/profiles", nullptr, [this, restoreSelection, previousSearch](Object data) { state = data; message(""); auto active = state["active"].toObject();
             if (restoreSelection) { const QSignalBlocker blocked(search); search->setText(previousSearch); }
             current->setText(active.isEmpty() ? "No complete profile loaded" : "Loaded: " + active["name"].toString()); render();
             if (restoreSelection && selected["unload"].toBool() && unload->isEnabled()) { focusControl(ControllerTarget::StopAll); return; }
@@ -283,7 +308,14 @@ class Switcher : public QDialog {
     }
     void choose(QListWidgetItem *item) {
         if (!item || !(item->flags() & Qt::ItemIsEnabled) || applying) return;
-        chooseTarget(item->data(Qt::UserRole).toJsonObject());
+        const auto choice = item->data(Qt::UserRole).toJsonObject();
+        if (choice["display"].toBool()) {
+            ++revision; message(""); item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+            Object body{{"id", choice["id"]}}; const bool off = choice["mode"] == "off";
+            request(off ? "display-off" : "display-on", &body, [this, off](Object data) { cecStandby = off; render(); message(data["message"].toString()); });
+            return;
+        }
+        chooseTarget(choice);
     }
     void chooseTarget(Object target) {
         if (applying) return;
@@ -407,6 +439,32 @@ public:
         }
         input.shoulders = preferences.value("controllerShoulders", false).toBool(); input.hold = qBound(500, preferences.value("holdMilliseconds", 1000).toInt(), 3000);
         input.open = [this] { showPicker("controller"); }; input.failure = [this](QString text) { message(text); };
+        input.activity = [this] {
+            const bool consume = cecStandby;
+            if (!controllerActivity.isValid() || controllerActivity.elapsed() >= 2000 || consume) {
+                controllerActivity.start();
+                auto bus = QDBusConnection::sessionBus();
+                bus.asyncCall(QDBusMessage::createMethodCall("org.freedesktop.ScreenSaver", "/ScreenSaver", "org.freedesktop.ScreenSaver", "SimulateUserActivity"));
+                // Plasma's display controller belongs to this session. Gamepad
+                // events are not ordinary pointer/keyboard idle activity.
+                auto dpms = new QProcess(this);
+                auto environment = QProcessEnvironment::systemEnvironment();
+                environment.remove("LD_LIBRARY_PATH"); environment.remove("QT_PLUGIN_PATH");
+                dpms->setProcessEnvironment(environment);
+                connect(dpms, &QProcess::errorOccurred, dpms, &QObject::deleteLater);
+                connect(dpms, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), dpms, &QObject::deleteLater);
+                dpms->start("kscreen-doctor", {"--dpms", "on"});
+            }
+            if (waking) return consume;
+            waking = true;
+            request("display-wake", nullptr, [this](Object data) {
+                const bool consumed = data["consumeInput"].toBool() || data["woken"].toInt() > 0;
+                if (data["woken"].toInt() > 0 || !consumed) cecStandby = false;
+                const auto command = pendingControllerAction; pendingControllerAction.clear();
+                if (!consumed && pendingControllerRevision == revision && isVisible() && !command.isEmpty()) input.action(command);
+            }, true);
+            return consume;
+        };
         // Controller selection survives fullscreen apps retaining desktop focus;
         // ordinary Tab/mouse focus changes still select the visible action.
         connect(qApp, &QApplication::focusChanged, this, [this](QWidget *, QWidget *now) {
@@ -421,6 +479,9 @@ public:
             highlightSelection();
         });
         input.action = [this](QString action) {
+            // The web manager may have put this TV in standby since the picker
+            // opened. Wait for the agent's wake gate before activating a row.
+            if (waking) { if (pendingControllerAction.isEmpty()) { pendingControllerAction = action; pendingControllerRevision = revision; } return; }
             if (modalAction) { modalAction(action); return; }
             if (QApplication::activeModalWidget() && QApplication::activeModalWidget() != this) return;
             if (action == "back") { goBack(); return; }

@@ -46,7 +46,9 @@ static class ConsoleMaintenanceTests
         await menu.Select('r');await menu.Select('y');
         check(handler.Posts.Last()=="/power/reboot" && menu.Screen.Id=="os","Only explicit confirmation sends reboot and then leaves confirmation");
         count=handler.Posts.Count;await menu.Select('y');check(handler.Posts.Count==count,"Repeated confirmation cannot repeat the power action");
-        await menu.Open("power");await menu.Select('s');await menu.Select('y');
+        await menu.Open("power");
+        check(menu.Screen.Options.Take(3).Select(o=>o.Key).SequenceEqual(['r','s','d']),"CEC display power preserves the existing reboot and shutdown number shortcuts");
+        await menu.Select('s');await menu.Select('y');
         check(handler.Posts.Last()=="/power/poweroff","Shutdown uses the same explicit confirmation flow");
         handler.Reject=true;await menu.Open("updates");await menu.Select('h');await menu.Select('f');
         check(menu.Screen.Body.Contains("Wait for the OS update to finish."),"Application update rejection is visible instead of silently ignored");

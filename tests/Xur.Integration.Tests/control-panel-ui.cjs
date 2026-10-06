@@ -2,7 +2,7 @@ const {chromium}=require('../../.build/browser/node_modules/playwright');
 const {execFileSync}=require('child_process'),fs=require('fs'),path=require('path'),assert=require('assert/strict');
 (async()=>{
  const out=path.resolve('.build/fast/control-panel');fs.mkdirSync(out,{recursive:true});
- execFileSync(process.env.XUR_DOTNET||path.join(process.env.HOME,'.local/share/xur-build/dotnet/dotnet'),['run','--project','tests/Xur.Unit.Tests','-c','Release','--','--control-panel-render',out],{stdio:'pipe'});
+ execFileSync(process.env.XUR_DOTNET||path.join(process.env.HOME,'.local/share/xur-build/dotnet/dotnet'),['run','--project','tests/Xur.Unit.Tests','-c','Release','--artifacts-path','.build/dotnet','--','--control-panel-render',out],{stdio:'pipe'});
  const browser=await chromium.launch({headless:true});
  try{
  const page=await browser.newPage();let mutations=0;

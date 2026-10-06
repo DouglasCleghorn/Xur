@@ -11,7 +11,7 @@ static class ControlPanelRender
 {
     public static async Task Run(string output, bool documentation = false)
     {
-        var root=Path.Combine(Path.GetTempPath(),"xur-home-"+Guid.NewGuid());Directory.CreateDirectory(root);Directory.CreateDirectory(output);
+        var root=Path.GetFullPath(Path.Combine(".build/evidence","h-"+Guid.NewGuid().ToString("N")[..12]));Directory.CreateDirectory(root);Directory.CreateDirectory(output);
         var previous=Environment.GetEnvironmentVariable("XUR_RUN");var mode=Environment.GetEnvironmentVariable("XUR_MODE");
         Environment.SetEnvironmentVariable("XUR_RUN",root);Environment.SetEnvironmentVariable("XUR_MODE","Installed");
         var builder=WebApplication.CreateBuilder();builder.Logging.ClearProviders();builder.WebHost.ConfigureKestrel(k=>k.ListenUnixSocket(root+"/agent.sock"));
@@ -34,6 +34,11 @@ static class ControlPanelRender
         agent.MapGet("/station-allocations",()=>Array.Empty<StationDeviceAllocation>());
         agent.MapGet("/station-users",()=>new[]{new StationAccount("doug",1000,"Doug","/var/home/doug")});
         agent.MapGet("/update-all",()=>new UpdateAllStatus(false,null));
+        agent.MapGet("/displays",()=>new DisplayPowerStatus([
+            new("display-console","card0-HDMI-A-1","0000:01:00.0","Example TV",null,"native",true,null),
+            new("display-station","card1-HDMI-A-1","0000:02:00.0","Desk TV","w1","external",true,null),
+            new("display-monitor","card2-DP-1","0000:03:00.0","Office monitor",null,null,false,"No CEC adapter assigned. HDMI alone does not guarantee CEC support.")
+        ],[new("native","Native CEC","/dev/cec0",true,0,41),new("external","USB CEC","/dev/cec1",true,null,null)]));
         var stationRecipe=new Recipe("gaming-workstation","Desktop","host:plasma",[],0,"","Display",1,0,"",Kind:"Workstation",Engine:"Plasma");
         Directory.CreateDirectory(root+"/catalog");File.WriteAllText(root+"/catalog/desktop.json",System.Text.Json.JsonSerializer.Serialize(stationRecipe));
         using var store=new ProfileStore(root+"/state");var observer=new Observer();var manager=new ProfileManager(store,observer,new Gateway());
@@ -48,11 +53,11 @@ static class ControlPanelRender
         {
             await agent.StartAsync();var services=new ServiceCollection();services.AddLogging();var context=new DefaultHttpContext();context.Request.Scheme="https";context.Request.Host=new HostString("stations.test");services.AddSingleton<IHttpContextAccessor>(new HttpContextAccessor{HttpContext=context});services.AddSingleton(new Appliance());services.AddSingleton(manager);services.AddSingleton(new ProfileAccessSettings(root+"/profile-access.json"));services.AddSingleton(new RecipeCatalog(root+"/catalog"));services.AddSingleton(new Bootstrap(directory:root));services.AddSingleton<NavigationManager>(new Navigation());
             await using var provider=services.BuildServiceProvider();await using var renderer=new HtmlRenderer(provider,provider.GetRequiredService<ILoggerFactory>());
-            foreach(var page in new[]{"home","workstations","endpoints","monitoring","files","model-lab","api-keys","settings","network-settings","storage","profile-edit","profile-switch"})
+            foreach(var page in new[]{"home","displays","workstations","endpoints","monitoring","files","model-lab","api-keys","settings","network-settings","storage","profile-edit","profile-switch"})
             {
                 var priorSnapshot=observer.Snapshot;
                 if(page=="profile-edit")observer.Snapshot=observer.Snapshot with{Gpus=[gpu with{ShortId="GPU 1",Cards=["/dev/dri/card0"]}]};
-                RenderFragment body=b=>{b.OpenComponent(0,page=="profile-switch"?typeof(Xur.Control.Components.Pages.ProfileSwitch):page=="workstations"?typeof(Xur.Control.Components.Pages.Workstations):page=="endpoints"?typeof(Xur.Control.Components.Pages.Endpoints):page=="profile-edit"?typeof(ProfileEditor):page=="network-settings"?typeof(Xur.Control.Components.Pages.NetworkSettingsPage):page=="settings"?typeof(Xur.Control.Components.Pages.Network):page=="storage"?typeof(Xur.Control.Components.Pages.StorageUsagePage):page=="api-keys"?typeof(Xur.Control.Components.Pages.ApiKeysPage):page=="model-lab"?typeof(Xur.Control.Components.Pages.ModelLab):page=="home"?typeof(Xur.Control.Components.Pages.Home):page=="files"?typeof(Xur.Control.Components.Pages.Files):typeof(Xur.Control.Components.Pages.Monitoring));b.CloseComponent();};
+                RenderFragment body=b=>{b.OpenComponent(0,page=="displays"?typeof(Xur.Control.Components.Pages.Displays):page=="profile-switch"?typeof(Xur.Control.Components.Pages.ProfileSwitch):page=="workstations"?typeof(Xur.Control.Components.Pages.Workstations):page=="endpoints"?typeof(Xur.Control.Components.Pages.Endpoints):page=="profile-edit"?typeof(ProfileEditor):page=="network-settings"?typeof(Xur.Control.Components.Pages.NetworkSettingsPage):page=="settings"?typeof(Xur.Control.Components.Pages.Network):page=="storage"?typeof(Xur.Control.Components.Pages.StorageUsagePage):page=="api-keys"?typeof(Xur.Control.Components.Pages.ApiKeysPage):page=="model-lab"?typeof(Xur.Control.Components.Pages.ModelLab):page=="home"?typeof(Xur.Control.Components.Pages.Home):page=="files"?typeof(Xur.Control.Components.Pages.Files):typeof(Xur.Control.Components.Pages.Monitoring));b.CloseComponent();};
                 var html=await renderer.Dispatcher.InvokeAsync(async()=> (await renderer.RenderComponentAsync<Xur.Control.Components.Layout.MainLayout>(ParameterView.FromDictionary(new Dictionary<string,object?>{{"Body",body}}))).ToHtmlString());
                 // Static rendering has no HTTP request from which to generate antiforgery tokens.
                 // Supply a fixture token for browser tests; production renders AntiforgeryToken normally.
