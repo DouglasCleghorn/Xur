@@ -22,7 +22,8 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
   assert.equal(await page.getByRole('button',{name:'Update Xur',exact:true}).count(),1);
   assert.equal(await page.locator('#os-update').getByRole('button',{name:'Update',exact:true}).count(),1);
   assert.equal(await page.locator('input[name="time"]').inputValue(),'03:00');
-  assert.equal(await page.locator('input[name="days"]:checked').count(),7);
+  assert.equal(await page.locator('input[name="days"]:checked').count(),1);
+  assert.equal(await page.locator('input[name="days"]:checked').inputValue(),'6');
   assert.equal(await page.locator('input[name="warningMinutes"]').inputValue(),'15');
   await page.getByRole('button',{name:'Skip this window',exact:true}).waitFor({state:'visible'});
   for(const [label,width,height] of [['desktop',1440,1000],['mobile',390,844]]){

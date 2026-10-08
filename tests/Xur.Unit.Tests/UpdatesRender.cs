@@ -20,7 +20,7 @@ static class UpdatesRender
         await using var agent=builder.Build();
         agent.MapGet("/application-updates",()=>new ApplicationUpdateStatus("test.invalid:8088",new("current","1"),null,new("next","2"),null,false));
         agent.MapGet("/updates",()=>new OsUpdateStatus(new("44","old","upstream",false),null,null,new("45","new","upstream",false),false,true,false,null,"",
-            new("03:00",[0,1,2,3,4,5,6]),new("123",DateTimeOffset.UtcNow.AddMinutes(15).ToUnixTimeSeconds(),DateTimeOffset.UtcNow.AddMinutes(15).ToUnixTimeSeconds(),"45","Waiting"),DateTimeOffset.UtcNow.AddDays(1).ToUnixTimeSeconds(),"UTC (+0000)"));
+            null,new("123",DateTimeOffset.UtcNow.AddMinutes(15).ToUnixTimeSeconds(),DateTimeOffset.UtcNow.AddMinutes(15).ToUnixTimeSeconds(),"45","Waiting"),DateTimeOffset.UtcNow.AddDays(1).ToUnixTimeSeconds(),"UTC (+0000)"));
         agent.MapGet("/tool-updates",async()=>await new Xur.Agent.ToolUpdateInventory(AppContext.BaseDirectory,(exe,args,timeout)=>Task.FromResult(new ProcessResult(exe=="podman"?1:0,"test-version"))).Read());
         try
         {

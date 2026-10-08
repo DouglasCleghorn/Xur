@@ -83,6 +83,8 @@ static class ConsoleMaintenanceTests
         check(handler.Posts.Last()=="/local/update-all/start","Text menu invokes the root-private Update All route");
         handler.All=handler.All with{Busy=false};await local.Open("schedule");await local.Select('y');
         check(handler.Posts.Last()=="/local/updates/schedule" && handler.LastUpdate?.Schedule?.Time=="22:30","Text schedule editor forwards JSON through the root-private route");
+        handler.Os=handler.Os with{Schedule=null};await local.Open("schedule");await local.Select('y');
+        check(handler.LastUpdate is {Action:"schedule",Schedule.Time:"03:00",Schedule.WarningMinutes:15} && handler.LastUpdate.Schedule.Days.SequenceEqual([6]),"An unconfigured console schedule saves Sunday at 03:00 with fifteen minutes of notice");
         count=handler.Reads;var installer=new ConsoleMaintenance(client,installer:true);await installer.Open("updates");
         check(handler.Reads==count && installer.Screen.Options.Length==1 && !LocalConsole.RootOptions(true).Contains("Updates"),"Installer hides updates and never reads installed update state");
         await installer.Open("power");await installer.Select('s');await installer.Select('0');

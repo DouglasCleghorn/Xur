@@ -5,7 +5,7 @@ import contextlib, datetime, fcntl, json, os, pathlib, pwd, re, subprocess, sys,
 STATE = pathlib.Path('/var/lib/xur/updates')
 CONFIG = pathlib.Path('/etc/xur/upstream.json')
 CHANNEL = 'ghcr.io/ublue-os/bazzite-nvidia-open:stable'
-DEFAULT_SCHEDULE = dict(time='03:00', days=list(range(7)), warningMinutes=15)
+DEFAULT_SCHEDULE = dict(time='03:00', days=[6], warningMinutes=15)
 TIMER_OVERRIDE = pathlib.Path('/etc/systemd/system/xur-os-update.timer.d/schedule.conf')
 PROGRAM = '/var/lib/xur/app/current/host/os-update'
 UTILITY = str(pathlib.Path(__file__).resolve().with_name('xurutil'))

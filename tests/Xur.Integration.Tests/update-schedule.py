@@ -12,9 +12,11 @@ def stamp(hour, minute=0): return datetime.datetime(2026, 10, 5, hour, minute).t
 def deployment(digest): return dict(version=digest, digest=digest, image=channel)
 
 @contextlib.contextmanager
-def fixture(available=True):
+def fixture(available=True, saved_schedule=schedule):
     with tempfile.TemporaryDirectory(dir='.build/evidence/update-schedule') as temp:
         root = pathlib.Path(temp)
+        if saved_schedule is not None:
+            m['save'](root / 'settings.json', dict(automatic=True, schedule=saved_schedule))
         clock = [stamp(2, 45)]
         state = dict(current=deployment('old'), pending=None, previous=None, available=deployment('new') if available else None, rollbackQueued=False, busy=False, operation=None, logs='')
         checks, stages, notices = [], [], []
@@ -36,6 +38,19 @@ def rejects(action):
 original_tz = os.environ.get('TZ')
 try:
     os.environ['TZ'] = 'UTC'; time.tzset()
+    with fixture(saved_schedule=None) as (root, clock, state, checks, stages, notices):
+        sunday = datetime.datetime(2026, 10, 11, 3).timestamp()
+        assert m['next_window'](m['settings'](), clock[0]) == sunday, 'An unconfigured host defaults to Sunday at 03:00'
+        for day in range(6):
+            clock[0] = stamp(2, 45) + day * 86400; tick()
+        clock[0] = sunday - 960; tick()
+        assert not checks and not stages and not notices, 'The default never runs Monday through Saturday or before the Sunday warning'
+        clock[0] = sunday - 900; tick()
+        assert checks == ['check'] and len(notices) == 1 and load(root, 'window')['startsAt'] == sunday
+        clock[0] = sunday; tick()
+        assert stages == [sunday], 'The default stages the available update on Sunday morning'
+    with fixture() as (root, clock, state, checks, stages, notices):
+        assert m['settings']()['schedule'] == schedule, 'Explicitly saved daily schedules remain unchanged'
     with fixture() as (root, clock, state, checks, stages, notices):
         clock[0] = stamp(2, 44); tick()
         assert not checks and not stages and not notices, 'Nothing runs outside the warning/window'
@@ -106,7 +121,7 @@ try:
         rejects(lambda:m['validate_schedule'](invalid))
     with fixture() as (root, clock, state, checks, stages, notices):
         m['save'](root/'settings.json', {'automatic':False})
-        assert m['settings']()['schedule'] == schedule, 'Legacy pause settings migrate without enabling updates'
+        assert not m['settings']()['automatic'] and m['settings']()['schedule'] == dict(time='03:00', days=[6], warningMinutes=15), 'Legacy pause settings receive the Sunday default without enabling updates'
         m['configure']('schedule', {'schedule':dict(schedule,days=[0,4],time='22:30',warningMinutes=30)})
         assert not m['settings']()['automatic']
         assert m['next_window'](dict(automatic=True,schedule=m['settings']()['schedule']),stamp(23)) == datetime.datetime(2026,10,9,22,30).timestamp()
@@ -162,4 +177,4 @@ finally:
     if original_tz is None: os.environ.pop('TZ',None)
     else: os.environ['TZ']=original_tz
     time.tzset()
-print('Scheduled update checks passed: daily/weekly windows, full notice, no-update silence, durable skip, pause/change races, missed windows, deployment guards, failures, desktop actions, legacy settings and DST')
+print('Scheduled update checks passed: Sunday-only defaults, saved daily/weekly windows, full notice, no-update silence, durable skip, pause/change races, missed windows, deployment guards, failures, desktop actions, legacy settings and DST')
