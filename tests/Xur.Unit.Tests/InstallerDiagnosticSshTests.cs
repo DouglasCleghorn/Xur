@@ -32,7 +32,7 @@ static class InstallerDiagnosticSshTests
                 return Task.FromResult(new ProcessResult(failed?1:exe=="systemctl"&&args.SequenceEqual(["is-active","firewalld"])?3:0,""));
             }
             var run=Path.Combine(root,"run");Directory.CreateDirectory(run);var system=Path.Combine(root,"system");
-            var ssh=new InstallerDiagnosticSsh(run,system,Run,selinux:true);
+            var ssh=new DiagnosticSsh(run,system,Run,selinux:true);
             await ssh.Configure(DiagnosticsConfiguration.Parse(yaml));
             check(calls.Count==0&&!ssh.Enabled,"A diagnostic API without SSH keys makes no SSH or firewall changes");
             await ssh.Configure(config);

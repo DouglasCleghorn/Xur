@@ -27,6 +27,9 @@ static class ApiKeyTests
                 foreach(var denied in new[]{"/api/api-keys","/api/api-keys/id/revoke","/api/auth/login","/api/bootstrap","/local/login","/settings","/api/install/approve","/API/API-KEYS/","/api/%61pi-keys","/api/../local/login"})
                     check(!ApiKeys.Allows(scope,"POST",denied),"API key cannot escalate via "+scope+" "+denied);
             check(ApiKeys.Allows("diagnostics","GET","/api/workstations/10/graphics") && ApiKeys.Allows("diagnostics","GET","/api/workloads/10/logs"),"Diagnostics keys can read workstation probes and logs");
+            check(ApiKeys.Allows("diagnostics","GET","/api/diagnostics/system") && ApiKeys.Allows("diagnostics","GET","/api/diagnostics/ssh"),"Diagnostics keys can collect system reports without enabling SSH");
+            foreach(var scope in new[]{"diagnostics","testing","automation"})
+                check(!ApiKeys.Allows(scope,"POST","/settings/diagnostic-ssh"),"API keys cannot enable root SSH: "+scope);
             check(!ApiKeys.Allows("diagnostics","GET","/api/files/download") && !ApiKeys.Allows("diagnostics","POST","/api/benchmarks") && !ApiKeys.Allows("testing","POST","/api/power/reboot"),"Read/test scopes exclude files and privileged mutations");
             check(ApiKeys.Allows("testing","POST","/api/model-lab/chat") && ApiKeys.Allows("testing","POST","/api/benchmarks") && ApiKeys.Allows("testing","POST","/inference/model/v1/chat/completions"),"Testing keys enable inference and benchmark workloads");
             check(ApiKeys.Allows("automation","POST","/api/workstations/10/stream"),"Automation keys enable streaming control");

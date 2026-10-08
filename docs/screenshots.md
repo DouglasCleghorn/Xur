@@ -109,6 +109,17 @@ See [release preparation](development/release-preparation.md).
 
 ## Change log
 
+- 2026-10-07: Added Diagnostic SSH in Settings and the system report download in
+  Diagnostics. Reviewed the actual Razor fixtures at 1280, 390 and 320 px in the
+  collaborative browser; the new controls have no horizontal overflow. Checked
+  disabled/enabled SSH states with synthetic keys and blank key inputs. The full
+  private Settings fixture includes development-host network addresses and stays
+  under `.build/evidence/diagnostic-access-ui/`. Local preview navigation was
+  unavailable, so rendered HTML and local styles were loaded directly for layout
+  checks; real HTTPS tests covered form submission and authorization. No images
+  were saved or published. Older private Settings captures predate these controls;
+  the published update-channel crop is unaffected.
+
 - 2026-10-07: Reviewed private T3 attachment `image.png`
   (`d967f238-2de3-4081-933c-47809af08b92-0f7301cd-4540-47dd-adb5-91f8829ab7a2.png`)
   for the Qwen-Image-2.1 catalog-resolution error. Shows the profile editor's

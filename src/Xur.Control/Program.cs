@@ -197,6 +197,7 @@ async Task StartHost()
     });
     app.MapGet("/local/application-health",()=>Results.Json(new {id=ApplicationIdentity.Id,active=maintenance.Active,profileBusy=profileManager.UpdateBusy}));
     app.MapConsoleProfiles(appliance,profileManager,profileAccess);
+    app.MapDiagnosticAccess(appliance);
     app.MapPost("/settings/profile-access",async Task<IResult>(HttpContext context)=> {
         try {var form=await context.Request.ReadFormAsync();profileAccess.Save(form["mode"].ToString());return Results.Redirect("/settings?profileAccessSaved=true");}
         catch(InvalidOperationException e){return Results.Redirect("/settings?profileAccessError="+Uri.EscapeDataString(e.Message));}
