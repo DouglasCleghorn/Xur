@@ -41,10 +41,23 @@ model downloaders use the saved credentials; a token does not grant access the
 account does not already have. Review the linked model license before applying.
 Model weights are not bundled.
 
-vLLM validates the checkpoint's root `config.json`. vLLM-Omni also accepts
+vLLM accepts Transformers `config.json` checkpoints with Safetensors or
+PyTorch `.bin` weights. Native Mistral checkpoints use `params.json`, their
+consolidated Safetensors weights and the Mistral config/tokenizer/weight loader.
+The catalog selects native Mistral weights when available, otherwise preferring
+Safetensors over PyTorch. The generated vLLM context limit is capped at the
+checkpoint's published maximum when it is below 4096 tokens.
+Alternate serializations and training-state files are
+excluded from the capacity estimate. Search includes PyTorch-only repositories.
+vLLM-Omni also accepts
 Diffusers pipelines, such as Qwen-Image-2.1, that publish `model_index.json`
 and component configurations instead. Xur checks these files at the selected
-checkpoint revision during selection and startup. Missing configuration and
+checkpoint revision during selection and startup. Published Safetensors,
+PyTorch and consolidated Mistral shard indexes select and validate the complete
+weight set; missing shards or invalid paths fail before recipe creation.
+Quantization in `hf_quant_config.json` and packed embedding names in shard
+indexes receive the same compatibility checks as inline configuration.
+Missing configuration and
 upstream HTTP errors are reported separately from connection failures; denied
 access points to repository permissions and the Hugging Face token in Settings.
 

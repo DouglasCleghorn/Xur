@@ -65,9 +65,10 @@ public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=n
         if(engine=="vLLM" && Regex.IsMatch(query,@"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"))
         {
             using var exact=await Metadata(query);var root=exact.RootElement;
-            return WeightBytes(root)>0?[new(root.GetProperty("id").GetString()!,root.GetProperty("id").GetString()!,engine)]:[];
+            return root.GetProperty("siblings").EnumerateArray().Any(f=>FileName(f).EndsWith(".safetensors",StringComparison.Ordinal)||FileName(f).EndsWith(".bin",StringComparison.Ordinal))
+                ?[new(root.GetProperty("id").GetString()!,root.GetProperty("id").GetString()!,engine)]:[];
         }
-        var url="https://huggingface.co/api/models?sort=downloads&direction=-1&limit=100&search="+Uri.EscapeDataString(query)+(engine=="llama.cpp"?"&author=unsloth&filter=gguf":"&filter=safetensors");
+        var url="https://huggingface.co/api/models?sort=downloads&direction=-1&limit=100&search="+Uri.EscapeDataString(query)+(engine=="llama.cpp"?"&author=unsloth&filter=gguf":"");
         using var data=JsonDocument.Parse(await Cached(url,TimeSpan.FromMinutes(10)));
         return data.RootElement.EnumerateArray().Where(m=>!m.TryGetProperty("private",out var p)||!p.GetBoolean()).Select(m=>m.GetProperty("id").GetString()!).Select(id=>new ModelChoice(id,id,engine)).ToArray();
     }
@@ -94,12 +95,17 @@ public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=n
         Engine(engine);using var data=await Metadata(model);var root=data.RootElement;
         if(root.TryGetProperty("gated",out var g) && g.ValueKind is not (JsonValueKind.False or JsonValueKind.Null) && !new HuggingFaceCredentials(state).Configured)throw new InvalidOperationException("This model requires upstream access approval. Add an authorized Hugging Face token in Settings first.");
         var revision=root.GetProperty("sha").GetString()!;var license=License(root);
-        if(engine!="llama.cpp")return new(model,revision,license,engine,[new("upstream","Upstream checkpoint",WeightBytes(root))]);
+        if(engine!="llama.cpp")
+        {
+            var weights=await Weights(model,revision,root);
+            return new(model,revision,license,engine,[new("upstream",weights.Format=="mistral"?"Native Mistral checkpoint":weights.Format=="pytorch"?"PyTorch checkpoint":"Upstream checkpoint",weights.Bytes)]);
+        }
         var files=Ggufs(root);
         var variants=files.Where(f=>!Path.GetFileName(FileName(f)).StartsWith("mmproj",StringComparison.OrdinalIgnoreCase) && (!Regex.IsMatch(FileName(f),@"-[0-9]{5}-of-[0-9]{5}\.gguf$") || FileName(f).Contains("-00001-of-"))).Select(f=>new ModelVariant(FileName(f),VariantName(FileName(f)),Group(files,FileName(f)).Sum(s=>s.GetProperty("size").GetInt64()))).OrderBy(v=>v.Id.Contains("Q4_K_M")?0:v.Id.Contains("Q4_K")?1:2).ThenBy(v=>v.Bytes).ToArray();
         if(variants.Length==0)throw new InvalidOperationException("No complete GGUF files were published for this model.");return new(model,revision,license,engine,variants);
     }
-    static long WeightBytes(JsonElement data)=>data.GetProperty("siblings").EnumerateArray().Where(f=>FileName(f).EndsWith(".safetensors") && f.TryGetProperty("size",out _)).Sum(f=>f.GetProperty("size").GetInt64());
+    Task<string> CheckpointFile(string model,string revision,string file)=>Cached("https://huggingface.co/"+model+"/raw/"+revision+"/"+file,TimeSpan.FromDays(365));
+    Task<CheckpointWeights> Weights(string model,string revision,JsonElement data)=>CheckpointWeights.Read(data,file=>CheckpointFile(model,revision,file));
     static string VariantName(string name){var m=Regex.Match(Path.GetFileName(name),@"(?:IQ|Q|BF|F)[0-9][A-Z0-9_]*");return m.Success?m.Value:Path.GetFileName(name);}
     async Task<(Dictionary<string,double> Values,string Source)> Sampling(string model)
     {
@@ -137,16 +143,41 @@ public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=n
             await ValidateCheckpoint(hub.Repository,hub.Revision,recipe.Engine,metadata.RootElement);
         }
     }
-    async Task ValidateCheckpoint(string model,string revision,string engine,JsonElement metadata)
+    async Task<CheckpointWeights> ValidateCheckpoint(string model,string revision,string engine,JsonElement metadata)
     {
         var files=metadata.GetProperty("siblings").EnumerateArray().Select(FileName).ToHashSet(StringComparer.Ordinal);
-        Task<string> Read(string file)=>Cached("https://huggingface.co/"+model+"/raw/"+revision+"/"+file,TimeSpan.FromDays(365));
-        async Task ValidateConfig(string file)
+        Task<string> Read(string file)=>CheckpointFile(model,revision,file);
+        var weights=await Weights(model,revision,metadata);
+        var maxModelLength=4096;
+        async Task ValidateConfig(string file,bool indexes=false)
         {
             using var config=JsonDocument.Parse(await Read(file));
-            EngineStartup.ValidateCheckpoint(engine,model,config.RootElement);
+            if(indexes)
+            {
+                var text=config.RootElement.TryGetProperty("text_config",out var nested)&&nested.ValueKind==JsonValueKind.Object?nested:config.RootElement;
+                foreach(var key in new[]{"max_position_embeddings","max_seq_len","n_positions"})
+                    if(text.TryGetProperty(key,out var limit)&&limit.ValueKind==JsonValueKind.Number&&limit.TryGetInt32(out var value)&&value>0)maxModelLength=Math.Min(maxModelLength,value);
+            }
+            var folder=file.Contains('/')?file[..(file.LastIndexOf('/')+1)]:"";
+            using var quant=files.Contains(folder+"hf_quant_config.json")?JsonDocument.Parse(await Read(folder+"hf_quant_config.json")):null;
+            EngineStartup.ValidateCheckpoint(engine,model,config.RootElement,quantization:quant?.RootElement);
+            if(indexes)foreach(var index in weights.Indexes)EngineStartup.ValidateCheckpoint(engine,model,config.RootElement,index,quant?.RootElement);
         }
-        if(files.Contains("config.json")){await ValidateConfig("config.json");return;}
+        async Task ValidateFolder(string folder)
+        {
+            if(files.Contains(folder+"config.json"))await ValidateConfig(folder+"config.json");
+            else if(files.Contains(folder+"hf_quant_config.json"))
+            {
+                using var config=JsonDocument.Parse("{}");using var quant=JsonDocument.Parse(await Read(folder+"hf_quant_config.json"));
+                EngineStartup.ValidateCheckpoint(engine,model,config.RootElement,quantization:quant.RootElement);
+            }
+        }
+        async Task ValidateComponents()
+        {
+            foreach(var folder in weights.Folders.Where(folder=>folder!=""))await ValidateFolder(folder);
+        }
+        if(weights.Format=="mistral"){await ValidateConfig("params.json",true);await ValidateComponents();return weights with{MaxModelLength=maxModelLength};}
+        if(files.Contains("config.json")){await ValidateConfig("config.json",true);await ValidateComponents();return weights with{MaxModelLength=maxModelLength};}
         if(engine!="vLLM-Omni" || !files.Contains("model_index.json"))throw new InvalidOperationException(engine=="vLLM-Omni"
             ?"This checkpoint does not publish config.json or a Diffusers model_index.json."
             :"This checkpoint does not publish the config.json required by vLLM.");
@@ -157,10 +188,16 @@ public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=n
         if(root.ValueKind!=JsonValueKind.Object || !root.TryGetProperty("_class_name",out var name) || name.ValueKind!=JsonValueKind.String || string.IsNullOrWhiteSpace(name.GetString()))
             throw new InvalidOperationException("The Diffusers model_index.json does not identify a pipeline class.");
         EngineStartup.ValidateCheckpoint(engine,model,root);
+        foreach(var index in weights.Indexes)EngineStartup.ValidateCheckpoint(engine,model,root,index);
+        if(files.Contains("hf_quant_config.json"))
+        {
+            using var quant=JsonDocument.Parse(await Read("hf_quant_config.json"));EngineStartup.ValidateCheckpoint(engine,model,root,quantization:quant.RootElement);
+        }
         foreach(var component in root.EnumerateObject())
             if(Regex.IsMatch(component.Name,@"^[A-Za-z0-9_-]+$") && component.Value.ValueKind==JsonValueKind.Array && component.Value.GetArrayLength()==2
-                && component.Value[0].ValueKind==JsonValueKind.String && component.Value[1].ValueKind==JsonValueKind.String && files.Contains(component.Name+"/config.json"))
-                await ValidateConfig(component.Name+"/config.json");
+                && component.Value[0].ValueKind==JsonValueKind.String && component.Value[1].ValueKind==JsonValueKind.String)
+                await ValidateFolder(component.Name+"/");
+        return weights;
     }
     public async Task<Recipe> Resolve(ModelSelection selection)
     {
@@ -169,13 +206,13 @@ public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=n
         await gate.WaitAsync();try
         {
             using var metadata=await Metadata(selection.Model,selection.Revision);var data=metadata.RootElement;var license=License(data);
-            ModelFile[]? files=null;long bytes;string variant=selection.Variant;
+            ModelFile[]? files=null;CheckpointWeights? checkpoint=null;long bytes;string variant=selection.Variant;
             if(selection.Engine=="llama.cpp")
             {
                 var group=Group(Ggufs(data),variant);if(group.Length==0)throw new InvalidOperationException("Select a published GGUF file.");
                 files=group.Select(f=>new ModelFile(Path.GetFileName(FileName(f)),new("https://huggingface.co/"+selection.Model+"/resolve/"+selection.Revision+"/"+string.Join('/',FileName(f).Split('/').Select(Uri.EscapeDataString)),f.GetProperty("lfs").GetProperty("sha256").GetString()!,f.GetProperty("size").GetInt64(),license,selection.Model,selection.Revision))).ToArray();bytes=files.Sum(f=>f.Asset.Bytes);
             }
-            else {await ValidateCheckpoint(selection.Model,selection.Revision,selection.Engine,data);if(variant!="upstream")throw new InvalidOperationException("Select the upstream checkpoint.");bytes=WeightBytes(data);if(bytes==0)throw new InvalidOperationException("The model does not publish safetensors weights.");}
+            else {if(variant!="upstream")throw new InvalidOperationException("Select the upstream checkpoint.");checkpoint=await ValidateCheckpoint(selection.Model,selection.Revision,selection.Engine,data);bytes=checkpoint.Bytes;}
             var hardware=await (observe?.Invoke()??GpuInventory.Observe());var vendor=selection.Device;
             if(vendor=="Auto")vendor=hardware.FirstOrDefault(g=>g.Problems.Length==0 && g.MemoryMiB>0)?.Vendor??"CPU";
             if(vendor is not ("CPU" or "NVIDIA" or "AMD" or "Intel"))throw new InvalidOperationException("Select a supported execution device.");
@@ -205,7 +242,8 @@ public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=n
             {
                 hub=new(selection.Model,selection.Revision,license);
                 args.AddRange(["serve",selection.Model,"--revision",selection.Revision,"--host","0.0.0.0","--port","8080"]);
-                if(selection.Engine=="vLLM")args.AddRange(ModelLaunchSettings.Vllm(selection.Model,count));
+                args.AddRange(checkpoint!.Arguments);
+                if(selection.Engine=="vLLM")args.AddRange(ModelLaunchSettings.Vllm(selection.Model,count,checkpoint.MaxModelLength));
                 else args.Add("--omni");
             }
             var name=selection.Model.Split('/')[1]+(selection.Engine=="llama.cpp"?" · "+Regex.Match(Path.GetFileName(variant),@"(?:IQ|Q|BF|F)[0-9][A-Z0-9_]*").Value:"");if(name.Length>80)name=name[..80];

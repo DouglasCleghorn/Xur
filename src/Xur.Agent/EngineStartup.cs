@@ -16,12 +16,14 @@ public static class EngineStartup
         if(log.Contains("EngineCore failed to start.")||log.Contains("Engine core initialization failed."))return "The engine failed during model initialization. Open the workload logs for the root cause.";
         return null;
     }
-    public static void ValidateCheckpoint(string engine,string model,JsonElement config,JsonElement? index=null)
+    public static void ValidateCheckpoint(string engine,string model,JsonElement config,JsonElement? index=null,JsonElement? quantization=null)
     {
         if(engine is not ("vLLM" or "vLLM-Omni"))return;
         var packed=index is {} i&&i.TryGetProperty("weight_map",out var map)&&map.EnumerateObject().Any(p=>p.Name.EndsWith("embed_tokens.weight_packed",StringComparison.Ordinal));
-        if(config.TryGetProperty("quantization_config",out var quant)&&quant.ValueKind==JsonValueKind.Object&&quant.TryGetProperty("config_groups",out var groups)&&groups.ValueKind==JsonValueKind.Object)
-            packed|=groups.EnumerateObject().Any(g=>g.Value.TryGetProperty("targets",out var targets)&&targets.ValueKind==JsonValueKind.Array&&targets.EnumerateArray().Any(t=>t.ValueKind==JsonValueKind.String&&t.GetString()!.Contains("embed_tokens",StringComparison.Ordinal)));
+        static bool Packed(JsonElement quant)=>quant.ValueKind==JsonValueKind.Object&&quant.TryGetProperty("config_groups",out var groups)&&groups.ValueKind==JsonValueKind.Object
+            &&groups.EnumerateObject().Any(g=>g.Value.ValueKind==JsonValueKind.Object&&g.Value.TryGetProperty("targets",out var targets)&&targets.ValueKind==JsonValueKind.Array&&targets.EnumerateArray().Any(t=>t.ValueKind==JsonValueKind.String&&t.GetString()!.Contains("embed_tokens",StringComparison.Ordinal)));
+        if(config.TryGetProperty("quantization_config",out var quant))packed|=Packed(quant);
+        if(quantization is {} sidecar)packed|=Packed(sidecar);
         if(packed)throw new InvalidOperationException("This checkpoint uses packed token embeddings. Xur's current "+engine+" image cannot load embed_tokens.weight_packed. It needs a separately pinned compatible engine recipe; the model will not be substituted or modified.");
         if(model.Equals("lued/Qwen3.8-27B-INT8-W8A16-DFlash2",StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("This DFlash2 checkpoint requires its author's patched vLLM runtime and separate drafter. That runtime recipe is not available in this build.");

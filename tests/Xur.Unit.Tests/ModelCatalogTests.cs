@@ -14,7 +14,7 @@ static class ModelCatalogTests
     static string Metadata(params string[] configs)=>JsonSerializer.Serialize(new
     {
         id=Model,sha=Revision,cardData=new{license="See upstream license"},
-        siblings=configs.Append("transformer/model.safetensors").Select(file=>new{rfilename=file,size=file.EndsWith(".safetensors")?33115613408L:100L})
+        siblings=configs.Append(configs.Contains("config.json")?"model.safetensors":"transformer/model.safetensors").Select(file=>new{rfilename=file,size=file.EndsWith(".safetensors")?33115613408L:100L})
     });
     static async Task<string> Error(Func<Task> action)
     {
@@ -75,6 +75,11 @@ static class ModelCatalogTests
             check(message.Contains("packed token embeddings")&&startupMessage.Contains("packed token embeddings"),
                 "Diffusers text encoders retain packed-embedding protection during selection and startup");
             replies[FileUrl("text_encoder/config.json")]=encoder;
+
+            replies[MetadataUrl(true)]=new(HttpStatusCode.OK,Metadata("model_index.json","transformer/config.json","text_encoder/hf_quant_config.json"));
+            replies[FileUrl("text_encoder/hf_quant_config.json")]=new(HttpStatusCode.OK,"""{"config_groups":{"embeddings":{"targets":["embed_tokens"]}}}""");
+            message=await Error(()=>Catalog("diffusion-sidecar").Resolve(selection));
+            check(message.Contains("packed token embeddings"),"Diffusers component quantization sidecars are checked even without a component config.json");
 
             replies[MetadataUrl(true)]=new(HttpStatusCode.OK,Metadata("config.json","model_index.json"));
             replies[FileUrl("config.json")]=new(HttpStatusCode.OK,"{}");
