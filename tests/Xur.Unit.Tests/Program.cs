@@ -30,7 +30,6 @@ if(args is ["--display-power"]){await DisplayPowerTests.Run(Check);Console.Write
 if(args is ["--model-catalog"]){await ModelCatalogTests.Run(Check);await CheckpointFormatTests.Run(Check);await ModelGpuTests.Run(Check);await EngineStartupTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ModelCatalog",passed=results}));return;}
 if(args is ["--diagnostic-access"]){await DiagnosticAccessTests.Run(Check,validateOpenSsh:true);ApiKeyTests.Run(Check);await InstallerDiagnosticSshTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="DiagnosticAccess",passed=results}));return;}
 if(args is ["--station-controllers"]){StationControllerTests.Run(Check);await StationIdentityTests.Run(Check);await ParallelLoadTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="StationControllers",passed=results}));return;}
-if(args is ["--model-catalog"]){await ModelCatalogTests.Run(Check);await ModelGpuTests.Run(Check);await EngineStartupTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ModelCatalog",passed=results}));return;}
 await DiagnosticAccessTests.Run(Check);
 StationControllerTests.Run(Check);
 await DisplayPowerTests.Run(Check);
