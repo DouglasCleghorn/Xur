@@ -75,7 +75,10 @@ public static class InstallationDiagnostics
     {
         var text=Regex.Replace(Tail(path),@"\x1b\][^\x07]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]","");
         text=new string(text.Where(c=>!char.IsControl(c)||c=='\n'||c=='\r'||c=='\t').ToArray());
-        var lines=Redaction.Logs(text).Split(['\n','\r']).Select(l=>l.Trim()).Where(l=>l.Length>0).TakeLast(3).Select(l=>l.Length>160?l[..160]+"…":l).ToArray();
+        var recent=new List<string>();
+        foreach(var line in Redaction.Logs(text).Split(['\n','\r']).Select(l=>l.Trim()).Where(l=>l.Length>0))
+            if(recent.Count==0||recent[^1]!=line)recent.Add(line);
+        var lines=recent.TakeLast(3).Select(l=>l.Length>160?l[..160]+"…":l).ToArray();
         return lines.Length>0?string.Join('\n',lines):null;
     }
     static string Tail(string path)
