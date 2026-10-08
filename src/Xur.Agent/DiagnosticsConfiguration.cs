@@ -11,7 +11,7 @@ public sealed class DiagnosticsConfiguration
     public bool AllowControl {get;}
     public string[] SshAuthorizedKeys {get;}
     DiagnosticsConfiguration(string apiKey,bool allowControl,string[] sshAuthorizedKeys){ApiKey=apiKey;AllowControl=allowControl;SshAuthorizedKeys=sshAuthorizedKeys;}
-    static string PublicKey(string value)
+    public static string PublicKey(string value)
     {
         if(value.Length>1024 || value.Any(c=>c<' ' || c>'~'))throw new FormatException("Use a single-line Ed25519 SSH public key without authorized_keys options.");
         var fields=value.Split(' ',StringSplitOptions.RemoveEmptyEntries);

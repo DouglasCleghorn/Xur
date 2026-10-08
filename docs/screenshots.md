@@ -67,6 +67,17 @@ See [release preparation](development/release-preparation.md).
 
 ## Change log
 
+- 2026-10-07: Added Diagnostic SSH in Settings and the system report download in
+  Diagnostics. Reviewed the actual Razor fixtures at 1280, 390 and 320 px in the
+  collaborative browser; the new controls have no horizontal overflow. Checked
+  disabled/enabled SSH states with synthetic keys and blank key inputs. The full
+  private Settings fixture includes development-host network addresses and stays
+  under `.build/evidence/diagnostic-access-ui/`. Local preview navigation was
+  unavailable, so rendered HTML and local styles were loaded directly for layout
+  checks; real HTTPS tests covered form submission and authorization. No images
+  were saved or published. Older private Settings captures predate these controls;
+  the published update-channel crop is unaffected.
+
 - 2026-10-06: Added the automatic update schedule and shared upcoming-window
   notice in the working tree. The private `.build/fast/updates-{desktop,mobile}.png`
   captures predate these controls and must be regenerated before release reuse.

@@ -21,6 +21,22 @@
 @if(ProfileAccessSaved) {<p role="status">Profile access saved.</p>}
 @if(!string.IsNullOrEmpty(ProfileAccessError)) {<p role="alert">@ProfileAccessError</p>}
 </section>
+<section class="panel" id="diagnostic-ssh"><h2>Diagnostic SSH</h2>
+<p><strong>Discouraged for normal use. Grants unrestricted root access.</strong> Enable only while troubleshooting with someone you trust, then disable it. Read-only reports are already available in <a href="/diagnostics">Diagnostics</a>.</p>
+@if(diagnosticSsh!=null) {
+<p>Diagnostic SSH: <strong>@(diagnosticSsh.Enabled?"Enabled":"Disabled")</strong>. Disabled by default; turns off when the agent restarts or the server reboots.</p>
+@if(diagnosticSsh.Enabled) {<p>@diagnosticSsh.KeyCount authorized key(s). Connect as <code>root</code> on port <code>22</code> using a configured private key. Verify the server’s SSH host key before connecting.</p>}
+<form method="post" action="/settings/diagnostic-ssh"><AntiforgeryToken />
+<label for="diagnostic-ssh-mode">SSH access</label>
+<select id="diagnostic-ssh-mode" name="mode"><option value="disabled" selected="@(!diagnosticSsh.Enabled)">Disabled (recommended)</option><option value="enabled" selected="@diagnosticSsh.Enabled">Enabled for troubleshooting</option></select>
+<label for="diagnostic-ssh-keys">Ed25519 SSH public keys</label><textarea id="diagnostic-ssh-keys" name="publicKeys" rows="3" maxlength="8192" spellcheck="false" autocomplete="off" placeholder="ssh-ed25519 …"></textarea>
+<p class="secondary-text">To enable, paste one to eight public keys, one per line. Saving Enabled replaces the authorized keys. Password login and forwarding are disabled. Private keys are never accepted. SSH is reachable on this server’s networks; firewall rules still apply.</p>
+<button>Save SSH setting</button></form>
+@if(diagnosticSsh.Error!=null) {<p role="alert">@diagnosticSsh.Error</p>}
+} else {<p role="alert">Could not read diagnostic SSH status. <a href="/settings#diagnostic-ssh">Refresh</a></p>}
+@if(SshSaved) {<p role="status">Diagnostic SSH setting saved.</p>}
+@if(!string.IsNullOrEmpty(SshError)) {<p role="alert">@SshError</p>}
+</section>
 }
 @if(Auth.AccountConfigured) { <section class="panel"><h2>Account</h2><p>@Auth.Username</p><form method="post" action="/auth/logout"><AntiforgeryToken /><button class="secondary">Sign out</button></form></section> }
 <section class="panel"><h2>Hugging Face</h2>
@@ -106,12 +122,14 @@
 }
 
 @code {
-    ApplicationUpdateStatus? application;TimezoneStatus? timezone;NtpStatus? ntp;bool hfConfigured;
+    ApplicationUpdateStatus? application;TimezoneStatus? timezone;NtpStatus? ntp;DiagnosticSshStatus? diagnosticSsh;bool hfConfigured;
     [SupplyParameterFromQuery] public bool HfSaved {get;set;}
+    [SupplyParameterFromQuery] public bool SshSaved {get;set;}
+    [SupplyParameterFromQuery] public string? SshError {get;set;}
     [SupplyParameterFromQuery] public bool ProfileAccessSaved {get;set;}
     [SupplyParameterFromQuery] public string? ProfileAccessError {get;set;}
     [SupplyParameterFromQuery] public bool NtpSaved {get;set;}
     [SupplyParameterFromQuery] public bool TimezoneSaved {get;set;}
     [SupplyParameterFromQuery] public string? Error {get;set;}
-    protected override async Task OnInitializedAsync() {if(!Device.Installer)try{application=await Device.Agent.GetFromJsonAsync<ApplicationUpdateStatus>("/application-updates");}catch{}try{hfConfigured=(await Device.Agent.GetFromJsonAsync<System.Text.Json.JsonElement>("/huggingface")).GetProperty("configured").GetBoolean();}catch{}try{timezone=await Device.Agent.GetFromJsonAsync<TimezoneStatus>("/timezone");}catch{}try{ntp=await Device.Agent.GetFromJsonAsync<NtpStatus>("/ntp");}catch{}}
+    protected override async Task OnInitializedAsync() {if(!Device.Installer){try{application=await Device.Agent.GetFromJsonAsync<ApplicationUpdateStatus>("/application-updates");}catch{}try{diagnosticSsh=await Device.Agent.GetFromJsonAsync<DiagnosticSshStatus>("/diagnostics/ssh");}catch{}}try{hfConfigured=(await Device.Agent.GetFromJsonAsync<System.Text.Json.JsonElement>("/huggingface")).GetProperty("configured").GetBoolean();}catch{}try{timezone=await Device.Agent.GetFromJsonAsync<TimezoneStatus>("/timezone");}catch{}try{ntp=await Device.Agent.GetFromJsonAsync<NtpStatus>("/ntp");}catch{}}
 }

@@ -42,6 +42,12 @@ if(!installer && File.Exists(hostUtility))
 }
 
 var stateDir = installer ? run : "/var/lib/xur";
+var systemDiagnostics=new SystemDiagnostics();
+app.MapGet("/diagnostics/system",async Task<IResult>()=>{
+    if(installer)return Results.Conflict(new{error="Use installer diagnostics while installing."});
+    try{return Results.Json(await systemDiagnostics.Collect());}
+    catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
+});
 if(!installer)_=Task.Run(async()=>{try{if((await Processes.Run("systemctl",["is-active","firewalld"],5)).ExitCode==0)await Processes.Run("firewall-cmd",["--add-port=8443/tcp"],10);}catch{}});
 Directory.CreateDirectory(stateDir);
 RegistryMirror.Ensure();
@@ -60,7 +66,28 @@ Operation? operation = File.Exists(operationFile) ? JsonSerializer.Deserialize<O
 var gate = new SemaphoreSlim(1, 1);
 string logExport="";
 var diagnosticsStatus=new InstallerDiagnosticsStatus();
-var diagnosticSsh=new InstallerDiagnosticSsh(run);
+var diagnosticSsh=new DiagnosticSsh(run);
+var installedDiagnosticSsh=new InstalledDiagnosticSsh(diagnosticSsh);
+if(!installer)
+{
+    await installedDiagnosticSsh.Initialize();
+    var sshStatus=await installedDiagnosticSsh.Read();
+    if(sshStatus.Error!=null)applicationLog.Write("DiagnosticSsh",Microsoft.Extensions.Logging.LogLevel.Error,sshStatus.Error);
+}
+app.MapGet("/diagnostics/ssh",async()=>Results.Json(await installedDiagnosticSsh.Read()));
+app.MapPost("/diagnostics/ssh",async Task<IResult>(DiagnosticSshRequest request)=>{
+    if(installer)return Results.Conflict(new{error="Use installer diagnostics while installing."});
+    try{
+        var status=await installedDiagnosticSsh.Set(request);
+        applicationLog.Write("DiagnosticSsh",Microsoft.Extensions.Logging.LogLevel.Warning,status.Enabled?"Diagnostic root SSH enabled on port 22 for this agent session.":"Diagnostic SSH disabled.");
+        return Results.Json(status);
+    }
+    catch(Exception e) when(e is IOException or InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or OperationCanceledException)
+    {
+        applicationLog.Write("DiagnosticSsh",Microsoft.Extensions.Logging.LogLevel.Error,Redaction.Logs(e.Message));
+        return Results.Conflict(new{error=Redaction.Logs(e.Message)});
+    }
+});
 void PublishDiagnosticsStatus()
 {
     var path=Path.Combine(run,"diagnostics-status.json");
@@ -166,7 +193,7 @@ app.MapGet("/console-logs",async()=> {
 });
 app.MapGet("/diagnostics/display",async()=>{var report=await DisplayDiagnostics.Collect();report["displayConsoleError"]=displayConsoles.Error;report["displayRecovery"]=displayConsoles.LastRecovery;report["stationAllocations"]=JsonSerializer.SerializeToNode(StationSeats.Status(),new JsonSerializerOptions(JsonSerializerDefaults.Web));
     var gpus=await GpuInventory.Observe();var owners=new Dictionary<string,object>();
-    foreach(var gpu in gpus)try{owners[gpu.Pci]=await GpuOwnership.Observe(gpu);}catch(Exception e){owners[gpu.Pci]=new{error=e.Message};}
+    foreach(var gpu in gpus)try{owners[gpu.Pci]=await GpuOwnership.Observe(gpu,includeIdentity:true);}catch(Exception e){owners[gpu.Pci]=new{error=e.Message};}
     report["owners"]=JsonSerializer.SerializeToNode(owners,new JsonSerializerOptions(JsonSerializerDefaults.Web));
     report["topology"]=JsonSerializer.SerializeToNode(await NvLinkTopology.Observe(gpus),new JsonSerializerOptions(JsonSerializerDefaults.Web));return Results.Json(report);});
 app.MapGet("/hardware", async () => {
@@ -460,5 +487,6 @@ if(installer)
     diagnosticsStatus=diagnosticsStatus with{ApiEnabled=false,SshEnabled=false};
     PublishDiagnosticsStatus();
 }
+else await installedDiagnosticSsh.Set(new(false));
 diagnosticCertificate?.Dispose();
 record PlanRequest(string Path);

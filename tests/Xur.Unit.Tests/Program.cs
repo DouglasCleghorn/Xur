@@ -26,6 +26,8 @@ void Check(bool value,string name) { if(!value) throw new Exception(name); resul
 if(args is ["--profile-access"]){await ProfileAccessTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ProfileAccess",passed=results}));return;}
 if(args is ["--console-gamepad"]){await ConsoleGamepadTests.Run(Check);ConsoleStickKeyboardTests.Run(Check);ConsoleKeyboardOverlayTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ConsoleGamepad",passed=results}));return;}
 if(args is ["--display-power"]){await DisplayPowerTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="DisplayPower",passed=results}));return;}
+if(args is ["--diagnostic-access"]){await DiagnosticAccessTests.Run(Check,validateOpenSsh:true);ApiKeyTests.Run(Check);await InstallerDiagnosticSshTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="DiagnosticAccess",passed=results}));return;}
+await DiagnosticAccessTests.Run(Check);
 await DisplayPowerTests.Run(Check);
 await InstallerDiagnosticsTests.Run(Check);
 await InstallerDiagnosticSshTests.Run(Check);
