@@ -5,11 +5,11 @@ namespace Xur.Control;
 public sealed class ConsoleUpdateSchedule(HttpClient client,bool local)
 {
     static readonly string[] Days=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-    OsUpdateSchedule schedule=new("03:00",[0,1,2,3,4,5,6]);
+    OsUpdateSchedule schedule=new("03:00",[6]);
     string edit="",notice="",zone="",validation="";
     public bool Closed {get;private set;}
     public void Open(OsUpdateStatus? status)
-    {schedule=status?.Schedule??new("03:00",[0,1,2,3,4,5,6]);zone=status?.Timezone??"Server local time";edit="";notice="";validation="";Closed=false;}
+    {schedule=status?.Schedule??new("03:00",[6]);zone=status?.Timezone??"Server local time";edit="";notice="";validation="";Closed=false;}
     public ConsoleScreen Screen=>edit switch {
         "time"=>new("schedule-time","Update time",validation+"Enter HH:mm in the server timezone: "+zone,[new('0',"Cancel")],schedule.Time),
         "days"=>new("schedule-days","Update days",validation+"Enter day numbers separated by commas: 1=Mon, 2=Tue, …, 7=Sun.",[new('0',"Cancel")],string.Join(',',schedule.Days.Select(d=>d+1))),
