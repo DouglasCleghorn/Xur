@@ -63,6 +63,11 @@ static class InstallationDiagnosticsTests
             check(anaconda.Message.Contains("Anaconda:\nCreating disklabel on /dev/test\nInstalling boot loader\nConfiguring installed system password=[REDACTED]")&&!anaconda.Message.Contains("Older output")&&!anaconda.Message.Contains('\u001b'),"Progress embeds bounded recent Anaconda output with credentials and terminal controls removed");
             var observedAgain=InstallationDiagnostics.Observe(anaconda,root,"",root);
             check(observedAgain==anaconda,"Repeated polls do not duplicate native Anaconda status text");
+            File.WriteAllText(root+"/anaconda-output.log","Older output\nInitializing ostree layout\nWaiting for sysroot lock...\n"+string.Concat(Enumerable.Repeat("Deploying image: # Deploying container image\n",5)));
+            var repeated=InstallationDiagnostics.Observe(operation,root,"",root).Message;
+            check(repeated.Contains("Anaconda:\nInitializing ostree layout\nWaiting for sysroot lock...\nDeploying image: # Deploying container image")&&!repeated.Contains("Older output"),"Repeated installer draws occupy one recent-activity line and retain the preceding activity");
+            File.WriteAllText(root+"/anaconda-output.log","Preparing transaction\nDeploying image\nPreparing transaction\n");
+            check(InstallationDiagnostics.Observe(operation,root,"",root).Message.Contains("Preparing transaction\nDeploying image\nPreparing transaction"),"Distinct repeated activity retains its chronological order");
             File.WriteAllText(root+"/anaconda-output.log","Installation complete!\n");
             check(InstallationDiagnostics.Observe(operation,root,"",root).Stage=="Installing","Native completion text cannot replace the successful Xur completion marker");
             File.Delete(root+"/anaconda-output.log");

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -10,7 +11,7 @@ using Xur.Domain;
 
 static class ConsoleSetupTests
 {
-    public static async Task Run(Action<bool,string> check)
+    public static async Task Run(Action<bool,string> check,string? captureDirectory=null)
     {
         var root=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../../.build/evidence/setup-"+Guid.NewGuid().ToString("N")[..8]));Directory.CreateDirectory(root);
         var oldRun=Environment.GetEnvironmentVariable("XUR_RUN");var oldMode=Environment.GetEnvironmentVariable("XUR_MODE");
@@ -67,13 +68,30 @@ static class ConsoleSetupTests
             check(approvals==1&&menu.Screen.Id=="setup-progress"&&menu.Screen.Body.Contains("Installing approved disk"),"Yes confirmation sends exactly one approval and opens live progress");
             operation=operation! with{Progress=new(2,"Download OS image","Downloading 128 image layers (5.6 GB).")};await menu.Refresh();
             check(menu.Screen.Body.Contains("[########------------] 2/5 stages complete")&&menu.Screen.Body.Contains("128 image layers (5.6 GB)")&&!menu.Screen.Body.Contains("percentage unavailable"),"Console shows useful download detail alongside completed installation stages");
-            var native="Fetching layers █░ 32/128\n└ Fetching █░ 8.00 MiB/16.00 MiB (2.00 MiB/s) ostree chunk abc";
-            operation=operation with{Message="Anaconda is installing the approved disk\n\nAnaconda:\nPreparing transaction\nInstalling software",Progress=operation.Progress! with{Detail=native}};await menu.Refresh();
-            check(menu.Screen.Body.Contains(native)&&menu.Screen.Body.Contains("Anaconda:\nPreparing transaction\nInstalling software")&&menu.Screen.Body.Contains("2/5 stages complete"),"Console embeds native download bars and Anaconda status alongside overall installation stages");
+            var native="Fetching layers █░ 10/128\n└ Fetching                  █░ 50.26\u00a0MiB/115.13 MiB (32.94 MiB/s) ostree chunk "+new string('a',64);
+            operation=operation with{Message="Anaconda is installing the approved disk\n\nAnaconda:\nDeploying image: # Initializing ostree layout\nDeploying image: # Waiting for sysroot lock...\nDeploying image: # layers already present: 0; layers needed: 128 (5.6 GB)",Progress=operation.Progress! with{Detail=native}};await menu.Refresh();
+            var progressBody=menu.Screen.Body;
+            check(progressBody.StartsWith("Installing · Download OS image\n[########------------] 2/5 stages complete\nTime check")&&progressBody.IndexOf("Layers:")<progressBody.IndexOf("Anaconda output:"),"Current stage and overall progress precede download counters and recent activity");
+            check(progressBody.Contains("Layers: 10 / 128\nLayer: 50.26 MiB / 115.13 MiB\nRate: 32.94 MiB/s")&&!progressBody.Contains("ostree chunk")&&!progressBody.Contains("Deploying image:")&&progressBody.Contains("────────────────────────\nAnaconda output:\nInitializing ostree layout\nWaiting for sysroot lock..."),"Console aligns real transfer counters and separates external output without native padding, duplicate prefixes or chunk identifiers");
+            foreach(var (width,height) in new[]{(40,20),(80,25),(100,40),(140,50)})
+            {
+                var rendered=LocalConsole.Frame(menu.Screen.Title,progressBody,width,height,optionList:menu.Screen.Options.Select(o=>o.Display).ToArray(),diagnosticsActive:true);
+                var rows=Regex.Split(rendered,@"\x1b\[\d+;1H").Skip(1).Select(LocalConsole.Clean).ToArray();
+                check(rows.Length==height&&rows.All(row=>row.Length==width)&&rows.Any(row=>row.Contains(InstallerDiagnosticWarning.Banner)),"Installer progress stays within terminal bounds and retains its diagnostic warning at "+width+"x"+height);
+                if(width>=80)check(LocalConsole.Clean(rendered).Contains("Layers: 10 / 128")&&LocalConsole.Clean(rendered).Contains("Rate: 32.94 MiB/s")&&LocalConsole.Clean(rendered).Contains("Anaconda output:")&&LocalConsole.Clean(rendered).Contains("Initializing ostree layout"),"Transfer counters and labelled external activity remain visible on the first progress page at "+width+"x"+height);
+            }
+            Capture(menu.Screen,"download",captureDirectory);
+            operation=operation with{Progress=operation.Progress! with{Detail="Fetching layers █ 128/128"}};await menu.Refresh();
+            check(menu.Screen.Body.Contains("Layers: 128 / 128")&&!menu.Screen.Body.Contains("Layer:")&&!menu.Screen.Body.Contains("Rate:"),"A completed native layer counter does not invent a current transfer");
+            operation=operation with{Progress=new(3,"Deploy OS and bootloader"),Message="Anaconda is installing the approved disk\n\nAnaconda:\nDeploying image: # Deploying container image\nDeploying image: # Deploying container image\nDeploying image: # Deploying container image"};await menu.Refresh();
+            check(menu.Screen.Body.Contains("3/5 stages complete")&&!menu.Screen.Body.Contains("Layers:")&&menu.Screen.Body.EndsWith("Anaconda output:\nDeploying container image"),"Deployment clears transfer details and collapses consecutive native activity repeats");
+            Capture(menu.Screen,"deploy",captureDirectory);
             await menu.Select('0');await menu.Open("setup");check(menu.Screen.Id=="setup-progress","Reopening setup resumes an existing installation");
             operation=operation! with{Stage="Complete",Message="Installation completed"};await menu.Refresh();check(menu.Screen.Options.Any(o=>o.Key=='r'),"Console installation completion offers an explicit reboot action");
             check(menu.Screen.Body.Contains("[####################] 5/5 stages complete"),"Only confirmed installation success fills the progress bar");
-            operation=operation with{Stage="Failed",Message="Download failed"};await menu.Refresh();check(!menu.Screen.Options.Any(o=>o.Key=='r')&&menu.Screen.Body.Contains("No automatic retry"),"Console installation failure remains visible without retrying erasure or rebooting");
+            Capture(menu.Screen,"complete",captureDirectory);
+            operation=operation with{Stage="Failed",Message="Download failed",Progress=new(2,"Download OS image",native)};await menu.Refresh();check(!menu.Screen.Options.Any(o=>o.Key=='r')&&menu.Screen.Body.Contains("No automatic retry")&&!menu.Screen.Body.Contains("Rate:"),"Console installation failure remains visible without stale transfer counters, retrying erasure or rebooting");
+            Capture(menu.Screen,"failed",captureDirectory);
             await menu.Select('s');check(menu.Screen.Id=="setup-usb"&&menu.Screen.Options.Any(o=>o.Label.Contains("/dev/usb1")),"Failed installation offers eligible USB log destinations");
             await menu.Select((char)256);check(exports==1&&menu.Screen.Body.Contains("Saved report"),"Selecting a USB destination exports logs and shows the receipt");await menu.Select('0');
             await menu.Select('l');check(menu.Screen.Id=="setup-logs"&&menu.Screen.Body.Contains("Error: installation fixture")&&!menu.Screen.Body.Contains("private-fixture"),"Failure details open installation logs directly and redact credentials");
@@ -84,5 +102,12 @@ static class ConsoleSetupTests
             await menu.Select('0');check(menu.Screen.Id=="setup-progress"&&approvals==1,"Back from installation logs preserves failure without repeating approval");
         }
         finally{await control.StopAsync();await agent.StopAsync();Environment.SetEnvironmentVariable("XUR_RUN",oldRun);Environment.SetEnvironmentVariable("XUR_MODE",oldMode);Directory.Delete(root,true);}
+    }
+    static void Capture(ConsoleScreen screen,string phase,string? directory)
+    {
+        if(directory==null)return;
+        Directory.CreateDirectory(directory);
+        foreach(var (width,height) in new[]{(40,20),(80,25),(100,40),(140,50)})
+            File.WriteAllText(Path.Combine(directory,$"{phase}-{width}x{height}.ansi"),LocalConsole.Frame(screen.Title,screen.Body,width,height,optionList:screen.Options.Select(o=>o.Display).ToArray(),diagnosticsActive:true));
     }
 }

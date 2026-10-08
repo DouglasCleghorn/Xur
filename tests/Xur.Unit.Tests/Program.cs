@@ -23,6 +23,7 @@ if(args is ["--website-render",var websiteOutput]) { await ControlPanelRender.Ru
 if(args is ["--console-overlay-render",var overlayOutput]) { ConsoleKeyboardOverlayTests.Capture(overlayOutput);return; }
 var results = new List<string>();
 void Check(bool value,string name) { if(!value) throw new Exception(name); results.Add(name); }
+if(args is ["--installer-progress",var installerOutput]){InstallationDiagnosticsTests.Run(Check);await ConsoleSetupTests.Run(Check,installerOutput);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="InstallerProgressLayout",passed=results}));return;}
 if(args is ["--profile-access"]){await ProfileAccessTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ProfileAccess",passed=results}));return;}
 if(args is ["--console-gamepad"]){await ConsoleGamepadTests.Run(Check);ConsoleStickKeyboardTests.Run(Check);ConsoleKeyboardOverlayTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ConsoleGamepad",passed=results}));return;}
 if(args is ["--display-power"]){await DisplayPowerTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="DisplayPower",passed=results}));return;}

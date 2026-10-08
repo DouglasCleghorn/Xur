@@ -47,19 +47,23 @@ marker still require removing the USB or choosing the SSD in the firmware menu.
 Both UEFI and BIOS menus use the same configuration and retain the supplied EFI
 loaders. Entering setup never bypasses disk review and Yes/No approval.
 
-Installation progress shows a five-stage bar: time synchronization, disk
-preparation, download, deployment and configuration. The bar
-counts completed stages. During download, the console embeds bootc's native
-terminal progress: its layer bar and the current layer's byte bar, size and
-transfer rate. Layers vary in size, so their count is not an overall byte
-percentage. Only confirmed installation completion fills the stage bar. The
-diagnostic status includes the same progress text. Without native progress, the
-console shows the reported download size and layer count and tracks stages.
-The screen also shows the latest three lines of Anaconda's own command-line
-output, including disk preparation, bootloader installation and system
-configuration messages. Terminal controls and credentials are removed. Native
-tools reporting completion does not mark the whole installation complete;
-Xur's successful completion marker remains authoritative.
+Installation progress puts the current stage and five-stage bar first: time
+synchronization, disk preparation, download, deployment and configuration. The
+bar counts completed stages. During download, the console shows bootc's layer
+count, current layer's transferred and total bytes, and transfer rate on separate
+lines. Native bar padding and chunk identifiers are omitted from this summary;
+diagnostic status retains bootc's original progress text. Layers vary in size, so
+their count is not an overall byte percentage. Only confirmed installation
+completion fills the stage bar. Without native progress, the console shows the
+reported download size and layer count and tracks stages. Transfer counters are
+hidden after failure or completion.
+Below a divider labelled **Anaconda output**, the screen shows the latest three
+activity lines from Anaconda's own command-line output, including disk preparation,
+bootloader installation and system configuration messages. Consecutive repeats
+occupy one line, and the console removes repeated `Deploying image:` prefixes.
+Terminal controls and credentials are removed. Native tools reporting completion
+does not mark the whole installation complete; Xur's successful completion marker
+remains authoritative. Full diagnostic logs remain available in **Installation logs**.
 
 Anaconda runs bootc through a pipe, which hides bootc's terminal transfer bars.
 An installer-scoped bootc wrapper gives stderr a private terminal and saves the
