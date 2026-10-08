@@ -34,10 +34,10 @@ A persistent `xur-os-update.timer` runs the small host update script every minut
 without the .NET manager or agent. It fetches directly from Bazzite's upstream
 registry. It needs neither Xur's GitHub repository nor a Xur server. The first
 timer tick occurs a minute after startup; update checks run only before a
-scheduled window. Automatic staging is on by default, scheduled for **03:00
-every day in the server timezone**, with **15 minutes of advance notice**.
-Existing installations keep their saved On/Paused setting and receive this
-schedule when the application is updated.
+scheduled window. Automatic staging is on by default, scheduled for **Sunday
+at 03:00 in the server timezone**, with **15 minutes of advance notice**.
+Existing installations keep their saved On/Paused setting and any saved
+schedule. Installations without a saved schedule use this Sunday default.
 
 Set the time, days and 5–120 minutes of advance notice under **Updates →
 Automatic update schedule**, or **Console → Updates → Operating system →
@@ -65,7 +65,7 @@ never replaced automatically, and staging failures retain the operation log.
 The authenticated API uses the existing `POST /api/updates` route:
 
 ```json
-{"action":"schedule","schedule":{"time":"03:00","days":[0,1,2,3,4,5,6],"warningMinutes":15}}
+{"action":"schedule","schedule":{"time":"03:00","days":[6],"warningMinutes":15}}
 ```
 
 Days are Monday=0 through Sunday=6. `GET /api/updates` includes `schedule`,

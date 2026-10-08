@@ -1,5 +1,15 @@
 # Screenshot and artwork register
 
+- 2026-10-07: Reviewed private user attachments `IMG_7977.jpg`
+  (`7ce58f17-58f7-4d7b-96eb-04413a87deac-18ba470e-74b2-401f-94ba-b9787d7604c0.jpg`)
+  and `IMG_7976.jpg`
+  (`7ce58f17-58f7-4d7b-96eb-04413a87deac-38b184af-3470-4d52-9123-ca49dae27b0e.jpg`)
+  as references for installer progress layout and ordering. Capture version/date
+  are unverified; reviewed on this date. Show OS download/deployment, repeated
+  Anaconda output and a wrapped chunk identifier. Privacy review: no credentials,
+  account names or network addresses visible. Kept private in T3 attachments;
+  not copied into documentation assets or published.
+
 - 2026-10-02: Reviewed private user attachment `IMG_7968.jpg`
   (`9a815e3d-21b5-4f73-aaf3-0d5dfb2d06a1-20c5cb12-93ab-4307-b982-d01a1790ce6e.jpg`)
   for the reported post-install boot problem. Shows Anaconda/dracut waiting for
@@ -58,6 +68,18 @@ See [release preparation](development/release-preparation.md).
 
 ## Development captures
 
+- 2026-10-07: Captured and visually reviewed the private
+  `.build/evidence/installer-progress/{download,deploy,complete,failed}-{40x20,80x25,100x40,140x50}.png`
+  family and its `review.png` contact sheet. Rasterized from the actual ANSI
+  console frames produced by the setup/agent fixtures, based on `a9bfa2b` plus
+  the installer layout changes. Covers progress ordering, compact transfer
+  counters, the divider before **Anaconda output**, repeated activity and the
+  pinned diagnostics warning. Privacy review: synthetic disk identities,
+  transfer counters and activity only; no live hardware, account names,
+  credentials or network addresses. Private regression evidence, not published
+  assets or captures of a running installation. Regenerate after installer
+  progress or console layout changes.
+
 | Capture family | Purpose | Storage / usage | Review |
 | --- | --- | --- | --- |
 | Website preview screenshots | Responsive homepage and guide design review | `.build/website/`; synthetic example content only, not committed | Rebuild and inspect when site layout or guides change |
@@ -77,6 +99,16 @@ See [release preparation](development/release-preparation.md).
   checks; real HTTPS tests covered form submission and authorization. No images
   were saved or published. Older private Settings captures predate these controls;
   the published update-channel crop is unaffected.
+
+- 2026-10-07: Reviewed private T3 attachment `image.png`
+  (`d967f238-2de3-4081-933c-47809af08b92-0f7301cd-4540-47dd-adb5-91f8829ab7a2.png`)
+  for the Qwen-Image-2.1 catalog-resolution error. Shows the profile editor's
+  Omni model, checkpoint size, NVIDIA selection and misleading network error;
+  capture version is unverified. No credentials or account details visible.
+  Kept private in T3 attachments; not copied into source or published.
+  Read-only live catalog checks and an unsuccessful resolve reproduced the
+  error without saving the profile or starting a workload. No new screenshots
+  were saved or published.
 
 - 2026-10-06: Added the automatic update schedule and shared upcoming-window
   notice in the working tree. The private `.build/fast/updates-{desktop,mobile}.png`

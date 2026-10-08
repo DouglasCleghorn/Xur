@@ -11,7 +11,7 @@ static class ModelGpuTests
         Directory.CreateDirectory(Path.Combine(root,"catalog-cache"));
         const string model="owner/model";var revision=new string('b',40);
         void Cache(string url,string value)=>File.WriteAllText(Path.Combine(root,"catalog-cache",Canonical.Hash(url+"\n")+".cache"),value);
-        Cache("https://huggingface.co/api/models/"+model+"/revision/"+revision+"?blobs=true",JsonSerializer.Serialize(new{siblings=new[]{new{rfilename="model.safetensors",size=20L*1024*1024*1024}},cardData=new{license="Apache-2.0"}}));
+        Cache("https://huggingface.co/api/models/"+model+"/revision/"+revision+"?blobs=true",JsonSerializer.Serialize(new{siblings=new[]{new{rfilename="config.json",size=2L},new{rfilename="model.safetensors",size=20L*1024*1024*1024}},cardData=new{license="Apache-2.0"}}));
         Cache("https://huggingface.co/"+model+"/raw/"+revision+"/config.json","{}");
         Cache("https://raw.githubusercontent.com/vllm-project/vllm-omni/main/docs/models/supported_models.md","`owner/model`");
         GpuDevice[] hardware=[];

@@ -121,6 +121,9 @@ static class UpdaterTests
         };
         var root = fixture.PathOf("app");
         Directory.CreateDirectory(root);
+        fixture.Write("bundled/bundle.json", new JsonObject { ["id"] = new string('c', 64), ["version"] = new string('c', 12) }.ToJsonString());
+        Linux.PublishLink(Path.Combine(root, "current"), "../bundled");
+        var installedRelease = Path.Combine(root, "release-" + identity + ".json");
         var updater = new SignedUpdater(new UpdatePaths(root, fixture.PathOf("config.json"), fixture.PathOf("official.pem")), runtime, files, downloads);
         using var stage = new TemporaryDirectory(root, "metadata-");
         Verify.That(updater.Source == Downloads.Stable, "Stable remains the default source");
@@ -133,14 +136,40 @@ static class UpdaterTests
         Verify.That(JsonNode.DeepEquals(await updater.Check(stage.Path), entry), "Real Ed25519 signatures verify");
         Verify.That(File.ReadAllText(Path.Combine(stage.Path, "source")) == Downloads.GitHub + "/download/v1.2", "Stable metadata is pinned to an immutable release");
         Verify.That(downloads.Requests.Skip(1).All(url => url.StartsWith(Downloads.GitHub + "/download/v1.2/", StringComparison.Ordinal)), "Compact descriptor stays on the resolved release");
+        Verify.That(!File.Exists(installedRelease) && JsonValues.Text(updater.Current()["version"]) == new string('c', 12), "An available release with a different bundle ID cannot rename the installed application");
+        fixture.Write("bundled/bundle.json", new JsonObject { ["id"] = identity, ["version"] = identity[..12] }.ToJsonString());
+        var bundledMetadata = File.ReadAllBytes(fixture.PathOf("bundled/bundle.json"));
+        Verify.That(JsonValues.Text(updater.Current()["version"]) == identity[..12], "Bundled installs initially display their build hash");
+        downloads.Requests.Clear();
+        await updater.Execute("check", []);
+        Verify.That(JsonValues.Text(updater.Current()["version"]) == JsonValues.Text(entry["version"]) && JsonNode.DeepEquals(DurableFiles.ReadJson(installedRelease), entry), "A signed check repairs the installed version when the bundle already matches");
+        Verify.That(downloads.Requests.SequenceEqual([Downloads.Stable + "/current", Downloads.GitHub + "/download/v1.2/" + SignedUpdater.Descriptor]), "Repairing an installed version fetches only the pointer and signed metadata");
+        Verify.That(Directory.ResolveLinkTarget(Path.Combine(root, "current"), true)!.FullName == fixture.PathOf("bundled") && File.ReadAllBytes(fixture.PathOf("bundled/bundle.json")).SequenceEqual(bundledMetadata), "Version repair preserves the selected bundle and its original manifest");
+        Verify.That(new[] { "previous.json", "transaction.json", "maintenance", "channel-sequences.json" }.All(name => !File.Exists(Path.Combine(root, name))), "Version checks do not activate an update or advance replay floors");
+
+        var installerPaths = new InstallerPaths(root, fixture.PathOf("bundled"), fixture.PathOf("ready"), fixture.PathOf("channel"),
+            fixture.PathOf("cmdline"), fixture.PathOf("approved.ks"), fixture.PathOf("config.json"), fixture.PathOf("official.pem"), fixture.PathOf("run"));
+        fixture.Write("cmdline", "xur.installer=1");
+        var bootstrap = new InstallerBootstrap(installerPaths, runtime, files, downloads, () => updater);
+        File.Delete(installedRelease);
+        await bootstrap.Check();
+        Verify.That(JsonValues.Text(DurableFiles.ReadObject(Path.Combine(root, "check.json"))["state"]) == "current" && JsonNode.DeepEquals(DurableFiles.ReadJson(installedRelease), entry), "Installer background checks retain matching signed metadata for install-manager to copy");
+        File.Delete(installedRelease);
+        await bootstrap.Refresh();
+        Verify.That(JsonNode.DeepEquals(DurableFiles.ReadJson(installedRelease), entry) && downloads.Requests.All(url => !url.EndsWith(".tar.gz", StringComparison.Ordinal)), "Explicit installer refresh retains the release version even when its bundled app is already current");
+
+        var installedMetadata = File.ReadAllBytes(installedRelease);
         var tampered = DurableFiles.ReadObject(descriptor);
         tampered["release"]!["sequence"] = 100;
+        tampered["release"]!["version"] = "Untrusted version";
         File.WriteAllText(descriptor, tampered.ToJsonString());
         await Verify.Reject(async () => await updater.Check(stage.Path), "Tampered signed metadata is rejected");
+        Verify.That(File.ReadAllBytes(installedRelease).SequenceEqual(installedMetadata), "An invalid signature cannot replace the installed version metadata");
         await Sign(official);
         files.WriteJson(Path.Combine(root, "highest-sequence.json"), JsonValue.Create(11));
         files.WriteJson(Path.Combine(root, "channel-sequences.json"), new JsonObject { ["stable"] = 11 });
         await Verify.Reject(async () => await updater.Check(stage.Path), "Stable replay floor is retained", "older release");
+        Verify.That(File.ReadAllBytes(installedRelease).SequenceEqual(installedMetadata), "A rejected replay cannot replace the installed version metadata");
         await Verify.Reject(async () => await updater.CheckLocalLegacy(stage.Path), "Public channels cannot fall back to legacy discovery", "only for local");
         await updater.SelectChannel("nightly");
         entry["channel"] = "nightly";
@@ -249,9 +278,12 @@ static class UpdaterTests
         legacy = true;
         entry["schema"] = 1;
         entry["file"] = identity + ".tar.gz";
+        entry["version"] = "1.3";
         await Sign(contributor);
+        File.Delete(installedRelease);
         downloads.Requests.Clear();
         Verify.That(JsonNode.DeepEquals(await updater.Check(stage.Path), entry), "Local 404 falls back to real detached schema-one signatures");
+        Verify.That(JsonValues.Text(updater.Current()["version"]) == "1.3" && JsonNode.DeepEquals(DurableFiles.ReadJson(installedRelease), entry), "Verified local legacy checks also repair the installed release version");
         Verify.That(downloads.Requests.SequenceEqual([updater.Source + "/current", updater.Source + "/latest", updater.Source + "/" + identity + ".json", updater.Source + "/" + identity + ".json.sig"]), "Legacy fallback is restricted to missing local current pointers");
         updater.RememberSequence(entry, updater.SequenceScope);
         entry["sequence"] = 29;

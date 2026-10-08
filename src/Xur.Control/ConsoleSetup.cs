@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Xur.Domain;
 namespace Xur.Control;
 
@@ -54,15 +55,7 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
                     title="Confirm disk erasure";body="ALL CONTENTS WILL BE ERASED:\n"+Disk(plan!.Target)+"\n\nErase this disk and install Xur?";
                     options.AddRange([new('0',"No"),new('y',"Yes")]);break;
                 case "progress":
-                    title="Installation progress";body=operation==null?"No installation has started.":operation.Stage+"\n"+operation.Message;
-                    if(operation!=null)
-                    {
-                        var progress=operation.Stage=="Complete"?new InstallationProgress(5,"Complete"):operation.Progress??new InstallationProgress(0,"Preparing installation");
-                        var completed=operation.Stage=="Complete"?5:Math.Clamp(progress.CompletedSteps,0,4);
-                        body+="\n\n["+new string('#',completed*4)+new string('-',20-completed*4)+$"] {completed}/5 stages complete\n"+progress.CurrentStep;
-                        if(progress.Detail.Length>0)body+="\n"+progress.Detail;
-                        body+="\nTime check → Disk → Download → Deploy → Configure";
-                    }
+                    title="Installation progress";body=ProgressBody(operation);
                     if(operation?.Stage=="Complete"){body+="\nRemove the installer USB when restarting.\nAfter reboot, use the displayed web address and access code to create the required administrator account.";options.Add(new('r',"Reboot into installed system"));}
                     if(operation?.Stage=="Failed")body+="\nKeep this installer running while reviewing the logs. Rebooting clears them.\nNo automatic retry. A new attempt requires rebooting the installer and approving the disk again.";
                     if(logExport.Length>0)body+="\n\n"+logExport;
@@ -92,6 +85,46 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
             if(!options.Any(o=>o.Key=='0'))options.Add(new('0',!installer||view is "home" or "progress"?"Back to menu":view=="disks"?"Back to networking":"Back"));
             return new("setup-"+view,title,LocalConsole.Clean((notice.Length>0?notice+"\n\n":"")+body),options.ToArray(),input,secret);
         }
+    }
+    static string ProgressBody(Operation? operation)
+    {
+        if(operation==null)return "No installation has started.";
+        var progress=operation.Stage=="Complete"?new InstallationProgress(5,"Complete"):operation.Progress??new InstallationProgress(0,"Preparing installation");
+        var completed=operation.Stage=="Complete"?5:Math.Clamp(progress.CompletedSteps,0,4);
+        var heading=operation.Stage==progress.CurrentStep?operation.Stage:operation.Stage+" · "+progress.CurrentStep;
+        var body=heading+"\n["+new string('#',completed*4)+new string('-',20-completed*4)+$"] {completed}/5 stages complete\n"+
+            "Time check → Disk → Download → Deploy → Configure";
+        // Keep the stage summary above the variable-length native installer output.
+        var message=operation.Message.Split("\n\nAnaconda:\n",2);
+        if(message[0].Length>0)body+="\n"+message[0];
+        if(operation.Stage is not ("Failed" or "Complete")&&progress.Detail.Length>0)body+="\n\n"+DownloadDetail(progress.Detail);
+        if(message.Length==2)
+        {
+            var activity=new List<string>();
+            foreach(var line in message[1].Split('\n'))
+            {
+                var text=Regex.Replace(Regex.Replace(line.Trim(),@"^Deploying image:\s*(?:#\s*)?",""),@"\s+"," ");
+                if(text.Length>0&&(activity.Count==0||activity[^1]!=text))activity.Add(text);
+            }
+            if(activity.Count>0)body+="\n────────────────────────\nAnaconda output:\n"+string.Join('\n',activity);
+        }
+        return body;
+    }
+    static string DownloadDetail(string detail)
+    {
+        // The API retains bootc's native bars. The console shows only the useful
+        // counters so terminal padding and chunk identifiers cannot distort the layout.
+        var lines=detail.Split('\n');
+        var layers=Regex.Match(lines[0],@"^Fetching layers\s+.*?\b(\d+)/(\d+)\b");
+        if(!layers.Success)return detail;
+        var result="Layers: "+layers.Groups[1].Value+" / "+layers.Groups[2].Value;
+        if(lines.Length>1)
+        {
+            var bytes=Regex.Match(lines[1],@"^└ Fetching\s+.*?(\d+(?:\.\d+)?\s*(?:[KMGTPE]i?B|B))/(\d+(?:\.\d+)?\s*(?:[KMGTPE]i?B|B))\s+\((\d+(?:\.\d+)?\s*(?:[KMGTPE]i?B|B)/s)\)");
+            if(bytes.Success)result+="\nLayer: "+Regex.Replace(bytes.Groups[1].Value,@"\s+"," ")+" / "+Regex.Replace(bytes.Groups[2].Value,@"\s+"," ")+"\nRate: "+Regex.Replace(bytes.Groups[3].Value,@"\s+"," ");
+            else result+="\n"+string.Join('\n',lines.Skip(1));
+        }
+        return result;
     }
     public async Task Open()
     {
