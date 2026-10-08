@@ -11,10 +11,26 @@ static class ConsoleKeyboardOverlayTests
         public void Advance(int milliseconds)=>Ticks+=TimeSpan.FromMilliseconds(milliseconds).Ticks;
     }
     static readonly ConsoleKeyboardPreview Choice=new(true,0,0,2,'c',0,-.9,.8,.45);
-    static ConsoleScreen Field(bool secret=false)=>new("overlay-fixture","Server name","Enter a name, then choose Save.",[new('s',"Save"),new('0',"Cancel")],"",secret);
+    static ConsoleScreen Field(bool secret=false)=>new("overlay-fixture","Server name","Choose the name shown on your network.\nUse letters, numbers and hyphens.",[new('0',"Cancel")],"",secret,InputLabel:secret?"Password":"Server name",InputAction:"Continue");
     public static void Run(Action<bool,string> check)
     {
         var clock=new Clock();using var scope=LocalConsole.UseKeyboardClock(clock);
+        LocalConsole.OpenMaintenance(Field() with{InputValue="living-room"});
+        foreach(var (width,height) in new[]{(40,12),(40,20),(80,25),(100,40)})
+        {
+            var idleFrame=LocalConsole.ExportFrame(width,height);var idleScreen=new Screen(width,height);idleScreen.Apply(idleFrame);
+            check(idleScreen.InBounds && idleScreen.Text.Contains("> living-room") && idleScreen.Text.Contains("Enter / A: Continue") && idleScreen.Text.Contains("Esc / B: Cancel"),"Text fields and contextual actions stay visible at "+width+"x"+height);
+            check(idleFrame.Contains("\x1b[7m") && idleFrame.Contains("\x1b[2m") && !idleScreen.Text.Contains("LB/RB: set") && !idleScreen.Text.Contains("Up/Down: Select"),"Idle text entry highlights the field and keeps detailed controller instructions inside the keyboard overlay at "+width+"x"+height);
+        }
+        LocalConsole.OpenMaintenance(Field() with{InputAction="Save"},refreshOnly:true);
+        check(LocalConsole.ExportFrame(100,40).Contains("Enter / A: Save"),"Input action changes invalidate the cached frame without resetting entered text");
+        LocalConsole.OpenMaintenance(Field() with{Id="long-idle-field",InputValue=new string('x',100)+"tail"});
+        var idleTail=new Screen(40,12);idleTail.Apply(LocalConsole.ExportFrame(40,12));
+        check(idleTail.InBounds && idleTail.Text.Contains("> …") && idleTail.Text.Contains("tail"),"Compact idle fields keep the insertion end of long text visible");
+        LocalConsole.OpenMaintenance(Field(secret:true) with{Id="idle-password",InputValue="private-password"});
+        var idlePassword=LocalConsole.ExportFrame(80,25);
+        check(idlePassword.Contains("> ****************") && !idlePassword.Contains("private-password"),"The focused idle input field masks saved passwords");
+        LocalConsole.OpenMaintenance(Field() with{Id="before-overlay"});
         LocalConsole.OpenMaintenance(Field());LocalConsole.EditText('x');var revision=LocalConsole.DiagnosticSnapshot().Revision;
         LocalConsole.SetControllerPreview(Choice);
         var before=LocalConsole.ExportFrame(100,40);var screen=new Screen(100,40);screen.Apply(before);
@@ -116,6 +132,9 @@ static class ConsoleKeyboardOverlayTests
     public static void Capture(string directory)
     {
         Directory.CreateDirectory(directory);var clock=new Clock();using var scope=LocalConsole.UseKeyboardClock(clock);
+        LocalConsole.OpenMaintenance(Field() with{Id="name-capture",Title="Step 1 of 4 · Server name",InputValue="living-room",Options=[new('0',"Back to menu")]});
+        foreach(var (width,height) in new[]{(100,40),(80,25),(40,20),(40,12)})
+            File.WriteAllText(Path.Combine(directory,$"name-{width}x{height}.ansi"),LocalConsole.ExportFrame(width,height));
         LocalConsole.OpenMaintenance(Field());foreach(var c in "xur")LocalConsole.EditText(c);LocalConsole.SetControllerPreview(Choice);
         foreach(var (width,height) in new[]{(100,40),(80,25),(40,20),(40,12)})
             File.WriteAllText(Path.Combine(directory,$"preview-{width}x{height}.ansi"),LocalConsole.ExportFrame(width,height));

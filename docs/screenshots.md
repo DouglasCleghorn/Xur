@@ -10,6 +10,26 @@
   account names or network addresses visible. Kept private in T3 attachments;
   not copied into documentation assets or published.
 
+- 2026-10-07: Captured the simplified server-name screen at 100×40 and 40×12
+  characters and its controller keyboard at 80×25 in
+  `.build/evidence/controllers/console/`. PNGs are rasterized from actual ANSI
+  console frames from the working tree based on `a9bfa2b`; purpose: review field
+  focus, spacing, the single typing hint and contextual Continue/Back actions.
+  Synthetic names and typed text only; no live device, credentials, addresses
+  or account data. Private regression evidence, not publication assets or
+  physical-display captures. Regenerate when console input layout changes.
+
+- 2026-10-07: Reviewed private, in-memory T3 collaborative browser snapshots of
+  the individual-controller profile editor at 320 and 1280 CSS px, from the
+  working tree based on `a9bfa2b`. The underlying synthetic Razor fixtures and
+  text test receipts are under `.build/evidence/controllers/`; no snapshot PNG
+  was saved or published. Purpose: inspect controller choices, disconnected
+  selections, unavailable identities and mobile checkbox sizing. Privacy review:
+  synthetic controller serials and fixture profiles only; preview network
+  addresses may appear in private browser metadata. No live host, credentials,
+  accounts or model prompts were captured. Regenerate after controller/editor
+  UI changes. The published profile-editor JPEG remains due for refresh.
+
 - 2026-10-02: Reviewed private user attachment `IMG_7968.jpg`
   (`9a815e3d-21b5-4f73-aaf3-0d5dfb2d06a1-20c5cb12-93ab-4307-b982-d01a1790ce6e.jpg`)
   for the reported post-install boot problem. Shows Anaconda/dracut waiting for
@@ -56,7 +76,7 @@ The capture dates and privacy reviews in the table above remain unchanged.
 
 | Image | Work before the next release |
 | --- | --- |
-| `docs/assets/profile-editor.jpg` | Refresh: predates inline rename, conditional workstation fields, Add user placement and shared Switch profile navigation. |
+| `docs/assets/profile-editor.jpg` | Refresh: predates inline rename, conditional workstation fields, Add user placement, shared Switch profile navigation and individual controller assignment. |
 | `docs/assets/workstations.jpg` | Refresh: predates desktop previews, current Settings/display controls and the removal of profile-loading and launch shortcuts. |
 | `docs/assets/control-panel.jpg` | Refresh: predates Home's per-display CEC controls and Displays navigation, as well as the current picker and shared Switch profile navigation. |
 | `docs/assets/model-lab.jpg` | Review and refresh if needed for shared navigation; preserve blank prompts/results and synthetic fixtures. |

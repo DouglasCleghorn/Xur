@@ -50,7 +50,6 @@ public sealed class ConsoleNetwork(HttpClient client,bool local=false,bool setup
                 {
                     input=editField switch{"addresses"=>string.Join(",",Family.Addresses??[]),"gateway"=>Family.Gateway??"",_=>string.Join(",",Family.Dns??[])};
                     body=editField switch{"addresses"=>"Enter addresses with prefix length, separated by commas.\nExample: "+(ipv6?"2001:db8:1::10/64":"192.0.2.10/24"),"gateway"=>"Enter the gateway address, or leave blank for none.",_=>"Enter DNS server IPs, separated by commas, or leave blank."};
-                    body+="\nEnter: Save field | Esc: Cancel | Backspace: Delete";
                     options.Add(new('0',"Cancel field edit"));
                 }
                 else options.AddRange([new('a',"Automatic"),new('s',"Static"),new('d',"Disabled"),new('i',"Edit addresses",Family.Method=="manual"),new('g',"Edit gateway",Family.Method=="manual"),new('z',"Edit DNS",Family.Method!="disabled"),new('0',"Back to adapter")]);

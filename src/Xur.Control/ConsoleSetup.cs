@@ -25,7 +25,7 @@ public sealed class ConsoleSetup(HttpClient client,bool installer=true)
     {
         get
         {
-            if(view=="name")return installer?name.Screen with{Title="Step 1 of 4 · Server name",Body=name.Screen.Body.Replace("Escape skips for now.","Escape returns to the menu."),Options=[new('0',"Back to menu")]}:name.Screen;
+            if(view=="name")return installer?name.Screen with{Title="Step 1 of 4 · Server name",InputAction="Continue",Options=[new('0',"Back to menu")]}:name.Screen;
             if(view=="network")return installer?network.Screen with{Title="Step 2 of 4 · "+network.Screen.Title}:network.Screen;
             string title=installer?"Setup and installation":"Local setup",body;string? input=null;bool secret=false;
             var options=new List<ConsoleOption>();

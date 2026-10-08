@@ -30,7 +30,7 @@ public sealed class ConsoleWifi(HttpClient client,bool local=false)
             }
             else if(view=="password")
             {
-                body=$"{adapter!.Interface} · {LocalConsole.Clean(selected!.Ssid)}\nEnter the Wi-Fi password. It will be saved for automatic reconnection.\nEnter: Connect | Escape: Cancel";
+                body=$"{adapter!.Interface} · {LocalConsole.Clean(selected!.Ssid)}\nEnter the Wi-Fi password. It will be saved for automatic reconnection.";
                 input="";secret=true;options.Add(new('0',"Cancel"));
             }
             else if(view=="networks")
@@ -50,7 +50,7 @@ public sealed class ConsoleWifi(HttpClient client,bool local=false)
                 if(status!=null)for(var i=0;i<status.Adapters.Length;i++)options.Add(new((char)(256+i),$"{status.Adapters[i].Interface} · {status.Adapters[i].Model} · {status.Adapters[i].Driver} · {status.Adapters[i].State}",status.Enabled&&status.HardwareEnabled));
                 options.AddRange([new('v',"Refresh adapters"),new('0',"Back to network settings")]);
             }
-            return new("wifi-"+view,"Wi-Fi setup",LocalConsole.Clean((notice.Length>0?notice+"\n\n":"")+body),options.ToArray(),input,secret);
+            return new("wifi-"+view,"Wi-Fi setup",LocalConsole.Clean((notice.Length>0?notice+"\n\n":"")+body),options.ToArray(),input,secret,InputLabel:"Password",InputAction:"Connect");
         }
     }
     public async Task Open(){Closed=false;Connected=false;notice="";scanTask=null;view="adapters";await LoadAdapters();}

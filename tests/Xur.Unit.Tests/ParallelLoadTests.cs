@@ -55,6 +55,14 @@ static class ParallelLoadTests
             check((await manager.State()).Operation?.Stage=="Complete"&&runtime.Instances.Count==2,"A profile accepts and starts two distinct workstation users and GPUs");
             await manager.Save(new("one","One desk",0,[a]));plan=await manager.Preview("one");
             check(plan.Steps.Any(s=>s.WorkloadId==a.Id&&s.Kind=="Keep")&&!plan.Steps.Any(s=>s.WorkloadId==a.Id&&s.Kind=="Stop"),"Removing a secondary desk without transferring peripherals preserves the primary desktop");
+            var controller="controller:"+new string('a',64);
+            var pads=await manager.Save(new("pads","Assign controller",0,[a,b with{Devices=new(Controllers:[controller])}]));
+            plan=await manager.Preview(pads.Id);
+            check(new[]{a.Id,b.Id}.All(id=>plan.Steps.Any(s=>s.WorkloadId==id&&s.Kind=="Stop")),"Assigning a controller restarts both the former default owner and its new desktop to revoke open handles");
+            await manager.Apply(new(plan.Id,plan.Digest));await manager.Wait();
+            var moved=await manager.Save(new("moved-pads","Move controller",0,[a with{Devices=new(true,Controllers:[controller])},b]));
+            plan=await manager.Preview(moved.Id);
+            check(new[]{a.Id,b.Id}.All(id=>plan.Steps.Any(s=>s.WorkloadId==id&&s.Kind=="Stop")),"Moving a controller between workstations requires complete seat handoff");
             var transfer=await manager.Save(new("transfer","Move hub",0,[a with{Devices=new(false)},b with{Devices=new(true)}]));
             plan=await manager.Preview(transfer.Id);runtime.FailStop=true;var preparations=runtime.Preparations;
             await manager.Apply(new(plan.Id,plan.Digest));await manager.Wait();

@@ -1,11 +1,12 @@
 namespace Xur.Domain;
 
 // Persist identities, never Linux bus numbers, ALSA indices or /dev node names.
-public record StationDevices(bool Primary=false,string[]? Usb=null);
+public record StationDevices(bool Primary=false,string[]? Usb=null,string[]? Controllers=null);
 public record UsbPeripheral(string Id,string Name,string Identity,string Path,bool Hub,bool RootHub,
     string[] Ancestors,string[] Nodes,bool Storage=false,string? Serial=null);
-public record StationPeripheral(string Node,string Kind,string? UsbId=null,string? Gpu=null,string? Station=null);
-public record StationDeviceInventory(UsbPeripheral[] Usb,StationPeripheral[] Devices,string[] Errors);
+public record StationPeripheral(string Node,string Kind,string? UsbId=null,string? Gpu=null,string? Station=null,string? ControllerId=null);
+public record ControllerPeripheral(string? Id,string Name,string Identity,string Path,string[] Nodes,string? UsbId=null,string? Serial=null,string? Problem=null);
+public record StationDeviceInventory(UsbPeripheral[] Usb,StationPeripheral[] Devices,string[] Errors,ControllerPeripheral[]? Controllers=null);
 public record StationDeviceAllocation(string WorkloadId,bool Primary,string[] Usb,string[] Nodes,string[] Audio,string[] Problems);
 
 public static class StationDevicePolicy
@@ -14,16 +15,19 @@ public static class StationDevicePolicy
     {
         var stations=workloads.Where(w=>w.Recipe.Kind=="Workstation").ToArray();
         if(stations.Count(w=>w.Devices?.Primary==true)>1)throw new InvalidOperationException("Choose one primary workstation.");
-        var users=new HashSet<int>();var assigned=new HashSet<string>(StringComparer.Ordinal);
+        var users=new HashSet<int>();var assigned=new HashSet<string>(StringComparer.Ordinal);var controllers=new HashSet<string>(StringComparer.Ordinal);
         foreach(var w in workloads)
         {
-            if(w.Devices!=null&&w.Recipe.Kind!="Workstation")throw new InvalidOperationException("Only workstations can select USB devices.");
+            if(w.Devices!=null&&w.Recipe.Kind!="Workstation")throw new InvalidOperationException("Only workstations can select peripherals.");
             if(w.Recipe.Kind!="Workstation")continue;
             if(w.User is {Temporary:false} user&&!users.Add(user.Uid))throw new InvalidOperationException("Each running workstation needs a different user. Temporary users are separate for each workstation.");
             var usb=w.Devices?.Usb??[];
             if(usb.Length>64||usb.Any(id=>id==null||!System.Text.RegularExpressions.Regex.IsMatch(id,@"^usb:[0-9a-f]{64}$")))throw new InvalidOperationException("Select USB devices from the device inventory.");
             // A primary's saved selections are dormant until it becomes secondary.
             if(w.Devices?.Primary!=true && usb.Any(id=>!assigned.Add(id)))throw new InvalidOperationException("A USB device or hub can belong to only one workstation.");
+            var pads=w.Devices?.Controllers??[];
+            if(pads.Length>64||pads.Any(id=>id==null||!System.Text.RegularExpressions.Regex.IsMatch(id,@"^controller:[0-9a-f]{64}$")))throw new InvalidOperationException("Select controllers from the device inventory.");
+            if(pads.Any(id=>!controllers.Add(id)))throw new InvalidOperationException("A controller can belong to only one workstation.");
         }
     }
 
@@ -56,7 +60,23 @@ public static class StationDevicePolicy
         }
         foreach(var conflict in claims.Where(c=>c.Value.Count>1))
             foreach(var owner in conflict.Value)problems[owner].Add("USB assignments overlap through a selected hub.");
+        // Explicit controller assignments override a receiver/hub's default
+        // owner. This is how one radio can serve several isolated desktops.
+        var controllerOwners=new Dictionary<string,string>(StringComparer.Ordinal);
+        var blockedControllers=new HashSet<string>(StringComparer.Ordinal);
+        foreach(var w in stations)
+        foreach(var id in w.Devices?.Controllers??[])
+        {
+            var matches=(inventory.Controllers??[]).Where(c=>c.Id==id).ToArray();
+            if(matches.Length!=1||matches[0].Problem!=null)
+            {
+                problems[w.Id].Add(matches.Length==0?"An assigned controller is disconnected.":matches.Length>1?"An assigned controller identity matches multiple devices.":matches[0].Problem!);
+                blockedControllers.Add(id);continue;
+            }
+            controllerOwners[id]=w.Id;
+        }
         var result=new List<StationDeviceAllocation>();
+        var splittingControllers=stations.Any(w=>w.Devices?.Controllers is {Length:>0});
         foreach(var w in stations)
         {
             var nodes=new HashSet<string>(StringComparer.Ordinal);var audio=new HashSet<string>(StringComparer.Ordinal);var usb=new HashSet<string>(StringComparer.Ordinal);
@@ -64,6 +84,9 @@ public static class StationDevicePolicy
             {
                 string? owner=null;
                 if(device.Station!=null)owner=stations.SingleOrDefault(w=>w.Id==device.Station)?.Id;
+                else if(device.ControllerId is "controller:unidentified" or "controller:shared" && splittingControllers)continue;
+                else if(device.ControllerId!=null && device.ControllerId is not ("controller:unidentified" or "controller:shared") && (blockedControllers.Contains(device.ControllerId)||(inventory.Controllers??[]).Count(c=>c.Id==device.ControllerId)!=1))continue;
+                else if(device.ControllerId!=null && controllerOwners.TryGetValue(device.ControllerId,out var controllerOwner))owner=controllerOwner;
                 else if(device.UsbId!=null)
                 {
                     var matches=inventory.Usb.Where(d=>d.Id==device.UsbId).ToArray();

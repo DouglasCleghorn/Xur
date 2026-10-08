@@ -300,6 +300,13 @@ public class SignedUpdater(UpdatePaths paths, Runtime runtime, DurableFiles file
         _ => false
     };
 
+    static bool UsesControllers(JsonNode? value) => value switch
+    {
+        JsonArray array => array.Any(UsesControllers),
+        JsonObject obj => obj["Devices"] is JsonObject devices && devices["Controllers"] is JsonArray { Count: > 0 } || obj.Any(pair => UsesControllers(pair.Value)),
+        _ => false
+    };
+
     public async Task Compatible(JsonObject entry, CancellationToken cancellationToken = default)
     {
         var identity = JsonValues.RequiredText(entry["id"]);
@@ -322,8 +329,11 @@ public class SignedUpdater(UpdatePaths paths, Runtime runtime, DurableFiles file
             throw new UserError("This version cannot manage your containers. Select a version with container workload support.");
         if (!features.Contains("multiseat-v1") && File.Exists(Path.Combine(stateDirectory, "station-seats.json")))
             throw new UserError("This version cannot manage workstation seats and USB assignments. Select a version with multiseat support.");
-        if (features.Contains("station-users-v1")) return;
         var database = Path.Combine(stateDirectory, "profiles.db");
+        if (!features.Contains("controller-assignments-v1") && (File.Exists(Path.Combine(stateDirectory, "controller-assignments-v1")) ||
+            File.Exists(database) && ProfileDatabase.Documents(database).Any(document => UsesControllers(JsonNode.Parse(document.Json)))))
+            throw new UserError("This version cannot preserve individual controller assignments. Select a version with controller assignment support.");
+        if (features.Contains("station-users-v1")) return;
         var required = false;
         if (File.Exists(database))
             foreach (var (kind, document) in ProfileDatabase.Documents(database))

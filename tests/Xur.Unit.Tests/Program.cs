@@ -27,7 +27,9 @@ if(args is ["--installer-progress",var installerOutput]){InstallationDiagnostics
 if(args is ["--profile-access"]){await ProfileAccessTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ProfileAccess",passed=results}));return;}
 if(args is ["--console-gamepad"]){await ConsoleGamepadTests.Run(Check);ConsoleStickKeyboardTests.Run(Check);ConsoleKeyboardOverlayTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ConsoleGamepad",passed=results}));return;}
 if(args is ["--display-power"]){await DisplayPowerTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="DisplayPower",passed=results}));return;}
+if(args is ["--station-controllers"]){StationControllerTests.Run(Check);await StationIdentityTests.Run(Check);await ParallelLoadTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="StationControllers",passed=results}));return;}
 if(args is ["--model-catalog"]){await ModelCatalogTests.Run(Check);await ModelGpuTests.Run(Check);await EngineStartupTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ModelCatalog",passed=results}));return;}
+StationControllerTests.Run(Check);
 await DisplayPowerTests.Run(Check);
 await InstallerDiagnosticsTests.Run(Check);
 await InstallerDiagnosticSshTests.Run(Check);

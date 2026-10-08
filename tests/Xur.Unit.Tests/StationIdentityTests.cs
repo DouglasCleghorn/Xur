@@ -28,7 +28,7 @@ static class StationIdentityTests
                 var third=await manager.Create();third=await manager.SaveSelection(third.Id,third.Revision,[new(null,recipe.Id,["0000:01:00.0"],user,"","Separate desktop")]);
                 check(third.Workloads[0].Id!=identity,"An explicitly new workstation never inherits another pairing");
                 var savedUsb=new[]{"usb:"+new string('a',64)};
-                third=await manager.SaveSelection(third.Id,third.Revision,[new(third.Workloads[0].Id,recipe.Id,["0000:01:00.0"],user,third.Workloads[0].Id,"Separate desktop",new(true,savedUsb))]);
+                third=await manager.SaveSelection(third.Id,third.Revision,[new(third.Workloads[0].Id,recipe.Id,["0000:01:00.0"],user,third.Workloads[0].Id,"Separate desktop",new(true,savedUsb,["controller:"+new string('a',64)]))]);
                 bool refused=false;try{await manager.Save(renamed with {Workloads=[renamed.Workloads[0] with {User=new("someone",1001)}]});}catch(InvalidOperationException){refused=true;}
                 check(refused && store.Get<Profile>("profile",second.Id)!.Workloads[0].User==user,"Changing user behind a paired identity is rejected transactionally");
                 bool inUse=false;try{await manager.DeleteStation(identity);}catch(InvalidOperationException){inUse=true;}
@@ -48,8 +48,10 @@ static class StationIdentityTests
                 check(station.Id==store.List<Profile>("profile").Single().Workloads[0].Id,"Existing workstation keys migrate without changing Moonlight identity");
                 var profile=store.List<Profile>("profile").Single();
                 check(profile.Workloads[0].Devices is {Primary:true,Usb.Length:1},"Primary USB selections survive saving and reopening the profile database");
+                check(profile.Workloads[0].Devices?.Controllers?.SequenceEqual(["controller:"+new string('a',64)])==true,"Primary controller selections survive saving and reopening the profile database");
                 profile=await manager.SaveSelection(profile.Id,profile.Revision,[new(station.Id,recipe.Id,["0000:01:00.0"],user,station.Id,station.Name,profile.Workloads[0].Devices! with{Primary=false})]);
                 check(profile.Workloads[0].Devices is {Primary:false} && profile.Workloads[0].Devices!.Usb!.SequenceEqual(["usb:"+new string('a',64)]),"Switching to non-primary preserves the saved USB selections");
+                check(profile.Workloads[0].Devices?.Controllers?.Length==1,"Changing the primary role preserves explicit controller assignments");
                 check((await manager.Stations()).Any(s=>s.Id==identity),"Unreferenced named workstations survive reopening the database");
             }
         } finally {Directory.Delete(root,true);}

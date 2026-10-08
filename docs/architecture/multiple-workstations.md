@@ -69,12 +69,29 @@ parent to the same workstation seat: libinput reads the event node's seat while
 logind checks access against the parent. Regression coverage checks both rules;
 physical keyboard/controller routing still needs acceptance on the candidate.
 
+Profiles also select individual controllers independently of USB ownership. A
+controller's explicit owner takes priority over its receiver/hub's owner, so
+several controllers on one Xbox Wireless Adapter can serve different desktops.
+Selections apply to the primary as well as secondary stations. Discovery groups
+event, legacy joystick and controller-specific HID/audio nodes through their
+physical input/HID/GIP parent; shared radio ancestors are never granted. Serial
+identities survive changes in receiver slots and input node numbers. Unidentified
+wireless controllers cannot use transient slots as saved identities and remain
+unallocated when a profile splits controllers. See the
+[controller guide](../usage/controllers.md) for driver requirements, Steam
+Controller limitations and hardware acceptance.
+
 An assignment or effective-primary change restarts the existing desktops before
 transferring peripherals: changing cgroup rules alone cannot revoke an already
 open device handle. Removing a secondary with no USB claims keeps an unchanged
 explicit primary running. Models remain independent. A failed prior seat stop
 blocks replacement of peripheral intent. Older app bundles without
 `multiseat-v1` cannot be selected once the new seat manager has been used.
+Using individual controller assignments also records the persistent
+`/var/lib/xur/controller-assignments-v1` compatibility marker; the updater rejects
+bundles without `controller-assignments-v1` after this feature has been used.
+The updater also checks saved profile documents before their first load, so a
+rollback cannot discard controller selections that have not yet been applied.
 
 ## Parallel profile execution
 
