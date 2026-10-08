@@ -146,6 +146,15 @@ public class SignedUpdater(UpdatePaths paths, Runtime runtime, DurableFiles file
         if (sequence < floor) throw new UserError("Repository offered an older release in this channel; use Roll back for the previous installation");
     }
 
+    void SaveCheckedRelease(JsonObject entry)
+    {
+        files.WriteJson(AtRoot("available.json"), entry);
+        var identity = JsonValues.RequiredText(entry["id"]);
+        // Bundled installs may only have a hash label until a matching signed release is checked.
+        if (JsonValues.Text(DurableFiles.ReadObject(AtRoot("current/bundle.json"))["id"]) == identity)
+            files.WriteJson(AtRoot("release-" + identity + ".json"), entry);
+    }
+
     public async Task<JsonObject> CheckLocalLegacy(string stage, CancellationToken cancellationToken = default)
     {
         if (Channel != "local") throw new UserError("Legacy update discovery is supported only for local build testing");
@@ -161,7 +170,7 @@ public class SignedUpdater(UpdatePaths paths, Runtime runtime, DurableFiles file
         ValidateMetadata(entry, 1);
         if (JsonValues.Text(entry["id"]) != identity) throw new UserError("Release identity mismatch");
         File.WriteAllText(Path.Combine(stage, "source"), server);
-        files.WriteJson(AtRoot("available.json"), entry);
+        SaveCheckedRelease(entry);
         return entry;
     }
 
@@ -208,7 +217,7 @@ public class SignedUpdater(UpdatePaths paths, Runtime runtime, DurableFiles file
         ValidateMetadata(entry, 2);
         if (!official && JsonValues.Text(entry["id"]) != target) throw new UserError("Release identity mismatch");
         File.WriteAllText(Path.Combine(stage, "source"), server);
-        files.WriteJson(AtRoot("available.json"), entry);
+        SaveCheckedRelease(entry);
         return entry;
     }
 

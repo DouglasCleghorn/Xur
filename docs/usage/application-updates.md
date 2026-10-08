@@ -7,6 +7,12 @@ GitHub's HTTPS release/CDN redirects and pins the resolved release tag before
 fetching its descriptor, signature and bundle. A new release appearing during a
 download cannot mix files from different releases.
 
+An installation from bundled media can initially show a short bundle hash as its
+installed version. When a verified update check finds the same bundle ID, it
+retains the signed release number and displays that version without downloading
+the application or restarting services. Installer checks also retain this metadata
+for the installed system.
+
 **Settings → Update channel** offers Stable, Nightly and Local build testing.
 For local testing, enter your development computer’s server address (for example
 `192.0.2.10:8088`) and paste its **Ed25519 public key in PEM format**. Obtain the
