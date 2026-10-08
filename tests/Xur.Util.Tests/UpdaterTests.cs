@@ -307,6 +307,10 @@ static class UpdaterTests
             fixture.PathOf("profiles.db"), kind, document]);
         await Database("{\"Workloads\":[{\"Recipe\":{},\"User\":null}]}");
         await updater.Compatible(entry);
+        await Database("{\"Workloads\":[{\"Recipe\":{},\"Devices\":{\"Controllers\":[\"controller-a\"]}}]}");
+        await Verify.Reject(async () => await updater.Compatible(entry), "Saved controllers reject older versions before their first load", "controller assignments");
+        await Database("{\"Workloads\":[{\"Recipe\":{},\"User\":null,\"Devices\":{\"Controllers\":[]}}]}");
+        await updater.Compatible(entry);
         fixture.Write("app/releases/" + identity + "/bundle.json", "{}");
         await updater.Execute("compatibility", [identity]);
         Verify.That(!File.Exists(fixture.PathOf("app/update.lock")) && !File.Exists(fixture.PathOf("app/update.json")), "Compatibility CLI has no lock, progress or activation side effects");
@@ -348,6 +352,10 @@ static class UpdaterTests
         runtime.Commands.Clear();
         await updater.Compatible(entry);
         Verify.That(runtime.Commands.Count == 0, "Installer never probes installed root compatibility");
+        fixture.Write("controller-assignments-v1", "true");
+        await Verify.Reject(async () => await updater.Compatible(entry), "Individual controller rollback guarded", "controller assignments");
+        fixture.Write("app/releases/" + identity + "/host/application-features.json", "[\"station-users-v1\",\"manager-account-v1\",\"container-workloads-v1\",\"multiseat-v1\",\"controller-assignments-v1\",\"btrfs-root-v1\"]");
+        await updater.Compatible(entry);
     }
 
     static async Task Transactions()

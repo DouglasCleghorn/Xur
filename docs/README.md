@@ -24,6 +24,10 @@ Xur remains a preview; implemented behavior and hardware validation are separate
 
 ## Implementation and validation status
 
+- Individual controllers on one Xbox Wireless Adapter can be assigned to separate
+  workstations, with multiple controllers per desktop. Source tests cover device
+  isolation and stable reconnect identities; physical acceptance remains open.
+  See [controllers](usage/controllers.md) for driver and Steam Controller limits.
 - Profiles load and unload independent workloads in parallel, with per-workload
   errors, cancellation and resumable partial changes. Tests cover preserving
   successful workloads while a sibling fails.

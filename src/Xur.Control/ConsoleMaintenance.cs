@@ -8,7 +8,7 @@ public record ConsoleOption(char Key,string Label,bool Enabled=true)
 {
     public string Display => Label+(Enabled ? "" : " (unavailable)");
 }
-public record ConsoleScreen(string Id,string Title,string Body,ConsoleOption[] Options,string? InputValue=null,bool Secret=false);
+public record ConsoleScreen(string Id,string Title,string Body,ConsoleOption[] Options,string? InputValue=null,bool Secret=false,string? InputLabel=null,string InputAction="Save");
 
 // Shared by the physical/serial console and the interactive `xur` command.
 public sealed class ConsoleMaintenance(HttpClient client,bool installer=false,bool local=false,HttpClient? setupClient=null)

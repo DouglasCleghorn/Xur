@@ -123,7 +123,7 @@
    if(userRow?.isConnected){const select=userRow.querySelector('[name=stationUser]');select.value=account.username;select.dispatchEvent(new CustomEvent('choices-changed'));}userDialog.close();
   }catch(e){message.textContent=e.message;message.hidden=false;}finally{submit.disabled=false;}
  });
- const renumber=()=>[...rows.children].forEach((row,i)=>{row.querySelectorAll('.gpu-choices select').forEach(s=>s.name='gpus-'+i);row.querySelectorAll('.station-usb,.station-usb-settings input').forEach(s=>s.name='usb-'+i);row.querySelector('.station-primary').name='primary-'+i;});
+ const renumber=()=>[...rows.children].forEach((row,i)=>{row.querySelectorAll('.gpu-choices select').forEach(s=>s.name='gpus-'+i);row.querySelectorAll('.station-usb,.station-usb-settings input').forEach(s=>s.name='usb-'+i);row.querySelectorAll('.station-controller').forEach(s=>s.name='controller-'+i);row.querySelector('.station-primary').name='primary-'+i;});
  function usbChoices(row){
   const primary=row.querySelector('.station-primary');
   // Disabled checkboxes need hidden fields to retain saved selections on submit.
@@ -133,6 +133,10 @@
    if(!primary.disabled&&primary.checked&&input.checked){const setting=document.createElement('input');setting.type='hidden';setting.name=input.name;setting.value=input.value;saved.push(setting);}
   });
   row.querySelector('.station-usb-settings').replaceChildren(...saved);
+  row.querySelectorAll('.station-controller').forEach(input=>{
+   if(input.dataset.unavailable===undefined)input.dataset.unavailable=String(input.disabled);
+   input.disabled=primary.disabled||input.dataset.unavailable==='true'&&!input.checked;
+  });
   row.querySelector('.station-primary-help').hidden=primary.disabled||!primary.checked;
  }
  function defaultPrimary(row){

@@ -28,7 +28,11 @@ static class ControlPanelRender
         agent.MapGet("/storage/trim",()=>new TrimStatus(false,"ActiveState=active","Result=success",[new("ssd","/etc","/dev/nvme0n1p2[/ostree/deploy/default/deploy/"+new string('a',64)+".0/etc]","btrfs",1000,400,500,true,true,false),new("readonly","/boot","/dev/nvme1n1p1","ext4",1000,400,500,true,false,true)],[]));
         agent.MapGet("/updates",()=>new OsUpdateStatus(null,new("new","digest","image",false),null,null,false,true,false,null,""));
         agent.MapGet("/application-updates",()=>new ApplicationUpdateStatus("http://192.0.2.10:8088",new("current","1"),null,null,null,false,true,"local","-----BEGIN PUBLIC KEY-----\nfixture\n-----END PUBLIC KEY-----","http://192.0.2.10:8088"));
-        agent.MapGet("/station-devices",()=>new StationDeviceInventory([new("usb:"+new string('a',64),"Desk hub","Serial","/usb/hub",true,false,[],[],Serial:"hub-serial"),new("usb:"+new string('b',64),"Keyboard","Port","/usb/keyboard",false,false,[],[]),new("usb:"+new string('c',64),"Second hub","Serial","/usb/hub2",true,false,[],[],Serial:"hub-serial")],[],[]));
+        agent.MapGet("/station-devices",()=>new StationDeviceInventory([new("usb:"+new string('a',64),"Desk hub","Serial","/usb/hub",true,false,[],[],Serial:"hub-serial"),new("usb:"+new string('b',64),"Keyboard","Port","/usb/keyboard",false,false,[],[]),new("usb:"+new string('c',64),"Second hub","Serial","/usb/hub2",true,false,[],[],Serial:"hub-serial")],[],[],[
+            new("controller:"+new string('a',64),"Xbox controller","Serial","/usb/receiver/gip0",[],Serial:"fixture-pad-a"),
+            new("controller:"+new string('b',64),"Xbox controller","Serial","/usb/receiver/gip1",[],Serial:"fixture-pad-b"),
+            new(null,"Xbox controller without serial","Unavailable","/usb/receiver/gip2",[],Problem:"The driver does not report a stable controller identity. Assign the whole receiver or hub instead.")
+        ]));
         StationStreamStatus[] streams=[];
         agent.MapGet("/workstations",()=>streams);
         agent.MapGet("/station-allocations",()=>Array.Empty<StationDeviceAllocation>());
@@ -69,7 +73,7 @@ static class ControlPanelRender
             observer.Snapshot=observer.Snapshot with{Gpus=[gpu with{ShortId="GPU 1",Cards=["/dev/dri/card0"]}]};
             foreach(var (fixture,type) in new[]{("empty",typeof(EmptyProfileEditor)),("primary",typeof(ProfileEditor))})
             {
-                if(fixture=="primary")store.Save(store.Get<Profile>("profile","1")! with{Workloads=[new("w1","Gaming",stationRecipe,[gpu.Pci],"desktop",Devices:new(true,["usb:"+new string('b',64),"usb:"+new string('d',64)]))]});
+                if(fixture=="primary")store.Save(store.Get<Profile>("profile","1")! with{Workloads=[new("w1","Gaming",stationRecipe,[gpu.Pci],"desktop",Devices:new(true,["usb:"+new string('b',64),"usb:"+new string('d',64)],["controller:"+new string('a',64),"controller:"+new string('d',64)]))]});
                 var html=await renderer.Dispatcher.InvokeAsync(async()=> (await renderer.RenderComponentAsync(type,ParameterView.Empty)).ToHtmlString());
                 html=html.Replace("<div id=\"workload-rows\"", "<input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"fixture-only\"><div id=\"workload-rows\"");
                 await File.WriteAllTextAsync(Path.Combine(output,"profile-edit-"+fixture+".html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><script src='/app-fetch.js'></script><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/profile-editor.css'></head><body><main>"+html+"</main></body></html>");
