@@ -32,6 +32,11 @@ public static class WorkstationUpdateTests
             check(GpuOwnership.ObserveProcesses(["/dev/nvidia0"],procRoot:root+"/proc").Single().Blocking,"A process name cannot bypass GPU ownership checks");
             File.WriteAllText(proc+"/cgroup","0::/system.slice/nvidia-persistenced.service");
             check(!GpuOwnership.ObserveProcesses(["/dev/nvidia0"],procRoot:root+"/proc").Single().Blocking&&GpuOwnership.ObserveProcesses(["/dev/nvidia0"],[42],root+"/proc").Single().Blocking,"Vendor persistence handles are distinguished from actual compute contexts");
+            File.WriteAllText(proc+"/status","Uid:\t958\t958\t958\t958\n");
+            GpuOwner Owner(uint? uid,HashSet<int>? compute=null)=>GpuOwnership.ObserveProcesses(["/dev/nvidia0"],compute,root+"/proc",accountUid:name=>name=="nvidia-persistenced"?uid:null).Single();
+            check(!Owner(958).Blocking&&Owner(null).Blocking&&Owner(957).Blocking&&Owner(958,[42]).Blocking,"NSS system accounts permit vendor persistence handles only for the exact UID and never a compute context");
+            File.WriteAllText(proc+"/status","Uid:\t958\t958\t0\t958\n");
+            check(Owner(958).Blocking,"Mixed process identities cannot bypass GPU ownership through the persistence account");
             Directory.Delete(root+"/proc",true);
             File.WriteAllBytes(root+"/model.gguf","GGUFtest"u8.ToArray());File.WriteAllText(root+"/config.gguf","{}");File.WriteAllBytes(root+"/model.safetensors",new byte[16]);Directory.CreateSymbolicLink(root+"/cycle",root);
             var found=new Dictionary<string,ModelFolder>();var count=0;ModelLibrary.Scan(root,"test",found,[],[],ref count,DateTimeOffset.UtcNow.AddMinutes(1));
