@@ -8,13 +8,19 @@ opaque (`null`) origins are rejected. The referrer policy is `same-origin` so lo
 forms retain their real origin while external sites receive no referrer.
 
 Cookie-authenticated mutations require ASP.NET Core antiforgery validation.
-SameSite=Strict, Secure cookies, frame blocking, `form-action 'self'`, and the origin
-check are additional protections. They do not replace token validation. Login
+Secure cookies (Lax for remembered sign-in, Strict for setup and antiforgery),
+frame blocking, `form-action 'self'`, and the origin check are additional
+protections. They do not replace token validation. Login
 forms also require antiforgery. JSON bootstrap/login exchanges require JSON and
 pass the same browser-origin check; HTML forms cannot submit those exchanges.
 
 Browser account sessions have no server time limit; setup and API sessions expire
 after eight hours. The persistent session cookie renews on authenticated visits.
+Browser cookie validation ignores lifetime claims from older bundles while still
+validating the signature, account, issuer, audience and purpose; bearer validation
+enforces expiry. Lax sign-in cookies accompany safe top-level external navigation.
+The login page checks for an existing session on `pageshow` and before submission,
+recovering older Strict cookies and restored login tabs without asking for credentials.
 Login refreshes only its antiforgery token through an uncached same-origin GET
 before form submission, so restored tabs and changed login state do not discard
 entered credentials. The POST still requires a valid token and cookie, including

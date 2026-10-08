@@ -1,9 +1,10 @@
 const {chromium}=require('../../.build/browser/node_modules/playwright');
 const {spawn}=require('child_process');
-const http=require('http'),fs=require('fs'),os=require('os'),path=require('path'),crypto=require('crypto');
+const http=require('http'),fs=require('fs'),path=require('path'),crypto=require('crypto');
 const assert=require('assert/strict');
 (async()=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'xur-https-'));
+ const evidence=path.resolve('.build/evidence');fs.mkdirSync(evidence,{recursive:true});
+ const root=fs.mkdtempSync(path.join(evidence,'https-'));
  fs.mkdirSync(path.join(root,"bin"));fs.writeFileSync(path.join(root,"bin/tailscale"),"#!/bin/sh\necho '{\"BackendState\":\"NeedsLogin\"}'\n",{mode:0o700});
  let process,browser,agent;const tls='https://127.0.0.1:19063',plain='http://127.0.0.1:18700';
  const local=(socket,url,headers={})=>new Promise((resolve,reject)=>{http.get({socketPath:path.join(root,socket),path:url,headers},r=>{let body='';r.on('data',x=>body+=x);r.on('end',()=>resolve({status:r.statusCode,body,headers:r.headers}));}).on('error',reject);});
@@ -183,6 +184,19 @@ const assert=require('assert/strict');
   const oldCookie=cookies.find(c=>c.name==='xur.session').value;await stop();await start(request);
   const setup=await request.get(tls+'/setup-account',{maxRedirects:0});assert.equal(setup.status(),302);assert.equal(setup.headers().location,'/');
   assert.equal((await context.cookies()).find(c=>c.name==='xur.session').value,oldCookie);
-  console.log(JSON.stringify({suite:'HttpsLogin',result:'Passed',httpRedirect:true,plaintextMutationsDenied:true,oldFormSurvivesRestart:true,secureCookies:true,staleFormRecovery:true,privateServeSocket:true,loginSurvivesRestart:true,cancelRedirect:true,validatedCompression:true,conditionalPolling:true,privateLargeResponseSpool:true,precompressedStaticAssets:true,crossOriginDenied:true}));
+  const remembered=(await context.cookies()).find(c=>c.name==='xur.session');assert.equal(remembered.sameSite,'Lax');assert(remembered.expires>Date.now()/1000+399*86400);
+  const returnPage=await context.newPage();
+  await returnPage.route('https://external.example.test/**',route=>route.fulfill({contentType:'text/html',body:'<a href="'+tls+'/login">Return to Xur</a>'}));
+  await returnPage.goto('https://external.example.test/');
+  await returnPage.getByRole('link',{name:'Return to Xur'}).click();await returnPage.waitForURL(tls+'/');
+  // Previously issued Strict cookies recover through the login page's same-origin
+  // check even when the initial external navigation withholds the cookie.
+  await context.addCookies([{...remembered,sameSite:'Strict'}]);
+  await returnPage.goto('https://external.example.test/');
+  await returnPage.getByRole('link',{name:'Return to Xur'}).click();await returnPage.waitForURL(tls+'/');
+  assert.equal((await context.cookies()).find(c=>c.name==='xur.session').sameSite,'Lax');
+  assert.equal(passwordSaves,explicitSave?1:0,'Returning through an external link never submits credentials again');
+  await returnPage.close();
+  console.log(JSON.stringify({suite:'HttpsLogin',result:'Passed',httpRedirect:true,plaintextMutationsDenied:true,oldFormSurvivesRestart:true,secureCookies:true,staleFormRecovery:true,privateServeSocket:true,loginSurvivesRestart:true,externalLinkPersistence:true,legacyStrictCookieRecovery:true,cancelRedirect:true,validatedCompression:true,conditionalPolling:true,privateLargeResponseSpool:true,precompressedStaticAssets:true,crossOriginDenied:true}));
  }finally{await stop();agent?.closeAllConnections();if(agent)await new Promise(resolve=>agent.close(resolve));await browser?.close();fs.rmSync(root,{recursive:true,force:true});}
 })().catch(e=>{console.error(e.message);process.exitCode=1;});
