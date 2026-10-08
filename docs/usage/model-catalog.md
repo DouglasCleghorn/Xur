@@ -41,6 +41,13 @@ model downloaders use the saved credentials; a token does not grant access the
 account does not already have. Review the linked model license before applying.
 Model weights are not bundled.
 
+vLLM validates the checkpoint's root `config.json`. vLLM-Omni also accepts
+Diffusers pipelines, such as Qwen-Image-2.1, that publish `model_index.json`
+and component configurations instead. Xur checks these files at the selected
+checkpoint revision during selection and startup. Missing configuration and
+upstream HTTP errors are reported separately from connection failures; denied
+access points to repository permissions and the Hugging Face token in Settings.
+
 `catalog/engines/Containerfile` selects the upstream rolling channels: `server`
 and its GPU variants for llama.cpp, and `latest` for vLLM's CUDA, ROCm and XPU
 images and vLLM-Omni's CUDA image. Omni ROCm uses the published `v0.28.0` image
