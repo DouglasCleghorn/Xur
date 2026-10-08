@@ -27,7 +27,7 @@ if(args is ["--installer-progress",var installerOutput]){InstallationDiagnostics
 if(args is ["--profile-access"]){await ProfileAccessTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ProfileAccess",passed=results}));return;}
 if(args is ["--console-gamepad"]){await ConsoleGamepadTests.Run(Check);ConsoleStickKeyboardTests.Run(Check);ConsoleKeyboardOverlayTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ConsoleGamepad",passed=results}));return;}
 if(args is ["--display-power"]){await DisplayPowerTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="DisplayPower",passed=results}));return;}
-if(args is ["--model-catalog"]){await ModelCatalogTests.Run(Check);await ModelGpuTests.Run(Check);await EngineStartupTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ModelCatalog",passed=results}));return;}
+if(args is ["--model-catalog"]){await ModelCatalogTests.Run(Check);await CheckpointFormatTests.Run(Check);await ModelGpuTests.Run(Check);await EngineStartupTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ModelCatalog",passed=results}));return;}
 await DisplayPowerTests.Run(Check);
 await InstallerDiagnosticsTests.Run(Check);
 await InstallerDiagnosticSshTests.Run(Check);
@@ -67,6 +67,7 @@ await ModelImageUpdaterTests.Run(Check);
 await CachedEngineImagesTests.Run(Check);
 await ModelGpuTests.Run(Check);
 await ModelCatalogTests.Run(Check);
+await CheckpointFormatTests.Run(Check);
 await OmniXpuImageTests.Run(Check);
 AmdGpuTargetTests.Run(Check);
 await NativeAmdImageTests.Run(Check);

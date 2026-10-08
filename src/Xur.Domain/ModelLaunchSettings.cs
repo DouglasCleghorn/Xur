@@ -3,10 +3,10 @@ namespace Xur.Domain;
 public static class ModelLaunchSettings
 {
     public const string QwenMtp="lued/Qwen3.8-27B-INT8-W8A16-MTP";
-    public static string[] Vllm(string model,int gpuCount)
+    public static string[] Vllm(string model,int gpuCount,int maxModelLength=4096)
     {
         // Deliberately bounded defaults; concurrency is not reserved KV capacity.
-        var args=new List<string>{"--max-model-len","4096","--tensor-parallel-size",gpuCount.ToString(),"--gpu-memory-utilization","0.85","--served-model-name","model","--max-num-seqs",model==QwenMtp?"1":"16"};
+        var args=new List<string>{"--max-model-len",maxModelLength.ToString(),"--tensor-parallel-size",gpuCount.ToString(),"--gpu-memory-utilization","0.85","--served-model-name","model","--max-num-seqs",model==QwenMtp?"1":"16"};
         if(model==QwenMtp)args.AddRange(["--mamba-cache-mode","align","--no-enable-prefix-caching","--speculative-config","{\"method\":\"mtp\",\"num_speculative_tokens\":3}"]);
         return args.ToArray();
     }
