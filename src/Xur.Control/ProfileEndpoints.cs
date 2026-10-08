@@ -91,7 +91,7 @@ public static class ProfileEndpoints
                     else if(chosen=="legacy" && existing?.Workloads.SingleOrDefault(w=>w.Id==ids[i]) is {Recipe.Kind:"Workstation",User:null}){}
                     else {var account=accounts.SingleOrDefault(a=>a.Username==chosen) ?? throw new InvalidOperationException("Select a workstation user.");user=new(account.Username,account.Uid);}
                 }
-                selections.Add(new(ids[i],recipes[i] ?? "",f["gpus-"+i].ToArray().Select(s=>s!).ToArray(),user,stationIds.ElementAtOrDefault(i),stationNames.ElementAtOrDefault(i),catalog.Recipes.SingleOrDefault(r=>r.Id==recipes[i])?.Kind=="Workstation"?new StationDevices(f["primary-"+i]=="true",f["usb-"+i].Select(s=>s!).ToArray()):null));
+                selections.Add(new(ids[i],recipes[i] ?? "",f["gpus-"+i].ToArray().Select(s=>s!).ToArray(),user,stationIds.ElementAtOrDefault(i),stationNames.ElementAtOrDefault(i),catalog.Recipes.SingleOrDefault(r=>r.Id==recipes[i])?.Kind=="Workstation"?new StationDevices(f["primary-"+i]=="true",f["usb-"+i].Select(s=>s!).ToArray(),f["controller-"+i].Select(s=>s!).ToArray()):null));
             }
             if(!long.TryParse(f["revision"],out var revision))throw new InvalidOperationException("Reload the profile form.");
             await manager.SaveSelection(f["id"].ToString(),revision,selections.ToArray(),f.ContainsKey("name")?f["name"].ToString():null);return Results.Redirect("/profiles");

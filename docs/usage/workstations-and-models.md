@@ -3,8 +3,10 @@
 Workstations lists every saved workstation, including stopped desktops and GPUs
 without a connected screen. Disconnected cards say **No display detected**.
 The ASPEED onboard adapter has a readable name. Profiles can run several workstations on distinct GPUs and Unix users. Persistent
-users retain their home and Steam data. In the profile editor, expand **USB devices,
-hubs and audio** to assign peripherals and choose a primary workstation. See
+users retain their home and Steam data. In the profile editor, use **Controllers,
+USB devices, hubs and audio** to assign peripherals and choose a primary workstation.
+The [controller guide](controllers.md) covers assigning individual controllers
+on a shared Xbox Wireless Adapter and the original Steam Controller's limits. See
 [multiple workstations](../architecture/multiple-workstations.md) for matching
 rules, supported devices and validation limits.
 

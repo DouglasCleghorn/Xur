@@ -36,13 +36,13 @@ public static class StationSeats
     public static async Task SetIntent(Workload[] workloads)
     {
         StationDevicePolicy.Validate(workloads);
-        await gate.WaitAsync();try{if(workloads.Length==0&&!File.Exists(Intent)&&Sessions().Length==0)return;Save(Intent,workloads);await ReconcileLocked();}finally{gate.Release();}
+        await gate.WaitAsync();try{if(workloads.Length==0&&!File.Exists(Intent)&&Sessions().Length==0)return;MarkControllers(workloads);Save(Intent,workloads);await ReconcileLocked();}finally{gate.Release();}
     }
     public static async Task Register(Workload w,GpuDevice gpu,int uid)
     {
         await gate.WaitAsync();try
         {
-            var desired=Intentions();if(!desired.Any(s=>s.Id==w.Id)){desired=[..desired,w];StationDevicePolicy.Validate(desired);Save(Intent,desired);}
+            var desired=Intentions();if(!desired.Any(s=>s.Id==w.Id)){desired=[..desired,w];StationDevicePolicy.Validate(desired);MarkControllers(desired);Save(Intent,desired);}
             var graphics=StationDeviceAccess.Nodes(gpu).Concat(gpu.Vendor=="NVIDIA"?await NvidiaDevice.WorkstationNodes(gpu):[]).Distinct().ToArray();
             Save(Root+"/"+w.Id+".json",new Session(w,uid,graphics));
             await ReconcileLocked();
@@ -92,7 +92,7 @@ public static class StationSeats
             lines.Add("DEVPATH==\""+path+"\", ENV{ID_SEAT}:=\""+seat+"\", TAG+=\"seat\", TAG+=\"uaccess\"");
             // libinput reads the event node's seat, but logind verifies access
             // against its inputN parent. Both must belong to the same station.
-            var input=Regex.Match(path,@"^(.*/input\d+)/event\d+$");
+            var input=Regex.Match(path,@"^(.*/input\d+)/(?:event|js)\d+$");
             if(node.StartsWith("/dev/input/")&&input.Success)
                 lines.Add("DEVPATH==\""+input.Groups[1].Value+"\", ENV{ID_SEAT}:=\""+seat+"\", TAG+=\"seat\", TAG+=\"uaccess\"");
         }
@@ -105,6 +105,10 @@ public static class StationSeats
             foreach(var node in allocations.Single(a=>a.WorkloadId==w.Id).Nodes){Device(node,seat);var card=Regex.Match(node,@"^/dev/snd/(?:control|pcm|hw|midi)C(\d+)");if(card.Success)Device("/dev/snd/card"+card.Groups[1].Value,seat);}
         }
         return string.Join('\n',lines.Distinct())+"\n";
+    }
+    static void MarkControllers(Workload[] workloads)
+    {
+        if(workloads.Any(w=>w.Devices?.Controllers is {Length:>0}))Save("/var/lib/xur/controller-assignments-v1",true);
     }
     static async Task ReconcileLocked()
     {

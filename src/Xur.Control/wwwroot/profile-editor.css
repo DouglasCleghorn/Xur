@@ -18,6 +18,8 @@
 #profile-form .station-devices{margin:0;padding-top:12px;border-top:1px solid var(--rule)}
 #profile-form .station-devices>h2{font-size:16px;margin:4px 0 12px}
 #profile-form .station-devices .secondary-text{font-size:13px}
+#profile-form .usb-choice input{flex:none}
+#profile-form .usb-choice span{min-width:0}
 #profile-form .nvlink-hint,#profile-form .container-library-link{grid-column:1/-1;margin:0}
 #profile-form #add-workload{justify-self:start}
 #profile-form .action-bar{margin:0;gap:10px}

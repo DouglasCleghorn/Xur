@@ -3,12 +3,14 @@ import ssl
 """Runs the real control process. A waiting child client is a test-only fixture.
 No bootstrap code or cookie is emitted into test output or saved to disk.
 """
-import threading, socketserver, secrets, ipaddress, http.cookiejar, http.client, socket, json, os, pathlib, re, signal, subprocess, tempfile, time
+import threading, socketserver, secrets, ipaddress, http.cookiejar, http.client, socket, json, os, pathlib, re, signal, subprocess, tempfile, time, base64
 import urllib.request, urllib.parse, urllib.error
 def tls_open(*args,**kwargs):return urllib.request.urlopen(*args,context=ssl._create_unverified_context(),**kwargs)
 repo=pathlib.Path(__file__).resolve().parents[2]
 passed=[]
-with tempfile.TemporaryDirectory(prefix='xur-test-') as temp:
+runtime=repo/'.build/auth';runtime.mkdir(parents=True,exist_ok=True)
+binary=pathlib.Path(os.environ.get('XUR_CONTROL_BINARY',str(repo/'.build/context/publish/control/Xur.Control'))).resolve()
+with tempfile.TemporaryDirectory(prefix='m-',dir=runtime) as temp:
     root=pathlib.Path(temp); (root/'bin').mkdir()
     (root/'run').mkdir(mode=0o700)
     (root/'run/administrator.json').write_text(json.dumps({'login':'test-admin@example.invalid'}))
@@ -22,6 +24,7 @@ with tempfile.TemporaryDirectory(prefix='xur-test-') as temp:
     server_name=None
     ntp={'enabled':True,'active':True,'synchronized':True,'servers':[],'details':''}
     timezone={'current':'UTC','zones':['UTC','America/Denver','Asia/Kolkata']}
+    ssh={'enabled':False,'keyCount':0,'error':None};ssh_changes=[];report_busy=False
     class ConfigHandler(socketserver.StreamRequestHandler):
         def handle(self):
             global server_name
@@ -44,10 +47,23 @@ with tempfile.TemporaryDirectory(prefix='xur-test-') as temp:
                 '/status':{'scan':{'state':'NoAnswer' if discovery_done else 'Starting'},'operation':operation},
                 '/disks':{'generation':'test','disks':[disk,disk|{'path':'/dev/blocked','model':'Hidden disk','blocked':['Boot media']}]}
                 }.get(path,{})).encode()
-            self.wfile.write((b'HTTP/1.1 404 Not Found' if body==b'{}' else b'HTTP/1.1 200 OK')+b'\r\nContent-Type: application/json\r\nContent-Length: '+str(len(body)).encode()+b'\r\nConnection: close\r\n\r\n'+body)
+            status=b'HTTP/1.1 404 Not Found' if body==b'{}' else b'HTTP/1.1 200 OK'
+            if path=='/diagnostics/ssh':
+                if data:
+                    change=json.loads(data);ssh_changes.append(change)
+                    if change.get('enabled') and change.get('publicKeys')=='fixture-invalid':
+                        status=b'HTTP/1.1 409 Conflict';body=json.dumps({'error':'Paste valid public keys.'}).encode()
+                    else:
+                        ssh.update(enabled=change['enabled'],keyCount=len(change.get('publicKeys','').splitlines()) if change['enabled'] else 0)
+                        status=b'HTTP/1.1 200 OK';body=json.dumps(ssh).encode()
+                else:status=b'HTTP/1.1 200 OK';body=json.dumps(ssh).encode()
+            if path=='/diagnostics/system':
+                status=b'HTTP/1.1 409 Conflict' if report_busy else b'HTTP/1.1 200 OK'
+                body=json.dumps({'error':'System diagnostics are already collecting.'} if report_busy else {'schema':1,'probes':[],'gpuOwners':{}}).encode()
+            self.wfile.write(status+b'\r\nContent-Type: application/json\r\nContent-Length: '+str(len(body)).encode()+b'\r\nConnection: close\r\n\r\n'+body)
     server=socketserver.UnixStreamServer(str(root/'run/agent.sock'),ConfigHandler)
     threading.Thread(target=server.serve_forever,daemon=True).start()
-    proc=subprocess.Popen([str(repo/'.build/context/publish/control/Xur.Control')],cwd=repo/'.build/context/publish/control',env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
+    proc=subprocess.Popen([str(binary)],cwd=binary.parent,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
     try:
         code=None
         for _ in range(200):
@@ -77,6 +93,9 @@ with tempfile.TemporaryDirectory(prefix='xur-test-') as temp:
         for route in ['/api/files/roots','/api/files/list','/api/files/download','/api/ntp']:
             check(request(route)[0]==401,'Anonymous access denied: '+route)
         check(request('/settings/ntp',{})[0]==401,'Anonymous NTP changes denied')
+        for route in ['/api/diagnostics/system','/api/diagnostics/ssh']:
+            check(request(route)[0]==401,'Anonymous diagnostic access denied: '+route)
+        check(request('/settings/diagnostic-ssh',{'mode':'enabled'})[0]==401 and not ssh_changes,'Anonymous callers cannot enable SSH')
         check(request('/api/timezone')[0]==401,'Anonymous timezone inventory denied')
         check(request('/api/timezone',{})[0]==401,'Anonymous timezone changes denied')
         check(request('/api/workstations/1/graphics')[0]==401,'Anonymous workstation graphics probes denied')
@@ -116,9 +135,9 @@ with tempfile.TemporaryDirectory(prefix='xur-test-') as temp:
         try:spoof_status=opener.open(spoof).status
         except urllib.error.HTTPError as error:spoof_status=error.code
         check(spoof_status==401,'Forged Tailscale header on TCP cannot authenticate')
-        cli=subprocess.run([str(repo/'.build/context/publish/control/Xur.Control'),'status','--json'],env=env,capture_output=True,check=True)
+        cli=subprocess.run([str(binary),'status','--json'],env=env,capture_output=True,check=True)
         check(json.loads(cli.stdout)['diskWrites']=='ApprovalRequired','System.CommandLine status --json reaches the running host')
-        menu=subprocess.run([str(repo/'.build/context/publish/control/Xur.Control')],input=b'1\n',env=env,capture_output=True,check=True)
+        menu=subprocess.run([str(binary)],input=b'1\n',env=env,capture_output=True,check=True)
         check(code.encode() in menu.stdout and proc.poll() is None,'Second root-menu invocation reuses the host and bootstrap identity')
         status,body=request('/login')
         check(status==200 and code not in body,'Login page does not expose the code')
@@ -154,6 +173,40 @@ with tempfile.TemporaryDirectory(prefix='xur-test-') as temp:
         check('name="zone"' in settings and 'Asia/Kolkata' in settings and 'action="/settings/timezone"' in settings,'Settings renders the available system timezones')
         check(request('/settings/timezone',{'zone':'Asia/Kolkata'})[0]==400,'Timezone form requires CSRF')
         zone_csrf=re.search(r'name="__RequestVerificationToken" value="([^"]+)"',settings).group(1)
+        check('Disabled (recommended)' in settings and 'Discouraged for normal use.' in settings and 'action="/settings/diagnostic-ssh"' in settings,'Settings shows discouraged SSH access with a disabled default')
+        check(request('/settings/diagnostic-ssh',{'mode':'enabled','publicKeys':'fixture-invalid'})[0]==400 and not ssh_changes,'SSH setting requires manager CSRF before contacting the agent')
+        invalid_status,invalid_page=request('/settings/diagnostic-ssh',{'mode':'unexpected','__RequestVerificationToken':zone_csrf})
+        check(invalid_status==200 and 'Choose Enabled or Disabled.' in invalid_page and not ssh_changes,'Invalid SSH mode is rejected without an agent mutation')
+        key='ssh-ed25519 '+base64.b64encode(b'\0\0\0\x0bssh-ed25519\0\0\0\x20'+secrets.token_bytes(32)).decode()
+        ssh_status,ssh_page=request('/settings/diagnostic-ssh',{'mode':'enabled','publicKeys':key,'__RequestVerificationToken':zone_csrf})
+        check(ssh_status==200 and 'Diagnostic SSH setting saved.' in ssh_page and '1 authorized key(s)' in ssh_page and ssh_changes[-1]=={'enabled':True,'publicKeys':key},'Protected manager form forwards public keys and renders confirmed SSH state')
+        check(key not in ssh_page,'Settings never echoes stored public keys')
+        def api_request(path,method='GET',payload=None,bearer=None):
+            headers={'Content-Type':'application/json','RequestVerificationToken':zone_csrf}
+            if bearer:headers['Authorization']='Bearer '+bearer
+            req=urllib.request.Request('https://127.0.0.1:18433'+path,data=None if payload is None else json.dumps(payload).encode(),headers=headers,method=method)
+            try:
+                with opener.open(req,timeout=5) as response:return response.status,json.load(response)
+            except urllib.error.HTTPError as error:return error.code,error.read().decode()
+        changes=len(ssh_changes)
+        for scope in ['diagnostics','testing','automation']:
+            created,body=api_request('/api/api-keys','POST',{'name':'Diagnostic boundary fixture','scope':scope,'days':1})
+            check(created==201,'Manager can create test API key: '+scope)
+            bearer=body['token']
+            check(api_request('/api/diagnostics/system',bearer=bearer)[0]==200 and api_request('/api/diagnostics/ssh',bearer=bearer)[1]['enabled'],'Read-only diagnostic reports and SSH status are accessible: '+scope)
+            denied=urllib.request.Request('https://127.0.0.1:18433/settings/diagnostic-ssh',data=urllib.parse.urlencode({'mode':'enabled','publicKeys':key,'__RequestVerificationToken':zone_csrf}).encode(),headers={'Authorization':'Bearer '+bearer})
+            try:denied_status=opener.open(denied,timeout=5).status
+            except urllib.error.HTTPError as error:denied_status=error.code
+            check(denied_status==403 and len(ssh_changes)==changes,'API key cannot enable SSH even alongside a manager cookie and CSRF: '+scope)
+            check(api_request('/api/diagnostics/ssh','POST',{'enabled':True,'publicKeys':key},bearer)[0] in [403,405] and len(ssh_changes)==changes,'There is no API-key SSH mutation endpoint: '+scope)
+        report_busy=True
+        check(api_request('/api/diagnostics/system')[0]==409,'Agent report conflicts retain their HTTP status')
+        report_busy=False
+        invalid_status,invalid_page=request('/settings/diagnostic-ssh',{'mode':'enabled','publicKeys':'fixture-invalid','__RequestVerificationToken':zone_csrf})
+        check(invalid_status==200 and 'Paste valid public keys.' in invalid_page and ssh['enabled'],'Agent validation errors appear in Settings without claiming the setting was saved')
+        disabled_status,disabled_page=request('/settings/diagnostic-ssh',{'mode':'disabled','__RequestVerificationToken':zone_csrf})
+        check(disabled_status==200 and 'Diagnostic SSH setting saved.' in disabled_page and not ssh['enabled'],'Manager can disable SSH without resubmitting keys')
+        check(api_request('/api/diagnostics/system')[0]==200 and not ssh['enabled'],'Read-only system reports work while SSH is disabled')
         zone_status,zone_page=request('/settings/timezone',{'zone':'Asia/Kolkata','__RequestVerificationToken':zone_csrf})
         check(zone_status==200 and 'Timezone saved.' in zone_page and json.loads(request('/api/timezone')[1])['current']=='Asia/Kolkata','Authenticated timezone form forwards the selected zone and displays confirmation')
         check(request('/settings/ntp',{'enabled':'true','servers':'time.example'})[0]==400,'NTP form requires CSRF')
@@ -185,7 +238,7 @@ with tempfile.TemporaryDirectory(prefix='xur-test-') as temp:
         with tls_open(api_login,timeout=5) as r:manager=json.load(r)['accessToken']
         persisted=urllib.request.Request('https://127.0.0.1:18433/api/status',headers={'Authorization':'Bearer '+manager})
         os.killpg(proc.pid,signal.SIGTERM);proc.wait(timeout=5)
-        proc=subprocess.Popen([str(repo/'.build/context/publish/control/Xur.Control')],cwd=repo/'.build/context/publish/control',env=env,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,start_new_session=True)
+        proc=subprocess.Popen([str(binary)],cwd=binary.parent,env=env,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,start_new_session=True)
         for _ in range(100):
             try:
                 with tls_open(persisted,timeout=2) as response:

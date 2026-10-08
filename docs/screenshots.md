@@ -10,6 +10,26 @@
   account names or network addresses visible. Kept private in T3 attachments;
   not copied into documentation assets or published.
 
+- 2026-10-07: Captured the simplified server-name screen at 100×40 and 40×12
+  characters and its controller keyboard at 80×25 in
+  `.build/evidence/controllers/console/`. PNGs are rasterized from actual ANSI
+  console frames from the working tree based on `a9bfa2b`; purpose: review field
+  focus, spacing, the single typing hint and contextual Continue/Back actions.
+  Synthetic names and typed text only; no live device, credentials, addresses
+  or account data. Private regression evidence, not publication assets or
+  physical-display captures. Regenerate when console input layout changes.
+
+- 2026-10-07: Reviewed private, in-memory T3 collaborative browser snapshots of
+  the individual-controller profile editor at 320 and 1280 CSS px, from the
+  working tree based on `a9bfa2b`. The underlying synthetic Razor fixtures and
+  text test receipts are under `.build/evidence/controllers/`; no snapshot PNG
+  was saved or published. Purpose: inspect controller choices, disconnected
+  selections, unavailable identities and mobile checkbox sizing. Privacy review:
+  synthetic controller serials and fixture profiles only; preview network
+  addresses may appear in private browser metadata. No live host, credentials,
+  accounts or model prompts were captured. Regenerate after controller/editor
+  UI changes. The published profile-editor JPEG remains due for refresh.
+
 - 2026-10-02: Reviewed private user attachment `IMG_7968.jpg`
   (`9a815e3d-21b5-4f73-aaf3-0d5dfb2d06a1-20c5cb12-93ab-4307-b982-d01a1790ce6e.jpg`)
   for the reported post-install boot problem. Shows Anaconda/dracut waiting for
@@ -56,7 +76,7 @@ The capture dates and privacy reviews in the table above remain unchanged.
 
 | Image | Work before the next release |
 | --- | --- |
-| `docs/assets/profile-editor.jpg` | Refresh: predates inline rename, conditional workstation fields, Add user placement and shared Switch profile navigation. |
+| `docs/assets/profile-editor.jpg` | Refresh: predates inline rename, conditional workstation fields, Add user placement, shared Switch profile navigation and individual controller assignment. |
 | `docs/assets/workstations.jpg` | Refresh: predates desktop previews, current Settings/display controls and the removal of profile-loading and launch shortcuts. |
 | `docs/assets/control-panel.jpg` | Refresh: predates Home's per-display CEC controls and Displays navigation, as well as the current picker and shared Switch profile navigation. |
 | `docs/assets/model-lab.jpg` | Review and refresh if needed for shared navigation; preserve blank prompts/results and synthetic fixtures. |
@@ -88,6 +108,17 @@ See [release preparation](development/release-preparation.md).
 | User-supplied bug screenshots | Reproduce reported defects | T3 attachments; referenced in conversation, not copied into source | Keep private; add a sanitized published-image entry before reuse |
 
 ## Change log
+
+- 2026-10-07: Added Diagnostic SSH in Settings and the system report download in
+  Diagnostics. Reviewed the actual Razor fixtures at 1280, 390 and 320 px in the
+  collaborative browser; the new controls have no horizontal overflow. Checked
+  disabled/enabled SSH states with synthetic keys and blank key inputs. The full
+  private Settings fixture includes development-host network addresses and stays
+  under `.build/evidence/diagnostic-access-ui/`. Local preview navigation was
+  unavailable, so rendered HTML and local styles were loaded directly for layout
+  checks; real HTTPS tests covered form submission and authorization. No images
+  were saved or published. Older private Settings captures predate these controls;
+  the published update-channel crop is unaffected.
 
 - 2026-10-07: Reviewed private T3 attachment `image.png`
   (`d967f238-2de3-4081-933c-47809af08b92-0f7301cd-4540-47dd-adb5-91f8829ab7a2.png`)

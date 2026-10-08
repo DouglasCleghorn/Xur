@@ -4,7 +4,7 @@ namespace Xur.Agent;
 public static class GpuOwnership
 {
     static string Read(string path){try{return File.ReadAllText(path).Trim();}catch(IOException){return "";}}
-    public static async Task<GpuOwner[]> Observe(GpuDevice gpu)
+    public static async Task<GpuOwner[]> Observe(GpuDevice gpu,bool includeIdentity=false)
     {
         var nodes=gpu.Nodes.Concat(gpu.Cards??[]).ToHashSet();var compute=new HashSet<int>();
         if(gpu.Vendor=="NVIDIA")
@@ -14,7 +14,7 @@ public static class GpuOwnership
             if(r.ExitCode!=0)throw new InvalidOperationException($"Could not observe compute owners for {gpu.Pci}.");
             foreach(var line in r.Output.Split('\n'))if(int.TryParse(line.Trim(),out var pid))compute.Add(pid);
         }
-        return ObserveProcesses(nodes,compute).Select(o=>o.Service=="xur-console-"+Canonical.Hash(gpu.Pci)[..16]+".service" && o.Devices.All(d=>(gpu.Cards??[]).Contains(d))
+        return ObserveProcesses(nodes,compute,includeIdentity:includeIdentity).Select(o=>o.Service=="xur-console-"+Canonical.Hash(gpu.Pci)[..16]+".service" && o.Devices.All(d=>(gpu.Cards??[]).Contains(d))
             ? o with {Blocking=false,Role="Xur display console"} : o).ToArray();
     }
     static bool PersistenceIdentity(string status)
@@ -24,7 +24,7 @@ public static class GpuOwnership
         var uid=fields.Groups[1].Value;if(uid=="0")return true;
         return int.TryParse(uid,out var value)&&value<1000&&File.ReadLines("/etc/passwd").Select(l=>l.Split(':')).Any(p=>p.Length==7&&p[0]=="nvidia-persistenced"&&p[2]==uid);
     }
-    public static GpuOwner[] ObserveProcesses(HashSet<string> nodes,HashSet<int>? compute=null,string procRoot="/proc")
+    public static GpuOwner[] ObserveProcesses(HashSet<string> nodes,HashSet<int>? compute=null,string procRoot="/proc",bool includeIdentity=false)
     {
         var owners=new List<GpuOwner>();compute??=[];
         foreach(var proc in Directory.EnumerateDirectories(procRoot))
@@ -39,11 +39,15 @@ public static class GpuOwnership
                 var executable=new FileInfo(proc+"/exe").LinkTarget??"";
                 // An open persistence handle alone is not a workload. Exempt only
                 // the vendor binary in its exact system service and system account, never a process name.
-                var persistence=!compute.Contains(pid)&&service=="nvidia-persistenced.service"&&
-                    cgroup.Contains("/system.slice/nvidia-persistenced.service")&&
-                    executable is "/usr/bin/nvidia-persistenced" or "/usr/sbin/nvidia-persistenced"&&
-                    PersistenceIdentity(Read(proc+"/status"));
-                owners.Add(new(pid,name.Length==0?"Process":name,service,held.Length>0?held:["NVIDIA compute context"],!persistence,persistence?"Driver persistence":compute.Contains(pid)?"Compute":"Device handle"));
+                var persistenceService=service=="nvidia-persistenced.service"&&cgroup.Contains("/system.slice/nvidia-persistenced.service");
+                var persistenceExecutable=executable is "/usr/bin/nvidia-persistenced" or "/usr/sbin/nvidia-persistenced";
+                var status=includeIdentity||!compute.Contains(pid)&&persistenceService&&persistenceExecutable?Read(proc+"/status"):"";
+                var persistenceAccount=PersistenceIdentity(status);
+                var persistence=!compute.Contains(pid)&&persistenceService&&persistenceExecutable&&persistenceAccount;
+                var fields=includeIdentity?Regex.Match(status,@"(?m)^Uid:\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)$"):null;
+                var uids=fields?.Success==true?fields.Groups.Cast<Group>().Skip(1).Select(g=>uint.Parse(g.Value,System.Globalization.CultureInfo.InvariantCulture)).ToArray():null;
+                var identity=includeIdentity?new GpuProcessIdentity(executable,cgroup,uids,compute.Contains(pid),persistenceService,persistenceExecutable,persistenceAccount):null;
+                owners.Add(new(pid,name.Length==0?"Process":name,service,held.Length>0?held:["NVIDIA compute context"],!persistence,persistence?"Driver persistence":compute.Contains(pid)?"Compute":"Device handle",identity));
             }
             catch(DirectoryNotFoundException){}catch(FileNotFoundException){}
         }
