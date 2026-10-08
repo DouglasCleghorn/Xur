@@ -5,12 +5,12 @@ namespace Xur.Control;
 public sealed class ConsoleComputerName(HttpClient client,bool local=false)
 {
     string Prefix=>local?"/local":"";
-    const string Prompt="Choose the name shown on your network and in Tailscale.\nUse letters, numbers and hyphens. Enter saves; Escape skips for now.";
+    const string Prompt="Choose the name shown on your network and in Tailscale.\nUse letters, numbers and hyphens.";
     string current="xur",message=Prompt;
     bool saved;
     public bool Saved=>saved;
     public bool Closed {get;private set;}
-    public ConsoleScreen Screen=>new("computer-name"+(saved?"-saved":""),"Server name",message,[new('0',saved?"Back to menu":"Skip for now")],saved?null:current);
+    public ConsoleScreen Screen=>new("computer-name"+(saved?"-saved":""),"Server name",message,[new('0',saved?"Back to menu":"Skip for now")],saved?null:current,InputLabel:"Server name");
     public async Task Open()
     {
         Closed=false;saved=false;message=Prompt;

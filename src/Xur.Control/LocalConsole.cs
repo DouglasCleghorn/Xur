@@ -104,7 +104,8 @@ public static class LocalConsole
             body=InputBody();Render();
         }
     }
-    static string InputBody()=>Clean(maintenance!.Body)+"\n> "+DisplayText+"\nHold LT/RT: stick keyboard | LB/RB: set | X: delete | Y: space";
+    static string InputBody()=>Clean(maintenance!.Body)+"\n\n"+(maintenance.InputLabel is {} label?Clean(label)+"\n":"")+"> "+DisplayText+"\n\n"+ControllerTypingHint(80)+"\nEnter: "+maintenance.InputAction+" | /cancel: "+maintenance.Options.First(o=>o.Key=='0').Label;
+    static string ControllerTypingHint(int width)=>width<40?"Hold LT / RT to type":"Controller: hold LT or RT to type";
     public static void EditText(char character)
     {
         lock(Sync)
@@ -287,7 +288,7 @@ public static class LocalConsole
         return new string(text.Where(c=>!char.IsControl(c) || c=='\n' || c=='\t').ToArray()).Replace("\t","    ");
     }
     // Kept pure so overflow, pagination and fixed controls can be checked directly.
-    public static string Frame(string heading,string text,int columns,int rows,int requestedPage=0,bool qrView=false,bool logWindow=false,int selectedOption=0,string[]? optionList=null,string[]? statusQr=null,bool diagnosticsActive=false)
+    public static string Frame(string heading,string text,int columns,int rows,int requestedPage=0,bool qrView=false,bool logWindow=false,int selectedOption=0,string[]? optionList=null,string[]? statusQr=null,bool diagnosticsActive=false,string? inputValue=null,string? inputLabel=null,string inputAction="Save")
     {
         var options=optionList ?? Options; selectedOption=Math.Clamp(selectedOption,0,options.Length-1);
         columns=Math.Clamp(columns,40,240); rows=Math.Clamp(rows,12,120);
@@ -299,11 +300,25 @@ public static class LocalConsole
         var width=innerColumns-4;
         var optionLimit=Math.Max(1,innerRows-12);
         var optionStart=selectedOption/optionLimit*optionLimit;
-        var footer=qrView ? new[]{"> Back to menu"} : logWindow
+        var footer=inputValue!=null?new[]{"Enter / A: "+Clean(inputAction),"Esc / B: "+Clean(options[selectedOption])}.SelectMany(line=>Wrap(line,width)).ToArray():qrView ? new[]{"> Back to menu"} : logWindow
             ? new[]{"> Back to menu","PgUp/PgDn / LB/RB: Scroll logs"}
             : options.Select((option,index)=>(index==selectedOption ? "> " : "  ")+(index+1)+" "+option).Skip(optionStart).Take(optionLimit).ToArray();
-        var height=Math.Max(1,innerRows-footer.Length-5);
+        var height=Math.Max(1,innerRows-footer.Length-(inputValue!=null?4:5));
         var lines=Clean(text).Split('\n').SelectMany(line=>Wrap(line,width)).ToArray();
+        string? inputLine=null;string[] inputRows=[];
+        if(inputValue!=null)
+        {
+            var value=Clean(inputValue).Replace("\n","");
+            inputLine="> "+(value.Length>width-2?"…"+value[^(width-3)..]:value);
+            // Keep the field and its one discovery hint visible even when the
+            // description needs pages on a small physical or serial display.
+            if(height>=7)inputRows=[..inputRows,""];
+            if(height>=5 && !string.IsNullOrEmpty(inputLabel))inputRows=[..inputRows,Clean(inputLabel)];
+            inputRows=[..inputRows,inputLine];
+            if(height>=7)inputRows=[..inputRows,""];
+            inputRows=[..inputRows,ControllerTypingHint(width)];
+            height=Math.Max(1,height-inputRows.Length);
+        }
         if(statusQr is {Length:>0})
         {
             var qrWidth=statusQr.Max(l=>l.Length);var leftWidth=width-qrWidth-2;
@@ -320,12 +335,13 @@ public static class LocalConsole
         var selected=Math.Min(requestedPage,pages-1);
         if(logWindow && requestedPage==0) lines=lines.TakeLast(height).ToArray();
         else lines=lines.Skip(selected*height).Take(height).ToArray();
+        lines=[..lines,..inputRows];
         using var writer=new StringWriter();
         var console=AnsiConsole.Create(new AnsiConsoleSettings { Out=new AnsiConsoleOutput(writer), Ansi=AnsiSupport.No, ColorSystem=ColorSystemSupport.NoColors });
         console.Profile.Width=innerColumns; console.Profile.Height=innerRows; console.Profile.Capabilities.Unicode=true;
         var content=new Panel(new Text(string.Join('\n',lines))).Header("Xur setup | "+Markup.Escape(heading)).RoundedBorder().Expand();
-        var controls=new Panel(new Text(string.Join('\n',footer)+"\n"+(qrView ? "Enter/A: Open | Esc/B/0: Menu | Alt+F2: Logs" : "Up/Down: Select | Enter/A: Open | Esc/B/0: Back"+(pages>1?$" | PgUp/PgDn/LB/RB: {selected+1}/{pages}":"")))).RoundedBorder().Expand();
-        console.Write(new Layout("root").SplitRows(new Layout("content").Update(content),new Layout("controls").Size(footer.Length+3).Update(controls)));
+        var controls=new Panel(new Text(string.Join('\n',footer)+(inputValue!=null?"":"\n"+(qrView ? "Enter/A: Open | Esc/B/0: Menu | Alt+F2: Logs" : "Up/Down: Select | Enter/A: Open | Esc/B/0: Back"+(pages>1?$" | PgUp/PgDn/LB/RB: {selected+1}/{pages}":""))))).RoundedBorder().Expand();
+        console.Write(new Layout("root").SplitRows(new Layout("content").Update(content),new Layout("controls").Size(footer.Length+(inputValue!=null?2:3)).Update(controls)));
         var frame=writer.ToString().Replace("\r","").TrimEnd('\n').Split('\n');
         var output=new StringBuilder("\x1b%G\x1b[0m\x1b[r\x1b[?25l\x1b[?7l\x1b[H");
         // No newline reaches the terminal. In-place writes cannot scroll at the bottom edge.
@@ -335,8 +351,10 @@ public static class LocalConsole
             var line=index>=0 && index<Math.Min(frame.Length,innerRows)?frame[index]:"";
             line=line.PadRight(innerColumns);
             if(diagnosticsActive && i==verticalMargin)line="\x1b[1;33m"+InstallerDiagnosticWarning.Banner.PadRight(innerColumns)+"\x1b[0m";
-            if(line.Contains(qrView || logWindow ? "> Back to menu" : "> "+(selectedOption+1)+" "+options[selectedOption]))
+            if(inputLine!=null && line.Contains(inputLine,StringComparison.Ordinal) || inputValue==null && line.Contains(qrView || logWindow ? "> Back to menu" : "> "+(selectedOption+1)+" "+options[selectedOption]))
                 line=line[..1]+"\x1b[7m"+line[1..^1]+"\x1b[0m"+line[^1..];
+            else if(inputValue!=null && line.Contains(ControllerTypingHint(width),StringComparison.Ordinal))
+                line="\x1b[2m"+line+"\x1b[0m";
             output.Append($"\x1b[{i+1};1H").Append(' ',horizontalMargin).Append(line).Append(' ',horizontalMargin);
         }
         return output.ToString();
@@ -368,11 +386,14 @@ public static class LocalConsole
         columns=Math.Clamp(columns,40,240);rows=Math.Clamp(rows,12,120);
         var options=CurrentOptions;var code=!logWindow&&view=="status"?ServeQr():null;
         var diagnosticsActive=DiagnosticsActive;
-        var overlay=!logWindow && EditingText?keyboardOverlay.View:null;
-        var key=System.Text.Json.JsonSerializer.Serialize(new{title,content,page,view,selection,options,code,diagnosticsActive,overlay});
+        var input=!logWindow && EditingText?maintenance:null;
+        if(input!=null)content=UpdateNotice(Clean(input.Body));
+        var overlay=input!=null?keyboardOverlay.View:null;
+        var inputValue=input!=null?DisplayText:null;
+        var key=System.Text.Json.JsonSerializer.Serialize(new{title,content,page,view,selection,options,code,diagnosticsActive,overlay,inputValue,input?.InputLabel,input?.InputAction});
         var size=(columns,rows,logWindow);
         if(FrameCache.TryGetValue(size,out var cached)&&cached.Key==key)return cached.Frame;
-        var frame=Frame(logWindow?"Logs":title,content,columns,rows,page,!logWindow&&view=="qr",logWindow,selection,options,code,diagnosticsActive);
+        var frame=Frame(logWindow?"Logs":title,content,columns,rows,page,!logWindow&&view=="qr",logWindow,selection,options,code,diagnosticsActive,inputValue,input?.InputLabel,input?.InputAction??"Save");
         if(overlay!=null)frame=ConsoleKeyboardOverlay.Draw(frame,overlay,DisplayText,maintenance!.Secret,columns,rows,diagnosticsActive);
         if(FrameCache.Count>=16)FrameCache.Clear();
         FrameCache[size]=(key,frame);return frame;
