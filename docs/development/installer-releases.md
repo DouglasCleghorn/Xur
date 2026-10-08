@@ -23,7 +23,12 @@ A push to `main` (Nightly) or `release` (Stable) runs **Build and publish releas
    files, BIOS/UEFI layout, SELinux settings and absence of a Bazzite payload. This
    runs alongside application publication; failure does not block or undo the
    update. The context carries the selected application channel; Bazzite uses Stable.
-5. After inspection and application publication succeed, publish a separate
+   After inspection, qualify that exact candidate in fresh UEFI/KVM VMs with
+   offline startup, no eligible disk, read-only diagnostics, conflicting answer
+   files, canceled erasure, and online install/reboot/account/profile persistence
+   checks. A failed VM qualification blocks installer publication.
+   See [automated VM qualification](vm-testing.md) for commands and evidence.
+5. After inspection, VM qualification and application publication succeed, publish a separate
    `nightly-<version>-installer` or `v<version>-installer` release. Stable installer
    publication also requires environment approval. Download and verify the signed
    app descriptor and archive from the matching, already-published app release,
@@ -89,9 +94,11 @@ superseded commit remain in effect; an existing release tag is never overwritten
 Signed metadata binds an application release to its channel. Each channel uses
 its own publication workflow; publishing Nightly does not promote it to Stable.
 
-This workflow does **not** assert that boot/install, GPU or physical USB tests
-passed. Its installer receipt explicitly records these as not run. Run the
-separate media suite before declaring installer hardware support verified.
+Installer publication now requires the separate VM qualification job to pass.
+The signed build/inspection receipt still records installation as not run at its
+creation; the later VM receipt is retained separately in Actions artifacts.
+Neither receipt establishes GPU or physical USB/audio support. Run physical
+acceptance before declaring installer hardware support verified.
 No self-hosted runner, signing key or GitHub write token is exposed to PR jobs.
 The September 21 `nightly-2026.09.21.26.1` release completed the hosted build and
 published a single 1.78 GiB ISO. This proves the build and embedded inspection,

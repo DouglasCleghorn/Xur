@@ -20,6 +20,8 @@ Xur remains a preview; implemented behavior and hardware validation are separate
 | Installer troubleshooting | [Boot diagnostics and console automation](usage/installer-diagnostics.md) |
 | Build and release | [Release preparation](development/release-preparation.md), [local builds](development/build.md), [installer release automation](development/installer-releases.md), [build cleanup](development/build-cleanup.md) |
 | Refresh an existing installer USB | [USB updater](usage/update-installer-usb.md) |
+| Qualify an installer ISO in disposable VMs | [Automated VM testing](development/vm-testing.md) |
+| Plan a hardware test farm | [PXE test server design](development/pxe-test-server.md) |
 | Maintain the public site | [Website setup and checks](../website/README.md), [screenshot register](screenshots.md) |
 
 ## Implementation and validation status

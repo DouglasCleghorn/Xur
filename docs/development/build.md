@@ -142,6 +142,11 @@ the filesystem log. The block device and loop view remain read-only.
 
 ## Run the installer VM evidence suite
 
+For release ISO boot/install/reboot testing, use the
+[automated VM qualification runner](vm-testing.md). It exercises the current
+console-based installer. The historical media suite below contains assumptions
+from the earlier web-based installation flow.
+
 Prepare browser tools with `python3 eng/prepare-npm.py browser` and install
 Chromium with `.build/browser/node_modules/.bin/playwright install chromium`.
 Install the QR tools with
