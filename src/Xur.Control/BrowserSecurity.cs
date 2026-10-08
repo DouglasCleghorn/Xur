@@ -7,8 +7,9 @@ public static class BrowserSecurity
 {
     // Browsers cap persistent cookies at 400 days. Renew on each authenticated
     // visit; the signed manager-browser token itself has no time limit.
+    // Lax sends remembered sign-in on external links; mutations still require CSRF.
     public static void SetSession(HttpContext context,string session,bool persistent)=>context.Response.Cookies.Append("xur.session",session,
-        new CookieOptions { HttpOnly=true,SameSite=SameSiteMode.Strict,Secure=true,MaxAge=persistent?TimeSpan.FromDays(400):TimeSpan.FromHours(8),Path="/" });
+        new CookieOptions { HttpOnly=true,SameSite=persistent?SameSiteMode.Lax:SameSiteMode.Strict,Secure=true,MaxAge=persistent?TimeSpan.FromDays(400):TimeSpan.FromHours(8),Path="/" });
 
     public static bool ServeOrigin(HttpContext context)
     {

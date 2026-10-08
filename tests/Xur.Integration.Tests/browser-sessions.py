@@ -2,6 +2,7 @@
 """Real HTTPS session persistence and fresh login-token checks; no saved credentials."""
 import base64
 import hashlib
+import hmac
 import http.client
 import json
 import os
@@ -96,6 +97,13 @@ with tempfile.TemporaryDirectory(prefix='s-', dir=runtime) as tmp:
         encoded = value.split('.')[1]
         return json.loads(base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)))
 
+    def signed_payload(value, **claims):
+        header = value.split('.')[0]
+        body = base64.urlsafe_b64encode(json.dumps({**payload(value), **claims}).encode()).decode().rstrip('=')
+        data = (header + '.' + body).encode()
+        signature = hmac.new((state / 'session-signing.key').read_bytes(), data, hashlib.sha256).digest()
+        return data.decode() + '.' + base64.urlsafe_b64encode(signature).decode().rstrip('=')
+
     try:
         start()
         local = http.client.HTTPConnection('localhost')
@@ -113,9 +121,10 @@ with tempfile.TemporaryDirectory(prefix='s-', dir=runtime) as tmp:
         assert status == 302 and headers['Location'] == '/'
         remembered = cookies['xur.session']
         assert payload(remembered)['purpose'] == 'manager-browser' and 'exp' not in payload(remembered)
-        assert 'max-age=34560000' in headers['Set-Cookie']
+        assert 'max-age=34560000' in headers['Set-Cookie'] and 'samesite=lax' in headers['Set-Cookie']
         assert request('GET', '/api/api-keys')[0] == 200
         authenticated_token = token()
+        assert authenticated_token['signedIn'] is True
         key_paths = [state / 'session-signing.key', state / 'manager-tls.pfx', *sorted((state / 'form-keys').glob('*.xml'))]
         keys = {path.name: hashlib.sha256(path.read_bytes()).digest() for path in key_paths}
         assert len(keys) >= 3
@@ -151,6 +160,32 @@ with tempfile.TemporaryDirectory(prefix='s-', dir=runtime) as tmp:
         assert payload(cookies['xur.session'])['purpose'] == 'manager-browser'
         assert form('/auth/logout', {}, token())[0] == 302 and 'xur.session' not in cookies
         assert request('GET', '/api/api-keys')[0] == 401
+        # Legacy expiry and not-before claims cannot invalidate browser sign-in,
+        # but the same token remains subject to expiry when used as a bearer.
+        expired = signed_payload(api['accessToken'], exp=int(time.time()) - 86400)
+        future = signed_payload(api['accessToken'], nbf=int(time.time()) + 86400, exp=int(time.time()) + 172800)
+        for old in (expired, future):
+            assert request('GET', '/api/api-keys', headers={'Authorization': 'Bearer ' + old})[0] == 401
+            cookies['xur.session'] = old
+            status, headers, _ = request('HEAD', '/login')
+            assert status == 302 and headers['Location'] == '/'
+            assert 'samesite=lax' in headers['Set-Cookie'] and 'max-age=34560000' in headers['Set-Cookie']
+            assert payload(cookies['xur.session'])['purpose'] == 'manager-browser' and 'exp' not in payload(cookies['xur.session'])
+            assert request('GET', '/api/api-keys')[0] == 200
+            assert form('/auth/logout', {}, token())[0] == 302
+        cookies['xur.session'] = expired
+        csrf = token()
+        assert csrf['signedIn'] is True
+        cookies['xur.session'] = expired
+        assert form('/auth/logout', {}, csrf)[0] == 302 and 'xur.session' not in cookies
+        # Reject tampering and credentials for other identities without clearing
+        # the browser cookie or silently granting access.
+        for invalid in (expired[:-12] + 'tampered', signed_payload(expired, sub='another-account'),
+                        signed_payload(expired, purpose='bootstrap'), signed_payload(expired, aud='another-service')):
+            cookies['xur.session'] = invalid
+            assert request('GET', '/api/api-keys')[0] == 401 and cookies['xur.session'] == invalid
+        cookies.pop('xur.session')
+        assert token()['signedIn'] is False
         # The explicit browser-save path confirms successful password login;
         # failed credentials and missing CSRF cannot issue a persistent session.
         status, _, body = form('/auth/login', {**credentials, 'password': 'wrong password'}, token(), 'application/json')
@@ -160,7 +195,7 @@ with tempfile.TemporaryDirectory(prefix='s-', dir=runtime) as tmp:
         assert status == 302 and 'xur.session' not in cookies
         status, headers, body = form('/auth/login', credentials, token(), 'application/json')
         assert status == 200 and json.loads(body) == {'signedIn': True, 'redirectTo': '/'}
-        assert 'max-age=34560000' in headers['Set-Cookie'] and 'Content-Encoding' not in headers
+        assert 'max-age=34560000' in headers['Set-Cookie'] and 'samesite=lax' in headers['Set-Cookie'] and 'Content-Encoding' not in headers
         assert request('GET', '/api/api-keys')[0] == 200
         assert form('/auth/logout', {}, token())[0] == 302 and 'xur.session' not in cookies
     finally:
@@ -169,4 +204,5 @@ with tempfile.TemporaryDirectory(prefix='s-', dir=runtime) as tmp:
 print(json.dumps({'suite': 'BrowserSessions', 'result': 'Passed', 'persistentSignup': True,
                   'persistentLogin': True, 'rebootStatePreserved': True, 'freshLoginTokens': True,
                   'crossOriginDenied': True, 'csrfRequired': True, 'apiExpiryUnchanged': True,
-                  'oldCookieUpgrade': True, 'browserSaveConfirmation': True, 'signOut': True}))
+                  'oldCookieUpgrade': True, 'expiredCookieRecovery': True, 'clockChangeRecovery': True,
+                  'invalidCookiesDenied': True, 'browserSaveConfirmation': True, 'signOut': True}))

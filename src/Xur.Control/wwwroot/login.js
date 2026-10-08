@@ -2,10 +2,21 @@
  const form=document.querySelector('form[action="/auth/login"]');
  if(form){
   let pending=false,ready=false;
-  window.addEventListener('pageshow',()=>{
+  async function refreshTokens(){
+   const response=await fetch('/auth/login-token',{credentials:'same-origin',cache:'no-store',redirect:'error',headers:{Accept:'application/json'}});
+   if(!response.ok)throw Error('Could not refresh the sign-in form. Try again.');
+   const tokens=await response.json(),input=form.elements.namedItem(tokens.fieldName);
+   if(!tokens.requestToken||!input)throw Error('Could not refresh the sign-in form. Reload the page and try again.');
+   input.value=tokens.requestToken;
+   return tokens;
+  }
+  window.addEventListener('pageshow',async()=>{
    pending=false;ready=false;
    const button=form.querySelector('button[type="submit"]');
    if(button)button.disabled=false;
+   // An older Strict cookie can be withheld on an external link's first
+   // navigation. A same-origin check recovers it, including restored tabs.
+   try{if((await refreshTokens()).signedIn&&!pending)location.replace('/');}catch{}
   });
   form.addEventListener('submit',async event=>{
    if(ready)return;
@@ -20,11 +31,7 @@
     // A restored tab or another tab signing in/out may have changed the
     // cookie or identity since this form was rendered. Refresh just the CSRF
     // token before authentication and password-manager detection.
-    const response=await fetch('/auth/login-token',{credentials:'same-origin',cache:'no-store',redirect:'error',headers:{Accept:'application/json'}});
-    if(!response.ok)throw Error('Could not refresh the sign-in form. Try again.');
-    const tokens=await response.json(),input=form.elements.namedItem(tokens.fieldName);
-    if(!tokens.requestToken||!input)throw Error('Could not refresh the sign-in form. Reload the page and try again.');
-    input.value=tokens.requestToken;
+    if((await refreshTokens()).signedIn){location.replace('/');return;}
     let credential;
     if(form.elements.namedItem('password') && typeof window.PasswordCredential==='function' && navigator.credentials?.store){
      try{credential=new PasswordCredential(form);}catch{}

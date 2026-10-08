@@ -18,10 +18,18 @@ The account stores a salted ASP.NET Core Identity password hash in
 `/var/lib/xur/manager-account.json`, with owner-only permissions. The live installer has no web listener or administrator-account form. The
 installed system generates its signing and form-protection keys on first start.
 Browser account sessions are signed with the distinct `manager-browser` purpose
-and have no server expiry. Their Secure, HttpOnly, SameSite=Strict cookie lasts
+and have no server expiry. Their Secure, HttpOnly, SameSite=Lax cookie lasts
 400 days and is renewed on authenticated visits, preserving sign-in across browser
-restarts, application updates and reboots. A valid eight-hour cookie from an older
-bundle upgrades on its next authenticated visit; expired cookies require login.
+restarts, application updates and reboots. An eight-hour cookie from an older
+bundle upgrades on its next visit, including when its old expiry or not-before
+claims would reject it as a bearer. Browser cookies validate the machine's
+signature, issuer, audience, account and purpose without a clock limit. API
+bearer validation remains separate and enforces its lifetime.
+Lax allows opening Xur from external links without losing sign-in. A restored
+login page checks the existing session through a same-origin request and returns
+to the dashboard automatically; this also recovers older Strict cookies withheld
+on the initial navigation. Antiforgery cookies remain Strict and mutations still
+require their request token.
 Browsers can still remove cookies, including after prolonged inactivity or when
 site data is cleared. Sign out removes this browser's cookie. Setup and API bearer
 sessions retain their eight-hour expiry. Corrupt account state fails closed.

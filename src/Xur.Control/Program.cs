@@ -151,8 +151,9 @@ async Task StartHost()
         var authorization=ctx.Request.Headers.Authorization.ToString();
         bool bearer=ctx.Items["apiKey"] is ApiKeyInfo || authorization.StartsWith("Bearer ",StringComparison.OrdinalIgnoreCase) && auth.Authorized(authorization[7..]);
         var cookie=ctx.Request.Cookies["xur.session"];
+        var remembered=auth.RememberBrowserSession(cookie);
         var setupSession=auth.CanSetup(cookie) ? cookie : authorization.StartsWith("Bearer ",StringComparison.Ordinal) && auth.CanSetup(authorization[7..]) ? authorization[7..] : null;
-        var authorized = auth.Authorized(cookie) || viaServe && auth.AccountConfigured || bearer;
+        var authorized = remembered!=null || viaServe && auth.AccountConfigured || bearer;
         bool setupBearer=setupSession!=null && authorization=="Bearer "+setupSession;
         ctx.Items["setupSession"]=setupSession;
         if (authorized) ctx.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name,auth.Username ?? "xur")],"bootstrap"));
@@ -183,9 +184,9 @@ async Task StartHost()
             }
         }
         if(ctx.Request.Method is "GET" or "HEAD" && ctx.GetEndpoint()?.Metadata.GetMetadata<PublicStaticAsset>()==null
-            && auth.RememberBrowserSession(cookie) is { } remembered)
+            && remembered!=null)
             BrowserSecurity.SetSession(ctx,remembered,persistent:true);
-        if(auth.Authorized(cookie) && path=="/login") { ctx.Response.Redirect("/");return; }
+        if(remembered!=null && path=="/login") { ctx.Response.Redirect("/");return; }
         await next();
     });
     app.Use(async(ctx,next)=> {
@@ -311,7 +312,7 @@ async Task StartHost()
     void SetSession(HttpContext ctx,string session)=>BrowserSecurity.SetSession(ctx,session,persistent:auth.AccountConfigured);
     app.MapGet("/auth/login-token",(HttpContext ctx,IAntiforgery antiforgery)=> {
         var tokens=antiforgery.GetAndStoreTokens(ctx);
-        return Results.Json(new {requestToken=tokens.RequestToken,fieldName=tokens.FormFieldName});
+        return Results.Json(new {requestToken=tokens.RequestToken,fieldName=tokens.FormFieldName,signedIn=ctx.User.Identity?.IsAuthenticated==true});
     });
     app.MapPost("/auth/login",async (HttpContext ctx) => {
         var form=await ctx.Request.ReadFormAsync();
@@ -368,7 +369,7 @@ async Task StartHost()
     app.MapGet("/api/logs",async()=> Results.Text(await diagnosticLogs.Read()));
     app.MapGet("/setup-account/logs",async()=> Results.File(System.Text.Encoding.UTF8.GetBytes(await diagnosticLogs.Read()),"text/plain; charset=utf-8","xur-setup-logs.txt"));
     app.MapPost("/tailscale/start",async (HttpContext ctx)=> {
-        if(!auth.Authorized(ctx.Request.Cookies["xur.session"])) return Results.StatusCode(403);
+        if(!auth.AuthorizedBrowser(ctx.Request.Cookies["xur.session"])) return Results.StatusCode(403);
         await appliance.StartWebLogin(); return Results.Redirect("/tailscale");
     });
     app.MapPost("/tailscale/confirm",async()=> { await appliance.ConfirmAdmin(); return Results.Redirect("/tailscale"); });

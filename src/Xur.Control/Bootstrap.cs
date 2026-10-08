@@ -99,19 +99,23 @@ public sealed class Bootstrap
     {
         lock(sync) { var principal=Validate(cookie);return IsManager(principal); }
     }
+    public bool AuthorizedBrowser(string? cookie)
+    {
+        lock(sync) { return IsManager(Validate(cookie,browser:true)); }
+    }
     bool IsManager(ClaimsPrincipal? principal)=>accounts.Account is { } account && principal?.FindFirst("sub")?.Value==account.Id && principal.FindFirst("purpose")?.Value is "manager" or "manager-browser";
     public string? RememberBrowserSession(string? token)
     {
         lock(sync)
         {
-            var principal=Validate(token);
+            var principal=Validate(token,browser:true);
             if(!IsManager(principal))return null;
-            // Upgrade still-valid cookies from older bundles without extending
-            // expired tokens or changing the lifetime of API bearer sessions.
+            // Browser sign-ins never expire, including cookies from older bundles.
+            // Bearer validation remains separate and keeps its eight-hour limit.
             return principal!.FindFirst("purpose")!.Value=="manager-browser" ? token : Issue(accounts.Account!.Id,"manager-browser");
         }
     }
-    ClaimsPrincipal? Validate(string? cookie)
+    ClaimsPrincipal? Validate(string? cookie,bool browser=false)
     {
         if(cookie==null || cookie.Length>8192)return null;
         try
@@ -120,9 +124,11 @@ public sealed class Bootstrap
                 ValidIssuer="xur",ValidAudience="xur-control",IssuerSigningKey=new SymmetricSecurityKey(signingKey),
                 ValidAlgorithms=[SecurityAlgorithms.HmacSha256],RequireSignedTokens=true,RequireExpirationTime=false,
                 ValidateIssuerSigningKey=true,ValidateLifetime=true,ClockSkew=TimeSpan.Zero,
-                LifetimeValidator=(start,end,token,_)=>
-                    (end is { } expiry ? expiry>clock.GetUtcNow().UtcDateTime : token is JwtSecurityToken jwt && jwt.Claims.Any(c=>c.Type=="purpose" && c.Value=="manager-browser"))
-                    && (start==null || start<=clock.GetUtcNow().UtcDateTime)
+                LifetimeValidator=(start,end,token,_)=> {
+                    if(browser && token is JwtSecurityToken browserJwt && browserJwt.Claims.Any(c=>c.Type=="purpose" && c.Value is "manager" or "manager-browser"))return true;
+                    return (end is { } expiry ? expiry>clock.GetUtcNow().UtcDateTime : token is JwtSecurityToken jwt && jwt.Claims.Any(c=>c.Type=="purpose" && c.Value=="manager-browser"))
+                        && (start==null || start<=clock.GetUtcNow().UtcDateTime);
+                }
             },out _);
             return principal;
         }
