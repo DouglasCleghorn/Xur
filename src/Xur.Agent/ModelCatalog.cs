@@ -10,7 +10,7 @@ public record ModelSelection(string Model,string Revision,string Variant,string 
 
 // Discovery may change upstream. A saved choice is a separate immutable recipe;
 // catalog refresh never edits a profile or changes a running instance.
-public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=null)
+public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=null,HttpClient? client=null)
 {
     static readonly HttpClient http=Xur.IO.HttpClients.Create(TimeSpan.FromSeconds(30), redirects:true);
     static ModelCatalog(){http.DefaultRequestHeaders.UserAgent.ParseAdd("Xur/1.0");}
@@ -29,7 +29,7 @@ public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=n
         try
         {
             using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            using var request=new HuggingFaceCredentials(state).Request(url);using var response=await http.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,deadline.Token);response.EnsureSuccessStatusCode();
+            using var request=new HuggingFaceCredentials(state).Request(url);using var response=await (client??http).SendAsync(request,HttpCompletionOption.ResponseHeadersRead,deadline.Token);response.EnsureSuccessStatusCode();
             await using var source=await response.Content.ReadAsStreamAsync(deadline.Token);
             using var bytes=new MemoryStream();
             await Xur.IO.StreamTransfer.Copy(source,bytes,8*1024*1024,TimeSpan.FromSeconds(10),deadline.Token);
@@ -38,7 +38,17 @@ public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=n
         }
         catch(InvalidDataException){throw new InvalidOperationException("The catalog response is too large.");}
         catch(Exception e) when(e is HttpRequestException or OperationCanceledException or Xur.IO.SourceReadException)
-        {if(File.Exists(path))return await File.ReadAllTextAsync(path);throw new InvalidOperationException("The model catalog could not be reached. Check the network and try again.");}
+        {
+            if(File.Exists(path))return await File.ReadAllTextAsync(path);
+            if(e is HttpRequestException {StatusCode:{} status})throw new InvalidOperationException(status switch
+            {
+                System.Net.HttpStatusCode.NotFound=>"The upstream model resource was not found (HTTP 404).",
+                System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden=>$"The upstream model source denied access (HTTP {(int)status}). "+(new Uri(url).Host=="huggingface.co"
+                    ?"Check the repository permissions and the Hugging Face token in Settings.":"Check access to the upstream source."),
+                _=>$"The upstream model source returned HTTP {(int)status}. Try again shortly."
+            });
+            throw new InvalidOperationException("The model catalog could not be reached. Check the network and try again.");
+        }
     }
     async Task<JsonDocument> Metadata(string model,string? revision=null)
     {Validate(model,revision);return JsonDocument.Parse(await Cached("https://huggingface.co/api/models/"+model+(revision==null?"":"/revision/"+revision)+"?blobs=true",revision==null?TimeSpan.FromMinutes(10):TimeSpan.FromDays(365)));}
@@ -121,12 +131,36 @@ public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=n
     }
     public async Task ValidateEngineCheckpoint(Recipe recipe)
     {
-        if(recipe.Hub is {} hub && recipe.Engine is "vLLM" or "vLLM-Omni")await ValidateCheckpoint(hub.Repository,hub.Revision,recipe.Engine);
+        if(recipe.Hub is {} hub && recipe.Engine is "vLLM" or "vLLM-Omni")
+        {
+            using var metadata=await Metadata(hub.Repository,hub.Revision);
+            await ValidateCheckpoint(hub.Repository,hub.Revision,recipe.Engine,metadata.RootElement);
+        }
     }
-    async Task ValidateCheckpoint(string model,string revision,string engine)
+    async Task ValidateCheckpoint(string model,string revision,string engine,JsonElement metadata)
     {
-        using var config=JsonDocument.Parse(await Cached("https://huggingface.co/"+model+"/raw/"+revision+"/config.json",TimeSpan.FromDays(365)));
-        EngineStartup.ValidateCheckpoint(engine,model,config.RootElement);
+        var files=metadata.GetProperty("siblings").EnumerateArray().Select(FileName).ToHashSet(StringComparer.Ordinal);
+        Task<string> Read(string file)=>Cached("https://huggingface.co/"+model+"/raw/"+revision+"/"+file,TimeSpan.FromDays(365));
+        async Task ValidateConfig(string file)
+        {
+            using var config=JsonDocument.Parse(await Read(file));
+            EngineStartup.ValidateCheckpoint(engine,model,config.RootElement);
+        }
+        if(files.Contains("config.json")){await ValidateConfig("config.json");return;}
+        if(engine!="vLLM-Omni" || !files.Contains("model_index.json"))throw new InvalidOperationException(engine=="vLLM-Omni"
+            ?"This checkpoint does not publish config.json or a Diffusers model_index.json."
+            :"This checkpoint does not publish the config.json required by vLLM.");
+        // Diffusers pipelines keep their model configuration in component folders,
+        // rather than the root config.json used by Transformers checkpoints.
+        using var pipeline=JsonDocument.Parse(await Read("model_index.json"));
+        var root=pipeline.RootElement;
+        if(root.ValueKind!=JsonValueKind.Object || !root.TryGetProperty("_class_name",out var name) || name.ValueKind!=JsonValueKind.String || string.IsNullOrWhiteSpace(name.GetString()))
+            throw new InvalidOperationException("The Diffusers model_index.json does not identify a pipeline class.");
+        EngineStartup.ValidateCheckpoint(engine,model,root);
+        foreach(var component in root.EnumerateObject())
+            if(Regex.IsMatch(component.Name,@"^[A-Za-z0-9_-]+$") && component.Value.ValueKind==JsonValueKind.Array && component.Value.GetArrayLength()==2
+                && component.Value[0].ValueKind==JsonValueKind.String && component.Value[1].ValueKind==JsonValueKind.String && files.Contains(component.Name+"/config.json"))
+                await ValidateConfig(component.Name+"/config.json");
     }
     public async Task<Recipe> Resolve(ModelSelection selection)
     {
@@ -141,7 +175,7 @@ public sealed class ModelCatalog(string state,Func<Task<GpuDevice[]>>? observe=n
                 var group=Group(Ggufs(data),variant);if(group.Length==0)throw new InvalidOperationException("Select a published GGUF file.");
                 files=group.Select(f=>new ModelFile(Path.GetFileName(FileName(f)),new("https://huggingface.co/"+selection.Model+"/resolve/"+selection.Revision+"/"+string.Join('/',FileName(f).Split('/').Select(Uri.EscapeDataString)),f.GetProperty("lfs").GetProperty("sha256").GetString()!,f.GetProperty("size").GetInt64(),license,selection.Model,selection.Revision))).ToArray();bytes=files.Sum(f=>f.Asset.Bytes);
             }
-            else {await ValidateCheckpoint(selection.Model,selection.Revision,selection.Engine);if(variant!="upstream")throw new InvalidOperationException("Select the upstream checkpoint.");bytes=WeightBytes(data);if(bytes==0)throw new InvalidOperationException("The model does not publish safetensors weights.");}
+            else {await ValidateCheckpoint(selection.Model,selection.Revision,selection.Engine,data);if(variant!="upstream")throw new InvalidOperationException("Select the upstream checkpoint.");bytes=WeightBytes(data);if(bytes==0)throw new InvalidOperationException("The model does not publish safetensors weights.");}
             var hardware=await (observe?.Invoke()??GpuInventory.Observe());var vendor=selection.Device;
             if(vendor=="Auto")vendor=hardware.FirstOrDefault(g=>g.Problems.Length==0 && g.MemoryMiB>0)?.Vendor??"CPU";
             if(vendor is not ("CPU" or "NVIDIA" or "AMD" or "Intel"))throw new InvalidOperationException("Select a supported execution device.");

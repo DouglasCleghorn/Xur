@@ -109,6 +109,16 @@ See [release preparation](development/release-preparation.md).
 
 ## Change log
 
+- 2026-10-07: Reviewed private T3 attachment `image.png`
+  (`d967f238-2de3-4081-933c-47809af08b92-0f7301cd-4540-47dd-adb5-91f8829ab7a2.png`)
+  for the Qwen-Image-2.1 catalog-resolution error. Shows the profile editor's
+  Omni model, checkpoint size, NVIDIA selection and misleading network error;
+  capture version is unverified. No credentials or account details visible.
+  Kept private in T3 attachments; not copied into source or published.
+  Read-only live catalog checks and an unsuccessful resolve reproduced the
+  error without saving the profile or starting a workload. No new screenshots
+  were saved or published.
+
 - 2026-10-06: Added the automatic update schedule and shared upcoming-window
   notice in the working tree. The private `.build/fast/updates-{desktop,mobile}.png`
   captures predate these controls and must be regenerated before release reuse.
