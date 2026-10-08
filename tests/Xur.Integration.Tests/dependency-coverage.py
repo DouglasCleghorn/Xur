@@ -17,6 +17,15 @@ assert not module.check(ROOT, config)
 for ecosystem in ('nuget', 'docker', 'npm', 'pip', 'dotnet-sdk', 'github-actions'):
     missing = config | {'updates': [e for e in config['updates'] if e['package-ecosystem'] != ecosystem]}
     assert any(f'missing {ecosystem}' in e for e in module.check(ROOT, missing)), ecosystem
+for ignore in ([],
+               [{'dependency-name': 'localhost/*', 'versions': ['1.0.0']}],
+               [{'dependency-name': 'localhost/*', 'update-types': ['version-update:semver-major']}],
+               [{'dependency-name': 'localhost/unrelated'}]):
+    incomplete = config | {'updates': [e | {'ignore': ignore} if e['package-ecosystem'] == 'docker' else e
+                                      for e in config['updates']]}
+    errors = module.check(ROOT, incomplete)
+    assert any('local image localhost/xur/vllm-rocm-gfx1103' in e for e in errors), ignore
+    assert any('local image localhost/xur/vllm-omni-xpu' in e for e in errors), ignore
 with tempfile.TemporaryDirectory(dir=ROOT / '.build') as temporary:
     root = pathlib.Path(temporary)
     def write(name, text):
@@ -35,4 +44,13 @@ with tempfile.TemporaryDirectory(dir=ROOT / '.build') as temporary:
     assert any('new-lock.json' in e for e in errors)
     assert any('libman.json' in e and 'manual LibMan' in e for e in errors)
     assert len([e for e in errors if 'mirrored latest channel' in e]) == 4
-print('Missing ecosystems, new unmanaged manifests, undocumented locks are rejected.')
+    write('eng/local/Containerfile', 'FROM localhost/xur/tagged:1.0.0 AS tagged\n'
+          'FROM localhost/xur/pinned@sha256:' + 'a' * 64 + ' AS pinned\n')
+    assert not any('eng/local/Containerfile' in e for e in module.check(root, config))
+    local_entry = {'package-ecosystem': 'docker', 'directory': '/eng/local'}
+    scanned = config | {'updates': [*config['updates'], local_entry]}
+    errors = module.check(root, scanned)
+    assert len([e for e in errors if 'eng/local/Containerfile: local image' in e]) == 2
+    ignored = config | {'updates': [*config['updates'], local_entry | {'ignore': [{'dependency-name': 'localhost/*'}]}]}
+    assert not any('eng/local/Containerfile' in e for e in module.check(root, ignored))
+print('Missing ecosystems, new unmanaged manifests, undocumented locks and unignored local images are rejected.')

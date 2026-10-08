@@ -15,14 +15,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 def check(root, config):
     errors = []
     updates = config.get('updates', [])
-    def covered(ecosystem, directory):
-        return any(entry['package-ecosystem'] == ecosystem and
-                   any(fnmatch.fnmatchcase(directory, pattern.rstrip('/') or '/')
-                       for pattern in entry.get('directories', [entry.get('directory', '')]))
-                   for entry in updates)
+    def matching_updates(ecosystem, directory):
+        return [entry for entry in updates if entry['package-ecosystem'] == ecosystem and
+                any(fnmatch.fnmatchcase(directory, pattern.rstrip('/') or '/')
+                    for pattern in entry.get('directories', [entry.get('directory', '')]))]
     def require(ecosystem, path):
         directory = '/' + str(path.parent.relative_to(root)) if path.parent != root else '/'
-        if not covered(ecosystem, directory):
+        if not matching_updates(ecosystem, directory):
             errors.append(f'{path.relative_to(root)}: missing {ecosystem} Dependabot directory {directory}')
     for path in source_files(root):
         if path.suffix == '.csproj' and ET.parse(path).findall('.//PackageReference'):
@@ -47,6 +46,16 @@ def check(root, config):
             images = re.findall(r'^FROM (\S+)', path.read_text(), re.M)
             if any('/' in image and not image.startswith('localhost/') for image in images):
                 require('docker', path)
+            directory = '/' + str(path.parent.relative_to(root)) if path.parent != root else '/'
+            for entry in matching_updates('docker', directory):
+                for image in images:
+                    if not image.startswith('localhost/'):
+                        continue
+                    dependency = image.split('@', 1)[0].split(':', 1)[0]
+                    if not any(fnmatch.fnmatchcase(dependency, rule.get('dependency-name', '')) and
+                               not rule.get('versions') and not rule.get('update-types')
+                               for rule in entry.get('ignore', [])):
+                        errors.append(f'{path.relative_to(root)}: local image {dependency} needs an unconditional Docker Dependabot ignore')
         elif path.parent.name == 'workflows' and path.suffix in ('.yml', '.yaml'):
             require('github-actions', root / 'workflow.yml')
     if (root / 'global.json').exists():
