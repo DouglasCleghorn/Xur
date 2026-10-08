@@ -5,7 +5,13 @@ one PR. Rolling model-engine channels are refreshed by the client at startup;
 Dependabot covers their container manifests but does not turn `latest` into a
 version-update PR. Security updates use GitHub's separate scheduling. The source checks run
 `eng/check-dependency-coverage.py` to reject supported manifests outside the
-configured directories and copied version information that needs refreshing.
+configured directories, local images without unconditional Docker ignore rules,
+and copied version information that needs refreshing.
+
+The Docker updater ignores `localhost/*` images built by Xur. Dependabot otherwise
+looks these names up on Docker Hub and fails because they are not published there.
+Their upstream base images remain covered through the corresponding Containerfiles;
+source/package pins and matching local tags require the manual review below.
 
 | Dependencies | Authoritative files | Dependabot ecosystem |
 | --- | --- | --- |
