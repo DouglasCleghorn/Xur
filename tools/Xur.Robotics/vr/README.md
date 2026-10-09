@@ -6,13 +6,34 @@ identified. Robot motion remains disabled until calibration and physical checks
 pass. [reuse-plan.json](reuse-plan.json) records the reviewed source revisions,
 known adaptation gaps and pending acceptance checks.
 
+## Licensing requirement
+
+Select application code under open-source licenses and model weights under
+explicit open licenses, retaining their notices. Review weights separately from
+the repository license; published source or downloadable weights alone do not
+meet this requirement. This VR preparation selects no model or model weights.
+
+CloudXR's SDK/runtime uses the
+[NVIDIA CloudXR software agreement](https://developer.download.nvidia.com/cloudxr/EULA/NVIDIA_CloudXR_GA_License_without_Data_Collection_25Feb2025.pdf)
+and is excluded from planned client dependencies. Reuse the openly licensed
+LeRobot/Isaac clutch, kinematics and recording components with a compatible local
+OpenXR reader; the default CloudXR example cannot be selected unchanged. No
+CloudXR runtime has been installed by this preparation and no EULA has been
+accepted.
+
+Windows Meta/Oculus and SteamVR runtimes are proprietary, separate platform
+compatibility routes. They are optional existing-runtime checks, not selected or
+installed dependencies of this plan. Monado/OpenHMD provide open-source routes
+to assess, but full CV1/Touch tracking remains unverified. The model/code license
+requirement does not establish an open, working CV1 platform.
+
 ## Existing applications first
 
 | Candidate | Reuse | CV1 acceptance status |
 | --- | --- | --- |
 | XLeVR | Existing A-Frame/WebXR renderer and controller reader, plus its transport format | Documented for Quest 3; test the CV1 through a desktop browser/runtime before selecting this path |
-| LeRobot Isaac Teleop SO101 example | Clutch, position-dominant IK, analog gripper mapping and dataset loop | Linux package with CloudXR as its default runtime; not a Windows CV1 application |
-| Existing native VR app/compositor | Local headset rendering and camera panels if the browser path fails | Select after verifying the actual headset host/runtime |
+| LeRobot Isaac Teleop SO101 example | Openly licensed clutch, position-dominant IK, analog gripper mapping and dataset loop | Default CloudXR runtime is excluded; an open local reader/runtime integration still needs CV1 verification |
+| Existing open-source VR app/compositor | Local headset rendering and camera panels if the browser path fails | Select after verifying the actual headset host/runtime and component licenses |
 
 [XLeVR's pinned tutorial](https://github.com/Vector-Wangel/XLeRobot/blob/b017b5e6354bd9f61f4247a920c72622ca0aade0/docs/en/source/simulation/getting_started/vr_sim.md#L1-L3)
 identifies Quest 3. Its
@@ -23,14 +44,17 @@ renderer/reader where compatible, rather than starting a new headset engine.
 The reviewed [LeRobot example](https://github.com/huggingface/lerobot/blob/30da8e687a6dfc617fcd94afc367ac7071c376ce/examples/isaac_teleop_to_so101/README.md)
 lives in its source tree, outside the pip package. It needs the kinematics extras
 and optional Isaac dependencies, which are not installed in the current robotics
-image. Its recommended Isaac package is `isaacteleop~=1.3.131`; the current NVIDIA
-repository redirects to IsaacCapture. Keep the reviewed package API and source
-aligned rather than silently substituting the renamed project's main branch.
+image. Its reviewed optional package reference is `isaacteleop~=1.3.131`; this is
+not a selected installation because its default path requires CloudXR. The
+current NVIDIA repository redirects to IsaacCapture. Keep the reviewed open
+component APIs and source aligned rather than silently substituting the renamed
+project's main branch or installing proprietary transitive dependencies.
 
-## Windows first, Linux separately
+## Runtime compatibility checks
 
-For Windows, begin with the installed Meta/Oculus PC runtime, the CV1 headset,
-Touch pairing and Constellation sensors. Meta documents a
+If the headset host already uses Windows and a Meta/Oculus PC runtime, its CV1,
+Touch pairing and Constellation sensor checks can establish an optional
+compatibility route. Meta documents a
 [PC OpenXR runtime](https://developers.meta.com/vr/documentation/native/pc/dg-openxr/),
 and Valve provides a [Rift / SteamVR setup path](https://help.steampowered.com/en/faqs/view/17DA-EC4C-7D5B-8266).
 Use the existing native runtime's own tracking/display test before testing
@@ -49,9 +73,11 @@ button states and recovery from occlusion on the installed build. A display or
 orientation-only headset test is insufficient for Cartesian robot control.
 
 The [Isaac SO101 installation reference](https://github.com/huggingface/lerobot/blob/30da8e687a6dfc617fcd94afc367ac7071c376ce/examples/isaac_teleop_to_so101/README.md)
-requires Linux and a supported CloudXR headset. Opting out of its launcher only
-avoids launch; it does not make the Windows Meta runtime accessible from a
-Linux container. No CloudXR EULA is accepted by this preparation.
+requires Linux and a supported CloudXR headset in its default workflow. That
+workflow is excluded. Reusing its open clutch/IK/recording components needs a
+separately verified local OpenXR input boundary. Opting out of its launcher only
+avoids launch; it does not remove CloudXR dependencies or make a Windows Meta
+runtime accessible from a Linux container.
 
 ## Container-owned mapping and recording
 
@@ -137,8 +163,10 @@ are implemented by this preparation.
 
 ## Next acceptance steps
 
-1. Identify the headset host/OS/GPU, active runtime and CV1 sensors. Complete the
-   existing runtime's headset and both Touch tracking tests with robot motors off.
+1. Identify the headset host/OS/GPU, active runtime and CV1 sensors. Check the
+   licenses of selected app/runtime components, then complete headset and both
+   Touch tracking tests with robot motors off. Existing proprietary Windows
+   runtimes remain optional compatibility checks, separate from app/model choices.
 2. Probe desktop WebXR support from a secure page without starting motion:
    `await navigator.xr?.isSessionSupported('immersive-vr')`. A positive result is
    only a browser capability check; then test the existing renderer/input reader.

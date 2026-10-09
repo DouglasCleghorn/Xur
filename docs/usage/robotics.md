@@ -149,10 +149,15 @@ separate teleoperation computer. Prefer existing upstream applications: assess
 and [LeRobot Isaac Teleop](https://huggingface.co/docs/lerobot/isaac_teleop) before
 adding new client code. The documented XLeVR browser flow targets Quest 3;
 Isaac Teleop provides SO101/OpenXR/recording integration, but its default CloudXR
-workflow does not establish CV1 compatibility. Verify the actual CV1 runtime and
-tracking on Windows first, then separately on Linux. Reuse the existing VR app's
-native compositor and headset runtime first. If a custom headset app is needed,
-Rust is an option for rendering, frame timing and the native XR loop. Add a
+workflow is excluded from planned client dependencies. Select open-source app
+code and openly licensed model weights, reviewing weight licenses separately.
+Reuse the open clutch/IK/recording components only with a verified local reader.
+Monado/OpenHMD CV1 tracking is unverified; proprietary Windows Meta/Oculus or
+SteamVR runtimes are optional existing compatibility routes, not selected or
+installed dependencies. Verify the actual headset host/runtime before choosing a
+path. Reuse the existing VR app's native compositor and headset runtime first.
+If a custom headset app is needed, Rust is an option for rendering, frame timing
+and the native XR loop. Add a
 transport adapter only for a connection the upstream tools cannot supply. The
 ASP.NET Core container app owns settings, mapping, arming and recording. CV1
 integration is not implemented yet; the current recorder uses Xbox input.

@@ -25,8 +25,10 @@
       "lerobotVersion": "0.6.0",
       "path": "examples/isaac_teleop_to_so101",
       "license": "Apache-2.0",
-      "recommendedOptionalPackage": "isaacteleop~=1.3.131",
-      "use": "clutch, SO101 IK processors, recording loop; not installed by current LeRobot wheel"
+      "use": "open clutch, SO101 IK processors and recording loop with a verified local OpenXR reader; default CloudXR runtime excluded",
+      "reviewedOptionalPackage": "isaacteleop~=1.3.131",
+      "plannedClientDependency": false,
+      "defaultCloudxrPathAllowed": false
     },
     {
       "name": "Isaac current repository",
@@ -85,5 +87,19 @@
   "cloudxrEulaAccepted": false,
   "vrInputEndpointImplemented": false,
   "remoteBackupImplemented": false,
-  "motionEnabled": false
+  "motionEnabled": false,
+  "licensing": {
+    "applicationCode": "open-source licenses required; retain component notices",
+    "modelWeights": "explicit open license required; review separately from repository code",
+    "modelsSelected": [],
+    "excludedClientDependencies": [
+      "NVIDIA CloudXR SDK/runtime"
+    ],
+    "cloudxrAllowed": false,
+    "proprietaryPlatformRuntimes": {
+      "Meta/Oculus PC and SteamVR": "optional existing Windows compatibility routes; not selected or installed by this plan"
+    },
+    "openCv1RuntimeTrackingVerified": false
+  },
+  "implementationStatusScope": "VR preparation only; recording backup runtime is reviewed and merged separately"
 }
