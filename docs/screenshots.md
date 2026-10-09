@@ -1,5 +1,15 @@
 # Screenshot and artwork register
 
+- 2026-10-09: Source review for the measured camera/tag setup panel and metric
+  AprilTag JSON display, based on `a8c5a52` plus the isolated metrology prototype.
+  The earlier private robot dashboard/setup/AprilTags captures remain retired
+  as current UI acceptance evidence and require regeneration before release
+  reuse. Actual local setup assets passed synthetic browser checks at 1440,
+  390 and 320 px, including the blank template, authenticated API helper,
+  save/clear flow and horizontal overflow. Synthetic API proof uses numeric
+  observations only; no new screenshots or live camera frames were captured,
+  used or published for this change.
+
 - 2026-10-09: Private stationary calibration-coverage capture family under
   `.build/evidence/calibration-current/`: head/hand JPEGs extracted from the
   read-only app observation and the later `head-markers.jpg`/`hand-markers.jpg`

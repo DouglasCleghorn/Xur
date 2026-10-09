@@ -48,8 +48,13 @@ cameras. These pixel observations do not approve joint calibration or motion.
 API clients can submit `{"kind":"inspect-markers"}` to
 `POST /robot/api/tasks`, then retrieve the completed observations through
 `GET /robot/api/jobs/{id}/markers` and camera evidence through the job's
-`captures` endpoints. The report marks duplicate IDs as ambiguous and does not
-claim metric pose, synchronized stereo capture or movement-range coverage.
+`captures` endpoints. Without supplied measurements the report stays pixel-only.
+Configure measured intrinsics and actual tag reference edges in
+**Camera and tag measurements** on `/robot/setup` to add competing metric
+tag-to-camera candidates, positive-depth/reprojection checks and explicit planar
+ambiguity. See the [measurement format](../architecture/robot-camera-metrology.md).
+Neither mode approves joint calibration, synchronized stereo capture or
+movement-range coverage.
 The controller selection can stay empty during camera setup. Controller motion
 and demonstration recording still require a selected, connected controller.
 

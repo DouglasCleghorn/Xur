@@ -5,7 +5,7 @@
     "revision": "b7c0ebe9aa20f82ec7a828579004f9e706bfecd9",
     "license": "BSD-2-Clause",
     "family": "tagStandard41h12",
-    "scope": "read-only saved-frame survey and live inspect-markers workload task; no metric pose or joint calibration approval"
+    "scope": "read-only saved-frame survey and live inspect-markers workload task; optional metric tag-to-camera candidates from supplied measured metrology; no joint calibration approval"
   },
   "lerobot": {
     "url": "https://github.com/huggingface/lerobot",

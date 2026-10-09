@@ -24,6 +24,9 @@ public static class RoboticsEndpoints
         app.MapGet("/api/observation",async Task<IResult>(HttpContext c)=>
         {try{return Reply(await robot.Observation(c.RequestAborted));}catch(InvalidOperationException e){return Conflict(new RobotError(e.Message));}});
         app.MapGet("/api/calibration-assessment",()=>Reply(robot.CalibrationAssessment()));
+        app.MapGet("/api/metrology",()=>
+        {try{return Reply(robot.Metrology());}catch(Exception error) when(error is IOException or UnauthorizedAccessException or InvalidOperationException){return Conflict(new RobotError(error.Message));}});
+        app.MapPost("/api/metrology",async Task<IResult>(HttpContext c)=>await Call<RobotMetrologySettings>(c,r=>Task.FromResult<IResult>(Reply(robot.ConfigureMetrology(r)))));
         app.MapPost("/api/auto-calibrate",async Task<IResult>(HttpContext c)=>await Call<RobotCalibrationRequest>(c,r=>Task.FromResult<IResult>(Reply(robot.AutoCalibrate(),statusCode:202))));
         app.MapPost("/api/start-controller",async Task<IResult>(HttpContext c)=>await Call<RobotControllerRequest>(c,r=>Task.FromResult<IResult>(Reply(robot.StartController(r),statusCode:202))));
         app.MapGet("/api/devices",()=>Reply(RoboticsRuntime.Devices()));

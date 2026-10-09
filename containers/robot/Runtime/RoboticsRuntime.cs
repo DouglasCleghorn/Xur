@@ -7,6 +7,7 @@ public sealed class RoboticsRuntime
     readonly object sync = new();
     readonly string directory, reservation;
     readonly IRobotTools tools;
+    readonly RobotMetrology metrology;
     readonly TimeProvider clock;
     readonly RoboticsContainer container;
     readonly Func<RobotDevices> deviceInventory;
@@ -32,8 +33,8 @@ public sealed class RoboticsRuntime
     long emergencyStopEpoch;
     string EmergencyStopPath=>Path.Combine(directory,"estop-latched");
 
-    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null,RecordingBackups? backups=null)
-    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
+    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null,RecordingBackups? backups=null,RobotMetrology? metrology=null)
+    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory);this.metrology=metrology??new(directory); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
 
     public RobotStatus Status()
     {
@@ -49,6 +50,15 @@ public sealed class RoboticsRuntime
     public RobotJob? Job(string id){lock(sync)return jobs.GetValueOrDefault(id);}
     public RoboticsConfiguration? Configuration(){lock(sync)return configuration;}
     public RobotCalibrationAssessment? CalibrationAssessment(){lock(sync)return calibrationAssessment;}
+    public RobotMetrologySettings? Metrology(){lock(sync)return metrology.Read();}
+    public RobotMetrologySettings ConfigureMetrology(RobotMetrologySettings settings)
+    {
+        lock(sync)
+        {
+            RequireLoaded();Idle();if(!stopLatched)throw new InvalidOperationException("Stop and disarm before changing camera metrology.");
+            var saved=metrology.Save(settings);calibrationAssessment=null;return saved;
+        }
+    }
     public async Task Recover()
     {
         // A restarted app must stop any surviving local tool before releasing
@@ -335,6 +345,7 @@ public sealed class RoboticsRuntime
                 var telemetry=await tools.Run(c,"dashboard",null,60,token);
                 lock(sync){observation=telemetry;observationReadAt=clock.GetUtcNow();}
                 var survey=RobotMarkerSurvey.Read(await tools.Run(c,"inspect-markers",null,75,token));
+                var metric=await metrology.Apply(survey.Report,c,token);
                 var blockers=new List<string>();
                 if(telemetry.TryGetProperty("buses",out var buses))
                     foreach(var bus in buses.EnumerateArray())
@@ -356,8 +367,11 @@ public sealed class RoboticsRuntime
                     if(camera.Markers.Length==0)blockers.Add(camera.Name+" camera has no repeatedly visible, unambiguous tags.");
                 // No supported solver has established these transforms on this robot.
                 // Never turn readable tags or existing EEPROM values into a calibration receipt.
+                if(metric.Metric==null)blockers.Add("Measured camera intrinsics, explicit lens distortion and actual tag reference sizes are not configured.");
+                else foreach(var camera in metric.Metric.Cameras)
+                    if(camera.State!="estimated"||camera.Tags.Any(t=>t.State!="estimated"))
+                        blockers.Add(camera.Name+" metric references are missing, rejected or ambiguous; supplied metrology does not approve joint calibration.");
                 blockers.AddRange([
-                    "Camera intrinsics and lens distortion have not been measured.",
                     "Measured rigid marker mounts and marker-to-link transforms are not configured.",
                     "The cameras have not established joint zero references and safe travel limits for every arm/head joint.",
                     "A verified physical motor-power emergency stop is required before powered automatic calibration.",
@@ -443,11 +457,12 @@ public sealed class RoboticsRuntime
                 return Launch("inspect-markers",false,async(c,token)=>
                 {
                     var result=RobotMarkerSurvey.Read(await tools.Run(c,"inspect-markers",null,75,token));
+                    var report=await metrology.Apply(result.Report,c,token);
                     string id;lock(sync)id=activeJob!;
                     var path=Path.Combine(directory,".build","captures",id);Directory.CreateDirectory(path);
                     foreach(var image in result.Images)
                         await File.WriteAllBytesAsync(Path.Combine(path,image.Key+"-markers.jpg"),image.Value,token);
-                    await File.WriteAllTextAsync(Path.Combine(path,"markers.json"),RobotJson.Serialize(result.Report),token);
+                    await File.WriteAllTextAsync(Path.Combine(path,"markers.json"),RobotJson.Serialize(report),token);
                     var observed=string.Join("; ",result.Report.Cameras.Select(camera=>camera.Name+": "+
                         (camera.Markers.Length==0?"no unambiguous tags":string.Join(", ",camera.Markers.Select(m=>$"{m.Id:00} ({m.DetectedFrames}/3)")))));
                     return "Marker observations saved. "+observed+". Joint calibration remains unverified.";

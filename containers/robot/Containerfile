@@ -37,6 +37,7 @@ RUN python3.12 -m venv /opt/robot-venv && /opt/robot-venv/bin/pip install --no-c
 RUN /opt/robot-venv/bin/python -c "from torchcodec.decoders import VideoDecoder"
 
 COPY tools/Xur.Robotics/detect_markers.c /opt/xur/detect_markers.c
+COPY tools/Xur.Robotics/estimate_marker_pose.c /opt/xur/estimate_marker_pose.c
 RUN git init /opt/apriltag && \
     git -C /opt/apriltag remote add origin https://github.com/AprilRobotics/apriltag.git && \
     git -C /opt/apriltag fetch --depth=1 origin b7c0ebe9aa20f82ec7a828579004f9e706bfecd9 && \
@@ -45,6 +46,9 @@ RUN git init /opt/apriltag && \
       /opt/xur/detect_markers.c /opt/apriltag/apriltag.c \
       /opt/apriltag/apriltag_quad_thresh.c /opt/apriltag/apriltag_pose.c \
       /opt/apriltag/tagStandard41h12.c /opt/apriltag/common/*.c -lm -lpthread && \
+    cc -O2 -Wall -Wextra -Werror -std=gnu99 -I /opt/apriltag -o /opt/xur/estimate-marker-pose \
+      /opt/xur/estimate_marker_pose.c /opt/apriltag/apriltag_pose.c /opt/apriltag/common/matd.c \
+      /opt/apriltag/common/homography.c /opt/apriltag/common/svd22.c /opt/apriltag/common/zarray.c -lm && \
     cp /opt/apriltag/LICENSE.md /opt/licenses/AprilTag-LICENSE.md && \
     rm -rf /opt/apriltag/.git
 

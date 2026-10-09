@@ -17,10 +17,11 @@ The pages are:
 - `/robot/`: head/hand camera snapshots, every motor's available registers,
   calibration assessment, controller start and recent operations.
 - `/robot/setup`: device selection and automatic bus-role detection, effort
-  limits, session arming, demonstration recording, ACT training, skill evaluation
-  and review, emotes and sorting tasks.
+  limits, measured camera/tag metrology, session arming, demonstration recording,
+  ACT training, skill evaluation and review, emotes and sorting tasks.
 - `/robot/tags`: AprilTag corners over the exact final survey frame, duplicate-ID
-  ambiguity and copyable/downloadable JSON for all three frames from each camera.
+  ambiguity, optional metric pose candidates from supplied measured settings,
+  and copyable/downloadable JSON for all three frames from each camera.
 - `/robot/controller`: the supported Xbox button map and session instructions.
 
 All four pages include the software E-stop and reset controls. The two cameras
@@ -118,6 +119,15 @@ joint calibration is not implemented. The assessment does not create approval
 receipts or treat existing EEPROM limits as verified mechanical limits. The
 existing upstream hand-guided routine does not satisfy marker-only automatic
 calibration. See the [design and acceptance gates](../../docs/architecture/robot-marker-calibration.md).
+
+Camera/tag measurements are configured in the container app at `/robot/setup`,
+with `GET/POST /robot/api/metrology`. No default intrinsics or tag dimensions are
+invented. With measured device-specific values at the exact decoded resolution,
+marker scans add the pinned AprilTag estimator's competing metric pose candidates,
+positive-depth/rotation checks and raw-pixel reprojection error. Missing data
+retains pixel-only scans; close planar fits remain explicitly ambiguous.
+This never approves joints or enables motion. See the
+[measurement format and proof scope](../../docs/architecture/robot-camera-metrology.md).
 
 **Check installed tools** prepares device aliases for the selected hardware and
 checks the container's installed upstream adapter. It does not download packages

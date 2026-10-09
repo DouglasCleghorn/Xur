@@ -14,6 +14,8 @@ on:
       - 'src/Xur.Domain/Robot*'
       - 'tools/Xur.Robotics/**'
       - 'tests/Xur.Integration.Tests/robot-web.py'
+      - 'tests/Xur.Integration.Tests/robot-metrology-native.py'
+      - 'tests/Xur.Integration.Tests/robot-metrology-web.py'
       - 'tests/Xur.Unit.Tests/RoboticsTests.cs'
       - 'tests/Xur.Robot.Tests/**'
       - 'tests/Xur.Integration.Tests/robot-boundary.py'
@@ -66,12 +68,26 @@ jobs:
         # Exercise the independent app with container-local fake subprocess tools.
         # No agent socket, physical devices or container-engine socket enter it.
         run: sudo python3 tests/Xur.Integration.Tests/robot-web.py --container "localhost/xur-robot-test:$GITHUB_SHA" --engine docker
+      - name: Validate metric marker estimation without hardware
+        run: |
+          mkdir -p .build/evidence/metrology
+          docker run --rm --pull=never --network=none --cap-drop=ALL \
+            --security-opt=no-new-privileges --read-only --memory=512m --pids-limit=128 \
+            --tmpfs=/tmp:rw,nosuid,nodev,size=32m \
+            --volume "$PWD/tests/Xur.Integration.Tests/robot-metrology-native.py:/test/native.py:ro" \
+            --volume "$PWD/.build/evidence/metrology:/evidence:rw" \
+            --entrypoint python "localhost/xur-robot-test:$GITHUB_SHA" \
+            /test/native.py --evidence /evidence/native-proof.json
+          sudo python3 tests/Xur.Integration.Tests/robot-metrology-web.py \
+            --container "localhost/xur-robot-test:$GITHUB_SHA" --engine docker
       - name: Preserve container test evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: robot-validation-${{ github.run_id }}
-          path: .build/evidence/robot-web/
+          path: |
+            .build/evidence/robot-web/
+            .build/evidence/metrology/
           retention-days: 7
       - name: Save tested image for publication
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
