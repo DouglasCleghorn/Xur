@@ -145,10 +145,10 @@ and never resumes an operation.
 
 No trained picking policy ships in this image. Recording, CPU ACT training,
 reviewed replay and high-level task execution provide the preparation workflow;
-they still need physical acceptance on a calibrated robot. Remote GPU policy
-configuration and the eventual rollout adapter belong to this app. The separate
-[GR00T N1.7 preparation kit](../gr00t/README.md) prepares GPU inference but does
-not yet connect its predictions to XLeRobot motors.
+they still need physical acceptance on a calibrated robot. Training uses the
+open-licensed LeRobot/ACT implementation without pretrained backbone weights.
+Any future remote GPU policy configuration and rollout adapter belong to this
+app, and must use open licenses for both implementation and model weights.
 
 
 The requested Oculus Rift CV1/Touch teleoperation computer should reuse existing

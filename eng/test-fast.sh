@@ -9,7 +9,6 @@ PYTHONPATH=.build/checks python3 eng/check-dependency-coverage.py > .build/fast/
 PYTHONPATH=.build/checks python3 tests/Xur.Integration.Tests/dependency-coverage.py >> .build/fast/dependency-coverage.log
 python3 eng/check-web-assets.py > .build/fast/web-assets.log
 python3 tests/Xur.Integration.Tests/web-assets.py >> .build/fast/web-assets.log
-XUR_DOTNET="$sdk" PYTHONPYCACHEPREFIX=.build/fast/pycache python3 tests/Xur.Integration.Tests/gr00t-preparation.py > .build/fast/gr00t-preparation.log 2>&1
 PYTHONPYCACHEPREFIX=.build/fast/pycache python3 tests/Xur.Integration.Tests/robotics-bridge.py > .build/fast/robotics-bridge.log 2>&1
 PYTHONPYCACHEPREFIX=.build/fast/pycache python3 tests/Xur.Integration.Tests/robotics-motor-probe.py > .build/fast/robotics-motor-probe.log 2>&1
 cc -O2 -Wall -Wextra -Werror tests/Xur.Unit.Tests/SeatInputTest.c -ldl -o .build/fast/seat-input-test
