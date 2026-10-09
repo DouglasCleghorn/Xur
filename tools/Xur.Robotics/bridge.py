@@ -407,7 +407,11 @@ def motor_details(configuration, bus_factory=None, motor_factory=None):
                                ("right/wheels", 9, ("left_wheel", "back_wheel", "right_wheel"))):
         side = role.split("/")[0]
         report = {"role": role, "port": configuration[side + "Port"], "motors": []}
-        bus = bus_factory("/dev/arm_" + side, {})
+        # LeRobot caches ID/name/model lookups in the bus constructor.
+        # Supply the complete expected map before connecting; ping below must
+        # still verify this inventory before any register details are read.
+        motors = {str(motor_id): motor_factory(motor_id) for motor_id in range(1, count + 1)}
+        bus = bus_factory("/dev/arm_" + side, motors)
         try:
             bus.connect(handshake=False)
             bus.set_baudrate(1_000_000)
@@ -416,7 +420,6 @@ def motor_details(configuration, bus_factory=None, motor_factory=None):
             models = bus.broadcast_ping(raise_on_error=True)
             if models != {motor_id: 777 for motor_id in range(1, count + 1)}:
                 raise ValueError("Inventory does not match this upstream XLeRobot bus; do not guess joint roles")
-            bus.motors = {str(motor_id): motor_factory(motor_id) for motor_id in models}
             names = [side + "_" + joint for joint in JOINTS] + list(extra)
             for motor_id in sorted(models):
                 item = {"id": motor_id, "name": names[motor_id - 1], "model": "STS3215", "registers": {}}

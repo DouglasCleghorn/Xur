@@ -27,17 +27,22 @@ class DiscoverySafety(unittest.TestCase):
         events = []
         class Bus:
             is_connected = False
-            def __init__(self, port, motors): self.port = port; self.motors = motors
+            def __init__(self, port, motors):
+                self.port = port; self.motors = motors
+                # The real LeRobot bus keeps these construction-time lookups.
+                self.id_to_model = {motor.id: motor for motor in motors.values()}
             def connect(self, handshake): self.is_connected = True; events.append(("connect", handshake))
             def set_baudrate(self, baud): events.append(("host-baud", baud))
             def broadcast_ping(self, raise_on_error):
                 return {i: 777 for i in range(1, 9 if self.port.endswith('left') else 10)}
             def read(self, register, motor, normalize):
+                self.id_to_model[int(motor)]  # Feetech sign decoding uses this lookup.
                 events.append(("read", register, motor, normalize)); return 0
             def disconnect(self, disable_torque): events.append(("disconnect", disable_torque))
         configuration = {"leftPort": "/dev/serial/by-id/left", "rightPort": "/dev/serial/by-id/right"}
-        reports = bridge.motor_details(configuration, Bus, lambda _: object())
+        reports = bridge.motor_details(configuration, Bus, lambda motor_id: types.SimpleNamespace(id=motor_id))
         self.assertEqual([len(report['motors']) for report in reports], [8, 9])
+        self.assertTrue(all("error" not in motor for report in reports for motor in report["motors"]))
         self.assertEqual(reports[0]['motors'][6]['name'], 'head_pan')
         self.assertEqual(reports[1]['motors'][8]['name'], 'right_wheel')
         self.assertEqual(len([item for item in events if item[0] == 'read']), 17 * len(bridge.MOTOR_REGISTERS))
@@ -46,7 +51,7 @@ class DiscoverySafety(unittest.TestCase):
             def broadcast_ping(self, **kwargs):
                 if self.port.endswith('left'): raise OSError('Disconnected')
                 return super().broadcast_ping(**kwargs)
-        reports = bridge.motor_details(configuration, MissingBus, lambda _: object())
+        reports = bridge.motor_details(configuration, MissingBus, lambda motor_id: types.SimpleNamespace(id=motor_id))
         self.assertEqual(reports[0]['error'], 'Disconnected')
         self.assertEqual(len(reports[1]['motors']), 9)
 
