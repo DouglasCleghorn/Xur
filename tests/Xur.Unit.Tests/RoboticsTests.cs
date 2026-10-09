@@ -190,6 +190,17 @@ static class RoboticsTests
         robot.EmergencyStop();await robot.Stop();tools.Block=true;tools.Started=new(TaskCreationOptions.RunContinuationsAsynchronously);
         robot.ResetEmergencyStop();await tools.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));robot.EmergencyStop();await robot.Stop();
         check(robot.Status().EmergencyStopLatched&&robot.Status().Job?.State=="stopped","Pressing E-stop during reset cancels reset and retains the latch");
+        var failureDirectory=Path.Combine(root,"stop-failure");Directory.CreateDirectory(Path.Combine(failureDirectory,".build"));
+        File.WriteAllText(Path.Combine(failureDirectory,".build","devices.json"),"{}");var engineFailure=true;
+        var container=new RoboticsContainer(failureDirectory,(_,_,_,_)=>Task.FromResult(new ProcessResult(engineFailure?125:1,"Unavailable engine")));
+        var failedStop=new RoboticsRuntime(failureDirectory,Path.Combine(failureDirectory,"reservation"),toolContainer:container);
+        failedStop.Start(workload);failedStop.Configure(c);Calibrate(failureDirectory,c);failedStop.EmergencyStop();
+        try{await failedStop.Stop();}catch(InvalidOperationException){}
+        check(failedStop.Status().EmergencyStopLatched&&failedStop.Status().Problems.Any(p=>p.Contains("cleanup failed"))
+            &&Rejected(()=>failedStop.ResetEmergencyStop()),"Container-engine errors stay visible and prevent E-stop reset");
+        engineFailure=false;await failedStop.Stop();
+        check(!failedStop.Status().Problems.Any(p=>p.Contains("cleanup failed"))&&failedStop.Status().EmergencyStopLatched,
+            "Retrying a successful stop clears cleanup failure without clearing E-stop");
     }
     static void MarkerValidation(Action<bool,string> check)
     {

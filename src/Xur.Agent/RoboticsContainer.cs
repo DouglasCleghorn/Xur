@@ -92,11 +92,18 @@ public sealed class RoboticsContainer(string directory, Func<string,IEnumerable<
     }
     public async Task Interrupt()
     {
-        if((await Run(["container","exists",Name],10,CancellationToken.None)).ExitCode!=0)return;
+        var exists=await Run(["container","exists",Name],10,CancellationToken.None);
+        if(exists.ExitCode==1)return;
+        if(exists.ExitCode!=0)throw new InvalidOperationException("Could not inspect robotics tools during software stop. Inspect motor power.");
         var running=await Run(["inspect","--format","{{.State.Running}}",Name],10,CancellationToken.None);
         if(running.ExitCode!=0)throw new InvalidOperationException("Could not inspect the robotics tools session.");
         if(running.Output.Trim()!="true")return;
-        await Run(["exec",Name,"python","/opt/xur/bridge.py","--stop"],5,CancellationToken.None);
+        var signal=await Run(["exec",Name,"python","/opt/xur/bridge.py","--stop"],5,CancellationToken.None);
+        if(signal.ExitCode!=0)
+        {
+            await Stop();
+            throw new InvalidOperationException("Upstream software stop failed; tools container stopped. Inspect motor power before resetting.");
+        }
         for(var attempt=0;attempt<5;attempt++)
         {
             if((await Run(["exec",Name,"python","/opt/xur/bridge.py","--idle"],2,CancellationToken.None)).ExitCode==0)return;
@@ -106,7 +113,9 @@ public sealed class RoboticsContainer(string directory, Func<string,IEnumerable<
     }
     public async Task Stop()
     {
-        if((await Run(["container","exists",Name],10,CancellationToken.None)).ExitCode!=0)return;
+        var exists=await Run(["container","exists",Name],10,CancellationToken.None);
+        if(exists.ExitCode==1)return;
+        if(exists.ExitCode!=0)throw new InvalidOperationException("Could not inspect robotics tools during shutdown. Inspect motor power.");
         var result=await Run(["stop","--time=10",Name],20,CancellationToken.None);
         if(result.ExitCode!=0)throw new InvalidOperationException("Robotics container did not stop; inspect it before restarting.");
     }
