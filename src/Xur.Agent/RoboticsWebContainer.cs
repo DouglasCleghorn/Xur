@@ -43,7 +43,9 @@ public sealed class RoboticsWebContainer(string runDirectory,
             return nodes.Order(StringComparer.Ordinal).ToArray();
         }
         var serial=Resolve(Path.Combine(devRoot,"serial","by-id"),"*",@"/tty(?:USB|ACM)[0-9]+");
-        var cameras=Resolve(Path.Combine(devRoot,"v4l","by-id"),"*index0",@"/video[0-9]+");
+        var cameras=Resolve(Path.Combine(devRoot,"v4l","by-id"),"*index0",@"/video[0-9]+")
+            .Concat(Resolve(Path.Combine(devRoot,"v4l","by-path"),"*index0",@"/video[0-9]+"))
+            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         var peripherals=StationDeviceInventoryReader.Read([],sysRoot,devRoot);
         if(peripherals.Errors.Length!=0)throw new InvalidOperationException("Could not verify controller interfaces for robotics container setup: "+string.Join(" ",peripherals.Errors));
         var controllers=(peripherals.Controllers??[]).SelectMany(c=>c.Nodes)

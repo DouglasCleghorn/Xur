@@ -35,9 +35,34 @@ static class RoboticsTests
             check(!ApiKeys.Allows("diagnostics","POST",prefix+"tasks")&&!ApiKeys.Allows("testing","POST",prefix+"tasks"),"Existing read/test keys do not gain robotics motion access through "+prefix);
         }
         check(!ApiKeys.Allows("robotics","POST","/api/power/reboot"),"Robotics keys do not gain host power control");
+        Inventory(check);
         await Container(workload,check);
         await Proxy(check);
         await Migration(workload,check);
+    }
+    static void Inventory(Action<bool,string> check)
+    {
+        var root=Path.GetFullPath(".build/robot-interface-"+Guid.NewGuid().ToString("N")[..12]);
+        var dev=Path.Combine(root,"dev");var byId=Path.Combine(dev,"v4l","by-id");var byPath=Path.Combine(dev,"v4l","by-path");
+        Directory.CreateDirectory(byId);Directory.CreateDirectory(byPath);
+        try
+        {
+            foreach(var node in new[]{"video3","video4","video5","disk0"})File.WriteAllText(Path.Combine(dev,node),"");
+            File.CreateSymbolicLink(Path.Combine(byId,"usb-camera-video-index0"),Path.Combine(dev,"video5"));
+            File.CreateSymbolicLink(Path.Combine(byPath,"pci-usb-interface0-video-index0"),Path.Combine(dev,"video3"));
+            File.CreateSymbolicLink(Path.Combine(byPath,"pci-usb-interface2-video-index0"),Path.Combine(dev,"video5"));
+            File.CreateSymbolicLink(Path.Combine(byPath,"pci-usb-interface0-video-index1"),Path.Combine(dev,"video4"));
+            var inventory=RoboticsWebContainer.Inventory(dev,Path.Combine(root,"sys"));
+            check(inventory.Cameras.SequenceEqual(new[]{Path.Combine(dev,"video3"),Path.Combine(dev,"video5")}),
+                "Distinct camera interfaces survive a colliding by-id alias, without duplicate nodes or metadata interfaces");
+            File.Delete(Path.Combine(byId,"usb-camera-video-index0"));
+            check(RoboticsWebContainer.Inventory(dev,Path.Combine(root,"sys")).Cameras.Length==2,
+                "Cameras without by-id aliases remain available through stable physical-interface paths");
+            File.CreateSymbolicLink(Path.Combine(byPath,"pci-foreign-video-index0"),Path.Combine(dev,"disk0"));
+            check(Rejected(()=>RoboticsWebContainer.Inventory(dev,Path.Combine(root,"sys"))),
+                "Camera interface aliases cannot grant unrelated host device categories");
+        }
+        finally{Directory.Delete(root,true);}
     }
     static async Task Container(Workload workload,Action<bool,string> check)
     {
