@@ -1,5 +1,5 @@
 # Docker Hub traffic must use Google's cache. A cache miss is an error.
-FROM mirror.gcr.io/library/python:3.12-slim-bookworm
+FROM mirror.gcr.io/library/python:3.14-slim-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates git gcc g++ pkg-config ffmpeg libgl1 libglib2.0-0 \
