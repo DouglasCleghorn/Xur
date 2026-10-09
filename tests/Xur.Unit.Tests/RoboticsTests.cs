@@ -154,6 +154,7 @@ static class RoboticsTests
             await robot.Unload(new(workload.Id,instance.InstanceId,instance.Pid,instance.BootId));
             check(robot.Inspect(workload)==null && Rejected(()=>robot.Task(new("inspect-table"))),"Profile unload releases robotics and blocks new operations");
             await Endpoints(root,check);
+            await FreshDetection(root,check);
             await EmergencyStops(root,check);
             await Container(root,check);
             foreach(var path in new[]{"/api/robotics/arm","/api/robotics/reset-estop","/api/robotics/auto-calibrate","/api/robotics/start-controller","/api/robotics/configure","/api/robotics/prepare","/api/robotics/detect-buses","/api/robotics/train","/api/robotics/record","/api/robotics/skills/evaluate","/api/robotics/skills/review","/api/power/reboot"})
@@ -165,6 +166,21 @@ static class RoboticsTests
             check(!ApiKeys.Allows("diagnostics","POST","/api/robotics/tasks") && !ApiKeys.Allows("testing","POST","/api/robotics/tasks"),"Existing read/test keys do not gain robot motion access");
         }
         finally{Directory.Delete(root,true);}
+    }
+    static async Task FreshDetection(string root,Action<bool,string> check)
+    {
+        var directory=Path.Combine(root,"fresh-detection");var ports=new[]{Path.Combine(root,"fresh-left"),Path.Combine(root,"fresh-right")};
+        foreach(var port in ports)File.WriteAllText(port,"");
+        var inventories=new[]{8,9}.Select(count=>Enumerable.Range(1,count).ToDictionary(id=>id,_=>777)).ToArray();
+        var container=new RoboticsContainer(directory,(_,args,_,_)=>Task.FromResult(new ProcessResult(0,args.First()=="run"?JsonSerializer.Serialize(inventories):"")));
+        var robot=new RoboticsRuntime(directory,Path.Combine(root,"fresh-reservation"),toolContainer:container,
+            deviceInventory:()=>new(ports.Select(p=>new RobotDevice(p,p)).ToArray(),[],[]));
+        robot.Start(new("robot","Robot",Recipe,[],"robot"));
+        check(!Directory.Exists(directory),"First-time bus discovery starts before any robotics state directory or configuration exists");
+        robot.DetectBuses();await Finished(robot);
+        check(robot.Status().Job?.State=="completed"&&robot.Detection() is {LeftPort:var left,RightPort:var right}
+            &&left==ports[0]&&right==ports[1]&&!robot.Status().Configured&&robot.Status().StopLatched,
+            "Fresh bus discovery persists the detected roles without requiring guessed configuration or arming motion");
     }
     static async Task EmergencyStops(string root,Action<bool,string> check)
     {
