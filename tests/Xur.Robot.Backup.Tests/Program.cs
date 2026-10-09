@@ -98,8 +98,8 @@ try
     {
         var recordingRoot=Path.Combine(root,interrupted?"interrupted-recording":"completed-recording");Directory.CreateDirectory(recordingRoot);
         var configuration=new RoboticsConfiguration("fixture","/dev/serial/by-id/left","/dev/serial/by-id/right","/dev/input/event77","/dev/v4l/by-id/head-video-index0","/dev/v4l/by-id/hand-video-index0",[],true,new(100,100,2));
-        Calibration(recordingRoot,configuration);var recordings=new RecordingBackups(recordingRoot);
-        var robot=new RoboticsRuntime(recordingRoot,Path.Combine(recordingRoot,"reservation"),new Recorder(recordingRoot,interrupted),backups:recordings);robot.Start("robot");robot.Configure(configuration);robot.Arm(new());
+        var recordings=new RecordingBackups(recordingRoot);
+        var robot=new RoboticsRuntime(recordingRoot,Path.Combine(recordingRoot,"reservation"),new Recorder(recordingRoot,interrupted),backups:recordings);robot.Start("robot");robot.Configure(configuration);Calibration(recordingRoot,configuration);robot.Arm(new());
         var job=robot.Record(new("demonstration","right","Sort the red block",5));
         for(var retry=0;retry<200&&robot.Job(job.Id)?.State=="running";retry++)await Task.Delay(10);
         var preserved=recordings.Recordings().Single();
