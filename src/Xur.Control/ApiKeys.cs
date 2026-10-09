@@ -28,7 +28,7 @@ public sealed class ApiKeys
     {
         var name=request.Name?.Trim()??"";
         if(name.Length is <1 or >80 || name.Any(char.IsControl))throw new ArgumentException("Use a key name between 1 and 80 characters.");
-        if(request.Scope is not ("diagnostics" or "testing" or "automation"))throw new ArgumentException("Choose a valid access level.");
+        if(request.Scope is not ("diagnostics" or "testing" or "robotics" or "automation"))throw new ArgumentException("Choose a valid access level.");
         if(request.Days is <0 or >365)throw new ArgumentException("Choose Never or an expiry between 1 and 365 days.");
         lock(sync)
         {
@@ -85,6 +85,8 @@ public sealed class ApiKeys
         if(!path.StartsWith("/api/") && !path.StartsWith("/inference/"))return false;
         if(path=="/api/api-keys" || path.StartsWith("/api/api-keys/") || path=="/api/bootstrap" || path.StartsWith("/api/auth/") || path.StartsWith("/api/install/"))return false;
         if(scope=="automation")return true;
+        if(scope=="robotics")return (method is "GET" or "HEAD") && (path is "/api/robotics/status" or "/api/robotics/jobs" || Regex.IsMatch(path,@"\A/api/robotics/(jobs/[a-f0-9]{32}(/markers|/captures(/[a-z0-9-]+\.jpg)?)?|cameras/(head|hand))\z"))
+            || method=="POST" && (path is "/api/robotics/tasks" or "/api/robotics/emotes" or "/api/robotics/controller" or "/api/robotics/stop" or "/api/robotics/estop" or "/api/robotics/probe");
         if(scope is not ("diagnostics" or "testing"))return false;
         if(method is "GET" or "HEAD")
         {

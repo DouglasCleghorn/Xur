@@ -1,0 +1,48 @@
+{
+  "reviewedAt": "2026-10-08",
+  "markerSurvey": {
+    "url": "https://github.com/AprilRobotics/apriltag",
+    "revision": "b7c0ebe9aa20f82ec7a828579004f9e706bfecd9",
+    "license": "BSD-2-Clause",
+    "family": "tagStandard41h12",
+    "scope": "read-only saved-frame survey and live inspect-markers workload task; no metric pose or joint calibration approval"
+  },
+  "lerobot": {
+    "url": "https://github.com/huggingface/lerobot",
+    "version": "0.6.0",
+    "revision": "30da8e687a6dfc617fcd94afc367ac7071c376ce",
+    "license": "Apache-2.0"
+  },
+  "xlerobot": {
+    "url": "https://github.com/Vector-Wangel/XLeRobot",
+    "revision": "b017b5e6354bd9f61f4247a920c72622ca0aade0",
+    "license": "Apache-2.0"
+  },
+  "pygame": {
+    "version": "2.6.1",
+    "license": "LGPL-2.1-or-later"
+  },
+  "pytorch": {
+    "version": "2.11.0",
+    "torchvision": "0.26.0",
+    "index": "https://download.pytorch.org/whl/cpu",
+    "license": "BSD-3-Clause"
+  },
+  "torchcodec": {
+    "version": "0.11.0+cpu",
+    "index": "https://download.pytorch.org/whl/cpu",
+    "license": "BSD-3-Clause"
+  },
+  "discovery": {
+    "lerobot": "0.6.0 (no policy dependencies)",
+    "feetech-servo-sdk": "1.0.0",
+    "pyserial": "3.5",
+    "deepdiff": "8.6.1",
+    "numpy": "2.2.6",
+    "tqdm": "4.67.1",
+    "draccus": "0.10.0",
+    "huggingface-hub": "1.33.0",
+    "packaging": "25.0",
+    "torch": "2.11.0 (CPU; required by upstream utility imports)"
+  }
+}

@@ -21,12 +21,14 @@ source/package pins and matching local tags require the manual review below.
 | llama.cpp variants, vLLM and Omni | `catalog/engines/Containerfile`, embedded by `EngineImages`; rolling channels refresh on start, with a pinned Omni ROCm release | `docker` |
 | Intel Omni layer | `catalog/engines/omni-xpu.Containerfile`, embedded by the agent; builds on the mirrored, matching vLLM XPU release | `docker` for the base; manual source/package pins |
 | Native gfx1103 vLLM layer | `catalog/engines/vllm-rocm-gfx1103.Containerfile`, embedded by the agent; AMD TheRock device wheels and source-built vLLM | `docker` for the base; manual source/package pins |
+| Robotics tools | `tools/Xur.Robotics/Containerfile` and `tools/Xur.Robotics/Discovery.Containerfile`, shipped by the agent for local preparation | `docker` for the base; manual source/package pins |
 | Hosted Fedora native builder | `eng/Containerfile`, read by `eng/ci-native.py` | `docker` |
 | Live installer Fedora base | `os/bootc/Containerfile`; resolved once to a digest in a private build recipe | `docker` |
 | Playwright and axe-core | `eng/browser/package.json` and lock | `npm` |
 | Website deployment CLI | `website/package.json` and lock | `npm` |
 | Source-check YAML parser | `eng/requirements.txt` | `pip` |
 | Private screenshot/QR test tools | `tests/Xur.Media.Tests/requirements.txt` | `pip` |
+| Robotics tag-mount CAD tools | `tools/Xur.Robotics/cad/requirements.txt` | `pip` |
 
 Install browser or website tools with `python3 eng/prepare-npm.py browser` or
 `python3 eng/prepare-npm.py website`. Install media Python tools with
@@ -85,6 +87,7 @@ release; they are deliberately manual checks, with no companion update service.
 | `eng/toolchain-lock.json` | Refresh the SDK archive URL/checksum whenever `global.json` changes; also review Fedora cloud builder images/checksums, Image Builder source releases, Tailscale archives and recorded toolchain metadata. Historical host/engine version records do not select runtime images. |
 | `tools/Xur.Console/upstream-lock.json` | Check kmscon releases, refresh the source archive/checksum, and exercise console patches and PTY tests. |
 | `tools/Xur.Streaming/upstream-lock.json` | Check Sunshine releases, refresh the AppImage URL/checksum, and verify streaming and input adapters. |
+| `tools/Xur.Robotics/upstream-lock.json` and `tools/Xur.Robotics/Containerfile` | Keep the LeRobot release, XLeRobot commit, pygame and compatible CPU PyTorch/torchvision/TorchCodec versions aligned. Install TorchCodec from the explicit CPU index; the default Linux wheel requires CUDA libraries. Verify the decoder during the image build and run `tests/Xur.Integration.Tests/robotics-tools.py` offline without device mappings to check CLI/helper imports, CPU ACT loss/inference, native marker detection and a synthetic video round trip. Keep the AprilTag commit, marker family and native build aligned; check physical print rasters, duplicate IDs, image geometry and camera-only inspection after updates. Preserve upstream licenses in the tools image; verify calibration, nested torque contexts, controller mappings, dataset recording/resume and the train/replay/rollout CLIs after updates. Run source safety tests and supervised physical acceptance before release. |
 | `tools/Xur.VirtualDisplay/README.md` and vendored `screencast.xml` | Review KDE protocol releases, compare the vendored XML, preserve its license, and test against supported KWin. |
 | `docs/font-source.json` and vendored font/OFL files | Review the selected Google Fonts/IBM Plex source, refresh checksums and the font together with its OFL notice, and review affected screenshots. |
 | `catalog/models/smollm2-135m-cpu.json` | Review Hugging Face checkpoint revisions, file size/checksum and upstream license; the container image is managed through the engine manifest. Model weights have no Dependabot ecosystem. |

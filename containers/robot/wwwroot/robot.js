@@ -1,0 +1,185 @@
+(() => {
+ 'use strict';
+ const $ = id => document.getElementById(id), page = document.body.dataset.page;
+ let csrf, mutating = false, observationRequest, markerReport, markerJob, motorData, renderedTagJob;
+ const set = (id, text) => { if ($(id)) $(id).textContent = text; };
+ const showError = error => { $('error').hidden = false; $('error').textContent = error.message; };
+ const clearError = () => { $('error').hidden = true; };
+ const time = value => value ? new Date(value).toLocaleTimeString() : 'No timestamp';
+ const ago = value => value ? `${Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 1000))}s ago` : 'No reading';
+ const value = (data, key, unit = '') => data?.[key] === undefined ? '—' : `${data[key]}${unit}`;
+ function list(id, values) {
+  if (!$(id)) return;
+  $(id).replaceChildren(...values.map(text => { const item = document.createElement('li'); item.textContent = text; return item; }));
+ }
+ async function api(path, body) {
+  if (body !== undefined && !csrf) {
+   const response = await fetch('/robot/csrf', { cache: 'no-store' });
+   if (!response.ok) throw Error('Sign in to Xur and refresh this page.');
+   csrf = (await response.json()).token;
+  }
+  const response = await fetch(`/robot/api/${path}`, body === undefined ? { cache: 'no-store' } : {
+   method: 'POST', headers: { 'Content-Type': 'application/json', RequestVerificationToken: csrf }, body: JSON.stringify(body)
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw Error(data?.error || `Robot request failed (${response.status}).`);
+  return data;
+ }
+ function operation(buttonId, path, body, message) {
+  $(buttonId)?.addEventListener('click', async () => {
+   mutating = true; $(buttonId).disabled = true; clearError();
+   try {
+    if (!['stop', 'estop'].includes(buttonId) && observationRequest) await observationRequest.catch(() => {});
+    const result = await api(path, body);
+    if (path === 'tasks') markerJob = result.id;
+    set('action-status', message);
+    await refresh();
+   } catch (error) { showError(error); }
+   finally { mutating = false; if (!['controller', 'calibrate'].includes(buttonId)) $(buttonId).disabled = false; }
+  });
+ }
+ operation('stop', 'stop', {}, 'Stopped and disarmed.');
+ operation('estop', 'estop', {}, 'E-stop requested. Motion is latched off; disconnect motor power if necessary.');
+ operation('reset-estop', 'reset-estop', {}, 'Checking fresh motor feedback before resetting E-stop…');
+ operation('calibrate', 'auto-calibrate', {}, 'Checking motors and visual references for automatic calibration…');
+ operation('controller', 'start-controller', { seconds: 60 }, 'Controller session requested. Hold Start / Menu to move; Back / View stops.');
+ operation('prepare', 'prepare', {}, 'Preparing the LeRobot tools…');
+ operation('scan-tags', 'tasks', { kind: 'inspect-markers' }, 'Capturing three frames from each camera and detecting AprilTags…');
+ async function copy(text, fallback) {
+  try { await navigator.clipboard.writeText(text); set('action-status', 'JSON copied.'); }
+  catch { fallback.hidden = false; fallback.focus(); fallback.select(); set('action-status', 'Select and copy the JSON below.'); }
+ }
+ $('copy-motors')?.addEventListener('click', () => copy(JSON.stringify(motorData ?? {}, null, 2), $('motor-data')));
+ $('copy-tags')?.addEventListener('click', () => copy($('tag-data').value, $('tag-data')));
+ $('download-tags')?.addEventListener('click', () => {
+  const url = URL.createObjectURL(new Blob([$('tag-data').value], { type: 'application/json' }));
+  const link = document.createElement('a'); link.href = url; link.download = `apriltags-${markerJob || 'observations'}.json`; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+ });
+ $('overlay')?.addEventListener('change', () => {
+  for (const camera of ['head', 'hand']) $(`${camera}-overlay`).hidden = !$('overlay').checked;
+ });
+ function image(camera, source, capturedAt, error) {
+  const img = $(`${camera}-image`), placeholder = $(`${camera}-empty`);
+  if (source) { img.src = source; img.hidden = false; placeholder.hidden = true; }
+  if (error) { img.hidden = true; placeholder.hidden = false; placeholder.textContent = error; }
+  set(`${camera}-time`, error || `${time(capturedAt)} · ${ago(capturedAt)}`);
+ }
+ function motors(observation) {
+  motorData = { observedAt: observation.observedAt, buses: observation.buses };
+  const open = new Set([...$('motors').querySelectorAll('details[open]')].map(item => item.dataset.motor));
+  const rows = [];
+  for (const bus of observation.buses || []) {
+   if (bus.error) {
+    const row = document.createElement('tr'), cell = document.createElement('td'); cell.colSpan = 10;
+    cell.textContent = `${bus.role}: ${bus.error}`; row.append(cell); rows.push(row);
+   }
+   for (const motor of bus.motors || []) {
+    const row = document.createElement('tr'), first = document.createElement('td'), details = document.createElement('details');
+    const key = `${bus.role}-${motor.id}`; details.dataset.motor = key; details.open = open.has(key);
+    const title = document.createElement('summary'); title.textContent = motor.name.replaceAll('_', ' ');
+    const raw = document.createElement('pre'); raw.textContent = JSON.stringify({ bus: bus.port, ...motor }, null, 2);
+    details.append(title, raw); first.append(details); row.append(first);
+    const r = motor.registers || {};
+    const cells = [`${bus.role} · ${motor.id}`, value(r, 'Present_Position', ' counts'), value(r, 'Present_Velocity', ' raw'),
+     value(r, 'Present_Load', ' raw'), value(r, 'Present_Current', ' raw'), value(r, 'Present_Temperature', '°C'),
+     r.Present_Voltage === undefined ? '—' : `${(r.Present_Voltage / 10).toFixed(1)} V`,
+     r.Torque_Enable === undefined ? '—' : r.Torque_Enable ? 'Enabled' : 'Off',
+     motor.error || (r.Status ? `Status ${r.Status}` : r.Moving ? 'Moving' : 'Stationary')];
+    for (const text of cells) { const cell = document.createElement('td'); cell.textContent = text; row.append(cell); }
+    rows.push(row);
+   }
+  }
+  $('motors').replaceChildren(...rows);
+  const count = (observation.buses || []).reduce((sum, bus) => sum + (bus.motors?.length || 0), 0);
+  set('motor-summary', `${count} motors reported · ${time(observation.observedAt)} · expand rows for all available details`);
+  $('motor-data').value = JSON.stringify(motorData, null, 2);
+ }
+ async function observe() {
+  if (document.hidden || mutating || observationRequest) return;
+  observationRequest = (async () => {
+   const data = await api('observation'), observation = data.observation;
+   if (observation) {
+    for (const camera of observation.cameras || [])
+     image(camera.name, camera.jpeg ? `data:image/jpeg;base64,${camera.jpeg}` : null, camera.capturedAt, camera.error);
+    motors(observation);
+   }
+   set('observation-status', data.paused ? `Refresh paused during ${data.operation || 'robot operation'} · last capture ${ago(observation?.observedAt)}` : `Updated ${time(observation?.observedAt)} · refreshes every 5 seconds`);
+   if (data.problem) throw Error(data.problem);
+  })();
+  try { await observationRequest; } catch (error) { showError(error); set('observation-status', 'Refresh unavailable · previous captures retained'); }
+  finally { observationRequest = null; }
+ }
+ function overlay(camera) {
+  const frame = camera.frames.at(-1), svg = $(`${camera.name}-overlay`), ns = 'http://www.w3.org/2000/svg';
+  svg.replaceChildren(); svg.setAttribute('viewBox', `0 0 ${frame.width} ${frame.height}`); svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  for (const tag of frame.detections) {
+   const polygon = document.createElementNS(ns, 'polygon'); polygon.setAttribute('points', tag.corners.map(point => point.join(',')).join(' '));
+   polygon.setAttribute('class', `tag-outline${frame.ambiguousDuplicateIds.includes(tag.id) ? ' ambiguous' : ''}`);
+   const text = document.createElementNS(ns, 'text'); text.setAttribute('x', tag.center[0]); text.setAttribute('y', tag.center[1] - 12); text.setAttribute('class', 'tag-label'); text.textContent = String(tag.id).padStart(2, '0');
+   svg.append(polygon, text);
+  }
+  // Match the image viewport to its native aspect ratio, including non-16:9 cameras.
+  $(`${camera.name}-image`).parentElement.style.aspectRatio = `${frame.width} / ${frame.height}`;
+  set(`${camera.name}-tags`, `${frame.detections.length} detections · ${frame.width} × ${frame.height} · ${camera.markers.map(tag => `${String(tag.id).padStart(2, '0')}: ${tag.detectedFrames}/3 frames`).join(' · ') || 'No unambiguous tags'}`);
+  image(camera.name, `/robot/api/jobs/${markerJob}/captures/${camera.name}-markers.jpg`, frame.capturedAt);
+ }
+ async function tags(jobs) {
+  markerJob ??= jobs.find(job => job.kind === 'inspect-markers' && job.state === 'completed')?.id;
+  if (!markerJob || renderedTagJob === markerJob) return;
+  const job = jobs.find(item => item.id === markerJob);
+  if (job?.state === 'failed' || job?.state === 'stopped') { set('action-status', job.detail); markerJob = null; return; }
+  if (job?.state !== 'completed') return;
+  markerReport = await api(`jobs/${markerJob}/markers`);
+  const rows = [];
+  for (const camera of markerReport.cameras) {
+   overlay(camera);
+   const frame = camera.frames.at(-1);
+   for (const tag of frame.detections) {
+    const row = document.createElement('tr');
+    for (const text of [camera.name, String(tag.id).padStart(2, '0'), tag.center.map(n => n.toFixed(2)).join(', '), tag.decisionMargin.toFixed(2), tag.hamming,
+     camera.markers.find(item => item.id === tag.id)?.detectedFrames ?? '—', frame.ambiguousDuplicateIds.includes(tag.id) ? 'Ambiguous' : 'No']) {
+     const cell = document.createElement('td'); cell.textContent = text; row.append(cell);
+    }
+    rows.push(row);
+   }
+  }
+  if (!rows.length) { const row = document.createElement('tr'), cell = document.createElement('td'); cell.colSpan = 7; cell.textContent = 'No tags decoded in the displayed frames.'; row.append(cell); rows.push(row); }
+  $('tag-rows').replaceChildren(...rows);
+  $('tag-data').value = JSON.stringify({ jobId: markerJob, ...markerReport }, null, 2);
+  set('tag-job', markerJob); set('action-status', `Scan complete · shared tag IDs: ${markerReport.sharedIds.join(', ') || 'none'}`);
+  renderedTagJob = markerJob;
+ }
+ async function refresh() {
+  if (document.hidden) return;
+  try {
+   const [status, jobs] = await Promise.all([api('status'), page === 'guide' ? Promise.resolve([]) : api('jobs')]);
+   set('mode', status.mode); list('problems', status.problems || []);
+   const latched = status.emergencyStopLatched === true;
+   $('estop').closest('.stop-bar').classList.toggle('latched', latched);
+   set('estop-state', latched ? 'E-stop latched · motion disabled' : 'Software emergency stop');
+   $('reset-estop').hidden = !latched;
+   for (const id of ['controller', 'calibrate']) if ($(id)) $(id).disabled = latched;
+   if (page === 'guide') return;
+   if (page === 'tags') await tags(jobs);
+   else {
+    set('identity', status.workloadId ? `${status.workloadId} · ${status.stopLatched ? 'disarmed' : 'operator session'} · base movement disabled` : 'Load the Robotics workload in your Xur profile.');
+    list('jobs', jobs.slice(0, 8).map(job => `${time(job.updated)} · ${job.kind} · ${job.state}: ${job.detail}`));
+    if (status.job && ['auto-calibrate', 'controller', 'prepare', 'reset-estop'].includes(status.job.kind)) set('action-status', `${status.job.kind} · ${status.job.state}: ${status.job.detail}`);
+    const calibration = await api('calibration-assessment');
+    if (calibration) { set('calibration-status', calibration.summary); list('calibration-blockers', calibration.blockers || []); }
+   }
+  } catch (error) { showError(error); set('mode', 'Unavailable'); }
+ }
+ async function start() {
+  await refresh();
+  if (page === 'dashboard') {
+   try { const configuration = await api('configuration'); set('head-device', configuration?.headCamera || 'Head camera not configured'); set('hand-device', configuration?.handCamera || 'Hand camera not configured'); }
+   catch (error) { showError(error); }
+   await observe();
+  }
+  setInterval(() => refresh(), 3000);
+  if (page === 'dashboard') setInterval(() => observe(), 5000);
+ }
+ start();
+})();

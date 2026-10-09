@@ -1,0 +1,14 @@
+{
+  "id": "xlerobot",
+  "name": "XLeRobot robotics",
+  "image": "host:xlerobot",
+  "command": [],
+  "port": 0,
+  "healthPath": "",
+  "vendor": "CPU",
+  "gpuCount": 0,
+  "memoryMiB": 0,
+  "description": "Xbox teleoperation, camera inspection, reviewed LeRobot manipulation policies and recorded emotes. Loading starts disarmed; the mobile base stays disabled.",
+  "kind": "Robotics",
+  "engine": "XLeRobot"
+}

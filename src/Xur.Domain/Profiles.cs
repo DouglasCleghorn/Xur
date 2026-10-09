@@ -52,6 +52,10 @@ public static class ProfilePolicy
         if(!EntityIdentifier(profile.Id) || string.IsNullOrWhiteSpace(profile.Name) || profile.Name.Length>80 || profile.Workloads.Length>32)
             throw new InvalidOperationException("Use a profile name and at most 32 workloads.");
         StationDevicePolicy.Validate(profile.Workloads);
+        if(profile.Workloads.Count(w=>w.Recipe.Kind=="Robotics")>1)
+            throw new InvalidOperationException("Select one robotics workload per host.");
+        if(profile.Workloads.Any(w=>w.Recipe.Kind=="Robotics") && profile.Workloads.Any(w=>w.Recipe.Kind=="Workstation"))
+            throw new InvalidOperationException("Run robotics in a profile without workstations so controllers and cameras stay exclusive to the robot.");
         var ids=new HashSet<string>();var routes=new HashSet<string>();var allocations=new HashSet<string>();
         foreach(var w in profile.Workloads)
         {
@@ -73,6 +77,12 @@ public static class ProfilePolicy
     }
     public static void ValidateRecipe(Recipe r)
     {
+        if(r.Kind=="Robotics")
+        {
+            if(r.Id!="xlerobot" || r.Image!="host:xlerobot" || r.Engine!="XLeRobot" || r.Vendor!="CPU" || r.GpuCount!=0 || r.MemoryMiB!=0 || r.Port!=0 || r.HealthPath!="" || r.Command.Length!=0 || r.Model!=null || r.Files!=null || r.Hub!=null || r.Container!=null)
+                throw new InvalidOperationException("Invalid robotics recipe.");
+            return;
+        }
         if(r.Kind=="Workstation")
         {
             if(r.Id!="gaming-workstation" || r.Image!="host:plasma" || r.GpuCount!=1 || r.Vendor!="Display" || r.Command.Length!=0 || r.Files!=null || r.Model!=null || r.Hub!=null || r.Container!=null)

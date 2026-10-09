@@ -4,6 +4,9 @@ Open **Settings → Manage API keys**. Give each client a name, choose access an
 
 - **Diagnostics:** system/GPU/storage status, system and display reports, diagnostic SSH status, models/profiles, workstation graphics probes and logs, saved benchmark results. Logs and profiles may contain sensitive configuration.
 - **Testing:** diagnostics plus inference, model-lab chat, benchmark creation and cancellation.
+- **Robotics:** robot status, jobs, camera feedback, reviewed tasks/emotes,
+  controller sessions, probe and stop. An operator must arm motion; this scope
+  cannot change setup or prepare, record, train, evaluate or review skills.
 - **Automation:** other authenticated API operations, including workload/profile changes, workstation streaming/pairing, file downloads, settings, updates and reboot. Keys cannot administer API keys, exchange login credentials, install the OS, change diagnostic SSH or access local-console routes.
 
 Use HTTPS and send the key in `Authorization: Bearer …`. Do not put it in a URL. Use the trusted Tailscale HTTPS name, or explicitly trust the server certificate for LAN connections.
@@ -20,7 +23,7 @@ Streaming control requires Automation. Model testing endpoints are `/api/model-l
 Read-only system reports need no opt-in setting or SSH access. Review their
 redacted journal entries before sharing; see [Diagnostics](diagnostics.md).
 
-Key management endpoints (`GET/POST /api/api-keys`, `POST /api/api-keys/{id}/revoke`) require an existing manager session. Browser changes also require the CSRF token. Creation JSON accepts `name`, `scope` (`diagnostics`, `testing`, `automation`) and `days`. Its response contains `key` metadata and the one-time `token`.
+Key management endpoints (`GET/POST /api/api-keys`, `POST /api/api-keys/{id}/revoke`) require an existing manager session. Browser changes also require the CSRF token. Creation JSON accepts `name`, `scope` (`diagnostics`, `testing`, `robotics`, `automation`) and `days`. Its response contains `key` metadata and the one-time `token`.
 
 The key page records authorized request count, last method/path and last-used time. It does not save query strings, bodies or secrets in that usage record. Invalid/expired/revoked keys return 401; insufficient scope returns 403, even when a browser cookie or Tailscale identity is present.
 

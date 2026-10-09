@@ -2,8 +2,10 @@ using System.Text.Json;
 using Xur.Domain;
 namespace Xur.Agent;
 
-public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,DisplayConsoles? consoles=null):IWorkloadRuntime
+public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,DisplayConsoles? consoles=null,RoboticsRuntime? robotics=null):IWorkloadRuntime
 {
+    readonly RoboticsRuntime robot=robotics??new RoboticsRuntime(Path.Combine(Path.GetDirectoryName(directory)!,"robotics"),"/run/xur/robotics-controller");
+    readonly RoboticsWebContainer robotWeb=new(Environment.GetEnvironmentVariable("XUR_RUN")??"/run/xur");
     readonly SemaphoreSlim gate=new(1,1);
     ParallelStopGate? stopGate;
     ParallelStopGate Stops=>LazyInitializer.EnsureInitialized(ref stopGate,()=>new ParallelStopGate(gate));
@@ -42,6 +44,11 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     public Task<RuntimeObservation> Observe()=>ObserveUnlocked();
     async Task<RuntimeInstance?> Inspect(Workload w)
     {
+        if(w.Recipe.Kind=="Robotics")
+        {
+            var current=robot.Inspect(w);
+            return current!=null&&!await robotWeb.Running()?current with{State="stopped",Pid=0}:current;
+        }
         if(w.Recipe.Kind=="Workstation")return await station.Inspect(w);
         ProcessResult r=new(1,"");
         for(int attempt=0;attempt<3;attempt++)
@@ -81,6 +88,9 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             catalog.Verify(w.Recipe);
             Directory.CreateDirectory(directory);
             var observed=await ObserveUnlocked();ProfilePolicy.Validate(new("runtime","Runtime",1,[w]),observed);
+            if((w.Recipe.Kind=="Robotics" && Definitions().Any(d=>d.Id!=w.Id && d.Recipe.Kind is "Workstation" or "Robotics")) ||
+                (w.Recipe.Kind=="Workstation" && Definitions().Any(d=>d.Id!=w.Id && d.Recipe.Kind=="Robotics")))
+                throw new InvalidOperationException("Robotics and workstations must release their peripherals before starting the other workload.");
             foreach(var pci in w.Gpus)if(observed.Instances.Any(i=>i.Id!=w.Id && i.Gpus.Contains(pci)))throw new InvalidOperationException($"GPU {pci} is still allocated.");
             if(w.Recipe.Kind=="Workstation" && Definitions().Any(d=>d.Id!=w.Id && d.Recipe.Kind=="Workstation" && StationAccounts.Username(d)==StationAccounts.Username(w)))throw new InvalidOperationException("Each running workstation needs a different user.");
             await receipts.WaitAsync();try {
@@ -117,6 +127,11 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 await new EngineRestartPolicy().Set(Name(w.Id),instance.InstanceId,"no");
             }
             if(instance?.State!="running" && w.Recipe.Engine is "vLLM" or "vLLM-Omni")await new ModelCatalog(Path.GetDirectoryName(directory)!).ValidateEngineCheckpoint(w.Recipe);
+            if(w.Recipe.Kind=="Robotics")
+            {
+                await robotWeb.Start();
+                return robot.Start(w);
+            }
             ModelImageSelection? engineImage=null;
             if(w.Recipe.Kind=="Model")
             {
@@ -219,6 +234,10 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             // A concurrent retry may have removed the receipt while this call waited.
             saved=Definitions().SingleOrDefault(w=>w.Id==request.Id);if(saved==null)return;
             var instance=await Inspect(saved);
+            if(saved.Recipe.Kind=="Robotics")
+            {
+                await robot.Unload(request);await robotWeb.Stop();File.Delete(ReceiptPath(request.Id));return;
+            }
             if(saved.Recipe.Kind=="Workstation")
             {
                 if(instance!=null && instance.InstanceId!=request.InstanceId)throw new InvalidOperationException("The workstation instance changed outside this operation.");
@@ -314,6 +333,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         if(!ProfilePolicy.EntityIdentifier(id) || !File.Exists(ReceiptPath(id)))throw new InvalidOperationException("Unknown workload.");
         var saved=Definitions().Single(w=>w.Id==id);
         if(saved.Recipe.Kind=="Workstation")return Redaction.Logs(await station.Logs(saved));
+        if(saved.Recipe.Kind=="Robotics")return JsonSerializer.Serialize(robot.Jobs(),json);
         var r=await Processes.Run("podman",["logs","--tail=200",Name(id)],10);var error=Path.Combine(directory,id+".error.log");var update=Path.Combine(directory,id+".update.log");return Redaction.Logs((File.Exists(error) ? File.ReadAllText(error)+"\n" : "")+(File.Exists(update)?File.ReadAllText(update)+"\n":"")+r.Output);
     }
     public async Task RestoreStations()

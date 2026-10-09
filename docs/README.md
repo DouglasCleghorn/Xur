@@ -13,6 +13,7 @@ Xur remains a preview; implemented behavior and hardware validation are separate
 | Configure desktops, pairing and peripherals | [Workstation identities](usage/workstation-identities.md), [multiple workstations](architecture/multiple-workstations.md) |
 | Wake displays and control TV power | [Display sleep and HDMI-CEC](usage/display-power.md) |
 | Choose models, connect clients and benchmark | [Model catalog](usage/model-catalog.md), [model lab](usage/model-lab.md), [API keys](usage/api-keys.md) |
+| Prepare XLeRobot, train sorting skills and trigger emotes | [Robotics](usage/robotics.md) |
 | Browse, download and manage files | [Files](usage/files.md), [storage and TRIM](usage/storage.md) |
 | Configure networking and time | [Wi-Fi, IP settings and answer YAML](usage/answer-file.md), [timezone and NTP](usage/timezone.md) |
 | Update, roll back or test a contributor build | [OS updates](usage/updates.md), [application updates](usage/application-updates.md) |
@@ -28,6 +29,9 @@ Xur remains a preview; implemented behavior and hardware validation are separate
   workstations, with multiple controllers per desktop. Source tests cover device
   isolation and stable reconnect identities; physical acceptance remains open.
   See [controllers](usage/controllers.md) for driver and Steam Controller limits.
+- The Robotics workload adds disarmed setup, container-based hand-guided
+  calibration, Xbox recording, ACT training and named task/emote APIs. Local
+  safety-gate tests pass; container and physical robot acceptance remain open.
 - Profiles load and unload independent workloads in parallel, with per-workload
   errors, cancellation and resumable partial changes. Tests cover preserving
   successful workloads while a sibling fails.
@@ -38,7 +42,7 @@ Xur remains a preview; implemented behavior and hardware validation are separate
 - File management includes storage/home tabs, a sortable/filterable grid,
   streamed file and ZIP downloads, rename/move, confirmed deletion and cached
   folder sizes. Directory listings are read afresh.
-- API keys have Diagnostics, Testing and Automation scopes, with optional Never
+- API keys have Diagnostics, Testing, Robotics and Automation scopes, with optional Never
   expiry. Contributor update servers can use their own Ed25519 public key.
 - The web manager and native Plasma helper provide a profile switcher with
   keyboard and controller shortcuts. The console supports Xbox One navigation

@@ -1,0 +1,11 @@
+#robotics{padding-bottom:64px}
+#robotics form{display:grid;gap:12px;margin:18px 0}
+#robotics label{display:grid;gap:6px;min-width:0}
+#robotics input:not([type=checkbox]),#robotics select{width:100%;min-width:0}
+#robotics .field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px}
+#robotics .inline-option{display:flex;align-items:center;gap:8px}
+#robotics form>button{justify-self:start}
+#robotics details{margin-top:16px}
+#robotics pre{white-space:pre-wrap;overflow-wrap:anywhere}
+#robot-jobs p{overflow-wrap:anywhere;border-top:1px solid var(--rule);padding-top:12px}
+#robot-stop{position:fixed;right:24px;bottom:calc(24px + env(safe-area-inset-bottom));z-index:40;box-shadow:0 4px 18px #0008}
