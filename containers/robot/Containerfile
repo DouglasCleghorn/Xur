@@ -12,7 +12,7 @@ RUN dotnet publish containers/robot/Xur.Robot.csproj -c Release -r linux-x64 --n
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      python3.12 python3.12-venv ca-certificates git gcc g++ pkg-config ffmpeg libgl1 libglib2.0-0 \
+      python3.12 python3.12-venv libpython3.12 ca-certificates git gcc g++ pkg-config ffmpeg libgl1 libglib2.0-0 \
       libusb-1.0-0 libsm6 libxext6 && rm -rf /var/lib/apt/lists/*
 
 # Reviewed interfaces: LeRobot 0.6.0 and the pinned XLeRobot plugin/example.
