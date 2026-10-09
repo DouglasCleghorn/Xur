@@ -156,6 +156,8 @@ Rust is an option for rendering, frame timing and the native XR loop. Add a
 transport adapter only for a connection the upstream tools cannot supply. The
 ASP.NET Core container app owns settings, mapping, arming and recording. CV1
 integration is not implemented yet; the current recorder uses Xbox input.
+See the [Rift CV1 reuse plan](../../tools/Xur.Robotics/vr/README.md) for runtime
+checks, source-reviewed adaptation blockers and recording metadata.
 
 Start with one easy-to-grasp object category and one reachable bin, in fixed
 positions under good lighting. Keep people and fragile objects outside the arm
