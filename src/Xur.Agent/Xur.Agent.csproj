@@ -5,16 +5,6 @@
     <Content Include="../../tools/Xur.Streaming/upstream-lock.json" Link="streaming-lock.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../os/containers/99-xur-docker-hub.conf" LogicalName="Xur.RegistryMirror" /></ItemGroup>
-  <ItemGroup><Content Include="../../tools/Xur.Robotics/discover_buses.py" Link="robotics/discover_buses.py" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
-  <ItemGroup><Content Include="../../tools/Xur.Robotics/bridge.py" Link="robotics/bridge.py" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
-  <ItemGroup><Content Include="../../tools/Xur.Robotics/motor_probe.py" Link="robotics/motor_probe.py" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
-  <ItemGroup><Content Include="../../tools/Xur.Robotics/detect_markers.c" Link="robotics/detect_markers.c" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
-  <ItemGroup>
-    <Content Include="../../tools/Xur.Robotics/Discovery.Containerfile" Link="robotics/Discovery.Containerfile" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../../tools/Xur.Robotics/Containerfile" Link="robotics/Containerfile" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../../LICENSE" Link="robotics/LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../../docs/licensing.md" Link="robotics/licensing.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-  </ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../catalog/engines/omni-xpu.Containerfile" LogicalName="Xur.OmniXpu" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../catalog/engines/vllm-rocm-gfx1103.Containerfile" LogicalName="Xur.VllmGfx1103" /></ItemGroup>
 </Project>

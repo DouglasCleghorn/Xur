@@ -5,17 +5,62 @@ COPY global.json Directory.Build.props ./
 COPY containers/robot/Xur.Robot.csproj containers/robot/packages.lock.json containers/robot/
 RUN dotnet restore containers/robot/Xur.Robot.csproj --locked-mode -r linux-x64
 COPY containers/robot/ containers/robot/
+COPY src/Xur.Domain/Redaction.cs src/Xur.Domain/Redaction.cs
 RUN dotnet publish containers/robot/Xur.Robot.csproj -c Release -r linux-x64 --no-restore \
     -p:TreatWarningsAsErrors=true -o /out && \
     test -x /out/Xur.Robot && test ! -e /out/libcoreclr.so
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3.12 python3.12-venv ca-certificates git gcc g++ pkg-config ffmpeg libgl1 libglib2.0-0 \
+      libusb-1.0-0 libsm6 libxext6 && rm -rf /var/lib/apt/lists/*
+
+# Reviewed interfaces: LeRobot 0.6.0 and the pinned XLeRobot plugin/example.
+# CPU ACT inference/training is the initial supported path; no GPU passthrough.
+RUN python3.12 -m venv /opt/robot-venv && /opt/robot-venv/bin/pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+      'torch==2.11.0' 'torchvision==0.26.0' 'torchcodec==0.11.0+cpu' && \
+    /opt/robot-venv/bin/pip install --no-cache-dir 'lerobot[feetech,training]==0.6.0' \
+      'pygame==2.6.1' && \
+    git init /opt/XLeRobot && \
+    git -C /opt/XLeRobot remote add origin https://github.com/Vector-Wangel/XLeRobot.git && \
+    git -C /opt/XLeRobot fetch --depth=1 origin b017b5e6354bd9f61f4247a920c72622ca0aade0 && \
+    git -C /opt/XLeRobot checkout --detach FETCH_HEAD && \
+    /opt/robot-venv/bin/pip install --no-cache-dir /opt/XLeRobot/software/plugins/xlerobot_model \
+      /opt/XLeRobot/software/plugins/lerobot_robot_xlerobot && \
+    mkdir -p /opt/licenses && \
+    cp /opt/XLeRobot/LICENSE /opt/licenses/XLeRobot-LICENSE && \
+    rm -rf /opt/XLeRobot/.git
+
+# Verify the native decoder before accepting the build; a GPU wheel can satisfy
+# the version constraint while failing on this CPU-only runtime.
+RUN /opt/robot-venv/bin/python -c "from torchcodec.decoders import VideoDecoder"
+
+COPY tools/Xur.Robotics/detect_markers.c /opt/xur/detect_markers.c
+RUN git init /opt/apriltag && \
+    git -C /opt/apriltag remote add origin https://github.com/AprilRobotics/apriltag.git && \
+    git -C /opt/apriltag fetch --depth=1 origin b7c0ebe9aa20f82ec7a828579004f9e706bfecd9 && \
+    git -C /opt/apriltag checkout --detach FETCH_HEAD && \
+    cc -O2 -std=gnu99 -I /opt/apriltag -o /opt/xur/detect-markers \
+      /opt/xur/detect_markers.c /opt/apriltag/apriltag.c \
+      /opt/apriltag/apriltag_quad_thresh.c /opt/apriltag/apriltag_pose.c \
+      /opt/apriltag/tagStandard41h12.c /opt/apriltag/common/*.c -lm -lpthread && \
+    cp /opt/apriltag/LICENSE.md /opt/licenses/AprilTag-LICENSE.md && \
+    rm -rf /opt/apriltag/.git
+
+COPY tools/Xur.Robotics/bridge.py tools/Xur.Robotics/discover_buses.py tools/Xur.Robotics/motor_probe.py /opt/xur/
+COPY LICENSE docs/licensing.md /opt/licenses/
+ENV PATH=/opt/robot-venv/bin:$PATH SDL_VIDEODRIVER=dummy PYTHONDONTWRITEBYTECODE=1 HF_HOME=/state/.build/huggingface \
+    HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
+WORKDIR /state/.build
+
+
+LABEL io.xur.robot.runtime="container-v1"
 WORKDIR /app
 COPY --from=build /out/Xur.Robot ./Xur.Robot
 COPY --from=build /out/wwwroot/ ./wwwroot/
 COPY --from=build /usr/share/dotnet/LICENSE.txt /app/licenses/dotnet-LICENSE.txt
 COPY --from=build /usr/share/dotnet/ThirdPartyNotices.txt /app/licenses/dotnet-ThirdPartyNotices.txt
 COPY LICENSE docs/licensing.md /app/licenses/
-ENV XUR_ROBOT_SOCKET=/run/xur/robot-web/app.sock XUR_AGENT_SOCKET=/run/xur/agent.sock
-# No port, device nodes, Podman socket or Docker socket is exposed.
+ENV XUR_ROBOT_SOCKET=/run/xur/robot-web/app.sock XUR_ROBOT_STATE=/state
+# Hardware paths and durable state are mounted by Xur. No host agent or engine socket.
 ENTRYPOINT ["/app/Xur.Robot"]

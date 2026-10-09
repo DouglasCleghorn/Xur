@@ -1,13 +1,19 @@
-# Attended motor identification
+# Motor identity and historical attended diagnostics
 
-The .NET host console invokes a private Python diagnostic through the prepared
-LeRobot container. It tests one expected arm/head motor, records encoder/effort
-feedback and both onboard camera views, and finishes with verified torque off.
-It does not expose motor targets through the task API or approve calibration.
+Current motor identity is available through **Detect motor buses** at
+`/robot/setup` and the read-only motor details on `/robot`. These run the upstream
+tools inside the robotics app container without changing motor settings.
 
-```bash
-sudo /var/lib/xur/app/current/host/xurutil robotics identify head-pan
-```
+The former `xurutil robotics identify` host-console entry point has been removed
+as robot settings and execution moved into that container. The app intentionally
+does not expose a powered motor-identification or raw motor-write endpoint.
+No replacement host command is required for current read-only identity checks.
+
+The remaining sections document the internal bounded diagnostic and October 8
+evidence. It tested one expected arm/head motor, recorded encoder/effort feedback
+and camera views, and finished with torque off. Those tests did not approve
+calibration. Any future operator-facing diagnostic must be added to the app's
+reviewed workflow before it can be used through the API.
 
 Selections are `left-` or `right-` followed by `shoulder-pan`, `shoulder-lift`,
 `elbow-flex`, `wrist-flex`, `wrist-roll` or `gripper`, plus `head-pan` and

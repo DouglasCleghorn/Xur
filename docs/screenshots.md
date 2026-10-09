@@ -1,5 +1,12 @@
 # Screenshot and artwork register
 
+- 2026-10-09: The October 8 robot dashboard UI capture families below are retired
+  as current acceptance evidence after setup/navigation and runtime ownership
+  moved into the proxied robotics container. Their historical privacy reviews
+  remain valid; keep the images private. Regenerate dashboard, setup, AprilTags
+  and controller views against the combined app before publishing new UI images.
+  No new screenshot was captured for this source change.
+
 - 2026-10-08: Deployed robot dashboard acceptance capture family under
   `.build/evidence/robot-web/live/`, covering dashboard cameras/motor details,
   E-stop/reset, the AprilTag overlay and controller instructions on xur-255.

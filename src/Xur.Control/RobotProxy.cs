@@ -21,8 +21,14 @@ public static class RobotProxy
                 await context.Response.WriteAsJsonAsync(new{error="Load the Robotics workload in a profile to start the robot dashboard container."});
                 return;
             }
-            await StreamProxy.Forward(context,client,"http://robot"+context.Request.Path+context.Request.QueryString);
+            var path=context.Request.Path.Value??"/robot";
+            if(context.Request.Path.StartsWithSegments("/api/robotics",out var remainder))path="/robot/api"+remainder;
+            await StreamProxy.Forward(context,client,"http://robot"+path+context.Request.QueryString);
         }
+        app.MapGet("/robotics",()=>Results.Redirect("/robot/setup"));
+        // Existing scoped API keys and integrations retain their route while
+        // all application endpoints are served by the robotics container.
+        app.MapMethods("/api/robotics/{**path}",["GET","HEAD","POST"],Forward);
         app.MapMethods("/robot",["GET","HEAD"],Forward);
         app.MapMethods("/robot/{**path}",["GET","HEAD","POST"],Forward);
     }

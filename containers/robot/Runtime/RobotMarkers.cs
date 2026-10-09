@@ -1,4 +1,4 @@
-namespace Xur.Domain;
+namespace Xur.Robot;
 
 public record RobotMarkerDetection(int Id,int Hamming,double DecisionMargin,double[] Center,double[][] Corners);
 public record RobotMarkerFrame(DateTimeOffset CapturedAt,int Width,int Height,

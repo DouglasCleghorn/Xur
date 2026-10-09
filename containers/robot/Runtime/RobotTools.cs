@@ -1,8 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Xur.Domain;
 
-namespace Xur.Agent;
+namespace Xur.Robot;
 
 public interface IRobotTools
 {
@@ -14,17 +13,15 @@ public interface IRobotTools
 // Every invocation is a reviewed operation; no shell commands come from clients.
 public sealed class LeRobotTools : IRobotTools
 {
-    static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
     public async Task<JsonElement> Run(RoboticsConfiguration configuration, string operation,
         object? request, int seconds, CancellationToken cancellation)
     {
-        var info = new ProcessStartInfo("podman")
+        var info = new ProcessStartInfo(RoboticsContainer.Python)
         {
             UseShellExecute = false, RedirectStandardInput = true,
             RedirectStandardOutput = true, RedirectStandardError = true
         };
-        foreach(var argument in new[]{"exec","--interactive",RoboticsContainer.Name,"python","/opt/xur/bridge.py"}) info.ArgumentList.Add(argument);
+        info.ArgumentList.Add(Path.Combine(RoboticsContainer.ToolsDirectory,"bridge.py"));
         using var process = Process.Start(info) ?? throw new IOException("Could not start the LeRobot adapter.");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         deadline.CancelAfter(TimeSpan.FromSeconds(seconds));
@@ -43,14 +40,14 @@ public sealed class LeRobotTools : IRobotTools
         var stderr = ReadBounded(process.StandardError,progress:true);
         try
         {
-            await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new{configuration, operation, request}, Json).AsMemory(), deadline.Token);
+            await process.StandardInput.WriteLineAsync(RobotJson.Serialize(new RobotToolRequest(configuration,operation,request==null?null:RobotJson.Element(request))).AsMemory(), deadline.Token);
             process.StandardInput.Close();
             // A failed pipe must also terminate the adapter promptly.
             var pending = new List<Task>{stdout, stderr, process.WaitForExitAsync(deadline.Token)};
             while(pending.Count != 0){var finished = await Task.WhenAny(pending); pending.Remove(finished); await finished;}
             var output = await stdout;
             if(process.ExitCode != 0)
-                throw new InvalidOperationException("LeRobot adapter failed: " + Redaction.Logs((await stderr)[..Math.Min((await stderr).Length, 2048)]));
+                throw new InvalidOperationException("LeRobot adapter failed: " + Xur.Domain.Redaction.Logs((await stderr)[..Math.Min((await stderr).Length, 2048)]));
             using var result = JsonDocument.Parse(output);
             return result.RootElement.Clone();
         }
@@ -60,13 +57,20 @@ public sealed class LeRobotTools : IRobotTools
             // the arm. A force kill is only the bounded last step after SIGINT.
             if(!process.HasExited)
             {
-                // podman exec does not forward host signals reliably. The bridge
-                // records its PID and handles this signal inside the container.
-                await Processes.Run("podman",["exec",RoboticsContainer.Name,"python","/opt/xur/bridge.py","--stop"],5);
+                // The bridge records its PID and handles SIGINT locally so
+                // upstream finally/disconnect handlers can release the motors.
+                try
+                {
+                    await Processes.Run(RoboticsContainer.Python,[Path.Combine(RoboticsContainer.ToolsDirectory,"bridge.py"),"--stop"],5);
+                }
+                catch
+                {
+                    // A failed stop helper must still reach the bounded child
+                    // cleanup below and preserve the original operation error.
+                }
                 try{await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));}
                 catch(TimeoutException)
                 {
-                    await Processes.Run("podman",["kill",RoboticsContainer.Name],10);
                     if(!process.HasExited)process.Kill(entireProcessTree:true);
                 }
             }

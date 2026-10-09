@@ -1,11 +1,9 @@
 using System.Text.Json;
-using Xur.Domain;
 
-namespace Xur.Agent;
+namespace Xur.Robot;
 
 public sealed class RoboticsRuntime
 {
-    static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web){UnmappedMemberHandling=System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow};
     readonly object sync = new();
     readonly string directory, reservation;
     readonly IRobotTools tools;
@@ -13,8 +11,7 @@ public sealed class RoboticsRuntime
     readonly RoboticsContainer container;
     readonly Func<RobotDevices> deviceInventory;
     readonly Dictionary<string, RobotJob> jobs = new();
-    Workload? workload;
-    RuntimeInstance? instance;
+    string? workloadId;
     RoboticsConfiguration? configuration;
     CancellationTokenSource? cancellation;
     Task? worker;
@@ -42,7 +39,7 @@ public sealed class RoboticsRuntime
         lock(sync)
         {
             var armed = !stopLatched && armedUntil > clock.GetUtcNow();
-            return new(workload?.Id, emergencyStop?"emergency-stop":activeJob!=null?jobs[activeJob].Kind:armed?"armed":"disarmed",
+            return new(workloadId, emergencyStop?"emergency-stop":activeJob!=null?jobs[activeJob].Kind:armed?"armed":"disarmed",
                 configuration!=null, configuration?.MotionEnabled==true, armed?armedUntil:null, stopLatched,
                 activeJob!=null?jobs[activeJob]:jobs.Values.LastOrDefault(), configuration?.Skills??[], configurationProblems.Concat(recoveryProblem==null?[]:[recoveryProblem]).Concat(stopProblem==null?[]:[stopProblem]).Concat(emergencyStop?["E-stop is latched. Inspect the robot, then reset E-stop; reset leaves motion disarmed."]:[]).Concat(configuration==null?[]:CalibrationProblems(configuration)).ToArray(),CalibrationHash(),emergencyStop);
         }
@@ -53,45 +50,35 @@ public sealed class RoboticsRuntime
     public RobotCalibrationAssessment? CalibrationAssessment(){lock(sync)return calibrationAssessment;}
     public async Task Recover()
     {
-        // A crashed agent can leave podman exec running. Profile recovery must
-        // stop that container before any new controller session is possible.
+        // A restarted app must stop any surviving local tool before releasing
+        // its controller reservation. Recovery never resumes motor motion.
         if(tools is not LeRobotTools || !File.Exists(Path.Combine(directory,".build","devices.json")))return;
-        try{await container.Interrupt();await container.Stop();File.Delete(reservation);}
-        catch(Exception e){lock(sync)recoveryProblem="Previous robotics session could not be stopped. Prepare again before motion: "+Redaction.Logs(e.Message);}
+        try{await container.Interrupt();File.Delete(reservation);}
+        catch(Exception e){lock(sync)recoveryProblem="Previous robot tool could not be stopped. Inspect motor power before motion: "+Xur.Domain.Redaction.Logs(e.Message);}
     }
     string? CalibrationHash()
     {
         var path=Path.Combine(directory,"calibration","receipt.json");
         return File.Exists(path)?Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))):null;
     }
-    public RuntimeInstance? Inspect(Workload desired){lock(sync)return instance?.Id==desired.Id && instance.Fingerprint==desired.Fingerprint?instance:null;}
-
-    public RuntimeInstance Start(Workload desired)
+    public void Start(string id)
     {
         lock(sync)
         {
-            if(instance!=null)
-            {
-                if(instance.Id!=desired.Id || instance.Fingerprint!=desired.Fingerprint)throw new InvalidOperationException("Stop the previous robotics workload first.");
-                return instance;
-            }
+            if(workloadId!=null)throw new InvalidOperationException("The robot app is already active.");
             if(worker is {IsCompleted:false})throw new InvalidOperationException("Wait for the previous robot operation to stop.");
             ReadConfiguration();observation=null;observationReadAt=null;observationProblem=null;calibrationAssessment=null;
-            emergencyStop=File.Exists(EmergencyStopPath);
-            workload=desired; stopLatched=true; armedUntil=null;
-            instance=new(desired.Id, desired.Fingerprint, "robotics:"+Guid.NewGuid().ToString("N"), Environment.ProcessId,
-                File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim(), "", "running", []);
-            return instance;
+            emergencyStop=File.Exists(EmergencyStopPath);workloadId=id;stopLatched=true;armedUntil=null;
         }
     }
     void ReadConfiguration()
     {
         configuration=null; configurationProblems=[];
         var path=Path.Combine(directory,"config.json");
-        if(!File.Exists(path)){configurationProblems=["Set up the robot's local robotics/config.json before using hardware."]; return;}
+        if(!File.Exists(path)){configurationProblems=["Open Robot setup and select the connected hardware before using it."]; return;}
         try
         {
-            var selected=JsonSerializer.Deserialize<RoboticsConfiguration>(File.ReadAllText(path),Json)??throw new InvalidOperationException("Empty robotics configuration.");
+            var selected=RobotJson.Deserialize<RoboticsConfiguration>(File.ReadAllText(path))??throw new InvalidOperationException("Empty robotics configuration.");
             ValidateConfiguration(selected); configuration=selected;
         }
         catch(Exception e) when(e is JsonException or IOException or InvalidOperationException)
@@ -101,7 +88,7 @@ public sealed class RoboticsRuntime
     {
         static bool PathValue(string? value)=>value!=null && Path.IsPathFullyQualified(value) && !value.Any(char.IsControl);
         static bool Match(string? value,string pattern)=>value!=null&&System.Text.RegularExpressions.Regex.IsMatch(value,pattern);
-        if(!ProfilePolicy.Identifier(c.RobotId)
+        if(!RobotIdentifiers.Valid(c.RobotId)
             || new[]{c.LeftPort,c.RightPort}.Any(p=>!Match(p,@"\A/dev/serial/by-id/[A-Za-z0-9._:+-]+\z"))
             || c.ControllerDevice!="" && !Match(c.ControllerDevice,@"\A/dev/input/(by-id/[A-Za-z0-9._:+-]+-event-joystick|event[0-9]+)\z")
             || new[]{c.HeadCamera,c.HandCamera}.Any(p=>!Match(p,@"\A/dev/v4l/by-id/[A-Za-z0-9._:+-]+-video-index0\z"))
@@ -113,13 +100,13 @@ public sealed class RoboticsRuntime
         if(c.Skills.Any(s=>s==null))throw new InvalidOperationException("Provide valid skills.");
         if(c.Skills.Select(s=>s.Id).Distinct(StringComparer.Ordinal).Count()!=c.Skills.Length)throw new InvalidOperationException("Skill IDs must be unique.");
         foreach(var skill in c.Skills)
-            if(!ProfilePolicy.Identifier(skill.Id)||string.IsNullOrWhiteSpace(skill.Name)||skill.Name.Length>80||skill.Kind is not ("sort" or "emote")||skill.Arm is not ("left" or "right")
+            if(!RobotIdentifiers.Valid(skill.Id)||string.IsNullOrWhiteSpace(skill.Name)||skill.Name.Length>80||skill.Kind is not ("sort" or "emote")||skill.Arm is not ("left" or "right")
                 || !PathValue(skill.AssetPath)||!skill.AssetPath.StartsWith(skill.Kind=="sort"?"/state/policies/":"/state/datasets/",StringComparison.Ordinal)||skill.AssetPath.Split('/').Contains("..")
                 ||string.IsNullOrWhiteSpace(skill.Task)||skill.Task.Length>500||skill.Seconds is <1 or >60||skill.Episode<0
-                || skill.PolicyType!="act"||skill.Kind=="sort"&&!ProfilePolicy.Identifier(skill.Bin))
+                || skill.PolicyType!="act"||skill.Kind=="sort"&&!RobotIdentifiers.Valid(skill.Bin))
                 throw new InvalidOperationException("Configure bounded local LeRobot policies for sorting and recorded single-arm datasets for emotes.");
     }
-    void RequireLoaded(){if(instance==null)throw new InvalidOperationException("Load the Robotics profile first.");}
+    void RequireLoaded(){if(workloadId==null)throw new InvalidOperationException("Load the Robotics profile first.");}
     RoboticsConfiguration RequireConfiguration()
     {RequireLoaded();return configuration??throw new InvalidOperationException(string.Join(" ",configurationProblems));}
     void Idle(){if(activeJob!=null||stopping||observing)throw new InvalidOperationException("Stop or finish the current robot operation first.");}
@@ -188,7 +175,7 @@ public sealed class RoboticsRuntime
             return Directory.GetFiles(path,pattern).Order(StringComparer.Ordinal).Select(p=>new RobotDevice(p,Path.GetFileName(p))).ToArray();
         }
         var pads=Read("/dev/input/by-id","*event-joystick");
-        if(pads.Length==0)pads=(StationDeviceInventoryReader.Read([]).Controllers??[]).SelectMany(p=>p.Nodes.Where(n=>n.StartsWith("/dev/input/event",StringComparison.Ordinal)).Select(n=>new RobotDevice(n,p.Name))).ToArray();
+        if(pads.Length==0)pads=Read("/dev/input","event*").Where(p=>ControllerInventory.IsGamepad(p.Path)).ToArray();
         return new(Read("/dev/serial/by-id","*"),pads,Read("/dev/v4l/by-id","*video-index0"));
     }
     public RobotStatus Configure(RoboticsConfiguration selected)
@@ -197,7 +184,7 @@ public sealed class RoboticsRuntime
         {
             RequireLoaded();Idle();if(!stopLatched)throw new InvalidOperationException("Stop and disarm the robot before changing setup.");
             ValidateConfiguration(selected);Directory.CreateDirectory(directory);
-            var path=Path.Combine(directory,"config.json");File.WriteAllText(path+".tmp",JsonSerializer.Serialize(selected,Json));File.Move(path+".tmp",path,true);
+            var path=Path.Combine(directory,"config.json");File.WriteAllText(path+".tmp",RobotJson.Serialize(selected));File.Move(path+".tmp",path,true);
             configuration=selected;configurationProblems=[];observation=null;observationReadAt=null;observationProblem=null;calibrationAssessment=null;return Status();
         }
     }
@@ -207,7 +194,7 @@ public sealed class RoboticsRuntime
         lock(sync)
         {
             if(!File.Exists(DetectionPath))return null;
-            var found=JsonSerializer.Deserialize<RobotBusDetection>(File.ReadAllText(DetectionPath),Json);
+            var found=RobotJson.Deserialize<RobotBusDetection>(File.ReadAllText(DetectionPath));
             return found!=null && File.Exists(found.LeftPort) && File.Exists(found.RightPort)?found:null;
         }
     }
@@ -223,19 +210,19 @@ public sealed class RoboticsRuntime
             {
                 var detected=await container.DetectBuses(ports,token);token.ThrowIfCancellationRequested();
                 Directory.CreateDirectory(Path.GetDirectoryName(DetectionPath)!);
-                File.WriteAllText(DetectionPath+".tmp",JsonSerializer.Serialize(detected,Json));File.Move(DetectionPath+".tmp",DetectionPath,true);
+                File.WriteAllText(DetectionPath+".tmp",RobotJson.Serialize(detected));File.Move(DetectionPath+".tmp",DetectionPath,true);
                 return "Detected the upstream left/head and right/wheel motor buses. Save hardware setup with these roles; calibration remains required and the robot is disarmed.";
             });
         }
     }
     public RobotJob Prepare()
-    {lock(sync){Idle();RequireConfiguration();if(!stopLatched)throw new InvalidOperationException("Disarm before preparing containers.");return Launch("prepare",false,async(c,token)=>{await container.Prepare(c,token);lock(sync)recoveryProblem=null;return "LeRobot/XLeRobot tools container is ready. Calibration and skills remain local and disarmed.";});}}
+    {lock(sync){Idle();RequireConfiguration();if(!stopLatched)throw new InvalidOperationException("Disarm before preparing containers.");return Launch("prepare",false,async(c,token)=>{await container.Prepare(c,token);lock(sync)recoveryProblem=null;return "LeRobot/XLeRobot tools are ready in this container. Calibration and skills remain disarmed.";});}}
     public RobotJob Record(RobotRecordRequest request)
     {
         lock(sync)
         {
             Idle();RequireController();Motion();
-            if(!ProfilePolicy.Identifier(request.Dataset)||request.Arm is not ("left" or "right")||string.IsNullOrWhiteSpace(request.Task)||request.Task.Length>500||request.Seconds is <5 or >60)
+            if(!RobotIdentifiers.Valid(request.Dataset)||request.Arm is not ("left" or "right")||string.IsNullOrWhiteSpace(request.Task)||request.Task.Length>500||request.Seconds is <5 or >60)
                 throw new InvalidOperationException("Name the demonstration, select one arm, describe the task and record for 5 to 60 seconds.");
             return Launch("record",true,async(c,token)=>
             {
@@ -250,7 +237,7 @@ public sealed class RoboticsRuntime
         lock(sync)
         {
             Idle();RequireConfiguration();if(!stopLatched)throw new InvalidOperationException("Disarm before training.");
-            if(!ProfilePolicy.Identifier(request.Dataset)||!ProfilePolicy.Identifier(request.Policy)||request.Steps is <10 or >100000)
+            if(!RobotIdentifiers.Valid(request.Dataset)||!RobotIdentifiers.Valid(request.Policy)||request.Steps is <10 or >100000)
                 throw new InvalidOperationException("Select local dataset and policy names and 10 to 100000 training steps.");
             return Launch("train",false,async(c,token)=>{await tools.Run(c,"train",request,86400,token);return "ACT training finished. Evaluate the checkpoint under supervision before verifying a sorting skill.";});
         }
@@ -277,7 +264,7 @@ public sealed class RoboticsRuntime
             return Launch("evaluate",true,async(config,token)=>
             {
                 await CaptureTo(config,"head","before-evaluation",token);
-                await tools.Run(config,skill.Kind,new{skill},skill.Seconds+15,token);
+                await tools.Run(config,skill.Kind,new RobotSkillRequest(skill),skill.Seconds+15,token);
                 await CaptureTo(config,"head","after-evaluation",token);
                 return "Supervised evaluation ended. Inspect placement, clearances and camera evidence before reviewing this skill.";
             });
@@ -306,7 +293,7 @@ public sealed class RoboticsRuntime
             return Launch("controller",true,async(c,token)=>
             {
                 ReserveController(c);
-                try{await tools.Run(c,"controller",new{seconds=request.Seconds},request.Seconds+15,token);}
+                try{await tools.Run(c,"controller",new RobotControllerRequest(request.Seconds),request.Seconds+15,token);}
                 finally{File.Delete(reservation);}
                 return "Controller session ended. Robot is disarmed.";
             });
@@ -365,21 +352,21 @@ public sealed class RoboticsRuntime
                 var assessment=new RobotCalibrationAssessment(clock.GetUtcNow(),"blocked",
                     "Automatic calibration is blocked. Motor and AprilTag checks completed without motion; no calibration was approved.",blockers.Distinct().ToArray());
                 var path=Path.Combine(directory,".build");Directory.CreateDirectory(path);
-                await File.WriteAllTextAsync(Path.Combine(path,"calibration-assessment.json"),JsonSerializer.Serialize(assessment,Json),token);
+                await File.WriteAllTextAsync(Path.Combine(path,"calibration-assessment.json"),RobotJson.Serialize(assessment),token);
                 lock(sync)calibrationAssessment=assessment;
                 return assessment.Summary;
             });
         }
     }
-    public async Task<object> Observation(CancellationToken token)
+    public async Task<RobotObservation> Observation(CancellationToken token)
     {
         Task pending;
         lock(sync)
         {
             RequireConfiguration();
             if(activeJob!=null||stopping||!stopLatched)
-                return new{observation,paused=true,operation=activeJob==null?"armed session":jobs[activeJob].Kind,problem=(string?)null};
-            if(observationReadAt>clock.GetUtcNow().AddSeconds(-5))return new{observation,paused=false,operation=(string?)null,problem=(string?)null};
+                return new RobotObservation(observation,true,activeJob==null?"armed session":jobs[activeJob].Kind,null);
+            if(observationReadAt>clock.GetUtcNow().AddSeconds(-5))return new RobotObservation(observation,false,null,null);
             if(!observing)
             {
                 var c=RequireConfiguration();
@@ -391,7 +378,7 @@ public sealed class RoboticsRuntime
                         var data=await tools.Run(c,"dashboard",null,60,source.Token);
                         lock(sync){observation=data;observationReadAt=clock.GetUtcNow();observationProblem=null;}
                     }
-                    catch(Exception e){lock(sync)observationProblem=Redaction.Logs(e.Message);}
+                    catch(Exception e){lock(sync)observationProblem=Xur.Domain.Redaction.Logs(e.Message);}
                     finally{lock(sync){observing=false;cancellation=null;source.Dispose();}}
                 });
             }
@@ -399,8 +386,7 @@ public sealed class RoboticsRuntime
         }
         // Browser disconnects do not cancel a snapshot shared by other viewers.
         await pending.WaitAsync(token);
-        lock(sync)return new{observation,paused=false,operation=(string?)null,
-            problem=observationProblem};
+        lock(sync)return new RobotObservation(observation,false,null,observationProblem);
     }
     void ReserveController(RoboticsConfiguration c)
     {
@@ -415,7 +401,7 @@ public sealed class RoboticsRuntime
         lock(sync)
         {
             Idle(); Motion(); var skill=Skill(request.Skill,"emote");
-            return Launch("emote",true,async(c,token)=>{await tools.Run(c,"emote",new{skill},skill.Seconds+15,token);Completed(skill.Id);return "Recorded emote finished. Robot is disarmed.";});
+            return Launch("emote",true,async(c,token)=>{await tools.Run(c,"emote",new RobotSkillRequest(skill),skill.Seconds+15,token);Completed(skill.Id);return "Recorded emote finished. Robot is disarmed.";});
         }
     }
     RobotSkill Skill(string id,string kind)
@@ -448,7 +434,7 @@ public sealed class RoboticsRuntime
                     var path=Path.Combine(directory,".build","captures",id);Directory.CreateDirectory(path);
                     foreach(var image in result.Images)
                         await File.WriteAllBytesAsync(Path.Combine(path,image.Key+"-markers.jpg"),image.Value,token);
-                    await File.WriteAllTextAsync(Path.Combine(path,"markers.json"),JsonSerializer.Serialize(result.Report,Json),token);
+                    await File.WriteAllTextAsync(Path.Combine(path,"markers.json"),RobotJson.Serialize(result.Report),token);
                     var observed=string.Join("; ",result.Report.Cameras.Select(camera=>camera.Name+": "+
                         (camera.Markers.Length==0?"no unambiguous tags":string.Join(", ",camera.Markers.Select(m=>$"{m.Id:00} ({m.DetectedFrames}/3)")))));
                     return "Marker observations saved. "+observed+". Joint calibration remains unverified.";
@@ -474,7 +460,7 @@ public sealed class RoboticsRuntime
                     var skill=selected[index].skill;
                     token.ThrowIfCancellationRequested();
                     await CaptureTo(c,"head","before-"+index+"-"+skill.Id,token);
-                    await tools.Run(c,"sort",new{skill},skill.Seconds+15,token);
+                    await tools.Run(c,"sort",new RobotSkillRequest(skill),skill.Seconds+15,token);
                     await CaptureTo(c,"head","after-"+index+"-"+skill.Id,token);
                     Completed(skill.Id);
                 }
@@ -484,7 +470,7 @@ public sealed class RoboticsRuntime
     }
     async Task CaptureTo(RoboticsConfiguration c,string camera,string suffix,CancellationToken token)
     {
-        var result=await tools.Run(c,"camera",new{camera},15,token);
+        var result=await tools.Run(c,"camera",new RobotCameraRequest(camera),15,token);
         var data=Convert.FromBase64String(result.GetProperty("jpeg").GetString()!);
         if(data.Length>2*1024*1024)throw new IOException("Camera image exceeds its limit.");
         string id;lock(sync)id=activeJob!;
@@ -500,7 +486,7 @@ public sealed class RoboticsRuntime
         lock(sync)
         {
             Idle();RequireConfiguration();
-            job=Launch("camera",false,async(c,cancel)=>{var result=await tools.Run(c,"camera",new{camera},15,cancel);bytes=Convert.FromBase64String(result.GetProperty("jpeg").GetString()!);return "Camera captured.";});
+            job=Launch("camera",false,async(c,cancel)=>{var result=await tools.Run(c,"camera",new RobotCameraRequest(camera),15,cancel);bytes=Convert.FromBase64String(result.GetProperty("jpeg").GetString()!);return "Camera captured.";});
         }
         Task pending;lock(sync)pending=worker!;
         using var registration=token.Register(()=>{lock(sync)if(activeJob==job.Id)cancellation?.Cancel();});
@@ -536,7 +522,7 @@ public sealed class RoboticsRuntime
                 throw new InvalidOperationException("Select a completed marker inspection job.");
             var path=Path.Combine(directory,".build","captures",id,"markers.json");
             if(!File.Exists(path))throw new InvalidOperationException("Marker observations are unavailable for this job.");
-            return JsonSerializer.Deserialize<RobotMarkerReport>(File.ReadAllText(path),Json)
+            return RobotJson.Deserialize<RobotMarkerReport>(File.ReadAllText(path))
                 ??throw new InvalidOperationException("Marker observations are unavailable for this job.");
         }
     }
@@ -568,7 +554,7 @@ public sealed class RoboticsRuntime
                 if(kind=="sort")state="awaiting-verification";
             }
             catch(OperationCanceledException){state="stopped";detail="Stopped or arm session expired; inspect the robot before rearming.";}
-            catch(Exception e){state="failed";detail=Redaction.Logs(e.Message);}
+            catch(Exception e){state="failed";detail=Xur.Domain.Redaction.Logs(e.Message);}
             finally{try{File.Delete(reservation);}catch(IOException){state="failed";}}
             lock(sync)
             {
@@ -587,7 +573,7 @@ public sealed class RoboticsRuntime
     {
         job=job with{Updated=clock.GetUtcNow()};jobs[job.Id]=job;
         var path=Path.Combine(directory,".build","jobs");Directory.CreateDirectory(path);
-        var file=Path.Combine(path,job.Id+".json");File.WriteAllText(file+".tmp",JsonSerializer.Serialize(job,Json));File.Move(file+".tmp",file,true);
+        var file=Path.Combine(path,job.Id+".json");File.WriteAllText(file+".tmp",RobotJson.Serialize(job));File.Move(file+".tmp",file,true);
     }
     public Task<RobotStatus> Stop()
     {
@@ -606,7 +592,7 @@ public sealed class RoboticsRuntime
                 }
                 catch(Exception e)
                 {
-                    lock(sync)stopProblem="Software stop cleanup failed. Inspect motor power and retry Stop & disarm before resetting or arming: "+Redaction.Logs(e.Message);
+                    lock(sync)stopProblem="Software stop cleanup failed. Inspect motor power and retry Stop & disarm before resetting or arming: "+Xur.Domain.Redaction.Logs(e.Message);
                     throw;
                 }
                 finally{lock(sync)stopping=false;}
@@ -627,7 +613,7 @@ public sealed class RoboticsRuntime
                 File.Move(EmergencyStopPath+".tmp",EmergencyStopPath,true);
             }
             catch(Exception e) when(e is IOException or UnauthorizedAccessException)
-            {recoveryProblem="E-stop was requested but its latch could not be persisted: "+Redaction.Logs(e.Message);}
+            {recoveryProblem="E-stop was requested but its latch could not be persisted: "+Xur.Domain.Redaction.Logs(e.Message);}
             return Status();
         }
     }
@@ -671,16 +657,9 @@ public sealed class RoboticsRuntime
             });
         }
     }
-    public async Task Unload(RuntimeStop request)
+    public async Task Shutdown()
     {
-        lock(sync)
-        {
-            if(instance==null)return;
-            if(instance.Id!=request.Id || instance.InstanceId!=request.InstanceId || request.Pid!=null&&request.Pid!=instance.Pid || request.BootId!=null&&request.BootId!=instance.BootId)
-                throw new InvalidOperationException("The robotics instance changed outside this operation.");
-            // Mark unloaded before cancelling, so no caller can start another job.
-            instance=null;workload=null;
-        }
+        lock(sync)workloadId=null;
         await Stop();
         if(tools is LeRobotTools)await container.Stop();
     }

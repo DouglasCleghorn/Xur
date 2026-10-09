@@ -1,8 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Xur.Domain;
 
-namespace Xur.Agent;
+namespace Xur.Robot;
 
 // Validate the private adapter's observations before persisting public evidence.
 // This observer cannot create calibration receipts or arm a robot.
@@ -11,12 +10,11 @@ public static class RobotMarkerSurvey
     public record AdapterFrame(DateTimeOffset CapturedAt,int Width,int Height,RobotMarkerDetection[] Detections);
     public record AdapterCamera(string Name,AdapterFrame[] Frames,string Jpeg);
     public record AdapterResult(string Family,string DetectorSha256,AdapterCamera[] Cameras);
-    static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web)
-    {UnmappedMemberHandling=System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow};
+
 
     public static (RobotMarkerReport Report,Dictionary<string,byte[]> Images) Read(JsonElement result)
     {
-        var data=result.Deserialize<AdapterResult>(Json)??throw new InvalidOperationException("Marker survey returned no observations.");
+        var data=result.Deserialize(RobotJson.Default.AdapterResult)??throw new InvalidOperationException("Marker survey returned no observations.");
         if(data.Family!="tagStandard41h12" || data.DetectorSha256==null || !Regex.IsMatch(data.DetectorSha256,@"\A[a-f0-9]{64}\z")
             || data.Cameras is not {Length:2} || !data.Cameras.Select(c=>c?.Name).Order().SequenceEqual(new[]{"hand","head"}))
             throw new InvalidOperationException("Marker survey must identify its detector and both selected cameras.");

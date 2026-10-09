@@ -6,4 +6,5 @@
     <IlcTreatWarningsAsErrors>true</IlcTreatWarningsAsErrors>
     <DefaultItemExcludes>$(DefaultItemExcludes);.build/**</DefaultItemExcludes>
   </PropertyGroup>
+  <ItemGroup><Compile Include="../../src/Xur.Domain/Redaction.cs" Link="Runtime/Redaction.cs" /></ItemGroup>
 </Project>

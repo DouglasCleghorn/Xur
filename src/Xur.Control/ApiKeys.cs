@@ -82,6 +82,7 @@ public sealed class ApiKeys
         // No key may mint credentials or authenticate as the browser administrator.
         path=path.ToLowerInvariant().TrimEnd('/');
         if(path.Contains('%') || path.Contains("..") || path.Contains('\\') || path.Contains("//"))return false;
+        if(path.StartsWith("/robot/api/",StringComparison.Ordinal))path="/api/robotics/"+path[11..];
         if(!path.StartsWith("/api/") && !path.StartsWith("/inference/"))return false;
         if(path=="/api/api-keys" || path.StartsWith("/api/api-keys/") || path=="/api/bootstrap" || path.StartsWith("/api/auth/") || path.StartsWith("/api/install/"))return false;
         if(scope=="automation")return true;
