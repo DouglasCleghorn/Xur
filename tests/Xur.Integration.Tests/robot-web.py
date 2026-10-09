@@ -67,6 +67,8 @@ def main():
     target.add_argument('--container')
     parser.add_argument('--engine', choices=['docker', 'podman'], default='docker')
     options = parser.parse_args()
+    if options.container and os.geteuid() != 0:
+        raise SystemExit('Run container validation with sudo: production uses root-owned private sockets and a root app with all capabilities dropped.')
     evidence = ROOT / '.build/evidence/robot-web'
     evidence.mkdir(parents=True, exist_ok=True)
     calls = []
@@ -102,14 +104,8 @@ def main():
         passed.append(label)
     with tempfile.TemporaryDirectory(prefix='robot-', dir=ROOT / '.build') as temporary:
         directory = Path(temporary)
-        # GitHub's fixture runs as an unprivileged host user, while the trusted
-        # app runs as container root with DAC override capabilities dropped.
-        # Only this disposable mock directory/socket need cross-UID access;
-        # production sockets and their parent directories stay root-only.
-        if options.container: directory.chmod(0o777)
         backend_socket, app_socket = directory / 'agent.sock', directory / 'app.sock'
         server = Agent(str(backend_socket), Handler)
-        if options.container: backend_socket.chmod(0o666)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         name = 'xur-robot-test-' + str(os.getpid())

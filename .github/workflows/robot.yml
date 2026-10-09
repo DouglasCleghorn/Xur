@@ -45,7 +45,9 @@ jobs:
           --label "org.opencontainers.image.revision=$GITHUB_SHA"
           --tag "localhost/xur-robot-test:$GITHUB_SHA" .
       - name: Test the exact container with isolated mock hardware
-        run: python3 tests/Xur.Integration.Tests/robot-web.py --container "localhost/xur-robot-test:$GITHUB_SHA" --engine docker
+        # Match appliance ownership in both directions: agent and app sockets
+        # are root-only, and the container drops DAC override capabilities.
+        run: sudo python3 tests/Xur.Integration.Tests/robot-web.py --container "localhost/xur-robot-test:$GITHUB_SHA" --engine docker
       - name: Preserve container test evidence
         if: always()
         uses: actions/upload-artifact@v7

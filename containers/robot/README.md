@@ -18,8 +18,11 @@ Build from the repository root:
 
 ```sh
 docker build --file containers/robot/Containerfile --tag localhost/xur-robot:dev .
-python3 tests/Xur.Integration.Tests/robot-web.py --container localhost/xur-robot:dev --engine docker
+sudo python3 tests/Xur.Integration.Tests/robot-web.py --container localhost/xur-robot:dev --engine docker
 ```
+
+The container test uses a root-owned disposable mock socket directory to match
+production ownership without passing any hardware.
 
 The multistage build uses the repository's .NET SDK version, clang and the Native
 AOT compiler. The final image contains the native executable and runtime OS
