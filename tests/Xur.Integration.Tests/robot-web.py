@@ -102,8 +102,14 @@ def main():
         passed.append(label)
     with tempfile.TemporaryDirectory(prefix='robot-', dir=ROOT / '.build') as temporary:
         directory = Path(temporary)
+        # GitHub's fixture runs as an unprivileged host user, while the trusted
+        # app runs as container root with DAC override capabilities dropped.
+        # Only this disposable mock directory/socket need cross-UID access;
+        # production sockets and their parent directories stay root-only.
+        if options.container: directory.chmod(0o777)
         backend_socket, app_socket = directory / 'agent.sock', directory / 'app.sock'
         server = Agent(str(backend_socket), Handler)
+        if options.container: backend_socket.chmod(0o666)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         name = 'xur-robot-test-' + str(os.getpid())
@@ -172,6 +178,8 @@ def main():
                 subprocess.run([options.engine, 'logs', name], stdout=log, stderr=subprocess.STDOUT)
                 subprocess.run([options.engine, 'rm', '--force', name], stdout=log, stderr=subprocess.STDOUT)
             log.close()
+            if not passed or not any('Unavailable agent' in label for label in passed):
+                print((evidence / 'app.log').read_text())
     receipt = {'suite': 'RobotNativeAot', 'passed': passed, 'hardware': 'No robot devices passed to app'}
     (evidence / 'validation.json').write_text(json.dumps(receipt, indent=2) + '\n')
     print(json.dumps(receipt))

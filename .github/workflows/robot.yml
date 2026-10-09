@@ -46,6 +46,13 @@ jobs:
           --tag "localhost/xur-robot-test:$GITHUB_SHA" .
       - name: Test the exact container with isolated mock hardware
         run: python3 tests/Xur.Integration.Tests/robot-web.py --container "localhost/xur-robot-test:$GITHUB_SHA" --engine docker
+      - name: Preserve container test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: robot-validation-${{ github.run_id }}
+          path: .build/evidence/robot-web/
+          retention-days: 7
       - name: Save tested image for publication
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: |
