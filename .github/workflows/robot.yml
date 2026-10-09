@@ -72,6 +72,7 @@ jobs:
         run: |
           mkdir -p .build/evidence/metrology
           docker run --rm --pull=never --network=none --cap-drop=ALL \
+            --user "$(id -u):$(id -g)" \
             --security-opt=no-new-privileges --read-only --memory=512m --pids-limit=128 \
             --tmpfs=/tmp:rw,nosuid,nodev,size=32m \
             --volume "$PWD/tests/Xur.Integration.Tests/robot-metrology-native.py:/test/native.py:ro" \
