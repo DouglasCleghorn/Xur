@@ -52,6 +52,13 @@ static class MetrologyTests
             store.Save(settings);before=calls;
             check((await store.Apply(report,config with{HeadCamera=config.HandCamera},CancellationToken.None)).Metric!.Cameras[0].State=="unavailable"&&calls==before,
                 "Changing the selected camera invalidates metrology associated with a different device");
+            var byPath="/dev/v4l/by-path/pci-0000:67:00.4-usb-0:1.2:1.0-video-index0";
+            check((await store.Apply(report,config with{HeadCamera=byPath},CancellationToken.None)).Metric!.Cameras[0].State=="unavailable"&&calls==before,
+                "Switching alias types cannot borrow old by-id measurements for a selected by-path interface");
+            store.Save(Settings(camera with{Device=byPath}));
+            check((await store.Apply(report,config with{HeadCamera=byPath},CancellationToken.None)).Metric!.Cameras[0].State=="estimated",
+                "Supplied by-path metrology is accepted only for the exact selected interface");
+            store.Save(settings);before=calls;
             check((await store.Apply(Report(camera,corners,1),config,CancellationToken.None)).Metric!.Cameras[0].Tags.All(t=>t.State=="tag-size-missing")&&calls==before,
                 "An unmeasured tag cannot inherit another tag's size");
             var ambiguousStore=new RobotMetrology(root,(_,_,_,_)=>Task.FromResult(new[]{new NativeTagPose(Identity,[0,0,0.5],0),new NativeTagPose(Identity,[0.0001,0,0.5],0)}));

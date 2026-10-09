@@ -102,9 +102,9 @@ public sealed class RoboticsRuntime
         if(!RobotIdentifiers.Valid(c.RobotId)
             || new[]{c.LeftPort,c.RightPort}.Any(p=>!Match(p,@"\A/dev/serial/by-id/[A-Za-z0-9._:+-]+\z"))
             || c.ControllerDevice!="" && !Match(c.ControllerDevice,@"\A/dev/input/(by-id/[A-Za-z0-9._:+-]+-event-joystick|event[0-9]+)\z")
-            || new[]{c.HeadCamera,c.HandCamera}.Any(p=>!Match(p,@"\A/dev/v4l/by-id/[A-Za-z0-9._:+-]+-video-index0\z"))
-            || c.LeftPort==c.RightPort || c.HeadCamera==c.HandCamera || c.Skills==null || c.Skills.Length>32)
-            throw new InvalidOperationException("Use inventory paths: serial/by-id buses, an optional controller event device and two distinct v4l/by-id cameras.");
+            || new[]{c.HeadCamera,c.HandCamera}.Any(p=>!RobotCameraDevices.Valid(p))
+            || c.LeftPort==c.RightPort || RobotCameraDevices.SameNode(c.HeadCamera,c.HandCamera) || c.Skills==null || c.Skills.Length>32)
+            throw new InvalidOperationException("Use inventory paths: serial/by-id buses, an optional controller event device and two distinct v4l/by-id or v4l/by-path camera interfaces.");
         if(c.MotorLimits is {} limits && (limits.MaxLoadRaw is <1 or >1023 || limits.MaxCurrentRaw is <1 or >65535
             || !double.IsFinite(limits.MaxFollowingErrorDegrees) || limits.MaxFollowingErrorDegrees is <0.1 or >3))
             throw new InvalidOperationException("Provide valid robot-specific load/current limits and a following error between 0.1 and 3 degrees.");
@@ -187,7 +187,7 @@ public sealed class RoboticsRuntime
         }
         var pads=Read("/dev/input/by-id","*event-joystick");
         if(pads.Length==0)pads=Read("/dev/input","event*").Where(p=>ControllerInventory.IsGamepad(p.Path)).ToArray();
-        return new(Read("/dev/serial/by-id","*"),pads,Read("/dev/v4l/by-id","*video-index0"));
+        return new(Read("/dev/serial/by-id","*"),pads,RobotCameraDevices.Read());
     }
     public RobotStatus Configure(RoboticsConfiguration selected)
     {
@@ -195,6 +195,13 @@ public sealed class RoboticsRuntime
         {
             RequireLoaded();Idle();if(!stopLatched)throw new InvalidOperationException("Stop and disarm the robot before changing setup.");
             ValidateConfiguration(selected);Directory.CreateDirectory(directory);
+            // Approval must not survive a camera/interface change. Keep the
+            // existing range files and original recordings for later review.
+            if(configuration==null||configuration.HeadCamera!=selected.HeadCamera||configuration.HandCamera!=selected.HandCamera)
+            {
+                try{File.Delete(Path.Combine(directory,"calibration","receipt.json"));}
+                catch(DirectoryNotFoundException){} // First setup has no calibration directory.
+            }
             var path=Path.Combine(directory,"config.json");File.WriteAllText(path+".tmp",RobotJson.Serialize(selected));File.Move(path+".tmp",path,true);
             configuration=selected;configurationProblems=[];observation=null;observationReadAt=null;observationProblem=null;calibrationAssessment=null;return Status();
         }

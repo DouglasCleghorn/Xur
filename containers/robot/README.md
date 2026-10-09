@@ -78,6 +78,15 @@ inventory so setup can select stable serial/input/camera paths. Reconnect a
 missing device and reload the Robotics profile if it is not present in the
 container. Selecting a device does not enable its motors.
 
+Camera setup accepts both `/dev/v4l/by-id/*-video-index0` and
+`/dev/v4l/by-path/*-video-index0`. Inventory groups aliases by their resolved
+capture node, preferring interface-specific by-path names and retaining each
+distinct stream. It does not guess RGB/infrared or head/hand roles. Confirm the
+selected image and decoded resolution; generic by-id aliases can collide on
+multi-interface cameras. Changing either selected camera invalidates the old
+calibration approval receipt while preserving range files and original recordings.
+Measured intrinsics stay bound to their exact saved device path.
+
 The container uses a private bridge network for outbound remote policy/backup
 connections, with no published TCP port or host networking. It has no host agent
 socket or container-engine socket and listens on its private application socket.

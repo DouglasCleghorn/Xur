@@ -25,7 +25,7 @@ The version-1 JSON document has:
 | Field | Meaning |
 | --- | --- |
 | `cameras[].name` | Selected logical role, `head` or `hand`. |
-| `cameras[].device` | Exact selected `/dev/v4l/by-id/…-video-index0` identity. |
+| `cameras[].device` | Exact selected `/dev/v4l/by-id/…-video-index0` or `/dev/v4l/by-path/…-video-index0` identity. |
 | `cameras[].width`, `height` | Actual decoded frame resolution used when measuring intrinsics. |
 | `cameras[].fx`, `fy`, `cx`, `cy` | Measured pinhole intrinsics in pixels at that exact resolution. |
 | `cameras[].distortionModel` | Explicit `none` with an empty coefficient array, or `brown-conrady-5`. |
@@ -51,6 +51,14 @@ device or resolution mismatch produces `unavailable`; the app never rescales
 intrinsics. Clear the camera list to restore pixel-only scans. Saved reports
 retain the supplied measurement snapshot and its hash, so later changes do not
 discard the parameters and provenance used for those observations.
+
+Camera inventory deduplicates aliases of one capture node and prefers by-path
+interfaces when available. Distinct RGB/infrared interfaces remain selectable;
+the app assigns no role or format automatically. A generic by-id alias can
+resolve to the wrong stream on a multi-interface device. Confirm the selected
+image before measuring intrinsics. Moving a USB cable can change its by-path
+identity; selecting a different path invalidates the previous calibration
+approval receipt and does not transfer measurements from the old alias.
 
 Measure the reference square after printing. The complete paper/sticker width,
 white margin and number caption are not the estimator's reference edge.

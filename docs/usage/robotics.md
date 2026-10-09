@@ -58,6 +58,14 @@ movement-range coverage.
 The controller selection can stay empty during camera setup. Controller motion
 and demonstration recording still require a selected, connected controller.
 
+Select the correct capture interface when a USB camera provides RGB and infrared
+streams. Setup lists stable `by-path` interfaces alongside cameras with only
+`by-id` identities, deduplicating aliases of the same node. Generic by-id names
+can collide; the app does not guess which stream is RGB. Check the image and
+actual decoded dimensions. Changing camera selection removes the old calibration
+approval receipt while retaining range files and recordings; existing metrology
+continues to require an exact device-path match.
+
 The [historical attended motor-identification evidence](../../tools/Xur.Robotics/motor-identification.md)
 records bounded single-motor tests with camera/effort feedback before full
 calibration. The former host-console command is removed; the app currently

@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 namespace Xur.Robot;
 
 public record RobotCameraMetrology(string Name,string Device,int Width,int Height,double Fx,double Fy,double Cx,double Cy,
@@ -68,7 +67,7 @@ public sealed class RobotMetrology(string directory,
             throw new InvalidOperationException("Invalid camera metrology schema, duplicate identities or pose-quality thresholds.");
         foreach(var camera in settings.Cameras)
         {
-            if(camera.Name is not ("head" or "hand")||camera.Device==null||!Regex.IsMatch(camera.Device,@"\A/dev/v4l/by-id/[A-Za-z0-9._:+-]+-video-index0\z")
+            if(camera.Name is not ("head" or "hand")||!RobotCameraDevices.Valid(camera.Device)
                 ||camera.Width is <16 or >3840||camera.Height is <16 or >2160
                 ||!Finite(camera.Fx)||!Finite(camera.Fy)||camera.Fx is <=0 or >100000||camera.Fy is <=0 or >100000
                 ||!Finite(camera.Cx)||!Finite(camera.Cy)||camera.Cx<0||camera.Cx>=camera.Width||camera.Cy<0||camera.Cy>=camera.Height
