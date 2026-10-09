@@ -1,5 +1,15 @@
 # Screenshot and artwork register
 
+- 2026-10-09: Private read-only Lenovo RGB diagnostic capture family under
+  `.build/evidence/calibration-rgb/`, captured on xur-255 using host 26.10.031
+  and robot image source `55c5f1b`. Purpose: assess head-camera coverage after
+  identifying that its saved by-id alias resolves to the grayscale infrared
+  interface, while the colour capture interface has a distinct by-path alias.
+  No motor commands or calibration receipts are involved. Privacy review:
+  private room and robot hardware; inspect before any publication and keep
+  this family ignored/private. These frames are hardware evidence, not UI
+  screenshots or release artwork.
+
 - 2026-10-09: Source review for the measured camera/tag setup panel and metric
   AprilTag JSON display, based on `a8c5a52` plus the isolated metrology prototype.
   The earlier private robot dashboard/setup/AprilTags captures remain retired

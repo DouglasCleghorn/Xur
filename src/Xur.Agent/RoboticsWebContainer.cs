@@ -179,7 +179,7 @@ public sealed class RoboticsWebContainer(string runDirectory,
             "--env","XUR_ROBOT_WORKLOAD_ID="+workload.Id,
             "--volume",StateDirectory+":/state:rw","--volume",SocketDirectory+":/run/xur/robot-web:rw"};
         foreach(var node in inventory.Serial.Concat(inventory.Cameras).Concat(inventory.Controllers).Distinct(StringComparer.Ordinal))args.AddRange(["--device",node+":"+node+":rw"]);
-        foreach(var alias in new[]{"/dev/serial/by-id","/dev/v4l/by-id"})if(Directory.Exists(alias))args.AddRange(["--volume",alias+":"+alias+":ro"]);
+        foreach(var alias in new[]{"/dev/serial/by-id","/dev/v4l/by-id","/dev/v4l/by-path"})if(Directory.Exists(alias))args.AddRange(["--volume",alias+":"+alias+":ro"]);
         args.AddRange(TimezoneSettings.ContainerArguments());args.Add(image);
         // Keep conmon outside xur-agent.service, so application upgrades cannot
         // terminate the independent robotics app or its motor stop handler.
