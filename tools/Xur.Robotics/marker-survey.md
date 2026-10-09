@@ -42,8 +42,12 @@ identity, IDs, timestamps, pixel geometry and image limits before persisting the
 report under `.build/captures/{id}/`. Duplicate copies of an ID in one frame
 are ambiguous. A shared camera reference requires unambiguous observations in
 all three frames of both cameras; the sequential camera captures are not
-synchronized stereo pairs. Reports explicitly leave metric pose and joint
-calibration unapproved. The task shares the workload's exclusive operation gate
+synchronized stereo pairs. Without supplied metrology, reports remain pixel-only.
+The application can optionally add metric tag-to-camera candidates from measured
+intrinsics and tag reference edges, with both planar fits, depth/reprojection
+checks and explicit ambiguity; see
+[camera/tag metrology](../../docs/architecture/robot-camera-metrology.md).
+Neither mode approves joint calibration. The task shares the workload's exclusive operation gate
 with manipulation and is available to the existing Robotics API-key scope.
 
 The saved-frame console below remains available for offline analysis without

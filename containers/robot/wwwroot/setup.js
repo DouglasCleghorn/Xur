@@ -55,7 +55,7 @@
   for(const [name,items] of [['leftPort',devices.ports],['rightPort',devices.ports],['controllerDevice',devices.controllers],['headCamera',devices.cameras],['handCamera',devices.cameras]]){
    const select=setup.elements[name];select.replaceChildren(new Option('Select device',''));
    for(const item of items)select.add(new Option(item.name,item.path));
-   if(configuration?.[name]&&!items.some(d=>d.path===configuration[name]))select.add(new Option('Disconnected: '+configuration[name],configuration[name]));
+   if(configuration?.[name]&&!items.some(d=>d.path===configuration[name]))select.add(new Option((name.endsWith('Camera')?'Saved alias (confirm interface): ':'Disconnected: ')+configuration[name],configuration[name]));
    select.value=configuration?.[name]??'';
   }
   lastDetection=null;

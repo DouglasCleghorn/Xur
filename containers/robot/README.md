@@ -17,10 +17,11 @@ The pages are:
 - `/robot/`: head/hand camera snapshots, every motor's available registers,
   calibration assessment, controller start and recent operations.
 - `/robot/setup`: device selection and automatic bus-role detection, effort
-  limits, session arming, demonstration recording, ACT training, skill evaluation
-  and review, emotes and sorting tasks.
+  limits, measured camera/tag metrology, session arming, demonstration recording,
+  ACT training, skill evaluation and review, emotes and sorting tasks.
 - `/robot/tags`: AprilTag corners over the exact final survey frame, duplicate-ID
-  ambiguity and copyable/downloadable JSON for all three frames from each camera.
+  ambiguity, optional metric pose candidates from supplied measured settings,
+  and copyable/downloadable JSON for all three frames from each camera.
 - `/robot/controller`: the supported Xbox button map and session instructions.
 
 All four pages include the software E-stop and reset controls. The two cameras
@@ -77,6 +78,15 @@ inventory so setup can select stable serial/input/camera paths. Reconnect a
 missing device and reload the Robotics profile if it is not present in the
 container. Selecting a device does not enable its motors.
 
+Camera setup accepts both `/dev/v4l/by-id/*-video-index0` and
+`/dev/v4l/by-path/*-video-index0`. Inventory groups aliases by their resolved
+capture node, preferring interface-specific by-path names and retaining each
+distinct stream. It does not guess RGB/infrared or head/hand roles. Confirm the
+selected image and decoded resolution; generic by-id aliases can collide on
+multi-interface cameras. Changing either selected camera invalidates the old
+calibration approval receipt while preserving range files and original recordings.
+Measured intrinsics stay bound to their exact saved device path.
+
 The container uses a private bridge network for outbound remote policy/backup
 connections, with no published TCP port or host networking. It has no host agent
 socket or container-engine socket and listens on its private application socket.
@@ -118,6 +128,15 @@ joint calibration is not implemented. The assessment does not create approval
 receipts or treat existing EEPROM limits as verified mechanical limits. The
 existing upstream hand-guided routine does not satisfy marker-only automatic
 calibration. See the [design and acceptance gates](../../docs/architecture/robot-marker-calibration.md).
+
+Camera/tag measurements are configured in the container app at `/robot/setup`,
+with `GET/POST /robot/api/metrology`. No default intrinsics or tag dimensions are
+invented. With measured device-specific values at the exact decoded resolution,
+marker scans add the pinned AprilTag estimator's competing metric pose candidates,
+positive-depth/rotation checks and raw-pixel reprojection error. Missing data
+retains pixel-only scans; close planar fits remain explicitly ambiguous.
+This never approves joints or enables motion. See the
+[measurement format and proof scope](../../docs/architecture/robot-camera-metrology.md).
 
 **Check installed tools** prepares device aliases for the selected hardware and
 checks the container's installed upstream adapter. It does not download packages

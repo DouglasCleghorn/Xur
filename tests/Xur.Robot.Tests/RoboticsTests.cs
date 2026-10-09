@@ -69,6 +69,7 @@ static class RoboticsTests
         var root=Path.GetFullPath(".build/evidence/robotics-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
         try
         {
+            CameraInventory(root,check);
             static RobotBusInventory Bus(string port,int count)=>new(port,Enumerable.Range(1,count).ToDictionary(id=>id,_=>777));
             var headBus=Bus("usb-head",8);var wheelBus=Bus("usb-wheels",9);
             var detected=RobotBusDetection.MatchXLeRobot([wheelBus,headBus]);
@@ -82,6 +83,8 @@ static class RoboticsTests
             robot.Start("robot");
             check(robot.Status().StopLatched && tools.Calls.Count==0,"Loading Robotics never connects motors or starts motion");
             var c=Configuration();robot.Configure(c);
+            check(robot.Status().Configured&&!Directory.Exists(Path.Combine(root,"calibration")),
+                "First configuration succeeds before a calibration directory or receipt exists");
             check(Rejected(()=>robot.Arm(new())) && tools.Calls.Count==0,"Uncalibrated and disabled robots cannot be armed");
             robot.Task(new("inspect-table"));await Finished(robot);
             check(robot.Status().Job?.State=="completed" && tools.Calls.SequenceEqual(["camera","camera"]),"Autonomous table inspection uses both cameras without motion");
@@ -143,6 +146,15 @@ static class RoboticsTests
             var restarted=new RoboticsRuntime(root,Path.Combine(root,"reservation"),new Tools(),clock);restarted.Start("robot");
             check(restarted.Status().StopLatched && restarted.Status().ArmedUntil==null,"App restart never resumes a motor session");
             check(Rejected(()=>robot.Configure(c with{LeftPort="/dev/mem"})),"Robotics setup cannot pass arbitrary host device nodes into its container");
+            Calibrate(root,c);
+            var original=Path.Combine(root,"datasets","keep-original.txt");Directory.CreateDirectory(Path.GetDirectoryName(original)!);File.WriteAllText(original,"Original recording");
+            var rgb="/dev/v4l/by-path/pci-0000:67:00.4-usb-0:1.2:1.0-video-index0";
+            robot.Configure(c with{HeadCamera=rgb});
+            check(robot.Configuration()!.HeadCamera==rgb&&robot.Status().StopLatched&&robot.Status().CalibrationHash==null
+                &&!File.Exists(Path.Combine(root,"calibration","receipt.json"))&&Rejected(()=>robot.Arm(new())),
+                "Changing a stable camera interface invalidates old calibration approval and keeps motion disarmed");
+            check(File.Exists(Path.Combine(root,"calibration",c.RobotId+".json"))&&File.ReadAllText(original)=="Original recording",
+                "Camera selection changes preserve measured range files and original training recordings");
             await robot.Shutdown();
             check(robot.Status().WorkloadId==null && Rejected(()=>robot.Task(new("inspect-table"))),"App shutdown releases robotics and blocks new operations");
             await Endpoints(root,check);
@@ -153,6 +165,33 @@ static class RoboticsTests
 
         }
         finally{Directory.Delete(root,true);}
+    }
+    static void CameraInventory(string root,Action<bool,string> check)
+    {
+        var directory=Path.Combine(root,"camera-inventory");var byId=Path.Combine(directory,"by-id");var byPath=Path.Combine(directory,"by-path");
+        Directory.CreateDirectory(byId);Directory.CreateDirectory(byPath);
+        var rgb=Path.Combine(directory,"video3");var infrared=Path.Combine(directory,"video5");var legacy=Path.Combine(directory,"video7");
+        foreach(var node in new[]{rgb,infrared,legacy})File.WriteAllText(node,"Synthetic device; never opened");
+        var id=Path.Combine(byId,"usb-Example-video-index0");File.CreateSymbolicLink(id,infrared);
+        var rgbAlias=Path.Combine(byPath,"pci-0000:67:00.4-usb-0:1.2:1.0-video-index0");File.CreateSymbolicLink(rgbAlias,rgb);
+        var irAlias=Path.Combine(byPath,"pci-0000:67:00.4-usb-0:1.2:1.2-video-index0");File.CreateSymbolicLink(irAlias,infrared);
+        var legacyAlias=Path.Combine(byId,"usb-Other-video-index0");File.CreateSymbolicLink(legacyAlias,legacy);
+        File.CreateSymbolicLink(Path.Combine(byPath,"pci-metadata-video-index1"),rgb);
+        File.CreateSymbolicLink(Path.Combine(byPath,"pci-disconnected-video-index0"),Path.Combine(directory,"missing"));
+        var inventory=RobotCameraDevices.Read(byId,byPath);
+        check(inventory.Length==3&&inventory.Select(c=>c.Path).Contains(rgbAlias)&&inventory.Select(c=>c.Path).Contains(irAlias)
+            &&!inventory.Select(c=>c.Path).Contains(id),
+            "Camera inventory retains distinct RGB/IR interfaces and deduplicates their aliases in favor of stable by-path names");
+        check(inventory.Select(c=>c.Path).Contains(legacyAlias),"Cameras with only a by-id alias remain available without a brand or RGB heuristic");
+        check(RobotCameraDevices.SameNode(id,irAlias)&&!RobotCameraDevices.SameNode(rgbAlias,irAlias),
+            "Aliases of one capture node cannot masquerade as distinct camera interfaces");
+        var basePath="/dev/v4l/by-path/pci-0000:67:00.4-usb-0:1.2:";
+        RoboticsRuntime.ValidateConfiguration(new("fixture","/dev/serial/by-id/left","/dev/serial/by-id/right","",basePath+"1.0-video-index0",basePath+"1.2-video-index0",[]));
+        check(RobotCameraDevices.Valid(basePath+"1.0-video-index0")&&RobotCameraDevices.Valid("/dev/v4l/by-id/legacy-video-index0"),
+            "Configuration accepts both stable by-path capture interfaces and existing by-id cameras");
+        check(!RobotCameraDevices.Valid(basePath+"1.0-video-index1")&&!RobotCameraDevices.Valid("/dev/video3")
+            &&!RobotCameraDevices.Valid("/dev/v4l/by-path/../../video3"),
+            "Camera validation rejects metadata interfaces, unstable raw nodes and path traversal");
     }
     static async Task FreshDetection(string root,Action<bool,string> check)
     {

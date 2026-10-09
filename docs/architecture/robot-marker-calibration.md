@@ -4,7 +4,10 @@ Status: stationary marker observations assessed and live read-only inspection
 implemented/tested, October 8, 2026. The owner
 confirmed a three-omniwheel XLeRobot and selected camera markers plus a physical
 motor-power emergency stop. Per-joint reference sensors are outside the selected
-approach. No automatic powered calibration has been enabled or validated.
+approach. No automatic powered calibration has been enabled or validated. The
+container now supports optional read-only metric pose candidates from supplied
+measured intrinsics and tag sizes; this prototype does not establish those
+measurements on xur-255. See [camera/tag metrology](robot-camera-metrology.md).
 
 ## Reusable setup, with robot-specific evidence
 
@@ -235,10 +238,12 @@ survey and the live read-only workload task; automatic calibration remains
 unimplemented.
 
 The workload now also implements the read-only `inspect-markers` task using
-that pinned detector in its tools container. It captures three observations
+that pinned detector in its application container. It captures three observations
 from each selected camera, validates and persists pixel geometry in .NET, and
 exposes a job report and camera evidence. This adds live observation to the
-workload; it does not implement the calibration or bounded setup-motion phases
+workload. Optional supplied measured metrology adds competing visual tag-to-camera
+poses with ambiguity and reprojection checks; unconfigured surveys remain
+pixel-only. It does not implement the calibration or bounded setup-motion phases
 below, create calibration receipts, or grant motion authorization.
 
 At 20:03 MDT the updated diagnostic tools image decoded 00/01/02 in all three

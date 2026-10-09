@@ -147,7 +147,9 @@
   if (!rows.length) { const row = document.createElement('tr'), cell = document.createElement('td'); cell.colSpan = 7; cell.textContent = 'No tags decoded in the displayed frames.'; row.append(cell); rows.push(row); }
   $('tag-rows').replaceChildren(...rows);
   $('tag-data').value = JSON.stringify({ jobId: markerJob, ...markerReport }, null, 2);
-  set('tag-job', markerJob); set('action-status', `Scan complete · shared tag IDs: ${markerReport.sharedIds.join(', ') || 'none'}`);
+  const metric=markerReport.metric;
+  set('tag-job', markerJob); set('action-status', `Scan complete · shared tag IDs: ${markerReport.sharedIds.join(', ') || 'none'}`+
+   (metric?` · visual poses: ${metric.cameras.map(camera=>`${camera.name} ${camera.state}`).join(', ')}; candidates and errors are in the raw data. Joint calibration remains unapproved.`:' · pixel observations only; measured camera settings are not supplied.'));
   renderedTagJob = markerJob;
  }
  async function refresh() {

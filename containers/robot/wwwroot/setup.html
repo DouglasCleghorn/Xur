@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Setup · Xur Robot</title><link rel="stylesheet" href="/robot/robot.css"><link rel="stylesheet" href="/robot/setup.css"><script src="/robot/robot.js" defer></script><script src="/robot/setup.js" defer></script><script src="/robot/backups.js" defer></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Setup · Xur Robot</title><link rel="stylesheet" href="/robot/robot.css"><link rel="stylesheet" href="/robot/setup.css"><script src="/robot/robot.js" defer></script><script src="/robot/setup.js" defer></script><script src="/robot/backups.js" defer></script><script src="/robot/metrology.js" defer></script></head>
 <body data-page="setup">
 <header><a class="brand" href="/">XUR <span>/ Robot</span></a><nav aria-label="Robot"><a href="/robot/">Dashboard</a><a href="/robot/setup" aria-current="page">Setup</a><a href="/robot/tags">AprilTags</a><a href="/robot/controller">Controller guide</a></nav><span class="badge" id="mode">Connecting</span></header>
 <aside class="stop-bar" aria-label="Emergency stop"><button id="estop" class="estop">E-STOP</button><div><strong id="estop-state" role="status">Software emergency stop</strong><p>Stops the session and latches motion off. Disconnect motor power for a physical emergency.</p></div><button id="reset-estop" hidden>Reset E-stop</button></aside>
@@ -15,6 +15,7 @@
     </section>
     <section class="panel"><h2>Hardware setup</h2>
         <p>Detect bus roles from the selected XLeRobot model before saving setup. Detection reads motor identities without changing motor state.</p>
+        <p>Camera choices include stable USB interface paths. A camera with RGB and infrared streams can have a misleading shared <code>by-id</code> alias; select the appropriate <code>by-path</code> interface and check its image and actual resolution. Changing the selected camera invalidates previous calibration approval and requires measurements for that exact selection.</p>
         <button type="button" id="robot-detect" class="secondary">Detect motor buses</button>
         <form id="robot-setup">
             <label>Robot name<input name="robotId" value="xlerobot" required pattern="[a-z][a-z0-9\-]{0,47}" maxlength="48" /></label>
@@ -27,6 +28,14 @@
             <button>Save setup</button>
         </form>
         <details><summary>Calibration status</summary><p>The <a href="/robot/">dashboard</a> offers a read-only automatic-calibration assessment. Powered marker-based joint calibration remains under development. The existing upstream hand-guided routine is a separate capability and does not satisfy fully automatic calibration.</p><p>A physical motor-power stop switch is independent of the API stop.</p></details>
+    </section>
+    <section class="panel"><h2>Camera and tag measurements</h2>
+        <p>Supply measured intrinsics for the camera's actual capture resolution, explicit lens distortion, and each flat tag's measured reference edge in meters. Camera names, advertised resolution and field of view cannot supply these measurements. Leave this unconfigured to retain pixel-only scans.</p>
+        <p>Supported distortion is <code>none</code> with an empty coefficient array, or <code>brown-conrady-5</code> with <code>[k1, k2, p1, p2, k3]</code>. Fisheye and rational models are unsupported. Reference edge means the square between detection corners, rather than the sticker's full width.</p>
+        <form id="metrology-form"><label for="metrology-document">Measured settings (JSON)</label><textarea id="metrology-document" class="raw" rows="16" spellcheck="false" placeholder="No measured camera metrology supplied."></textarea>
+            <div class="actions"><button>Save measured settings</button><button type="button" id="metrology-template" class="secondary">Make blank template for current cameras</button><button type="button" id="metrology-clear" class="secondary">Use pixel-only scans</button></div></form>
+        <p id="metrology-message" role="status">Checking measurement settings…</p>
+        <p>A template leaves measurement values empty. Save only values measured at this exact camera mode. A measurement source records provenance; it does not approve robot calibration. Scans show both planar pose candidates and reject ambiguous, inconsistent or wrong-resolution inputs.</p>
     </section>
     <section class="panel"><h2>Teleoperation and demonstrations</h2>
         <p>The current recorder uses the selected Xbox controller. Oculus Rift CV1 headset and Touch input from another computer will first be assessed with existing XLeVR / LeRobot teleoperation apps. Compatibility is unverified; VR input is not available here yet. This app will own mapping and recording.</p>

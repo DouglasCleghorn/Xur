@@ -8,5 +8,7 @@
 #robotics details{margin-top:16px}
 #robotics pre{white-space:pre-wrap;overflow-wrap:anywhere}
 #robot-jobs p{overflow-wrap:anywhere;border-top:1px solid var(--line);padding-top:12px}
+#metrology-form .actions button{white-space:normal;text-align:left;max-width:100%}
+#metrology-document:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 
 .setup-page{max-width:1200px}#robotics input:not([type=checkbox]),#robotics select{font:inherit;background:#0b111b;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:10px 12px}#robotics input[type=checkbox]{width:18px;height:18px;flex-shrink:0}#robotics select:focus-visible,#robotics input:focus-visible{outline:3px solid var(--accent);outline-offset:3px}#robotics .section-heading{display:flex;gap:16px;justify-content:space-between;align-items:center}#robotics .inline-option{align-items:flex-start}#robot-problems,#robot-message{overflow-wrap:anywhere}#robot-skills button{margin-left:10px}#robot-jobs details{border-top:1px solid var(--line);padding-top:12px}#robotics .field-grid select,#robotics .field-grid input{max-width:100%}@media(max-width:800px){#robotics .section-heading{align-items:flex-start;flex-wrap:wrap}#robotics form>button{white-space:normal;text-align:left}nav{flex-wrap:wrap;row-gap:10px}.setup-page .title{flex-wrap:wrap}}
