@@ -1,5 +1,95 @@
 # Screenshot and artwork register
 
+- 2026-10-08: Robot dashboard review family under `.build/robot/preview/`
+  and `.build/evidence/robot-web/`, using the working tree based on `322b687`.
+  The local Native AOT preview replays the already registered private head/hand
+  marker captures and the 03:08 UTC motor profile. Purpose: review the dashboard,
+  tag overlay and copyable data without live hardware access. All views are
+  explicitly marked as saved evidence; no motor commands are issued. Privacy
+  review: the reused captures contain room furnishings and robot hardware,
+  without faces or credentials. Keep ignored/private. A shared-browser snapshot
+  on October 8 at 21:57 MDT returned only a blank Chromium error page with an
+  Electron renderer error; it is not an application screenshot and was not saved.
+  Reassess after camera, layout, mounting or pose changes.
+
+- 2026-10-08: Private motor-identification camera evidence family under
+  `.build/evidence/robotics-motor-identification/`, including initial/clear
+  head/hand JPEGs, per-test `ready`, `before`, `displaced`, `after` JPEGs and
+  copies under `captures/{UTC-timestamp}-{selection}/`. Captured from xur-255
+  during attended diagnostic tests from 20:26–21:04 MDT, using the working tree
+  based on `322b687` and the pinned robotics tools image plus diagnostic scripts.
+  Purpose: correlate single-motor encoder feedback with arm/tag/head/gripper
+  responses and record aborted checks. Some tests issued small, capped arm/head
+  commands; no wheel motion commands. Privacy review: private room, furniture,
+  flooring, electrical outlet, robot hardware and the operator's hands during
+  label adjustment; no faces or credentials visible in reviewed captures.
+  Keep ignored/private. A hand obscures/moves tag 02 during the right-wrist
+  test, so those images do not independently verify that axis. Tag 02 was later
+  moved partly outside the head view. Reassess after marker/pose/camera changes.
+
+- 2026-10-08: Live marker adapter/API evidence family under
+  `.build/evidence/robotics-marker-survey/live-api/`: `head-markers.jpg`,
+  `hand-markers.jpg` and the same JPEGs in `.build/captures/{job}/`.
+  Captured at 20:03 MDT through the updated CPU robotics tools container and
+  validated/served by the working-tree .NET task API based on `322b687`.
+  Only camera devices were passed into the capture container; no motor commands.
+  Purpose: verify the container's live three-frame detections, report persistence
+  and image retrieval. Head reads 00/01/02; hand reads 01 in all three frames.
+  Privacy review: private room, furniture, flooring, electrical outlet and robot
+  hardware; no people or credentials visible. Keep ignored and private. The
+  previews under `ui/` are test renders using these saved results, not a deployed
+  robot-control page. Reassess after mounting, lighting, camera or pose changes.
+
+- 2026-10-08: Private arm-tag assessment capture family under
+  `.build/evidence/robotics-marker-survey/`: `head-initial.jpg`,
+  `hand-initial.jpg`, their grayscale inputs, `head-repeat.pgmstream`,
+  `hand-repeat.pgmstream` and extracted `analysis/frames/*.pgm`.
+  Stationary 1920×1080 captures from xur-255 after the owner attached arm tags,
+  with no motor commands. Working tree based on `322b687`. Purpose: infer marker
+  locations from the images and assess repeated detection and camera
+  co-visibility. Head reads 00/01/02; hand reads 01. Privacy review: private room,
+  furniture, electrical outlet and robot hardware; no people or credentials
+  visible. Retain as ignored private evidence and do not publish. Reassess after
+  camera aim, marker mounting, illumination or arm pose changes. Five readable
+  stationary frames do not validate movement coverage or joint calibration.
+
+- 2026-10-08: First installed marker camera assessment family under
+  `.build/evidence/robotics-markers-camera/`: `head-tag00.jpg`, `hand-tag00.jpg`
+  and their grayscale detector inputs. Captured stationary 1920×1080 frames
+  through SSH from xur-255 after the owner installed printed tag 00 on the tray.
+  Working tree based on `322b687`; no motor commands. Purpose: check actual label
+  readability and onboard visibility. Native `tagStandard41h12` detection read
+  ID 0 with zero bit errors in the head frame; the hand frame has no detections.
+  Privacy review: robot hardware and private room details, including flooring
+  and furniture; no credentials or people visible. Keep these as private ignored
+  evidence, not publication assets. Reassess after camera aim, tag placement,
+  lighting or robot pose changes. A successful ID read does not establish a
+  calibrated camera pose, measured tag size or full joint coverage.
+
+- 2026-10-08: Robotics marker print-kit capture family:
+  `.build/evidence/robotics-marker-sheet.png` and raster/PDF proof renders under
+  `.build/evidence/robotics-marker-print-kit/`. Generated from the working-tree
+  `tools/Xur.Robotics/print_markers.cs`, based on `322b687`, using pinned official
+  AprilTag artwork. Purpose: review complete patterns, white margins, identifiers
+  and scale; rendered sheets and individual labels also undergo native AprilTag
+  detection. These are digital proofs, not evidence of successful physical
+  printing or camera coverage. Privacy review: tag patterns, numeric IDs and
+  printing instructions only; no room images, people or credentials. Retained as
+  ignored development evidence. Regenerate after artwork, dimensions or layout
+  changes. Artwork retains its upstream BSD-2-Clause notice.
+
+- 2026-10-08: Private robotics camera assessment captures in
+  `.build/evidence/robotics-usb/`: `emeet-stationary.jpg`,
+  `lenovo-stationary.jpg`, `emeet-settled.jpg`, `lenovo-settled.jpg` and
+  `lenovo-open-shutter.jpg`.
+  Live stationary frames from xur-255, captured through SSH using the host's
+  FFmpeg, with no motor commands. Working tree based on `322b687`; these are
+  hardware evidence, not UI or release screenshots. Purpose: identify camera
+  roles, exposure and visible arm references for marker calibration. Privacy
+  review: the EMEET view includes a person and private room/chassis details;
+  retain all frames privately under ignored evidence paths and do not publish.
+  Reassess after camera mounting, lighting, robot pose or marker placement changes.
+
 - 2026-10-07: Reviewed private user attachments `IMG_7977.jpg`
   (`7ce58f17-58f7-4d7b-96eb-04413a87deac-18ba470e-74b2-401f-94ba-b9787d7604c0.jpg`)
   and `IMG_7976.jpg`
@@ -340,3 +430,16 @@ capture date, privacy review, and the features whose next changes require a refr
   focused style probes, not captures of a running workstation. Regenerate after
   changes to desktop control colors or states; review full desktop picker and
   review-screen captures before release.
+
+- 2026-10-08: SO-101 tag-mount prototype v1 CAD capture family:
+  `.build/evidence/so101-tag-mount/upstream-links.png`,
+  `upstream-sections.png`, `clip-review.png`, and `clip-on-link.png`.
+  Private geometry inspection and prototype review renders from
+  `tools/Xur.Robotics/cad/so101_tag_clip.py` and TheRobotStudio/SO-ARM100
+  commit `a758567c3978dfeefe282ede0500085a48fe8f78`; no released application
+  version. Shows the measured upper-arm rail, print orientation and proposed
+  collar placement. Upstream-link images retain their Apache-2.0 provenance;
+  original Xur mount geometry is MIT. Privacy review: synthetic CAD geometry
+  only, no credentials, people, user files or live robot camera imagery.
+  Regenerate if the source arm, clip dimensions, placement or label size
+  changes. These renders do not establish physical fit or motion clearance.

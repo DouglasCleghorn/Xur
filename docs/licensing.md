@@ -32,6 +32,25 @@ Existing notices include:
   These NuGet packages are restored during file-based app builds and are not
   relabeled under Xur's license.
 - OS packages and container images: their upstream license/source notices.
+- Robotics tools: LeRobot and XLeRobot retain Apache-2.0 notices; pygame retains
+  LGPL-2.1-or-later; PyTorch, torchvision and TorchCodec retain their respective
+  BSD notices. The pinned XLeRobot source/license remains in the prepared image,
+  Python package distributions retain their notices, and `/opt/licenses/` carries
+  Xur's license and this document. Other Python/OS dependencies retain their own
+  licenses, including the minimal discovery image's Feetech SDK, pyserial,
+  DeepDiff, NumPy, tqdm and draccus package notices. No model weights are bundled
+  or relabeled as MIT.
+- Robotics marker artwork: the generator downloads unmodified
+  `tagStandard41h12` patterns from AprilRobotics/apriltag-imgs at
+  `f3fd9a7add5bfd82a886fc65240fdb8e3c9ac5a1`. That artwork retains its
+  BSD-2-Clause notice in the generated `AprilTag-LICENSE.txt` and on the PDF
+  instructions page. Xur's original printing generator remains MIT licensed.
+- Robotics marker detector: the C adapter uses AprilTag at
+  `b7c0ebe9aa20f82ec7a828579004f9e706bfecd9`, retaining its BSD-2-Clause notice
+  in the ignored upstream checkout. Keep that notice with any distributed
+  detector. The prepared robotics tools image includes the pinned source and
+  `/opt/licenses/AprilTag-LICENSE.md`. The original C, Python and .NET survey
+  wrappers are MIT licensed.
 - Model weights: each selected repository's own license; the model catalog keeps
   the model repository, license and revision. MIT licensing of Xur does not grant
   rights to third-party models or games.
@@ -54,3 +73,12 @@ notices). The utility additionally carries the command-line library license,
 application bundle under `host/licenses/` and in the installer under
 `/usr/share/licenses/xurutil/`; independent recovery and shared station helper
 copies retain their notices too.
+
+## Robot dashboard container
+
+The original `containers/robot` application is covered by Xur's MIT license.
+Its Native AOT executable includes .NET/ASP.NET Core code; the image retains
+Microsoft's `LICENSE.txt` and `ThirdPartyNotices.txt` under `/app/licenses/`,
+alongside Xur's license and this document. The `mcr.microsoft.com` SDK and
+runtime-dependencies images retain their upstream and operating-system licenses.
+No third-party browser libraries are used by this dashboard.

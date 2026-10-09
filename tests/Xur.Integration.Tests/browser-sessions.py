@@ -106,6 +106,9 @@ with tempfile.TemporaryDirectory(prefix='s-', dir=runtime) as tmp:
 
     try:
         start()
+        assert request('GET', '/robot/')[1]['Location'] == '/login'
+        assert request('GET', '/robot/csrf')[1]['Location'] == '/login'
+        assert request('POST', '/robot/api/start-controller', '{}', {'Content-Type': 'application/json'})[0] == 401
         local = http.client.HTTPConnection('localhost')
         local.sock = socket.socket(socket.AF_UNIX)
         local.sock.connect(str(run / 'control.sock'))
@@ -123,6 +126,13 @@ with tempfile.TemporaryDirectory(prefix='s-', dir=runtime) as tmp:
         assert payload(remembered)['purpose'] == 'manager-browser' and 'exp' not in payload(remembered)
         assert 'max-age=34560000' in headers['Set-Cookie'] and 'samesite=lax' in headers['Set-Cookie']
         assert request('GET', '/api/api-keys')[0] == 200
+        status, _, body = request('GET', '/robot/csrf')
+        robot_csrf = json.loads(body)['token']
+        assert status == 200 and robot_csrf
+        assert request('GET', '/robot/')[0] == 503  # No container loaded in this fixture.
+        assert request('POST', '/robot/api/start-controller', '{}', {'Content-Type': 'application/json'})[0] == 400
+        assert request('POST', '/robot/api/start-controller', '{}', {'Content-Type': 'application/json', 'RequestVerificationToken': robot_csrf})[0] == 503
+        assert request('GET', '/robot/csrf', headers={'Origin': 'https://evil.example'})[0] == 403
         authenticated_token = token()
         assert authenticated_token['signedIn'] is True
         key_paths = [state / 'session-signing.key', state / 'manager-tls.pfx', *sorted((state / 'form-keys').glob('*.xml'))]

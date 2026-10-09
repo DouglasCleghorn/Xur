@@ -1,0 +1,45 @@
+# Docker Hub traffic must use Google's cache. A cache miss is an error.
+FROM mirror.gcr.io/library/python:3.12-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates git gcc g++ pkg-config ffmpeg libgl1 libglib2.0-0 \
+      libusb-1.0-0 libsm6 libxext6 && rm -rf /var/lib/apt/lists/*
+
+# Reviewed interfaces: LeRobot 0.6.0 and the pinned XLeRobot plugin/example.
+# CPU ACT inference/training is the initial supported path; no GPU passthrough.
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+      'torch==2.11.0' 'torchvision==0.26.0' 'torchcodec==0.11.0+cpu' && \
+    pip install --no-cache-dir 'lerobot[feetech,training]==0.6.0' \
+      'pygame==2.6.1' && \
+    git init /opt/XLeRobot && \
+    git -C /opt/XLeRobot remote add origin https://github.com/Vector-Wangel/XLeRobot.git && \
+    git -C /opt/XLeRobot fetch --depth=1 origin b017b5e6354bd9f61f4247a920c72622ca0aade0 && \
+    git -C /opt/XLeRobot checkout --detach FETCH_HEAD && \
+    pip install --no-cache-dir /opt/XLeRobot/software/plugins/xlerobot_model \
+      /opt/XLeRobot/software/plugins/lerobot_robot_xlerobot && \
+    mkdir -p /opt/licenses && \
+    cp /opt/XLeRobot/LICENSE /opt/licenses/XLeRobot-LICENSE && \
+    rm -rf /opt/XLeRobot/.git
+
+# Verify the native decoder before accepting the build; a GPU wheel can satisfy
+# the version constraint while failing on this CPU-only runtime.
+RUN python -c "from torchcodec.decoders import VideoDecoder"
+
+COPY detect_markers.c /opt/xur/detect_markers.c
+RUN git init /opt/apriltag && \
+    git -C /opt/apriltag remote add origin https://github.com/AprilRobotics/apriltag.git && \
+    git -C /opt/apriltag fetch --depth=1 origin b7c0ebe9aa20f82ec7a828579004f9e706bfecd9 && \
+    git -C /opt/apriltag checkout --detach FETCH_HEAD && \
+    cc -O2 -std=gnu99 -I /opt/apriltag -o /opt/xur/detect-markers \
+      /opt/xur/detect_markers.c /opt/apriltag/apriltag.c \
+      /opt/apriltag/apriltag_quad_thresh.c /opt/apriltag/apriltag_pose.c \
+      /opt/apriltag/tagStandard41h12.c /opt/apriltag/common/*.c -lm -lpthread && \
+    cp /opt/apriltag/LICENSE.md /opt/licenses/AprilTag-LICENSE.md && \
+    rm -rf /opt/apriltag/.git
+
+COPY bridge.py discover_buses.py motor_probe.py /opt/xur/
+COPY LICENSE licensing.md /opt/licenses/
+ENV SDL_VIDEODRIVER=dummy PYTHONDONTWRITEBYTECODE=1 HF_HOME=/state/.build/huggingface \
+    HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
+WORKDIR /state/.build
+CMD ["sleep", "infinity"]

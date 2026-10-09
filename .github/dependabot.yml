@@ -36,6 +36,8 @@ updates:
       - /catalog/engines
       - /eng
       - /os/bootc
+      - /tools/Xur.Robotics
+      - /containers/robot
     # These images are built locally; their upstream bases are covered separately.
     # Exclude them before Dependabot tries to resolve them on Docker Hub.
     ignore:
@@ -54,6 +56,7 @@ updates:
     directories:
       - /eng
       - /tests/Xur.Media.Tests
+      - /tools/Xur.Robotics/cad
     patterns: ["*"]
     multi-ecosystem-group: weekly-dependencies
 

@@ -1,0 +1,52 @@
+@page "/robotics"
+@inject Appliance Device
+<PageTitle>Robotics · Xur</PageTitle>
+<link rel="stylesheet" href="/robotics.css" />
+<div class="page-heading"><h1>Robotics</h1><a class="button secondary" href="/profiles">Profiles</a></div>
+@if(Device.Installer) { <p>Robotics is available after installation.</p> }
+else
+{
+    <div id="robotics">
+    <section class="panel"><div class="section-heading"><h2>Robot session</h2><button type="button" id="robot-stop" class="danger">Stop and disarm</button></div>
+        <p id="robot-status" role="status">Checking robot…</p><div id="robot-problems" role="alert"></div>
+        <p>Load a profile with the XLeRobot robotics workload. The mobile base stays stationary. Each motion session needs an operator to arm it.</p>
+        <div class="actions"><button type="button" id="robot-probe" class="secondary">Check controller</button><button type="button" id="robot-inspect" class="secondary">Inspect table</button><button type="button" id="robot-markers" class="secondary">Check markers</button><button type="button" id="robot-prepare" class="secondary">Prepare tools container</button></div>
+        <p>Check markers captures both selected cameras without moving the robot. It reports tag visibility at the current pose; automatic joint calibration is still under development.</p>
+    </section>
+    <section class="panel"><h2>Hardware setup</h2>
+        <p>Detect bus roles from the selected XLeRobot model before saving setup. Detection reads motor identities without changing motor state.</p>
+        <button type="button" id="robot-detect" class="secondary">Detect motor buses</button>
+        <form id="robot-setup"><AntiforgeryToken />
+            <label>Robot name<input name="robotId" value="xlerobot" required pattern="[a-z][a-z0-9\-]{0,47}" maxlength="48" /></label>
+            <div class="field-grid"><label>Left arm and head bus<select name="leftPort" required></select></label><label>Right arm and wheel bus<select name="rightPort" required></select></label>
+                <label>Xbox controller (optional for camera checks)<select name="controllerDevice"></select></label><label>Head camera<select name="headCamera" required></select></label><label>Hand camera<select name="handCamera" required></select></label></div>
+            <p>Detect the two serial buses before calibration. Automatic marker calibration requires verified camera coverage and a motor-power emergency stop; it is not yet available. The tools container also includes upstream hand-guided calibration.</p>
+            <p>Motion requires measured load/current limits for this robot. These readings indicate motor effort; they do not measure contact force.</p>
+            <div class="field-grid"><label>Maximum motor load (raw)<input name="maxLoadRaw" type="number" min="1" max="1023" /></label><label>Maximum motor current (raw)<input name="maxCurrentRaw" type="number" min="1" max="65535" /></label><label>Maximum joint following error (degrees)<input name="maxFollowingErrorDegrees" type="number" min="0.1" max="3" step="0.1" /></label></div>
+            <label class="inline-option"><input type="checkbox" name="motionEnabled" /> Enable motion after calibration and clearance checks</label>
+            <button>Save setup</button>
+        </form>
+        <details><summary>Guided calibration terminal</summary><p>Run Xur's .NET calibration console beside the robot after preparing its container:</p><pre>sudo /var/lib/xur/app/current/host/xurutil robotics calibrate</pre><p>Calibration keeps torque disabled while you move each joint by hand. A physical motor-power stop switch is independent of the API stop.</p></details>
+    </section>
+    <section class="panel"><h2>Controller and demonstrations</h2>
+        <form id="robot-arm"><label>Session length (seconds)<input name="seconds" type="number" min="5" max="120" value="60" required /></label><button>Arm robot</button></form>
+        <p>Hold <strong>Start</strong> to move; release it to hold position. <strong>Back</strong> ends the session. Sticks move the arms, bumpers change pitch/wrist control, triggers close grippers, and trigger + stick press opens them. D-pad movement is disabled.</p>
+        <button type="button" id="robot-controller" class="secondary">Start controller session</button>
+        <form id="robot-record"><div class="field-grid"><label>Demonstration name<input name="dataset" required pattern="[a-z][a-z0-9\-]{0,47}" placeholder="red-block-left-01" /></label><label>Arm<select name="arm"><option value="right">Right</option><option value="left">Left</option></select></label></div>
+            <label>Task demonstrated<input name="task" required maxlength="500" placeholder="Put the red block into the left bin" /></label><label>Record seconds<input name="seconds" type="number" min="5" max="60" value="30" /></label><button>Record with Xbox controller</button></form>
+    </section>
+    <section class="panel"><h2>Train a sorting skill</h2><p>Record representative demonstrations first. Training runs locally with the robot disarmed. A completed training job still needs a supervised evaluation.</p>
+        <form id="robot-train"><div class="field-grid"><label>Dataset name<input name="dataset" required pattern="[a-z][a-z0-9\-]{0,47}" /></label><label>Policy name<input name="policy" required pattern="[a-z][a-z0-9\-]{0,47}" /></label><label>Training steps<input name="steps" type="number" min="10" max="100000" value="1000" /></label></div><button>Train ACT policy</button></form>
+    </section>
+    <section class="panel"><h2>Reviewed skills</h2><p>Emotes replay recorded single-arm demonstrations. Sorting uses a trained policy for a specific object and bin. Recalibration invalidates previous skill reviews.</p><div id="robot-skills"></div>
+        <form id="robot-skill"><div class="field-grid"><label>Skill ID<input name="id" required pattern="[a-z][a-z0-9\-]{0,47}" /></label><label>Name<input name="name" required maxlength="80" /></label><label>Type<select name="kind"><option value="sort">Sorting</option><option value="emote">Emote</option></select></label><label>Arm<select name="arm"><option value="right">Right</option><option value="left">Left</option></select></label></div>
+            <label>Task<input name="task" required maxlength="500" /></label><label>Asset path in the tools container<input name="assetPath" required placeholder="/state/policies/red-left/checkpoints/last/pretrained_model" /></label><div class="field-grid"><label>Bin ID (sorting)<input name="bin" pattern="[a-z][a-z0-9\-]{0,47}" /></label><label>Recorded episode (emote)<input name="episode" type="number" min="0" value="0" /></label><label>Maximum seconds<input name="seconds" type="number" min="1" max="60" value="15" /></label></div>
+            <button type="button" id="robot-evaluate" class="secondary">Evaluate with operator present</button>
+            <label class="inline-option"><input name="reviewed" type="checkbox" required /> I evaluated this skill for the current calibration, objects and bin layout</label><button>Save reviewed skill</button>
+        </form>
+        <form id="robot-sort"><label>Sorting instructions<input name="instructions" required maxlength="1000" /></label><label>Object to sort<input name="object" required maxlength="200" /></label><label>Reviewed sorting skill<select name="skill" required></select></label><button>Run sorting task</button></form>
+    </section>
+    <p id="robot-message" role="status"></p><section class="panel"><h2>Recent jobs</h2><div id="robot-jobs"></div></section>
+    </div>
+    <script src="/robotics.js" defer></script>
+}

@@ -254,7 +254,11 @@ app.MapPost("/approve", async (Approval approval) => {
     finally { gate.Release(); }
 });
 app.MapGet("/display-consoles",()=>Results.Json(new{error=displayConsoles.Error}));
-var workloads=new WorkloadRuntime(Path.Combine(stateDir,"workloads"),new RecipeCatalog(Environment.GetEnvironmentVariable("XUR_CATALOG") ?? "/usr/share/xur/catalog",Path.Combine(stateDir,"catalog-selected")),displayConsoles);
+var robotics=new RoboticsRuntime(Path.Combine(stateDir,"robotics"),Path.Combine(run,"robotics-controller"));
+if(!installer)await robotics.Recover();
+app.MapRobotics(robotics);
+app.Lifetime.ApplicationStopping.Register(()=>robotics.Stop().GetAwaiter().GetResult());
+var workloads=new WorkloadRuntime(Path.Combine(stateDir,"workloads"),new RecipeCatalog(Environment.GetEnvironmentVariable("XUR_CATALOG") ?? "/usr/share/xur/catalog",Path.Combine(stateDir,"catalog-selected")),displayConsoles,robotics);
 var containers=new ContainerLibrary(stateDir);
 app.MapGet("/container-jobs",()=>installer?Results.Conflict():Results.Json(containers.Jobs()));
 app.MapGet("/container-volumes",async()=>installer?Results.Conflict():Results.Json(await ContainerLibrary.Volumes()));

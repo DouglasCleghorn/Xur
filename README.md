@@ -37,6 +37,9 @@ and [multiseat validation](docs/architecture/multiple-workstations.md).
   and sampled VRAM context. Model data persists between reboots.
 - **Manage the host.** Monitor GPUs, NVLink, storage and network usage; browse files;
   configure time, HF credentials, API keys, and backups; apply app and OS updates.
+- **Prepare an XLeRobot.** A Robotics workload provides local calibration,
+  Xbox demonstrations, ACT training, reviewed emotes and task APIs. Physical
+  robot acceptance remains open; see [Robotics](docs/usage/robotics.md).
 
 ## Example profiles
 
@@ -86,6 +89,7 @@ another profile. Workstations also provide a native Plasma switcher; see
 | Workstation identity and Moonlight | [Named workstations](docs/usage/workstation-identities.md), [workstations and models](docs/usage/workstations-and-models.md) |
 | Profiles and inference APIs | [Profiles](docs/usage/profiles.md), [API keys](docs/usage/api-keys.md) |
 | Model selection | [Model catalog](docs/usage/model-catalog.md) |
+| Robot setup, demonstrations and task APIs | [Robotics](docs/usage/robotics.md) |
 | Files, storage and GPUs | [File management](docs/usage/files.md), [Storage](docs/usage/storage.md), [GPU monitoring](docs/usage/gpu-monitoring.md) |
 | Updates and local builds | [OS updates](docs/usage/updates.md), [application updates](docs/usage/application-updates.md) |
 | Security boundaries | [Request security](docs/architecture/request-security.md), [multiple workstations](docs/architecture/multiple-workstations.md) |

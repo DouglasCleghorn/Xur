@@ -1,0 +1,95 @@
+name: Robot nightly container
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'containers/robot/**'
+      - 'src/Xur.Agent/Robot*'
+      - 'src/Xur.Agent/WorkloadRuntime.cs'
+      - 'src/Xur.Agent/Program.cs'
+      - 'src/Xur.Control/Robot*'
+      - 'src/Xur.Control/Program.cs'
+      - 'src/Xur.Domain/Robot*'
+      - 'tools/Xur.Robotics/**'
+      - 'tests/Xur.Integration.Tests/robot-web.py'
+      - 'tests/Xur.Unit.Tests/RoboticsTests.cs'
+      - '.github/workflows/robot.yml'
+      - 'Directory.Build.props'
+      - 'global.json'
+      - 'eng/source_files.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: robot-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Check robotics integration
+        run: |
+          dotnet run --project tests/Xur.Unit.Tests -c Release -- --robotics
+          python3 tests/Xur.Integration.Tests/robotics-bridge.py
+          python3 eng/check-web-assets.py
+      - name: Build Native AOT container
+        run: >-
+          docker build --file containers/robot/Containerfile
+          --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          --label "org.opencontainers.image.revision=$GITHUB_SHA"
+          --tag "localhost/xur-robot-test:$GITHUB_SHA" .
+      - name: Test the exact container with isolated mock hardware
+        # Match appliance ownership in both directions: agent and app sockets
+        # are root-only, and the container drops DAC override capabilities.
+        run: sudo python3 tests/Xur.Integration.Tests/robot-web.py --container "localhost/xur-robot-test:$GITHUB_SHA" --engine docker
+      - name: Preserve container test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: robot-validation-${{ github.run_id }}
+          path: .build/evidence/robot-web/
+          retention-days: 7
+      - name: Save tested image for publication
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          mkdir -p .build/robot
+          docker save "localhost/xur-robot-test:$GITHUB_SHA" | gzip > .build/robot/image.tar.gz
+      - uses: actions/upload-artifact@v7
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          name: robot-candidate-${{ github.sha }}
+          path: .build/robot/image.tar.gz
+          compression-level: 0
+          retention-days: 1
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: nightly
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download this run's tested candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "robot-candidate-$GITHUB_SHA" --dir .build/robot
+      - name: Publish tested nightly to GHCR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/xur-robot"
+          gzip -dc .build/robot/image.tar.gz | docker load
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag "localhost/xur-robot-test:$GITHUB_SHA" "$image:nightly"
+          docker tag "localhost/xur-robot-test:$GITHUB_SHA" "$image:sha-$GITHUB_SHA"
+          docker push "$image:sha-$GITHUB_SHA"
+          docker push "$image:nightly"
+          docker logout ghcr.io

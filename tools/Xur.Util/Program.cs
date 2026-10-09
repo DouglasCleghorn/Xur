@@ -27,6 +27,23 @@ public static class Program
         var downloads = new Downloads();
         var root = new RootCommand("Xur startup, installer and signed application update utilities");
 
+        var robotics = new Command("robotics", "Guided preparation using the robot's LeRobot/XLeRobot container");
+        var calibrate = new Command("calibrate", "Hand-guided calibration with an operator supporting the robot's arms");
+        calibrate.SetAction(_=>
+        {
+            try{return RoboticsCalibration.Run();}
+            catch(Exception error){Console.Error.WriteLine("xurutil: "+error.Message);return 1;}
+        });
+        var identify = new Command("identify", "Operator-attended small-motion check of one expected arm/head motor; does not calibrate");
+        var identificationJoint = new Argument<string>("joint") { Description = "Named arm/head joint from the pinned XLeRobot wiring" };
+        identify.Arguments.Add(identificationJoint);
+        identify.SetAction(parsed=>
+        {
+            try{return RoboticsCalibration.Identify(parsed.GetValue(identificationJoint)!);}
+            catch(Exception error){Console.Error.WriteLine("xurutil: "+error.Message);return 1;}
+        });
+        robotics.Subcommands.Add(calibrate);robotics.Subcommands.Add(identify);root.Subcommands.Add(robotics);
+
         static void Bind(Command command, Func<CancellationToken, Task> action) => command.SetAction(async (_, token) =>
         {
             try { await action(token); return 0; }

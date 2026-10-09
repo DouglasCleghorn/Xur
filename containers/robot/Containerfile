@@ -1,0 +1,21 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble AS build
+RUN apt-get update && apt-get install -y --no-install-recommends clang zlib1g-dev && rm -rf /var/lib/apt/lists/*
+WORKDIR /source
+COPY global.json Directory.Build.props ./
+COPY containers/robot/Xur.Robot.csproj containers/robot/packages.lock.json containers/robot/
+RUN dotnet restore containers/robot/Xur.Robot.csproj --locked-mode -r linux-x64
+COPY containers/robot/ containers/robot/
+RUN dotnet publish containers/robot/Xur.Robot.csproj -c Release -r linux-x64 --no-restore \
+    -p:TreatWarningsAsErrors=true -o /out && \
+    test -x /out/Xur.Robot && test ! -e /out/libcoreclr.so
+
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble
+WORKDIR /app
+COPY --from=build /out/Xur.Robot ./Xur.Robot
+COPY --from=build /out/wwwroot/ ./wwwroot/
+COPY --from=build /usr/share/dotnet/LICENSE.txt /app/licenses/dotnet-LICENSE.txt
+COPY --from=build /usr/share/dotnet/ThirdPartyNotices.txt /app/licenses/dotnet-ThirdPartyNotices.txt
+COPY LICENSE docs/licensing.md /app/licenses/
+ENV XUR_ROBOT_SOCKET=/run/xur/robot-web/app.sock XUR_AGENT_SOCKET=/run/xur/agent.sock
+# No port, device nodes, Podman socket or Docker socket is exposed.
+ENTRYPOINT ["/app/Xur.Robot"]

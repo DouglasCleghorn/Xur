@@ -77,7 +77,7 @@
   function open(filter=''){
    const version=++request;clearTimeout(timer);render(filter);if(select.name!=='recipe')return;
    const row=select.closest('.workload-editor'),engine=row.querySelector('.catalog-engine').value;
-   if(engine==='Workstation'||engine==='Podman')return;
+   if(engine==='Workstation'||engine==='Podman'||engine==='XLeRobot')return;
    timer=setTimeout(async()=>{
     try{
      const models=await api('search?engine='+encodeURIComponent(engine)+'&q='+encodeURIComponent(filter));
@@ -162,15 +162,15 @@
  }
  function filterRecipes(row){
   const engine=row.querySelector('.catalog-engine').value,select=row.querySelector('[name=recipe]'),station=engine==='Workstation';
-  row.querySelector('.recipe-label').textContent=station?'Workstation':engine==='Podman'?'Container':'Model';
+  row.querySelector('.recipe-label').textContent=station?'Workstation':engine==='Podman'?'Container':engine==='XLeRobot'?'Robot':'Model';
   row.querySelector('.container-library-link').hidden=engine!=='Podman';
   row.querySelector('.recipe-choice').hidden=station;row.querySelector('.station-devices').hidden=!station;
   const primary=row.querySelector('.station-primary');primary.disabled=!station;if(!station)primary.checked=false;usbChoices(row);
   row.querySelector('.station-user-choice').hidden=!station||!!row.querySelector('[name=stationId]').value;row.querySelector('.station-new-name').hidden=!station||!!row.querySelector('[name=stationId]').value;row.querySelector('.station-identity-choice').hidden=!station;
-  select.dataset.placeholder=station?'Search workstations…':engine==='Podman'?'Search containers…':'Search models…';
+  select.dataset.placeholder=station?'Search workstations…':engine==='Podman'?'Search containers…':engine==='XLeRobot'?'Search robots…':'Search models…';
   for(const option of select.options){
    option.hidden=!!option.value&&(station?option.dataset.kind!=='Workstation':option.dataset.engine!==engine||option.dataset.kind==='Workstation');
-   if(!option.value)option.textContent=station?'Select workstation':engine==='Podman'?'Select container':'Select model';
+   if(!option.value)option.textContent=station?'Select workstation':engine==='Podman'?'Select container':engine==='XLeRobot'?'Select robot':'Select model';
   }
   if(select.selectedOptions[0]?.hidden)select.value='';
   if(station)select.value=[...select.options].find(o=>o.value==='gaming-workstation'&&!o.hidden)?.value??'';

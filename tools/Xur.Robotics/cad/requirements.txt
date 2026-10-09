@@ -1,0 +1,9 @@
+# Prototype CAD/validation tools only; not application runtime dependencies.
+trimesh==5.1.1
+numpy==2.5.3
+scipy==1.18.1
+shapely==2.2.0
+mapbox-earcut==2.1.0
+manifold3d==3.5.4
+matplotlib==3.11.2
+networkx==3.7
