@@ -61,10 +61,14 @@ The main Xur package is responsible for installing/loading/unloading the workloa
 selecting its image, mounting its devices/state and proxying authenticated
 requests. Robot settings and execution belong to this application.
 
-Loading a Robotics workload starts `xur-robot-web`. Unloading first requests
-stop/disarm, then removes the container. The first load pulls the nightly image
-if it is not cached. Set `XUR_ROBOT_IMAGE` in the agent environment to select a
-reviewed digest or local image. The initial supported platform is `linux/amd64`.
+Loading a Robotics workload starts `xur-robot-web` in an independent
+`xur-robot-container` systemd service so agent upgrades preserve its lifetime.
+Unloading first requests stop/disarm, verifies container exit, then removes it
+and releases that service. A fresh container start pulls the selected GHCR
+image; an already running healthy container keeps its image. Set
+`XUR_ROBOT_IMAGE` in the agent environment to select a reviewed digest or prepared
+`localhost/` image. Local images must already exist. Every selected image must
+carry `io.xur.robot.runtime=container-v1`. The initial platform is `linux/amd64`.
 
 Xur mounts its existing `/var/lib/xur/robotics` directory at `/state`, preserving
 configuration, calibration, datasets, policies, private job evidence and the
