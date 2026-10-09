@@ -27,8 +27,10 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
   assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),label+' home overflow');
   await page.screenshot({path:path.join(out,label+'.png'),fullPage:true});
   if(label==='mobile')await page.locator('.mobile-nav-more>summary').click();
-  assert(await page.getByRole('link',{name:'Robot',exact:true}).filter({visible:true}).isVisible());
-  assert(await page.getByRole('link',{name:'Robotics setup',exact:true}).filter({visible:true}).isVisible());
+  const robotLink=page.getByRole('link',{name:'Robot',exact:true}).filter({visible:true});
+  assert(await robotLink.isVisible());assert.equal(await robotLink.getAttribute('href'),'/robot');
+  assert.equal(await page.getByRole('link',{name:'Robotics setup',exact:true}).count(),0);
+  assert.equal(await page.locator('a[href="/robotics"]').count(),0);
   await page.getByRole('link',{name:'Monitoring',exact:true}).filter({visible:true}).click();await page.getByRole('heading',{name:'Monitoring',exact:true}).waitFor();
   assert.equal(await page.locator('.control-disk').count(),2);
   await page.getByText('Not mounted',{exact:true}).waitFor();
