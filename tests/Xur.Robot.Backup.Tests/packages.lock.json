@@ -8,6 +8,12 @@
           "Xur.Robot.Backup.Protocol": "[1.0.0, )"
         }
       },
+      "xur.robot.backup": {
+        "type": "Project",
+        "dependencies": {
+          "Xur.Robot.Backup.Protocol": "[1.0.0, )"
+        }
+      },
       "xur.robot.backup.protocol": {
         "type": "Project"
       }

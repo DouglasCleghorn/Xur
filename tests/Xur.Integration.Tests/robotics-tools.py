@@ -2,6 +2,7 @@
 """Check installed robotics dependencies offline, without opening robot devices."""
 import importlib
 import importlib.util
+import json
 import subprocess
 from pathlib import Path
 import tempfile
@@ -21,6 +22,32 @@ class ToolsContainer(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             bridge.detect_frame(np.zeros((8, 8, 3), dtype=np.uint8))
         self.assertNotEqual(subprocess.run(["/opt/xur/detect-markers", "/missing.pgm"], capture_output=True).returncode, 0)
+
+    def test_raw_pending_recording_numpy_stream_round_trip(self):
+        import numpy as np
+        spec = importlib.util.spec_from_file_location("xur_recording_check", "/opt/xur/bridge.py")
+        bridge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bridge)
+        with tempfile.TemporaryDirectory() as directory:
+            journal = bridge.RecordingJournal(Path(directory), {"inputSource": "synthetic-fixture"})
+            expected = []
+            for index in range(3):
+                head = np.arange(12 * 16 * 3, dtype=np.uint8).reshape(12, 16, 3) + index
+                hand = np.full((8, 10, 3), index, dtype=np.uint8)
+                expected.append({"head": head, "hand": hand})
+                journal.add([index] * 6, [index + 1] * 6, expected[-1], np.save, True)
+            journal.close("interrupted")
+            frames = [json.loads(line) for line in (journal.path / "frames.jsonl").read_text().splitlines()]
+            self.assertEqual(len(list(journal.path.iterdir())), 4)
+            for index, frame in enumerate(frames):
+                for camera, original in expected[index].items():
+                    reference = frame["images"][camera]
+                    with (journal.path / reference["file"]).open("rb") as stream:
+                        stream.seek(reference["offset"])
+                        actual = np.load(stream, allow_pickle=False)
+                        self.assertEqual(stream.tell(), reference["offset"] + reference["length"])
+                    np.testing.assert_array_equal(actual, original)
+            self.assertEqual(json.loads((journal.path / "session.json").read_text())["episodeCompleteness"], "unverified")
 
     def test_upstream_cli_modules_import(self):
         for module in ("lerobot_robot_xlerobot", "xlerobot_model.SO101Robot",

@@ -10,6 +10,7 @@ public sealed class RoboticsRuntime
     readonly TimeProvider clock;
     readonly RoboticsContainer container;
     readonly Func<RobotDevices> deviceInventory;
+    readonly RecordingBackups backups;
     readonly Dictionary<string, RobotJob> jobs = new();
     string? workloadId;
     RoboticsConfiguration? configuration;
@@ -31,8 +32,8 @@ public sealed class RoboticsRuntime
     long emergencyStopEpoch;
     string EmergencyStopPath=>Path.Combine(directory,"estop-latched");
 
-    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null)
-    {this.directory=directory; this.reservation=reservation; this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
+    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null,RecordingBackups? backups=null)
+    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
 
     public RobotStatus Status()
     {
@@ -227,8 +228,20 @@ public sealed class RoboticsRuntime
             return Launch("record",true,async(c,token)=>
             {
                 ReserveController(c);
-                await tools.Run(c,"record",request,request.Seconds+30,token);
-                return "Demonstration saved locally. Review it before training or using it as an emote.";
+                var began=backups.BeginRecording(request.Dataset);
+                var complete=false;Xur.Robot.Backups.RecordingBackupStatus? saved=null;
+                try{await tools.Run(c,"record",request,request.Seconds+30,token);complete=true;}
+                finally
+                {
+                    // The adapter releases its ownership before Run returns or
+                    // throws. Preserve completed or interrupted local samples;
+                    // snapshot verification never approves an incomplete episode.
+                    saved=await backups.CaptureCompleted(request.Dataset,c.RobotId,request.Arm,request.Task,
+                        new Xur.Robot.Backups.BackupProvenance("xbox",Environment.GetEnvironmentVariable("XUR_LEROBOT_VERSION"),Environment.GetEnvironmentVariable("XUR_XLEROBOT_REVISION"),CalibrationHash(),c.HeadCamera,c.HandCamera),
+                        complete?"completed":"interrupted",began.RecordingId);
+                }
+                return saved.State=="snapshot-failed"?"Demonstration remains saved locally; immutable backup snapshot failed: "+saved.Error
+                    :"Demonstration and immutable snapshot saved locally. Remote backup is "+saved.State+". Review samples before training or using them as an emote.";
             });
         }
     }

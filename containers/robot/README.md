@@ -145,10 +145,10 @@ and never resumes an operation.
 
 No trained picking policy ships in this image. Recording, CPU ACT training,
 reviewed replay and high-level task execution provide the preparation workflow;
-they still need physical acceptance on a calibrated robot. Remote GPU policy
-configuration and the eventual rollout adapter belong to this app. The separate
-[GR00T N1.7 preparation kit](../gr00t/README.md) prepares GPU inference but does
-not yet connect its predictions to XLeRobot motors.
+they still need physical acceptance on a calibrated robot. Training uses the
+open-licensed LeRobot/ACT implementation without pretrained backbone weights.
+Any future remote GPU policy configuration and rollout adapter belong to this
+app, and must use open licenses for both implementation and model weights.
 
 
 The requested Oculus Rift CV1/Touch teleoperation computer should reuse existing
@@ -161,7 +161,9 @@ first. If a custom headset app is needed, Rust is an option for rendering, frame
 timing and the native XR loop. Add a transport adapter only where an upstream
 connection is missing. Robot settings, mapping and recording stay owned by the
 ASP.NET Core app.
-Original datasets stay under persistent `/state/datasets`. A separate verified
-xur-epyc copy with manifests, checksums and visible backup status/errors is also
-planned. Neither CV1 integration nor automated remote backup is implemented yet;
-training and cleanup must preserve original recordings.
+Original datasets stay under persistent `/state/datasets`. The app preserves
+immutable snapshots and can automatically back them up to the separate xur-epyc
+receiver, with manifests, checksums and visible status/errors on Setup. Configure
+its HTTPS URL and dedicated token inside this app; see the
+[receiver and recovery guide](../robot-backup/README.md). CV1 integration remains
+unimplemented. Training and cleanup must preserve original recordings.

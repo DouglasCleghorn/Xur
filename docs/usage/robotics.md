@@ -149,13 +149,20 @@ separate teleoperation computer. Prefer existing upstream applications: assess
 and [LeRobot Isaac Teleop](https://huggingface.co/docs/lerobot/isaac_teleop) before
 adding new client code. The documented XLeVR browser flow targets Quest 3;
 Isaac Teleop provides SO101/OpenXR/recording integration, but its default CloudXR
-workflow does not establish CV1 compatibility. Verify the actual CV1 runtime and
-tracking on Windows first, then separately on Linux. Reuse the existing VR app's
-native compositor and headset runtime first. If a custom headset app is needed,
-Rust is an option for rendering, frame timing and the native XR loop. Add a
+workflow is excluded from planned client dependencies. Select open-source app
+code and openly licensed model weights, reviewing weight licenses separately.
+Reuse the open clutch/IK/recording components only with a verified local reader.
+Monado/OpenHMD CV1 tracking is unverified; proprietary Windows Meta/Oculus or
+SteamVR runtimes are optional existing compatibility routes, not selected or
+installed dependencies. Verify the actual headset host/runtime before choosing a
+path. Reuse the existing VR app's native compositor and headset runtime first.
+If a custom headset app is needed, Rust is an option for rendering, frame timing
+and the native XR loop. Add a
 transport adapter only for a connection the upstream tools cannot supply. The
 ASP.NET Core container app owns settings, mapping, arming and recording. CV1
 integration is not implemented yet; the current recorder uses Xbox input.
+See the [Rift CV1 reuse plan](../../tools/Xur.Robotics/vr/README.md) for runtime
+checks, source-reviewed adaptation blockers and recording metadata.
 
 Start with one easy-to-grasp object category and one reachable bin, in fixed
 positions under good lighting. Keep people and fragile objects outside the arm
@@ -171,11 +178,12 @@ the object positions you intend to use. Recording requires an armed session long
 enough for the demonstration and stops on Back or expiry.
 
 Keep original recordings in persistent `/state/datasets`; training, conversion
-and cleanup must not delete them. The planned backup workflow creates a separate
-durable copy on xur-epyc, with a dataset manifest, file checksums, verified-copy
-status and visible errors. A backup is complete only after destination checksums
-match. Remote backup is not implemented yet; retain originals and verify a
-separate copy before starting destructive maintenance.
+and cleanup must not delete them. Each recording creates an immutable local
+snapshot. Configure the separate xur-epyc receiver in `/robot/setup` for automatic
+remote backups with manifests, file checksums and visible retry/error status.
+A remote backup is `verified` only after every destination file matches its
+checksum. Unconfigured receivers remain `unconfigured`. Interrupted recordings
+retain raw camera arrays and numeric frame journals; review them before training.
 
 Disarm, then train an ACT policy with the dataset name and a new policy name.
 Training is offline inside the robotics app container, uses CPU initially and starts
@@ -307,14 +315,10 @@ not switch off the power supply. Reset checks fresh feedback from both buses
 and requires all seventeen motors to report torque off, stationary and no status
 fault. A reset leaves motion disarmed. Robotics API keys may latch E-stop, while
 reset is reserved for an authenticated operator.
+## Recording preservation and remote backups
 
-## Remote GR00T N1.7 preparation
-
-The [GR00T preparation kit](../../containers/gr00t/README.md) describes the
-remote GPU workflow for xur-epyc, pinned source/model versions, a private
-connection plan and the first demonstration-only inference test. Its .NET
-console writes plans and checks saved GPU inventory without accessing motors.
-Host access, GPU runtime and gated model access remain to be checked when the
-server is powered on. XLeRobot needs its own calibrated demonstrations, dataset
-conversion, custom embodiment and fine-tuned checkpoint before remote policy
-predictions can enter a reviewed local rollout adapter.
+The container app preserves byte-for-byte local snapshots after completed or
+interrupted recording sessions and retains the original datasets. Configure the
+HTTPS receiver and its dedicated token in `/robot/setup`. Verification, retry
+status and interrupted-episode labels appear per recording. See the
+[receiver setup and recovery guide](../../containers/robot-backup/README.md).

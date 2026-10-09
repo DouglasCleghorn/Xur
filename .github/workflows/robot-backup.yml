@@ -1,0 +1,83 @@
+name: Robot backup nightly container
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'containers/robot-backup/**'
+      - 'containers/robot/Runtime/Backups/**'
+      - 'tests/Xur.Robot.Backup.Tests/**'
+      - 'tests/Xur.Integration.Tests/recording-backups-native.py'
+      - '.github/workflows/robot-backup.yml'
+      - 'Directory.Build.props'
+      - 'global.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: robot-backup-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Check snapshot preservation and verification
+        run: dotnet run --project tests/Xur.Robot.Backup.Tests -c Release
+      - name: Build Native AOT backup receiver
+        run: >-
+          docker build --file containers/robot-backup/Containerfile
+          --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          --label "org.opencontainers.image.revision=$GITHUB_SHA"
+          --tag "localhost/xur-robot-backup-test:$GITHUB_SHA" .
+      - name: Test exact receiver without hardware
+        run: sudo python3 tests/Xur.Integration.Tests/recording-backups-native.py --container "localhost/xur-robot-backup-test:$GITHUB_SHA"
+      - name: Preserve test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: robot-backup-validation-${{ github.run_id }}
+          path: .build/evidence/recording-backups-native/
+          retention-days: 7
+      - name: Save verified nightly candidate
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          mkdir -p .build/robot-backup
+          docker save "localhost/xur-robot-backup-test:$GITHUB_SHA" | gzip > .build/robot-backup/image.tar.gz
+      - uses: actions/upload-artifact@v7
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          name: robot-backup-candidate-${{ github.sha }}
+          path: .build/robot-backup/image.tar.gz
+          compression-level: 0
+          retention-days: 1
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: nightly
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download tested candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "robot-backup-candidate-$GITHUB_SHA" --dir .build/robot-backup
+      - name: Publish tested nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/xur-robot-backup"
+          gzip -dc .build/robot-backup/image.tar.gz | docker load
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag "localhost/xur-robot-backup-test:$GITHUB_SHA" "$image:nightly"
+          docker tag "localhost/xur-robot-backup-test:$GITHUB_SHA" "$image:sha-$GITHUB_SHA"
+          docker push "$image:sha-$GITHUB_SHA"
+          docker push "$image:nightly"
+          docker logout ghcr.io

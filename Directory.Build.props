@@ -7,7 +7,7 @@
     <Deterministic>true</Deterministic>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Xur.IO' or '$(MSBuildProjectName)' == 'Xur.Util' or '$(MSBuildProjectName)' == 'Xur.Util.Tests' or '$(MSBuildProjectName)' == 'Xur.Robot' or '$(MSBuildProjectName)' == 'Xur.Robot.Tests'">
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Xur.IO' or '$(MSBuildProjectName)' == 'Xur.Util' or '$(MSBuildProjectName)' == 'Xur.Util.Tests' or '$(MSBuildProjectName)' == 'Xur.Robot' or '$(MSBuildProjectName)' == 'Xur.Robot.Tests' or '$(MSBuildProjectName)' == 'Xur.Robot.Backup' or '$(MSBuildProjectName)' == 'Xur.Robot.Backup.Protocol' or '$(MSBuildProjectName)' == 'Xur.Robot.Backup.Tests'">
     <BaseOutputPath>$(MSBuildProjectDirectory)/.build/bin/</BaseOutputPath>
     <BaseIntermediateOutputPath>$(MSBuildProjectDirectory)/.build/obj/</BaseIntermediateOutputPath>
     <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**;.build/**</DefaultItemExcludes>

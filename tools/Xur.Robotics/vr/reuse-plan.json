@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "reviewedAt": "2026-10-09",
+  "state": "preparation-only",
+  "headset": "oculus-rift-cv1",
+  "controllers": "oculus-touch-cv1",
+  "host": null,
+  "operatingSystem": null,
+  "preferredApproach": "reuse-upstream-renderer-reader-and-robot-processors",
+  "upstreams": [
+    {
+      "name": "XLeVR",
+      "repository": "https://github.com/Vector-Wangel/XLeRobot",
+      "revision": "b017b5e6354bd9f61f4247a920c72622ca0aade0",
+      "path": "XLeVR",
+      "subtreeLicense": "MIT",
+      "documentedHeadset": "Meta Quest 3",
+      "renderer": "A-Frame 1.7.1 / WebXR",
+      "use": "renderer and controller reader; server motor-goal mapping must be replaced"
+    },
+    {
+      "name": "LeRobot Isaac SO101 example",
+      "repository": "https://github.com/huggingface/lerobot",
+      "revision": "30da8e687a6dfc617fcd94afc367ac7071c376ce",
+      "lerobotVersion": "0.6.0",
+      "path": "examples/isaac_teleop_to_so101",
+      "license": "Apache-2.0",
+      "use": "open clutch, SO101 IK processors and recording loop with a verified local OpenXR reader; default CloudXR runtime excluded",
+      "reviewedOptionalPackage": "isaacteleop~=1.3.131",
+      "plannedClientDependency": false,
+      "defaultCloudxrPathAllowed": false
+    },
+    {
+      "name": "Isaac current repository",
+      "repository": "https://github.com/NVIDIA/IsaacCapture",
+      "revision": "e7bd63b4647b40ada8e81270d52af7fd4ca81866",
+      "license": "Apache-2.0",
+      "use": "current requirement review only; renamed main is not substituted for reviewed isaacteleop API"
+    },
+    {
+      "name": "Monado",
+      "repository": "https://gitlab.freedesktop.org/monado/monado",
+      "revision": "ec188bb137b6af93120e015a8df100046a34d8f0",
+      "path": "src/xrt/drivers/rift/rift_driver.c",
+      "use": "Linux runtime assessment; full CV1/Touch tracking unverified"
+    },
+    {
+      "name": "OpenHMD",
+      "repository": "https://github.com/OpenHMD/OpenHMD",
+      "revision": "85075b0c7e3c723ded2577edb79d00ee11aac339",
+      "use": "support review only; main README marks project unmaintained and refers CV1 positional work to fork"
+    }
+  ],
+  "ownership": {
+    "headsetRendering": "existing local VR app and native runtime/compositor",
+    "robotSettings": "container ASP.NET Core app",
+    "robotMapping": "container-owned upstream clutch/IK",
+    "recording": "existing local LeRobot dataset boundary",
+    "hostXur": "workload/device/state setup and authenticated proxy"
+  },
+  "requiredAdaptations": [
+    "disable automatic origin reset/slews",
+    "disable wheels and headset-to-head output",
+    "gate every motion/gripper action with arming and held clutch",
+    "normalize and test trigger polarity without motors",
+    "reject missing/untracked/stale/out-of-order pose samples",
+    "use relative measured-pose rebase",
+    "replace CDN assets with LibMan-managed local assets",
+    "add authenticated tracking and low-latency camera transport",
+    "preserve immutable recording provenance and raw XR timing sidecars"
+  ],
+  "recording": {
+    "currentFps": 10,
+    "cameraRoles": [
+      "head",
+      "hand"
+    ],
+    "originals": "/state/datasets",
+    "separateBackupTarget": "xur-epyc",
+    "verifyChecksumsBeforeMarkingBackedUp": true,
+    "preserveOriginals": true
+  },
+  "runtimeTested": false,
+  "clientInstalled": false,
+  "cv1TrackingVerified": false,
+  "videoLatencyVerified": false,
+  "cloudxrEulaAccepted": false,
+  "vrInputEndpointImplemented": false,
+  "remoteBackupImplemented": true,
+  "remoteBackupDeployed": false,
+  "motionEnabled": false,
+  "licensing": {
+    "applicationCode": "open-source licenses required; retain component notices",
+    "modelWeights": "explicit open license required; review separately from repository code",
+    "modelsSelected": [],
+    "excludedClientDependencies": [
+      "NVIDIA CloudXR SDK/runtime"
+    ],
+    "cloudxrAllowed": false,
+    "proprietaryPlatformRuntimes": {
+      "Meta/Oculus PC and SteamVR": "optional existing Windows compatibility routes; not selected or installed by this plan"
+    },
+    "openCv1RuntimeTrackingVerified": false
+  },
+  "implementationStatusScope": "VR preparation only; recording backup runtime is reviewed and merged separately"
+}

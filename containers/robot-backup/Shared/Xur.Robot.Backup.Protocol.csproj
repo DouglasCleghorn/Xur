@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**;.build/**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

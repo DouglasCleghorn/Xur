@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - 'containers/robot/**'
+      - 'containers/robot-backup/Shared/**'
       - 'src/Xur.Agent/Robot*'
       - 'src/Xur.Agent/WorkloadRuntime.cs'
       - 'src/Xur.Agent/Program.cs'

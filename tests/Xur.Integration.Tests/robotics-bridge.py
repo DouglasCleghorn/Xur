@@ -22,22 +22,155 @@ discovery = importlib.util.module_from_spec(discovery_spec)
 discovery_spec.loader.exec_module(discovery)
 
 
+class RecordingPreservation(unittest.TestCase):
+    def test_interrupted_pending_episode_keeps_exact_raw_numeric_and_camera_samples(self):
+        with tempfile.TemporaryDirectory(dir=repo / ".build") as directory:
+            root = Path(directory)
+            journal = bridge.RecordingJournal(root, {"calibrationHash": "a" * 64, "task": "Pick block"})
+            def raw_image(output, value, allow_pickle):
+                self.assertFalse(allow_pickle)
+                output.write(value)
+            # The independent journal commits before the upstream add_frame/save_episode path.
+            journal.add([1, 2, 3, 4, 5, 6], [2, 3, 4, 5, 6, 7],
+                {"head": b"unchanged head pixels", "hand": b"unchanged hand pixels"}, raw_image, True)
+            journal.close("interrupted")
+            frame = json.loads((journal.path / "frames.jsonl").read_text())
+            summary = json.loads((journal.path / "session.json").read_text())
+            self.assertEqual(frame["state"], [1, 2, 3, 4, 5, 6])
+            self.assertEqual(frame["action"], [2, 3, 4, 5, 6, 7])
+            self.assertTrue(frame["deadmanHeld"])
+            self.assertTrue(frame["observationReceivedAt"])
+            self.assertEqual((journal.path / frame["images"]["head"]["file"]).read_bytes(), b"unchanged head pixels")
+            self.assertEqual((journal.path / frame["images"]["hand"]["file"]).read_bytes(), b"unchanged hand pixels")
+            self.assertEqual(summary["outcome"], "interrupted")
+            self.assertEqual(summary["episodeCompleteness"], "unverified")
+            self.assertEqual(summary["frameCount"], 1)
+            self.assertEqual((journal.path / "frames.jsonl").stat().st_mode & 0o777, 0o600)
+
+    def test_controller_writer_failure_preserves_pending_frames_after_motor_release(self):
+        with tempfile.TemporaryDirectory(dir=repo / ".build") as directory:
+            state = Path(directory)
+            (state / "calibration").mkdir()
+            (state / "calibration/receipt.json").write_text("{}")
+            events = []
+            observed = {f"{arm}_arm_{joint}.pos": float(index) for arm in ("left", "right") for index, joint in enumerate(bridge.JOINTS)}
+            observed.update({"head_motor_1.pos": 0.0, "head": b"head raw pixels", "hand": b"hand raw pixels"})
+            robot = types.SimpleNamespace(get_observation=lambda: observed, send_action=lambda action: action)
+            xbox = types.SimpleNamespace(update=lambda: None, get_button=lambda _: False, close=lambda: events.append("controller-closed"))
+            class Arm:
+                def __init__(self, kinematics, mapping, observed, prefix):
+                    self.kinematics, self.prefix = kinematics, prefix
+            class Kinematics:
+                def forward_kinematics(self, *args): return 0, 0
+            upstream = types.SimpleNamespace(SimpleTeleopArm=Arm, SimpleHeadControl=lambda _: types.SimpleNamespace(target_positions={"head_motor_1": 0}),
+                LEFT_JOINT_MAP={}, RIGHT_JOINT_MAP={}, LEFT_KEYMAP={}, RIGHT_KEYMAP={})
+            class Dataset:
+                @staticmethod
+                def create(**kwargs):
+                    (kwargs["root"] / "meta").mkdir(parents=True)
+                    return Dataset()
+                def add_frame(self, frame):
+                    events.append("upstream-add")
+                    raise RuntimeError("writer failed before saving pending episode")
+                def save_episode(self): raise AssertionError("Interrupted buffer must not be claimed as a completed episode")
+                def finalize(self): events.append("upstream-finalized")
+            numpy = types.ModuleType("numpy")
+            numpy.array = lambda value, **_: value
+            numpy.float32 = object()
+            numpy.save = lambda output, value, **_: output.write(value)
+            kinematics = types.ModuleType("xlerobot_model.SO101Robot")
+            kinematics.SO101Kinematics = Kinematics
+            dataset = types.ModuleType("lerobot.datasets.lerobot_dataset")
+            dataset.LeRobotDataset = Dataset
+            modules = {"numpy": numpy, "xlerobot_model": types.ModuleType("xlerobot_model"), kinematics.__name__: kinematics,
+                "lerobot": types.ModuleType("lerobot"), "lerobot.datasets": types.ModuleType("lerobot.datasets"), dataset.__name__: dataset}
+            spec = types.SimpleNamespace(loader=types.SimpleNamespace(exec_module=lambda _: None))
+            with patch.dict("sys.modules", modules), patch.object(bridge, "STATE", state), patch.object(bridge, "Xbox", return_value=xbox), \
+                    patch.object(bridge, "calibration"), patch.object(bridge, "connect_robot", return_value=robot), \
+                    patch.object(bridge, "disconnect", side_effect=lambda _: events.append("motors-released")), \
+                    patch.object(bridge.importlib.util, "spec_from_file_location", return_value=spec), \
+                    patch.object(bridge.importlib.util, "module_from_spec", return_value=upstream), \
+                    patch.object(bridge.importlib.metadata, "version", return_value="0.6.0"):
+                with self.assertRaisesRegex(RuntimeError, "writer failed"):
+                    bridge.controller({"headCamera": "head-camera", "handCamera": "hand-camera"},
+                        {"dataset": "pending", "arm": "right", "task": "Pick block", "seconds": 5}, recording=True)
+            journal = next((state / "datasets/pending/raw-recordings").iterdir())
+            frame = json.loads((journal / "frames.jsonl").read_text())
+            summary = json.loads((journal / "session.json").read_text())
+            self.assertEqual(frame["state"], [float(index) for index in range(6)])
+            self.assertEqual(frame["action"], frame["state"])
+            self.assertEqual((journal / frame["images"]["head"]["file"]).read_bytes(), b"head raw pixels")
+            self.assertEqual(summary["outcome"], "interrupted")
+            self.assertEqual(summary["episodeCompleteness"], "unverified")
+            self.assertEqual(events, ["upstream-add", "motors-released", "controller-closed", "upstream-finalized"])
+
+    def test_journal_survives_process_crash_before_final_summary(self):
+        with tempfile.TemporaryDirectory(dir=repo / ".build") as directory:
+            journal = bridge.RecordingJournal(Path(directory), {})
+            journal.add([1] * 6, [2] * 6, {"head": b"pixels"}, lambda output, value, **_: output.write(value), False)
+            # Closing the raw file models process exit without normal finalization.
+            journal.file.close()
+            for image in journal.images.values(): image.close()
+            self.assertEqual(json.loads((journal.path / "frames.jsonl").read_text())["frameIndex"], 0)
+            summary = json.loads((journal.path / "session.json").read_text())
+            self.assertEqual(summary["outcome"], "recording")
+            self.assertEqual(summary["episodeCompleteness"], "unverified")
+            self.assertEqual((journal.path / "head.npy").read_bytes(), b"pixels")
+
+    def test_multiple_frames_keep_lossless_offsets_without_per_frame_files(self):
+        with tempfile.TemporaryDirectory(dir=repo / ".build") as directory:
+            journal = bridge.RecordingJournal(Path(directory), {})
+            received = "2026-10-09T00:00:00+00:00"
+            for frame in range(12):
+                journal.add([frame] * 6, [frame + 1] * 6, {"head": bytes([frame, frame + 1]), "hand": bytes([frame + 2])},
+                    lambda output, value, **_: output.write(value), True, received)
+            journal.close("completed")
+            frames = [json.loads(line) for line in (journal.path / "frames.jsonl").read_text().splitlines()]
+            self.assertEqual(len(list(journal.path.iterdir())), 4)
+            for index, frame in enumerate(frames):
+                self.assertEqual(frame["observationReceivedAt"], received)
+                self.assertTrue(frame["journaledAt"])
+                for camera, expected in (("head", bytes([index, index + 1])), ("hand", bytes([index + 2]))):
+                    reference = frame["images"][camera]
+                    with (journal.path / reference["file"]).open("rb") as image:
+                        image.seek(reference["offset"])
+                        self.assertEqual(image.read(reference["length"]), expected)
+            self.assertEqual(json.loads((journal.path / "session.json").read_text())["episodeCompleteness"], "completed")
+
+    def test_journal_rejects_linked_storage(self):
+        with tempfile.TemporaryDirectory(dir=repo / ".build") as directory:
+            root = Path(directory)
+            outside = root / "outside"
+            outside.mkdir()
+            dataset = root / "dataset"
+            dataset.mkdir()
+            (dataset / "raw-recordings").symlink_to(outside)
+            with self.assertRaisesRegex(ValueError, "symbolic link"):
+                bridge.RecordingJournal(dataset, {})
+            self.assertEqual(list(outside.iterdir()), [])
+
+
 class DiscoverySafety(unittest.TestCase):
     def test_dashboard_reads_every_motor_without_writes_even_when_a_bus_fails(self):
         events = []
         class Bus:
             is_connected = False
-            def __init__(self, port, motors): self.port = port; self.motors = motors
+            def __init__(self, port, motors):
+                self.port = port; self.motors = motors
+                # The real LeRobot bus keeps these construction-time lookups.
+                self.id_to_model = {motor.id: motor for motor in motors.values()}
             def connect(self, handshake): self.is_connected = True; events.append(("connect", handshake))
             def set_baudrate(self, baud): events.append(("host-baud", baud))
             def broadcast_ping(self, raise_on_error):
                 return {i: 777 for i in range(1, 9 if self.port.endswith('left') else 10)}
             def read(self, register, motor, normalize):
+                self.id_to_model[int(motor)]  # Feetech sign decoding uses this lookup.
                 events.append(("read", register, motor, normalize)); return 0
             def disconnect(self, disable_torque): events.append(("disconnect", disable_torque))
         configuration = {"leftPort": "/dev/serial/by-id/left", "rightPort": "/dev/serial/by-id/right"}
-        reports = bridge.motor_details(configuration, Bus, lambda _: object())
+        reports = bridge.motor_details(configuration, Bus, lambda motor_id: types.SimpleNamespace(id=motor_id))
         self.assertEqual([len(report['motors']) for report in reports], [8, 9])
+        self.assertTrue(all("error" not in motor for report in reports for motor in report["motors"]))
         self.assertEqual(reports[0]['motors'][6]['name'], 'head_pan')
         self.assertEqual(reports[1]['motors'][8]['name'], 'right_wheel')
         self.assertEqual(len([item for item in events if item[0] == 'read']), 17 * len(bridge.MOTOR_REGISTERS))
@@ -46,7 +179,7 @@ class DiscoverySafety(unittest.TestCase):
             def broadcast_ping(self, **kwargs):
                 if self.port.endswith('left'): raise OSError('Disconnected')
                 return super().broadcast_ping(**kwargs)
-        reports = bridge.motor_details(configuration, MissingBus, lambda _: object())
+        reports = bridge.motor_details(configuration, MissingBus, lambda motor_id: types.SimpleNamespace(id=motor_id))
         self.assertEqual(reports[0]['error'], 'Disconnected')
         self.assertEqual(len(reports[1]['motors']), 9)
 

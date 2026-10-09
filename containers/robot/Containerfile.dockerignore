@@ -7,10 +7,6 @@
 !containers
 !containers/robot
 !containers/robot/**
-**/.build/**
-**/bin/**
-**/obj/**
-**/*.private.*
 
 !src/
 !src/Xur.Domain/
@@ -21,3 +17,12 @@
 !tools/Xur.Robotics/discover_buses.py
 !tools/Xur.Robotics/motor_probe.py
 !tools/Xur.Robotics/detect_markers.c
+
+!containers/robot-backup/
+!containers/robot-backup/Shared/
+!containers/robot-backup/Shared/**
+
+**/.build/**
+**/bin/**
+**/obj/**
+**/*.private.*

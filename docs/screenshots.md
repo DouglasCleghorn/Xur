@@ -1,5 +1,21 @@
 # Screenshot and artwork register
 
+- 2026-10-09: Private stationary calibration-coverage capture family under
+  `.build/evidence/calibration-current/`: head/hand JPEGs extracted from the
+  read-only app observation and the later `head-markers.jpg`/`hand-markers.jpg`
+  with copyable marker data. Captured from xur-255 at 17:27 and 17:30 UTC,
+  host 26.10.030 and
+  robotics image source revision `a080b9de0cf3dc7d6e33887374491c5d6a858c60`.
+  Purpose: assess current camera visibility before implementing metric marker
+  poses or joint calibration. The head view is almost entirely black and
+  returned 640×480 even when full resolution was requested. The 1920×1080
+  hand view reads tag 01 in all three frames, showing fingers, tray edge and
+  room without shoulder/elbow references. The cameras share no visible tag.
+  No motor writes or movement commands were issued. Privacy review: private
+  room, furnishings and robot hardware, with no people or credentials visible.
+  Keep ignored/private; these are hardware evidence, not publication assets.
+  Reassess after camera exposure, cover, mounting, marker or robot pose changes.
+
 - 2026-10-09: The October 8 robot dashboard UI capture families below are retired
   as current acceptance evidence after setup/navigation and runtime ownership
   moved into the proxied robotics container. Their historical privacy reviews

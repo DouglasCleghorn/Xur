@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 
 STATE = Path("/state")
 PID = STATE / ".build/adapter.json"
@@ -407,7 +408,11 @@ def motor_details(configuration, bus_factory=None, motor_factory=None):
                                ("right/wheels", 9, ("left_wheel", "back_wheel", "right_wheel"))):
         side = role.split("/")[0]
         report = {"role": role, "port": configuration[side + "Port"], "motors": []}
-        bus = bus_factory("/dev/arm_" + side, {})
+        # LeRobot caches ID/name/model lookups in the bus constructor.
+        # Supply the complete expected map before connecting; ping below must
+        # still verify this inventory before any register details are read.
+        motors = {str(motor_id): motor_factory(motor_id) for motor_id in range(1, count + 1)}
+        bus = bus_factory("/dev/arm_" + side, motors)
         try:
             bus.connect(handshake=False)
             bus.set_baudrate(1_000_000)
@@ -416,7 +421,6 @@ def motor_details(configuration, bus_factory=None, motor_factory=None):
             models = bus.broadcast_ping(raise_on_error=True)
             if models != {motor_id: 777 for motor_id in range(1, count + 1)}:
                 raise ValueError("Inventory does not match this upstream XLeRobot bus; do not guess joint roles")
-            bus.motors = {str(motor_id): motor_factory(motor_id) for motor_id in models}
             names = [side + "_" + joint for joint in JOINTS] + list(extra)
             for motor_id in sorted(models):
                 item = {"id": motor_id, "name": names[motor_id - 1], "model": "STS3215", "registers": {}}
@@ -533,6 +537,84 @@ def connect_robot(configuration, recording=False):
     return robot
 
 
+
+def flush_directory(path):
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+class RecordingJournal:
+    """Retain raw samples even if the upstream pending episode never gets saved."""
+    def __init__(self, dataset, provenance):
+        parent = dataset / "raw-recordings"
+        if dataset.is_symlink() or parent.is_symlink():
+            raise ValueError("Raw recording storage cannot be a symbolic link")
+        parent.mkdir(mode=0o700, exist_ok=True)
+        flush_directory(dataset)
+        self.path = parent / uuid.uuid4().hex
+        self.path.mkdir(mode=0o700)
+        flush_directory(parent)
+        self.started = time.monotonic()
+        self.frames = 0
+        self.provenance = provenance
+        descriptor = os.open(self.path / "frames.jsonl", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        self.file = os.fdopen(descriptor, "wb")
+        self.images = {}
+        for camera in ("head", "hand"):
+            descriptor = os.open(self.path / (camera + ".npy"), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_APPEND, 0o600)
+            self.images[camera] = os.fdopen(descriptor, "ab")
+        self.summary("recording")
+
+    def summary(self, outcome):
+        document = {"version": 1, "inputSource": "xbox", "outcome": outcome,
+            "frameCount": self.frames, "updatedAt": datetime.now(timezone.utc).isoformat(),
+            "provenance": self.provenance, "imageFormat": "numpy-frame-stream-with-byte-offsets",
+            "episodeCompleteness": "completed" if outcome == "completed" else "unverified"}
+        temporary = self.path / "session.json.tmp"
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "wb") as output:
+            output.write(json.dumps(document).encode())
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, self.path / "session.json")
+        flush_directory(self.path)
+
+    def add(self, state, action, images, save_image, deadman, observation_received_at=None):
+        # Preserve camera arrays directly: no resizing, encoding or colour change.
+        # Each numeric row is committed only after its referenced images are durable.
+        received_at = observation_received_at or datetime.now(timezone.utc).isoformat()
+        image_files = {}
+        for camera, image in images.items():
+            if camera not in self.images:
+                raise ValueError("Unexpected recording camera")
+            output = self.images[camera]
+            offset = output.tell()
+            save_image(output, image, allow_pickle=False)
+            output.flush()
+            os.fsync(output.fileno())
+            image_files[camera] = {"file": camera + ".npy", "offset": offset, "length": output.tell() - offset}
+        frame = {"frameIndex": self.frames, "observationReceivedAt": received_at,
+            "journaledAt": datetime.now(timezone.utc).isoformat(), "elapsedSeconds": time.monotonic() - self.started,
+            "state": state, "action": action, "deadmanHeld": deadman, "images": image_files}
+        self.file.write(json.dumps(frame, allow_nan=False).encode() + b"\n")
+        self.file.flush()
+        os.fsync(self.file.fileno())
+        self.frames += 1
+
+    def close(self, outcome):
+        try:
+            self.file.flush()
+            os.fsync(self.file.fileno())
+        finally:
+            self.file.close()
+            for image in self.images.values():
+                image.close()
+        self.summary(outcome)
+
+
 def controller(configuration, request, recording=False):
     calibration(configuration)
     import numpy as np
@@ -544,6 +626,8 @@ def controller(configuration, request, recording=False):
     xbox = Xbox(grab=True)
     robot = None
     dataset = None
+    journal = None
+    completed = False
     try:
         xbox.update()
         if xbox.get_button(7) or xbox.get_button(6):
@@ -580,6 +664,9 @@ def controller(configuration, request, recording=False):
                 dataset = LeRobotDataset.create(repo_id="xur/" + name, fps=10, root=path,
                     robot_type="so101_follower", features=features, image_writer_threads=2)
                 previous.write_text(json.dumps(receipt))
+            journal = RecordingJournal(path, {**receipt,
+                "lerobotVersion": importlib.metadata.version("lerobot"),
+                "xlerobotRevision": os.environ.get("XUR_XLEROBOT_REVISION")})
         end = time.monotonic() + request["seconds"]
         held_frames = 0
         while time.monotonic() < end:
@@ -588,8 +675,10 @@ def controller(configuration, request, recording=False):
             if xbox.get_button(6):
                 raise KeyboardInterrupt("Back pressed")
             observed = robot.get_observation()
+            observation_received_at = datetime.now(timezone.utc).isoformat()
             action = {**{key: value for key, value in observed.items() if key.endswith(".pos")}, **ZERO_BASE}
-            if xbox.get_button(7):  # Hold Start as the deadman switch.
+            deadman = bool(xbox.get_button(7))
+            if deadman:  # Hold Start as the deadman switch.
                 held_frames += 1
                 for arm, mapping in zip(arms, (upstream.LEFT_KEYMAP, upstream.RIGHT_KEYMAP), strict=True):
                     if recording and arm.prefix != request["arm"]:
@@ -623,16 +712,22 @@ def controller(configuration, request, recording=False):
             accepted = robot.send_action(action)
             if dataset is not None:
                 prefix = request["arm"] + "_arm_"
+                state = [float(observed[prefix + j + ".pos"]) for j in JOINTS]
+                targets = [float(accepted[prefix + j + ".pos"]) for j in JOINTS]
+                journal.add(state, targets, {name: observed[name] for name in ("head", "hand")}, np.save, deadman, observation_received_at)
                 dataset.add_frame({
-                    "observation.state": np.array([observed[prefix + j + ".pos"] for j in JOINTS], dtype=np.float32),
-                    "action": np.array([accepted[prefix + j + ".pos"] for j in JOINTS], dtype=np.float32),
+                    "observation.state": np.array(state, dtype=np.float32),
+                    "action": np.array(targets, dtype=np.float32),
                     "observation.images.head": observed["head"], "observation.images.hand": observed["hand"], "task": request["task"],
                 })
+            if time.monotonic() - tick > 0.5:
+                raise RuntimeError("Recording/control loop stalled; stop and inspect the robot")
             time.sleep(max(0, 0.1 - (time.monotonic() - tick)))
         if dataset is not None:
             if held_frames < 10:
                 raise ValueError("No usable demonstration: hold Start while demonstrating the task")
             dataset.save_episode()
+        completed = True
         return {"sessionEnded": True, "baseMotion": False, "recorded": recording}
     finally:
         try:
@@ -642,8 +737,15 @@ def controller(configuration, request, recording=False):
             try:
                 xbox.close()
             finally:
-                if dataset is not None:
-                    dataset.finalize()
+                try:
+                    if dataset is not None:
+                        dataset.finalize()
+                except BaseException:
+                    completed = False
+                    raise
+                finally:
+                    if journal is not None:
+                        journal.close("completed" if completed else "interrupted")
 
 
 def disconnect(robot):
