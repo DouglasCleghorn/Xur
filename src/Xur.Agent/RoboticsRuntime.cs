@@ -11,6 +11,7 @@ public sealed class RoboticsRuntime
     readonly IRobotTools tools;
     readonly TimeProvider clock;
     readonly RoboticsContainer container;
+    readonly Func<RobotDevices> deviceInventory;
     readonly Dictionary<string, RobotJob> jobs = new();
     Workload? workload;
     RuntimeInstance? instance;
@@ -33,8 +34,8 @@ public sealed class RoboticsRuntime
     long emergencyStopEpoch;
     string EmergencyStopPath=>Path.Combine(directory,"estop-latched");
 
-    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null)
-    {this.directory=directory; this.reservation=reservation; this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);emergencyStop=File.Exists(EmergencyStopPath);}
+    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null)
+    {this.directory=directory; this.reservation=reservation; this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
 
     public RobotStatus Status()
     {
@@ -215,9 +216,9 @@ public sealed class RoboticsRuntime
         lock(sync)
         {
             RequireLoaded();Idle();if(!stopLatched)throw new InvalidOperationException("Disarm before detecting motor buses.");
-            var ports=Devices().Ports.Select(p=>p.Path).ToArray();
+            var ports=deviceInventory().Ports.Select(p=>p.Path).ToArray();
             if(ports.Length!=2)throw new InvalidOperationException("Connect exactly two serial/by-id adapters for XLeRobot bus detection.");
-            File.Delete(DetectionPath);
+            if(File.Exists(DetectionPath))File.Delete(DetectionPath);
             return LaunchOperation("detect-buses",false,async token=>
             {
                 var detected=await container.DetectBuses(ports,token);token.ThrowIfCancellationRequested();
