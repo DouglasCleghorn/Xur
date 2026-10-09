@@ -299,3 +299,14 @@ not switch off the power supply. Reset checks fresh feedback from both buses
 and requires all seventeen motors to report torque off, stationary and no status
 fault. A reset leaves motion disarmed. Robotics API keys may latch E-stop, while
 reset is reserved for an authenticated operator.
+
+## Remote GR00T N1.7 preparation
+
+The [GR00T preparation kit](../../containers/gr00t/README.md) describes the
+remote GPU workflow for xur-epyc, pinned source/model versions, a private
+connection plan and the first demonstration-only inference test. Its .NET
+console writes plans and checks saved GPU inventory without accessing motors.
+Host access, GPU runtime and gated model access remain to be checked when the
+server is powered on. XLeRobot needs its own calibrated demonstrations, dataset
+conversion, custom embodiment and fine-tuned checkpoint before remote policy
+predictions can enter a reviewed local rollout adapter.

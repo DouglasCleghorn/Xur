@@ -82,3 +82,9 @@ Microsoft's `LICENSE.txt` and `ThirdPartyNotices.txt` under `/app/licenses/`,
 alongside Xur's license and this document. The `mcr.microsoft.com` SDK and
 runtime-dependencies images retain their upstream and operating-system licenses.
 No third-party browser libraries are used by this dashboard.
+
+The optional `containers/gr00t` image preserves the pinned NVIDIA Isaac-GR00T
+Apache-2.0 license and attribution file under `/opt/licenses/`. Base checkpoint
+and Cosmos backbone weights are downloaded separately into a private model
+cache under their upstream terms; neither is relabeled as Xur MIT code or
+included in Xur source bundles. Model access must already be authorized.

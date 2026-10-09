@@ -1,0 +1,32 @@
+# Xur integration: MIT. NVIDIA Isaac-GR00T keeps its Apache-2.0 license.
+# Build from the repository root. Docker Hub cache misses must fail.
+FROM ghcr.io/astral-sh/uv:0.8.14 AS uv
+FROM mirror.gcr.io/nvidia/cuda:12.8.0-devel-ubuntu24.04
+COPY --from=uv /uv /usr/local/bin/uv
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates git git-lfs python3.12 python3.12-venv python3.12-dev \
+    build-essential ffmpeg libegl1 && rm -rf /var/lib/apt/lists/*
+ENV CUDA_HOME=/usr/local/cuda UV_PROJECT_ENVIRONMENT=/opt/gr00t-venv \
+    UV_LINK_MODE=copy UV_HTTP_TIMEOUT=300 UV_CONCURRENT_DOWNLOADS=4
+# Keep the source checkout and lockfile together: no runtime git pull or uv sync.
+RUN git init /opt/Isaac-GR00T && \
+    git -C /opt/Isaac-GR00T remote add origin https://github.com/NVIDIA/Isaac-GR00T.git && \
+    GIT_LFS_SKIP_SMUDGE=1 git -C /opt/Isaac-GR00T fetch --depth=1 origin d2b7e75b937e3ec9aa5dbc798f08b89692c49734 && \
+    GIT_LFS_SKIP_SMUDGE=1 git -C /opt/Isaac-GR00T checkout --detach FETCH_HEAD && \
+    GIT_LFS_SKIP_SMUDGE=1 git -C /opt/Isaac-GR00T submodule update --init --recursive && \
+    git -C /opt/Isaac-GR00T lfs pull --include='demo_data/droid_sample/**' && \
+    cd /opt/Isaac-GR00T && uv sync --frozen --python /usr/bin/python3.12 --no-dev && \
+    mkdir -p /opt/licenses && cp LICENSE /opt/licenses/Isaac-GR00T-LICENSE && \
+    cp ATTRIBUTIONS.md /opt/licenses/Isaac-GR00T-ATTRIBUTIONS.md && \
+    git rev-parse HEAD > /opt/gr00t-revision && \
+    rm -rf .git
+COPY tools/Xur.Robotics/gr00t/server.py /opt/xur/server.py
+COPY LICENSE docs/licensing.md /opt/licenses/
+ENV PATH=/opt/gr00t-venv/bin:$PATH PYTHONPATH=/opt/Isaac-GR00T \
+    HF_HOME=/cache/huggingface PYTHONDONTWRITEBYTECODE=1 \
+    HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+WORKDIR /opt/Isaac-GR00T
+# Private upstream policy transport; deployment binds only host loopback.
+EXPOSE 5555
+ENTRYPOINT ["python", "/opt/xur/server.py"]
