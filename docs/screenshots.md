@@ -1,5 +1,15 @@
 # Screenshot and artwork register
 
+- 2026-10-08: Deployed robot dashboard acceptance capture family under
+  `.build/evidence/robot-web/live/`, covering dashboard cameras/motor details,
+  E-stop/reset, the AprilTag overlay and controller instructions on xur-255.
+  Capture-specific bundle version, source commit, timestamp and privacy review
+  belong in the ignored `receipt.json` beside the images. Purpose: validate the
+  published container through Xur's authenticated proxy at desktop/mobile sizes.
+  Treat live room/camera imagery as private; review every used capture for people,
+  credentials and personal files. Do not publish these images. Regenerate after
+  camera, marker, navigation, dashboard or emergency-stop behavior changes.
+
 - 2026-10-08: Robot dashboard review family under `.build/robot/preview/`
   and `.build/evidence/robot-web/`, using the working tree based on `322b687`.
   The local Native AOT preview replays the already registered private head/hand
