@@ -1,4 +1,4 @@
-FROM mirror.gcr.io/library/python:3.12-slim-bookworm
+FROM mirror.gcr.io/library/python:3.14-slim-bookworm
 
 # LeRobot's utility imports require CPU Torch and Hugging Face Hub even for
 # motor discovery. No policies or model weights are downloaded.
