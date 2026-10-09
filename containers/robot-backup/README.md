@@ -80,6 +80,11 @@ podman run --detach --name xur-robot-backup --pull=never --restart=no \
   localhost/xur-robot-backup:prepared
 ```
 
+On an SELinux host, use `:Z` for the dedicated backup directory and token file
+mounts. Relabel only those paths. If backups use a separately mounted disk,
+verify its mount and expected filesystem identity before each receiver start;
+an absent disk must not redirect backups into the system disk.
+
 Expose that dedicated listener through an approved HTTPS reverse proxy.
 [Tailscale Serve documentation](https://tailscale.com/docs/reference/tailscale-cli/serve)
 describes HTTPS ports and persistent background mode. On a

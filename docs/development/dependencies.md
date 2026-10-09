@@ -22,6 +22,7 @@ source/package pins and matching local tags require the manual review below.
 | Intel Omni layer | `catalog/engines/omni-xpu.Containerfile`, embedded by the agent; builds on the mirrored, matching vLLM XPU release | `docker` for the base; manual source/package pins |
 | Native gfx1103 vLLM layer | `catalog/engines/vllm-rocm-gfx1103.Containerfile`, embedded by the agent; AMD TheRock device wheels and source-built vLLM | `docker` for the base; manual source/package pins |
 | Robotics application and tools | `containers/robot/Containerfile`, which combines the Native AOT app with `tools/Xur.Robotics/Containerfile`; `tools/Xur.Robotics/Discovery.Containerfile` remains an isolated toolkit recipe | `docker` for the bases; manual source/package pins |
+| Recording backup receiver | `containers/robot-backup/Containerfile`, shared snapshot protocol and locked .NET projects | `docker` for the bases; `nuget` for locked packages |
 | Hosted Fedora native builder | `eng/Containerfile`, read by `eng/ci-native.py` | `docker` |
 | Live installer Fedora base | `os/bootc/Containerfile`; resolved once to a digest in a private build recipe | `docker` |
 | Playwright and axe-core | `eng/browser/package.json` and lock | `npm` |

@@ -86,7 +86,8 @@
   "videoLatencyVerified": false,
   "cloudxrEulaAccepted": false,
   "vrInputEndpointImplemented": false,
-  "remoteBackupImplemented": false,
+  "remoteBackupImplemented": true,
+  "remoteBackupDeployed": false,
   "motionEnabled": false,
   "licensing": {
     "applicationCode": "open-source licenses required; retain component notices",
