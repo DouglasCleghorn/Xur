@@ -52,6 +52,9 @@ jobs:
       - name: Validate installed upstream robotics tools without hardware
         run: |
           mkdir -p .build/robot/tool-state
+          # Match the appliance's private root-owned state with capabilities dropped.
+          sudo chown 0:0 .build/robot/tool-state
+          sudo chmod 700 .build/robot/tool-state
           docker run --rm --pull=never --network=none --cap-drop=ALL \
             --security-opt=no-new-privileges --read-only --memory=4g --pids-limit=256 \
             --tmpfs=/tmp:rw,nosuid,nodev,size=128m \
