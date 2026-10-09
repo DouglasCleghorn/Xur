@@ -5,9 +5,11 @@
   and robot image source `55c5f1b`. Purpose: assess head-camera coverage after
   identifying that its saved by-id alias resolves to the grayscale infrared
   interface, while the colour capture interface has a distinct by-path alias.
-  No motor commands or calibration receipts are involved. Privacy review:
-  private room and robot hardware; inspect before any publication and keep
-  this family ignored/private. These frames are hardware evidence, not UI
+  Capture at 18:13:53 UTC returned 1920×1080 colour pixels and decoded tags 00
+  and 01 together, with tag 02 partly below the frame. No motor commands or
+  calibration receipts are involved. Privacy review: robot hardware and
+  private room/furnishings, with no people or credentials visible; keep this
+  family ignored/private. These frames are hardware evidence, not UI
   screenshots or release artwork.
 
 - 2026-10-09: Source review for the measured camera/tag setup panel and metric
