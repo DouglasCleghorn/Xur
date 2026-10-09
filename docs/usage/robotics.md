@@ -178,11 +178,12 @@ the object positions you intend to use. Recording requires an armed session long
 enough for the demonstration and stops on Back or expiry.
 
 Keep original recordings in persistent `/state/datasets`; training, conversion
-and cleanup must not delete them. The planned backup workflow creates a separate
-durable copy on xur-epyc, with a dataset manifest, file checksums, verified-copy
-status and visible errors. A backup is complete only after destination checksums
-match. Remote backup is not implemented yet; retain originals and verify a
-separate copy before starting destructive maintenance.
+and cleanup must not delete them. Each recording creates an immutable local
+snapshot. Configure the separate xur-epyc receiver in `/robot/setup` for automatic
+remote backups with manifests, file checksums and visible retry/error status.
+A remote backup is `verified` only after every destination file matches its
+checksum. Unconfigured receivers remain `unconfigured`. Interrupted recordings
+retain raw camera arrays and numeric frame journals; review them before training.
 
 Disarm, then train an ACT policy with the dataset name and a new policy name.
 Training is offline inside the robotics app container, uses CPU initially and starts
@@ -314,3 +315,10 @@ not switch off the power supply. Reset checks fresh feedback from both buses
 and requires all seventeen motors to report torque off, stationary and no status
 fault. A reset leaves motion disarmed. Robotics API keys may latch E-stop, while
 reset is reserved for an authenticated operator.
+## Recording preservation and remote backups
+
+The container app preserves byte-for-byte local snapshots after completed or
+interrupted recording sessions and retains the original datasets. Configure the
+HTTPS receiver and its dedicated token in `/robot/setup`. Verification, retry
+status and interrupted-episode labels appear per recording. See the
+[receiver setup and recovery guide](../../containers/robot-backup/README.md).

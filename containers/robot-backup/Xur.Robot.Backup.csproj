@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <PublishAot>true</PublishAot><InvariantGlobalization>true</InvariantGlobalization>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <IlcTreatWarningsAsErrors>true</IlcTreatWarningsAsErrors>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**;.build/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup><Compile Remove="Shared/**/*.cs" /><ProjectReference Include="Shared/Xur.Robot.Backup.Protocol.csproj" /></ItemGroup>
+</Project>

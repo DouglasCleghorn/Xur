@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><AllowUnsafeBlocks>true</AllowUnsafeBlocks><DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**;.build/**</DefaultItemExcludes></PropertyGroup></Project>

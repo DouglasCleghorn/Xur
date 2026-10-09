@@ -3,6 +3,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends clang zlib1g-de
 WORKDIR /source
 COPY global.json Directory.Build.props ./
 COPY containers/robot/Xur.Robot.csproj containers/robot/packages.lock.json containers/robot/
+COPY containers/robot-backup/Shared/ containers/robot-backup/Shared/
 RUN dotnet restore containers/robot/Xur.Robot.csproj --locked-mode -r linux-x64
 COPY containers/robot/ containers/robot/
 COPY src/Xur.Domain/Redaction.cs src/Xur.Domain/Redaction.cs
@@ -61,6 +62,7 @@ COPY --from=build /out/wwwroot/ ./wwwroot/
 COPY --from=build /usr/share/dotnet/LICENSE.txt /app/licenses/dotnet-LICENSE.txt
 COPY --from=build /usr/share/dotnet/ThirdPartyNotices.txt /app/licenses/dotnet-ThirdPartyNotices.txt
 COPY LICENSE docs/licensing.md /app/licenses/
-ENV XUR_ROBOT_SOCKET=/run/xur/robot-web/app.sock XUR_ROBOT_STATE=/state
+ENV XUR_ROBOT_SOCKET=/run/xur/robot-web/app.sock XUR_ROBOT_STATE=/state \
+    XUR_LEROBOT_VERSION=0.6.0 XUR_XLEROBOT_REVISION=b017b5e6354bd9f61f4247a920c72622ca0aade0
 # Hardware paths and durable state are mounted by Xur. No host agent or engine socket.
 ENTRYPOINT ["/app/Xur.Robot"]

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Setup · Xur Robot</title><link rel="stylesheet" href="/robot/robot.css"><link rel="stylesheet" href="/robot/setup.css"><script src="/robot/robot.js" defer></script><script src="/robot/setup.js" defer></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Setup · Xur Robot</title><link rel="stylesheet" href="/robot/robot.css"><link rel="stylesheet" href="/robot/setup.css"><script src="/robot/robot.js" defer></script><script src="/robot/setup.js" defer></script><script src="/robot/backups.js" defer></script></head>
 <body data-page="setup">
 <header><a class="brand" href="/">XUR <span>/ Robot</span></a><nav aria-label="Robot"><a href="/robot/">Dashboard</a><a href="/robot/setup" aria-current="page">Setup</a><a href="/robot/tags">AprilTags</a><a href="/robot/controller">Controller guide</a></nav><span class="badge" id="mode">Connecting</span></header>
 <aside class="stop-bar" aria-label="Emergency stop"><button id="estop" class="estop">E-STOP</button><div><strong id="estop-state" role="status">Software emergency stop</strong><p>Stops the session and latches motion off. Disconnect motor power for a physical emergency.</p></div><button id="reset-estop" hidden>Reset E-stop</button></aside>
@@ -36,7 +36,13 @@
         <form id="robot-record"><div class="field-grid"><label>Demonstration name<input name="dataset" required pattern="[a-z][a-z0-9\-]{0,47}" placeholder="red-block-left-01" /></label><label>Arm<select name="arm"><option value="right">Right</option><option value="left">Left</option></select></label></div>
             <label>Task demonstrated<input name="task" required maxlength="500" placeholder="Put the red block into the left bin" /></label><label>Record seconds<input name="seconds" type="number" min="5" max="60" value="30" /></label><button>Record with Xbox controller</button></form>
     </section>
-    <section class="panel"><h2>Recording backups</h2><p>Original demonstrations stay in persistent container state at <code>/state/datasets</code>. A separate verified copy on xur-epyc, with a manifest, checksums and backup status, is required for the training workflow. Automated remote backup is not implemented yet.</p><p>Training and cleanup must preserve the original recordings. Verify a separate copy before treating a dataset as backed up.</p></section>
+    <section class="panel"><h2>Recording backups</h2>
+        <p>Original recordings and immutable local snapshots are retained. Remote copies are marked verified only after the receiver checks every sample against its SHA-256 manifest. Interrupted recordings remain labelled incomplete even when their preserved bytes are verified.</p>
+        <form id="backup-settings"><label>HTTPS receiver URL<input name="url" type="url" placeholder="https://xur-epyc.drum-goblin.ts.net:9443/" /></label>
+            <label>Private receiver token<input name="token" type="password" autocomplete="new-password" placeholder="Private receiver token" /></label>
+            <p>Leave the token blank to keep the saved token for this destination. Clear the URL to disable remote copies while retaining all existing recordings and backups.</p><button>Save backup receiver</button></form>
+        <p id="backup-message" role="status">Checking backup settings…</p><div id="backup-recordings"></div>
+    </section>
     <section class="panel"><h2>Train a sorting skill</h2><p>Record representative demonstrations first. Training runs in this container with the robot disarmed. A completed training job still needs a supervised evaluation.</p>
         <form id="robot-train"><div class="field-grid"><label>Dataset name<input name="dataset" required pattern="[a-z][a-z0-9\-]{0,47}" /></label><label>Policy name<input name="policy" required pattern="[a-z][a-z0-9\-]{0,47}" /></label><label>Training steps<input name="steps" type="number" min="10" max="100000" value="1000" /></label></div><button>Train ACT policy</button></form>
     </section>

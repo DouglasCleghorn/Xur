@@ -10,7 +10,8 @@ else
 }
 var state=Environment.GetEnvironmentVariable("XUR_ROBOT_STATE")??"/state";
 Directory.CreateDirectory(state);
-var robot=new RoboticsRuntime(state,Path.Combine(state,".build","controller-reservation"));
+var backups=new RecordingBackups(state);builder.Services.AddSingleton(backups);builder.Services.AddHostedService<RecordingBackupWorker>();
+var robot=new RoboticsRuntime(state,Path.Combine(state,".build","controller-reservation"),backups:backups);
 await robot.Recover();
 robot.Start(Environment.GetEnvironmentVariable("XUR_ROBOT_WORKLOAD_ID")??"robot");
 var app=builder.Build();
@@ -41,6 +42,6 @@ app.MapGet("/controller",()=>TypedResults.PhysicalFile(Path.Combine(app.Environm
 app.MapGet("/tags",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/tags.html"),"text/html"));
 app.MapGet("/setup",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/setup.html"),"text/html"));
 app.UseStaticFiles();
-app.MapRobotics(robot);
+app.MapRobotics(robot);app.MapRecordingBackups(backups);
 app.Lifetime.ApplicationStopping.Register(()=>robot.Shutdown().GetAwaiter().GetResult());
 await app.RunAsync();

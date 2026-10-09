@@ -1,0 +1,17 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble AS build
+RUN apt-get update && apt-get install -y --no-install-recommends clang zlib1g-dev && rm -rf /var/lib/apt/lists/*
+WORKDIR /source
+COPY global.json Directory.Build.props ./
+COPY containers/robot-backup/ containers/robot-backup/
+RUN dotnet restore containers/robot-backup/Xur.Robot.Backup.csproj --locked-mode -r linux-x64 && \
+    dotnet publish containers/robot-backup/Xur.Robot.Backup.csproj -c Release -r linux-x64 --no-restore \
+      -p:TreatWarningsAsErrors=true -o /out && test ! -e /out/libcoreclr.so
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble
+WORKDIR /app
+COPY --from=build /out/Xur.Robot.Backup ./Xur.Robot.Backup
+COPY --from=build /usr/share/dotnet/LICENSE.txt /app/licenses/dotnet-LICENSE.txt
+COPY --from=build /usr/share/dotnet/ThirdPartyNotices.txt /app/licenses/dotnet-ThirdPartyNotices.txt
+COPY LICENSE docs/licensing.md /app/licenses/
+ENV XUR_BACKUP_STATE=/backup XUR_BACKUP_LISTEN=http://0.0.0.0:7081 XUR_BACKUP_TOKEN_FILE=/run/secrets/backup-token
+EXPOSE 7081
+ENTRYPOINT ["/app/Xur.Robot.Backup"]

@@ -28,7 +28,13 @@ class UnixHTTP(http.client.HTTPConnection):
     def connect(self):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.settimeout(self.timeout)
-        self.sock.connect(self.path)
+        # Linux resolves the directory descriptor without putting a long
+        # checkout/worktree path into the 108-byte Unix socket address.
+        descriptor = os.open(Path(self.path).parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            self.sock.connect('/proc/self/fd/' + str(descriptor) + '/' + Path(self.path).name)
+        finally:
+            os.close(descriptor)
 
 
 def request(path, route, method='GET', body=None, headers=None):
@@ -91,7 +97,7 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix='robot-', dir=ROOT / '.build') as temporary:
         directory = Path(temporary)
-        app_socket = directory / 'app.sock'
+        app_socket = directory / 'socket/app.sock'
         state = directory / 'state'
         tools = directory / 'tools'
         tools.mkdir()
@@ -108,20 +114,20 @@ def main():
             nonlocal process, active_container
             if options.binary:
                 binary = options.binary.resolve()
-                environment = dict(os.environ, XUR_ROBOT_SOCKET=str(app_socket), XUR_ROBOT_STATE=str(state),
+                environment = dict(os.environ, XUR_ROBOT_SOCKET='/proc/self/cwd/socket/app.sock', ASPNETCORE_CONTENTROOT=str(binary.parent), XUR_ROBOT_STATE=str(state),
                                    XUR_ROBOT_TOOLS=str(tools), XUR_ROBOT_PYTHON=sys.executable,
                                    XUR_ROBOT_WORKLOAD_ID='isolated-test', XUR_ROBOT_TEST_CALLS=str(calls_path),
                                    PYTHONPYCACHEPREFIX=str(directory / 'pycache'))
                 environment.pop('XUR_ROBOT_DEV_URL', None)
                 environment.pop('XUR_AGENT_SOCKET', None)
-                process = subprocess.Popen([str(binary)], cwd=binary.parent, env=environment,
+                process = subprocess.Popen([str(binary)], cwd=directory, env=environment,
                                            stdout=log, stderr=subprocess.STDOUT)
             else:
                 subprocess.run([options.engine, 'run', '--detach', '--name', name, '--pull=never',
                     '--network=none', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--security-opt=label=disable',
                     '--read-only', '--memory=512m', '--cpus=1', '--pids-limit=128',
                     '--tmpfs=/tmp:rw,nosuid,nodev,size=32m', '--volume', str(directory) + ':/test:rw',
-                    '--env', 'XUR_ROBOT_SOCKET=/test/app.sock', '--env', 'XUR_ROBOT_STATE=/test/state',
+                    '--env', 'XUR_ROBOT_SOCKET=/test/socket/app.sock', '--env', 'XUR_ROBOT_STATE=/test/state',
                     '--env', 'XUR_ROBOT_TOOLS=/test/tools', '--env', 'XUR_ROBOT_PYTHON=python3',
                     '--env', 'XUR_ROBOT_WORKLOAD_ID=isolated-test', '--env', 'XUR_ROBOT_TEST_CALLS=/test/calls.jsonl',
                     '--env', 'PYTHONPYCACHEPREFIX=/test/pycache', options.container], check=True,
@@ -185,12 +191,23 @@ def main():
                 check(status == 200 and text in data, 'Serves ' + page)
                 check(b'id="estop"' in data and b'id="reset-estop"' in data, 'E-stop and reset are available on ' + page)
                 check('blob: data:' in headers['Content-Security-Policy'], 'Camera CSP survives the proxy response')
-            for asset in ['robot.js', 'robot.css', 'setup.js', 'setup.css']:
+            for asset in ['robot.js', 'robot.css', 'setup.js', 'setup.css', 'backups.js']:
                 check(request(app_socket, '/robot/' + asset)[0] == 200, 'Serves local ' + asset)
             check(request(app_socket, '/robot/Program.cs')[0] == 404, 'Does not expose source files')
             initial = api('status')
             check(initial['workloadId'] == 'isolated-test' and initial['mode'] == 'disarmed' and not initial['configured'],
                   'Container owns unconfigured status without any agent socket')
+            check(api('backups/settings') == {'url': '', 'tokenStored': False} and api('backups/recordings') == [],
+                  'Unconfigured backup settings remain inside the independent app and never claim verification')
+            check(post('backups/settings', dict(url='http://xur-epyc/', token='t' * 64))[0] == 409,
+                  'Native backup settings require a trusted HTTPS receiver')
+            check(post('backups/settings', dict(url='https://example.invalid:9443/', token='t' * 64, motors={'goal': 180}))[0] == 400,
+                  'Native backup settings reject unknown motor fields')
+            status, _, data = post('backups/settings', dict(url='https://example.invalid:9443/', token='t' * 64))
+            check(status == 200 and json.loads(data)['tokenStored'] and 't' * 64 not in data.decode(),
+                  'Backup connection persists privately and its token is absent from public responses')
+            check(post('backups/retry', dict(recordingId='../../config'))[0] == 409,
+                  'Backup retry identities cannot traverse into application settings')
             configuration = dict(robotId='fixture', leftPort='/dev/serial/by-id/left', rightPort='/dev/serial/by-id/right',
                 controllerDevice='', headCamera='/dev/v4l/by-id/head-video-index0',
                 handCamera='/dev/v4l/by-id/hand-video-index0', skills=[], motionEnabled=False,
@@ -251,6 +268,8 @@ def main():
             check(restarted['configured'] and restarted['emergencyStopLatched'] and restarted['stopLatched']
                   and restarted['armedUntil'] is None and api('configuration') == configuration,
                   'Container restart preserves settings and E-stop while never resuming a motion session')
+            check(api('backups/settings') == {'url': 'https://example.invalid:9443/', 'tokenStored': True},
+                  'Container restart retains private receiver configuration without exposing its token')
             status, _, data = post('reset-estop', {})
             check(status == 202 and finished(json.loads(data)['id'])['state'] == 'completed',
                   'E-stop reset checks fresh feedback from all seventeen fixture motors')

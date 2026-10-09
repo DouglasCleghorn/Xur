@@ -7,4 +7,5 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);.build/**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup><Compile Include="../../src/Xur.Domain/Redaction.cs" Link="Runtime/Redaction.cs" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../robot-backup/Shared/Xur.Robot.Backup.Protocol.csproj" /></ItemGroup>
 </Project>

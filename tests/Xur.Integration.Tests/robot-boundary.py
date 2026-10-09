@@ -16,7 +16,7 @@ for project in ('Xur.Agent', 'Xur.Control', 'Xur.Domain'):
         assert 'Xur.Robotics' not in include and 'robotics/' not in element.get('Link', ''), \
             f'{project} must not package robotics tools or settings: {include}'
     for source in directory.rglob('*'):
-        if source.suffix not in ('.cs', '.razor') or any(part in ('obj', 'bin', '.build') for part in source.parts):
+        if source.suffix not in ('.cs', '.razor') or any(part in ('obj', 'bin', '.build') for part in source.relative_to(directory).parts):
             continue
         match = runtime_types.search(source.read_text())
         assert match is None, f'{source.relative_to(ROOT)} retains container-owned runtime type {match.group()}'

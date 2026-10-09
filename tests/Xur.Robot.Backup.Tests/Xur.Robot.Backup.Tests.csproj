@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../containers/robot/Xur.Robot.csproj" /><ProjectReference Include="../../containers/robot-backup/Xur.Robot.Backup.csproj" /><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup>
+  <ItemGroup><AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute"><_Parameter1>linux</_Parameter1></AssemblyAttribute></ItemGroup>
+</Project>

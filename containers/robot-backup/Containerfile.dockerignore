@@ -1,0 +1,12 @@
+**
+!global.json
+!Directory.Build.props
+!LICENSE
+!docs/
+!docs/licensing.md
+!containers/
+!containers/robot-backup/
+!containers/robot-backup/**
+**/bin/**
+**/obj/**
+**/.build/**
