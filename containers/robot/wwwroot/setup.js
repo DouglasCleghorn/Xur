@@ -2,11 +2,8 @@
  const byId=id=>document.getElementById(id), setup=byId('robot-setup');
  if(!setup)return;
  let configuration=null,skills=[],refreshing=false,lastDetection=null,lastJobs=null;
- const message=text=>{byId('robot-message').textContent=text;};
- async function api(path,body){
-  const response=await (window.xurFetch??fetch)('/api/robotics/'+path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  const data=await response.json();if(!response.ok)throw Error(data.error??'Robot request failed');return data;
- }
+ const message=text=>{const node=byId('robot-message');node.textContent=text;node.hidden=!text;};
+ const api=(path,body)=>window.XurRobot.api(path,body);
  async function refresh(){
   if(refreshing)return;refreshing=true;
   try{
@@ -33,7 +30,7 @@
    const p=document.createElement('p');p.textContent=`${job.kind} · ${job.state} · ${job.detail}`;list.append(p);
    if(['inspect-table','inspect-markers','sort','evaluate'].includes(job.kind)&&job.state!=='running'){
     const captures=await api(`jobs/${encodeURIComponent(job.id)}/captures`);
-    for(const name of captures){const link=document.createElement('a');link.href=`/api/robotics/jobs/${encodeURIComponent(job.id)}/captures/${encodeURIComponent(name)}`;link.textContent=name;link.target='_blank';link.rel='noopener';p.append(' · ',link);}
+    for(const name of captures){const link=document.createElement('a');link.href=`/robot/api/jobs/${encodeURIComponent(job.id)}/captures/${encodeURIComponent(name)}`;link.textContent=name;link.target='_blank';link.rel='noopener';p.append(' · ',link);}
    }
    if(job.kind==='inspect-markers'&&job.state==='completed'){
     const report=await api(`jobs/${encodeURIComponent(job.id)}/markers`),details=document.createElement('details'),summary=document.createElement('summary');
@@ -70,12 +67,10 @@
   for(const name of ['robotId','leftPort','rightPort','controllerDevice','headCamera','handCamera'])body[name]=setup.elements[name].value;
   const limits=['maxLoadRaw','maxCurrentRaw','maxFollowingErrorDegrees'];
   body.motorLimits=limits.some(name=>setup.elements[name].value!=='')?Object.fromEntries(limits.map(name=>[name,Number(setup.elements[name].value)])):null;
-  body.motionEnabled=setup.elements.motionEnabled.checked;await api('configure',body);message('Setup saved. Prepare the tools container before hardware checks.');await loadSetup();await refresh();
+  body.motionEnabled=setup.elements.motionEnabled.checked;await api('configure',body);message('Setup saved. Check installed tools, then inspect hardware before enabling motion.');await loadSetup();await refresh();
  }catch(error){message(error.message);}});
- byId('robot-stop').addEventListener('click',()=>run('stop',{}));
  byId('robot-probe').addEventListener('click',()=>run('probe',{}));
  byId('robot-detect').addEventListener('click',()=>run('detect-buses',{}));
- byId('robot-prepare').addEventListener('click',()=>run('prepare',{}));
  byId('robot-inspect').addEventListener('click',()=>run('tasks',{kind:'inspect-table'}));
  byId('robot-markers').addEventListener('click',()=>run('tasks',{kind:'inspect-markers'}));
  byId('robot-controller').addEventListener('click',()=>run('controller',{seconds:Number(byId('robot-arm').elements.seconds.value)}));

@@ -1,4 +1,4 @@
-namespace Xur.Domain;
+namespace Xur.Robot;
 
 // Public requests describe tasks and reviewed skills, never motor targets.
 public record RobotSkill(string Id, string Name, string Kind, string Arm,

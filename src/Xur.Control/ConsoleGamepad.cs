@@ -100,9 +100,10 @@ internal interface IConsoleGamepadDevice:IDisposable
 // One reader in the control service, never one per display. Read-only evdev
 // descriptors are not grabbed; workstation and synthetic streaming seats stay out.
 internal sealed class ConsoleGamepadInput(string sysRoot="/sys",string devRoot="/dev",string udevRoot="/run/udev/data",
-    TimeProvider? clock=null,Func<string,IConsoleGamepadDevice>? openDevice=null,Func<string?>? textContext=null,Action? clearPreview=null,string roboticsReservation="/run/xur/robotics-controller"):IDisposable
+    TimeProvider? clock=null,Func<string,IConsoleGamepadDevice>? openDevice=null,Func<string?>? textContext=null,Action? clearPreview=null,string? roboticsReservation=null):IDisposable
 {
     sealed record Node(string Path,string Identity);
+    readonly string reservation=roboticsReservation??Path.Combine(Environment.GetEnvironmentVariable("XUR_RUN")??"/run/xur","robot-ownership","active");
     readonly TimeProvider time=clock??TimeProvider.System;
     readonly Dictionary<string,(Node Node,IConsoleGamepadDevice Device)> devices=[];
     long lastScan;
@@ -121,7 +122,10 @@ internal sealed class ConsoleGamepadInput(string sysRoot="/sys",string devRoot="
         try
         {
             var node=Path.Combine(devRoot,"input",Path.GetFileName(sysPath));
-            if(File.Exists(roboticsReservation) && Read(roboticsReservation)==node)return null;
+            // Robotics owns gamepad interfaces for the whole container session,
+            // including controllers paired after startup. The host does not read
+            // the app's controller settings or motion state.
+            if(File.Exists(reservation))return null;
             var properties=File.ReadAllLines(Path.Combine(udevRoot,"c"+Read(sysPath+"/dev")));
             var seat=properties.FirstOrDefault(p=>p.StartsWith("E:ID_SEAT=",StringComparison.Ordinal));
             if(seat!=null && seat!="E:ID_SEAT=seat0")return null;

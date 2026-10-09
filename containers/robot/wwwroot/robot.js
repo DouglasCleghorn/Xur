@@ -43,7 +43,7 @@
  operation('reset-estop', 'reset-estop', {}, 'Checking fresh motor feedback before resetting E-stop…');
  operation('calibrate', 'auto-calibrate', {}, 'Checking motors and visual references for automatic calibration…');
  operation('controller', 'start-controller', { seconds: 60 }, 'Controller session requested. Hold Start / Menu to move; Back / View stops.');
- operation('prepare', 'prepare', {}, 'Preparing the LeRobot tools…');
+ operation('prepare', 'prepare', {}, 'Checking the installed LeRobot tools…');
  operation('scan-tags', 'tasks', { kind: 'inspect-markers' }, 'Capturing three frames from each camera and detecting AprilTags…');
  async function copy(text, fallback) {
   try { await navigator.clipboard.writeText(text); set('action-status', 'JSON copied.'); }
@@ -153,14 +153,14 @@
  async function refresh() {
   if (document.hidden) return;
   try {
-   const [status, jobs] = await Promise.all([api('status'), page === 'guide' ? Promise.resolve([]) : api('jobs')]);
+   const [status, jobs] = await Promise.all([api('status'), ['guide', 'setup'].includes(page) ? Promise.resolve([]) : api('jobs')]);
    set('mode', status.mode); list('problems', status.problems || []);
    const latched = status.emergencyStopLatched === true;
    $('estop').closest('.stop-bar').classList.toggle('latched', latched);
    set('estop-state', latched ? 'E-stop latched · motion disabled' : 'Software emergency stop');
    $('reset-estop').hidden = !latched;
    for (const id of ['controller', 'calibrate']) if ($(id)) $(id).disabled = latched;
-   if (page === 'guide') return;
+   if (page === 'guide' || page === 'setup') return;
    if (page === 'tags') await tags(jobs);
    else {
     set('identity', status.workloadId ? `${status.workloadId} · ${status.stopLatched ? 'disarmed' : 'operator session'} · base movement disabled` : 'Load the Robotics workload in your Xur profile.');
@@ -181,5 +181,6 @@
   setInterval(() => refresh(), 3000);
   if (page === 'dashboard') setInterval(() => observe(), 5000);
  }
+ window.XurRobot = { api };
  start();
 })();

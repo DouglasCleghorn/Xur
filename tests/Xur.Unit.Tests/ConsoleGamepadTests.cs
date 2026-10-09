@@ -155,7 +155,7 @@ static class ConsoleGamepadTests
             void Properties(int index,string? seat=null,string identity="1")=>File.WriteAllText(udev+"/c13:"+(64+index),"I:"+identity+"\nE:ID_INPUT_JOYSTICK=1\n"+(seat==null?"":"E:ID_SEAT="+seat+"\n"));
             Node(0);Node(1,"seat-xur-test");Node(2,phys:"xur/seat-xur-stream/input0");Node(3,gamepad:false);Node(4,"seat-xur-unassigned");Node(5);File.Delete(udev+"/c13:69");
             var opened=new List<Device>();var clock=new Clock();string? editor=null;var cleared=0;
-            using var input=new ConsoleGamepadInput(sys,root+"/dev",udev,clock,_=>{var device=new Device(clock);opened.Add(device);return device;},()=>editor,()=>cleared++,roboticsReservation:root+"/robotics-controller");
+            using var input=new ConsoleGamepadInput(sys,root+"/dev",udev,clock,_=>{var device=new Device(clock);opened.Add(device);return device;},()=>editor,()=>cleared++,roboticsReservation:root+"/robot-ownership-active");
             var actions=new List<(ConsoleKeyAction Action,bool Logs)>();
             Task<bool> Dispatch(ConsoleControllerInput input,bool logs){actions.Add((input.Action,logs));return Task.FromResult(false);}
             await input.Pump(Dispatch);
@@ -186,10 +186,14 @@ static class ConsoleGamepadTests
             check(textInputs.Count(command=>command.Character=='a')==1,"The shared input pump forwards a fresh two-stick gesture as exactly one text edit");
             typing.Queue(3,5,1023);typing.Queue(0,0,0);await input.Pump(Text);textInputs.Clear();Properties(0,"seat-xur-test");typing.Queue(3,5,0);typing.Queue(0,0,0);await input.Pump(Text);
             check(textInputs.All(command=>command.Character==null) && typing.Disposed && cleared>0,"A seat handoff cancels a pending typing gesture and removes its local preview");
-            actions.Clear();opened[5].Queue(1,0x130,1);File.WriteAllText(root+"/robotics-controller",root+"/dev/input/event6");await input.Pump(Dispatch);
-            check(opened[5].Disposed && actions.Count==0,"Robotics reservation closes the console reader before queued input can operate setup");
-            File.Delete(root+"/robotics-controller");clock.Advance(1000);await input.Pump(Dispatch);
-            check(opened.Count==7,"Releasing Robotics controller ownership restores console discovery");
+            Node(7);clock.Advance(1000);await input.Pump(Dispatch);check(opened.Count==7,"A second active gamepad is available before robotics ownership");
+            actions.Clear();opened[5].Queue(1,0x130,1);opened[6].Queue(1,0x130,1);
+            File.WriteAllText(root+"/robot-ownership-active","Robotics container owns gamepads");await input.Pump(Dispatch);
+            check(opened[5].Disposed&&opened[6].Disposed&&actions.Count==0,"Robotics container ownership closes all gamepad readers before queued input can operate host setup");
+            Node(8);clock.Advance(1000);await input.Pump(Dispatch);
+            check(opened.Count==7,"Controllers paired while robotics owns the hardware do not enter the host console");
+            File.Delete(root+"/robot-ownership-active");clock.Advance(1000);await input.Pump(Dispatch);
+            check(opened.Count==10,"Releasing Robotics container ownership restores all console gamepad discovery");
             using var gate=new SemaphoreSlim(1,1);using var stop=new CancellationTokenSource();
             var running=input.Run(Dispatch,gate,stop.Token);stop.Cancel();await running;
             check(opened.All(d=>d.Disposed),"Manager cancellation releases every gamepad descriptor");

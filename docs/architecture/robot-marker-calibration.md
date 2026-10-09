@@ -71,8 +71,8 @@ restart and leave motion disarmed afterward. Verify loss/restoration of motor
 power and unchanged host uptime during acceptance. A remote restart relay must
 not replace or bypass the physical motor-power emergency stop.
 
-The owner requires automatic bus-role detection. The implementation uses a
-separate read-only LeRobot discovery container and a .NET matcher for the
+The owner requires automatic bus-role detection. The current implementation runs the installed read-only LeRobot discovery
+tool inside the robotics application container and uses a .NET matcher for the
 selected upstream motor inventory, persisting candidate roles by serial
 identity. After the owner restored the computer on C3, physical discovery
 identified `7688` as the eight-motor left/head bus and `7920` as the nine-motor
@@ -340,9 +340,10 @@ camera-coverage assessment, not supply raw motor targets or torque values.
    required joints pass. Invalidate existing skill reviews and leave the robot
    disarmed. Automatic calibration success does not approve a picking policy.
 
-The calibration state machine and public API belong in .NET. Marker detection
-and upstream robot interactions can remain in the existing Python robotics
-container. Public commands should request coverage assessment, candidate
+The calibration state machine, settings and public API belong in the Native
+AOT .NET robotics app at `/robot`. Marker detection and upstream interactions
+run as Python subprocesses inside that same container. The main Xur package
+only loads/unloads the workload, maps devices/state and authenticates its proxy. Public commands should request coverage assessment, candidate
 calibration and bounded verification; they should not expose joint targets.
 The physical emergency stop must remove motor power independently of Xur,
 USB, camera tracking or the host's ability to process an API stop.

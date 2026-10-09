@@ -146,13 +146,17 @@ Xur's existing HTTP proxy as though it were one. Keep its unencrypted transport
 inside loopback plus authenticated SSH; do not expose 5555 through Tailscale
 Serve, a public listener, or an unauthenticated forwarding endpoint.
 
-On the client host, after diagnostic SSH access is established and its host key
-verified, establish a bounded SSH tunnel with the appropriate private key:
+Xur's diagnostic SSH disables port forwarding and cannot provide this tunnel.
+Provision a separate restricted forwarding account or reviewed authenticated
+transport before connecting the robot container. Keep diagnostic SSH's existing
+restrictions in place. On the client host, after that forwarding access is
+established and its host key verified, establish a bounded tunnel with its
+appropriate account and private key:
 
 ```sh
 ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 \
   -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes \
-  -L 127.0.0.1:15555:127.0.0.1:5555 root@xur-epyc.drum-goblin.ts.net
+  -L 127.0.0.1:15555:127.0.0.1:5555 gr00t-forward@xur-epyc.drum-goblin.ts.net
 ```
 
 The generated `connection.json` describes this loopback endpoint and the separate

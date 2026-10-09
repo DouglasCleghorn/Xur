@@ -7,9 +7,10 @@
     <Deterministic>true</Deterministic>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Xur.IO' or '$(MSBuildProjectName)' == 'Xur.Util' or '$(MSBuildProjectName)' == 'Xur.Util.Tests'">
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Xur.IO' or '$(MSBuildProjectName)' == 'Xur.Util' or '$(MSBuildProjectName)' == 'Xur.Util.Tests' or '$(MSBuildProjectName)' == 'Xur.Robot' or '$(MSBuildProjectName)' == 'Xur.Robot.Tests'">
     <BaseOutputPath>$(MSBuildProjectDirectory)/.build/bin/</BaseOutputPath>
     <BaseIntermediateOutputPath>$(MSBuildProjectDirectory)/.build/obj/</BaseIntermediateOutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**;.build/**</DefaultItemExcludes>
   </PropertyGroup>
   <!-- The services and their process tests require Linux. Keep the domain and
        CLI libraries portable, and keep platform compatibility analysis enabled. -->

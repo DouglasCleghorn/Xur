@@ -24,7 +24,6 @@ if(args is ["--console-overlay-render",var overlayOutput]) { ConsoleKeyboardOver
 var results = new List<string>();
 void Check(bool value,string name) { if(!value) throw new Exception(name); results.Add(name); }
 if(args is ["--manager-account"]){AccountTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ManagerAccount",passed=results}));return;}
-if(args is ["--robotics-live-markers",var markerInput,var markerOutput]){await RoboticsTests.LiveMarkers(markerInput,markerOutput,Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="RoboticsLiveMarkers",passed=results}));return;}
 if(args is ["--robotics"]){await RoboticsTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="Robotics",passed=results}));return;}
 if(args is ["--installer-progress",var installerOutput]){InstallationDiagnosticsTests.Run(Check);await ConsoleSetupTests.Run(Check,installerOutput);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="InstallerProgressLayout",passed=results}));return;}
 if(args is ["--profile-access"]){await ProfileAccessTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ProfileAccess",passed=results}));return;}

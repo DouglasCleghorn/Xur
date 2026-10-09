@@ -2,10 +2,9 @@ using System.Text.Json;
 using Xur.Domain;
 namespace Xur.Agent;
 
-public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,DisplayConsoles? consoles=null,RoboticsRuntime? robotics=null):IWorkloadRuntime
+public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,DisplayConsoles? consoles=null):IWorkloadRuntime
 {
-    readonly RoboticsRuntime robot=robotics??new RoboticsRuntime(Path.Combine(Path.GetDirectoryName(directory)!,"robotics"),"/run/xur/robotics-controller");
-    readonly RoboticsWebContainer robotWeb=new(Environment.GetEnvironmentVariable("XUR_RUN")??"/run/xur");
+    readonly RoboticsWebContainer robotWeb=new(Environment.GetEnvironmentVariable("XUR_RUN")??"/run/xur",stateDirectory:Path.Combine(Path.GetDirectoryName(directory)!,"robotics"));
     readonly SemaphoreSlim gate=new(1,1);
     ParallelStopGate? stopGate;
     ParallelStopGate Stops=>LazyInitializer.EnsureInitialized(ref stopGate,()=>new ParallelStopGate(gate));
@@ -42,13 +41,25 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         await StationSeats.SetIntent(workloads.Where(w=>w.Recipe.Kind=="Workstation").ToArray());
     }
     public Task<RuntimeObservation> Observe()=>ObserveUnlocked();
+    public async Task InitializeRoboticsSetup()
+    {
+        try
+        {
+            await robotWeb.MigrateLegacy();
+            foreach(var workload in Definitions().Where(w=>w.Recipe.Kind=="Robotics"))await robotWeb.RestoreOwnership(workload);
+            await robotWeb.ReconcileOwnership();
+        }
+        catch
+        {
+            // Keep controller input away from the host console until the
+            // uncertain container setup has been inspected and reconciled.
+            robotWeb.ReserveForRecovery();throw;
+        }
+    }
     async Task<RuntimeInstance?> Inspect(Workload w)
     {
         if(w.Recipe.Kind=="Robotics")
-        {
-            var current=robot.Inspect(w);
-            return current!=null&&!await robotWeb.Running()?current with{State="stopped",Pid=0}:current;
-        }
+            return await robotWeb.Inspect(w);
         if(w.Recipe.Kind=="Workstation")return await station.Inspect(w);
         ProcessResult r=new(1,"");
         for(int attempt=0;attempt<3;attempt++)
@@ -128,10 +139,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             }
             if(instance?.State!="running" && w.Recipe.Engine is "vLLM" or "vLLM-Omni")await new ModelCatalog(Path.GetDirectoryName(directory)!).ValidateEngineCheckpoint(w.Recipe);
             if(w.Recipe.Kind=="Robotics")
-            {
-                await robotWeb.Start();
-                return robot.Start(w);
-            }
+                return await robotWeb.Start(w);
             ModelImageSelection? engineImage=null;
             if(w.Recipe.Kind=="Model")
             {
@@ -236,7 +244,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             var instance=await Inspect(saved);
             if(saved.Recipe.Kind=="Robotics")
             {
-                await robot.Unload(request);await robotWeb.Stop();File.Delete(ReceiptPath(request.Id));return;
+                await robotWeb.Stop(request);File.Delete(ReceiptPath(request.Id));return;
             }
             if(saved.Recipe.Kind=="Workstation")
             {
@@ -333,7 +341,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         if(!ProfilePolicy.EntityIdentifier(id) || !File.Exists(ReceiptPath(id)))throw new InvalidOperationException("Unknown workload.");
         var saved=Definitions().Single(w=>w.Id==id);
         if(saved.Recipe.Kind=="Workstation")return Redaction.Logs(await station.Logs(saved));
-        if(saved.Recipe.Kind=="Robotics")return JsonSerializer.Serialize(robot.Jobs(),json);
+        if(saved.Recipe.Kind=="Robotics")return await robotWeb.Logs();
         var r=await Processes.Run("podman",["logs","--tail=200",Name(id)],10);var error=Path.Combine(directory,id+".error.log");var update=Path.Combine(directory,id+".update.log");return Redaction.Logs((File.Exists(error) ? File.ReadAllText(error)+"\n" : "")+(File.Exists(update)?File.ReadAllText(update)+"\n":"")+r.Output);
     }
     public async Task RestoreStations()

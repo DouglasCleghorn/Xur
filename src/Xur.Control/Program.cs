@@ -163,7 +163,7 @@ async Task StartHost()
         if(setupSession!=null && path=="/login") { ctx.Response.Redirect("/setup-account");return; }
         if(!authorized && !publicPath && !(setupSession!=null && setupPath))
         {
-            if(ctx.Request.Method=="GET" && !path.StartsWith("/api/"))ctx.Response.Redirect(setupSession!=null?"/setup-account":"/login");
+            if(ctx.Request.Method=="GET" && !path.StartsWith("/api/") && !path.StartsWith("/robot/api/"))ctx.Response.Redirect(setupSession!=null?"/setup-account":"/login");
             else if(setupSession!=null) { ctx.Response.StatusCode=403;await ctx.Response.WriteAsJsonAsync(new {error="Create your account first",setupRequired=true}); }
             else ctx.Response.StatusCode=401;
             return;
@@ -175,7 +175,7 @@ async Task StartHost()
         // mutations still require CSRF; API mutations require an explicit bearer.
         if(path is "/api/bootstrap" or "/api/auth/login" or "/api/auth/setup" && ctx.Request.Method=="POST" && !ctx.Request.HasJsonContentType())
         { ctx.Response.StatusCode=415; return; }
-        if (ctx.Request.Method is not ("GET" or "HEAD" or "OPTIONS") && path is not ("/api/bootstrap" or "/api/auth/login") && !((bearer || setupBearer && path=="/api/auth/setup") && (path.StartsWith("/api/") || path.StartsWith("/inference/"))))
+        if (ctx.Request.Method is not ("GET" or "HEAD" or "OPTIONS") && path is not ("/api/bootstrap" or "/api/auth/login") && !((bearer || setupBearer && path=="/api/auth/setup") && (path.StartsWith("/api/") || path.StartsWith("/robot/api/") || path.StartsWith("/inference/"))))
         {
             try { await ctx.RequestServices.GetRequiredService<IAntiforgery>().ValidateRequestAsync(ctx); }
             catch (AntiforgeryValidationException) {
@@ -399,7 +399,6 @@ async Task StartHost()
     });
     app.MapPost("/local/{action}",async(string action)=>{ if(action is not ("reboot" or "poweroff")) return Results.BadRequest(); return Results.StatusCode((int)(await appliance.Agent.PostAsync("/power/"+action,null)).StatusCode); });
     app.MapProfiles(appliance,profileManager,catalog);
-    app.MapRobotics(appliance);
     app.MapRobotProxy(appliance);
     app.MapUpdates(appliance);
     app.MapNetworkSettings(appliance);

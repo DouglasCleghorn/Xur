@@ -11,3 +11,13 @@
 **/bin/**
 **/obj/**
 **/*.private.*
+
+!src/
+!src/Xur.Domain/
+!src/Xur.Domain/Redaction.cs
+!tools/
+!tools/Xur.Robotics/
+!tools/Xur.Robotics/bridge.py
+!tools/Xur.Robotics/discover_buses.py
+!tools/Xur.Robotics/motor_probe.py
+!tools/Xur.Robotics/detect_markers.c

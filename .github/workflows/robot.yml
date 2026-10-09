@@ -14,6 +14,9 @@ on:
       - 'tools/Xur.Robotics/**'
       - 'tests/Xur.Integration.Tests/robot-web.py'
       - 'tests/Xur.Unit.Tests/RoboticsTests.cs'
+      - 'tests/Xur.Robot.Tests/**'
+      - 'tests/Xur.Integration.Tests/robot-boundary.py'
+      - 'tests/Xur.Integration.Tests/robotics-tools.py'
       - '.github/workflows/robot.yml'
       - 'Directory.Build.props'
       - 'global.json'
@@ -27,7 +30,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -36,7 +39,9 @@ jobs:
       - name: Check robotics integration
         run: |
           dotnet run --project tests/Xur.Unit.Tests -c Release -- --robotics
-          python3 tests/Xur.Integration.Tests/robotics-bridge.py
+          dotnet run --project tests/Xur.Robot.Tests -c Release
+          python3 tests/Xur.Integration.Tests/robot-boundary.py
+          PYTHONPYCACHEPREFIX=.build/robot/pycache python3 tests/Xur.Integration.Tests/robotics-bridge.py
           python3 eng/check-web-assets.py
       - name: Build Native AOT container
         run: >-
@@ -44,9 +49,21 @@ jobs:
           --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
           --label "org.opencontainers.image.revision=$GITHUB_SHA"
           --tag "localhost/xur-robot-test:$GITHUB_SHA" .
+      - name: Validate installed upstream robotics tools without hardware
+        run: |
+          mkdir -p .build/robot/tool-state
+          # Match the appliance's private root-owned state with capabilities dropped.
+          sudo chown 0:0 .build/robot/tool-state
+          sudo chmod 700 .build/robot/tool-state
+          docker run --rm --pull=never --network=none --cap-drop=ALL \
+            --security-opt=no-new-privileges --read-only --memory=4g --pids-limit=256 \
+            --tmpfs=/tmp:rw,nosuid,nodev,size=128m \
+            --volume "$PWD/.build/robot/tool-state:/state:rw" \
+            --volume "$PWD/tests/Xur.Integration.Tests/robotics-tools.py:/test/robotics-tools.py:ro" \
+            --entrypoint python "localhost/xur-robot-test:$GITHUB_SHA" /test/robotics-tools.py
       - name: Test the exact container with isolated mock hardware
-        # Match appliance ownership in both directions: agent and app sockets
-        # are root-only, and the container drops DAC override capabilities.
+        # Exercise the independent app with container-local fake subprocess tools.
+        # No agent socket, physical devices or container-engine socket enter it.
         run: sudo python3 tests/Xur.Integration.Tests/robot-web.py --container "localhost/xur-robot-test:$GITHUB_SHA" --engine docker
       - name: Preserve container test evidence
         if: always()
