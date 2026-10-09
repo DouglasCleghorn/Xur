@@ -120,9 +120,14 @@ public sealed class RoboticsWebContainer(string runDirectory,
         if((await Inspect(workload))?.State=="running")Reserve();
     }
     public void ReserveForRecovery()=>Reserve();
+    void ReleaseOwnership()
+    {
+        try{File.Delete(Ownership);}
+        catch(DirectoryNotFoundException){} // A first startup has no reservation directory.
+    }
     public async Task ReconcileOwnership()
     {
-        if(await Identity()==null)File.Delete(Ownership);else Reserve();
+        if(await Identity()==null)ReleaseOwnership();else Reserve();
     }
     async Task<bool> Healthy()
     {
@@ -186,7 +191,7 @@ public sealed class RoboticsWebContainer(string runDirectory,
         if(created.ExitCode!=0)
         {
             // Keep ownership if a partial create left processes behind.
-            if((await Identity())==null)File.Delete(Ownership);
+            if((await Identity())==null)ReleaseOwnership();
             throw new InvalidOperationException("Could not start the robotics container: "+Redaction.Logs(created.Output));
         }
         try
@@ -213,7 +218,7 @@ public sealed class RoboticsWebContainer(string runDirectory,
         if(current==null)
         {
             await Command("systemctl",["stop",Unit+".service"],20);
-            File.Delete(Ownership);return;
+            ReleaseOwnership();return;
         }
         if(current.WorkloadId!=request.Id||current.InstanceId!=request.InstanceId||(current.Status=="running"||current.Pid>0)&&
             (request.Pid!=null&&current.Pid!=request.Pid||request.BootId!=null&&request.BootId!=BootId))
@@ -238,7 +243,7 @@ public sealed class RoboticsWebContainer(string runDirectory,
         if(after!=null&&(after.InstanceId!=current.InstanceId||after.Status=="running"||after.Pid!=0))throw new InvalidOperationException("Robotics container release could not be verified.");
         if(after!=null&&(await Run(["rm",current.InstanceId])).ExitCode!=0)throw new InvalidOperationException("Could not remove the stopped robotics container.");
         await Command("systemctl",["stop",Unit+".service"],20);
-        File.Delete(Path.Combine(SocketDirectory,"app.sock"));File.Delete(Ownership);
+        File.Delete(Path.Combine(SocketDirectory,"app.sock"));ReleaseOwnership();
     }
     public async Task<string> Logs()
     {

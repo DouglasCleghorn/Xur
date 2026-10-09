@@ -69,6 +69,8 @@ static class RoboticsTests
                 }
                 return Task.FromResult(new ProcessResult(0,""));
             },stateDirectory:state,hardware:()=>new(["/dev/ttyUSB7","/dev/ttyUSB8"],["/dev/video7","/dev/video8"],["/dev/input/event7"]),healthy:()=>Task.FromResult(true),deviceExists:_=>true);
+            await container.ReconcileOwnership();
+            check(!Directory.Exists(Path.Combine(root,"robot-ownership")),"First startup reconciles an absent robotics container without creating or requiring a reservation directory");
             var started=await container.Start(workload);
             var create=calls.Single(a=>a[0]=="run");
             check(independentUnits.Single().Contains("--unit=xur-robot-container")
