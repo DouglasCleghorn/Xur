@@ -53,6 +53,7 @@ RUN git init /opt/apriltag && \
     rm -rf /opt/apriltag/.git
 
 COPY tools/Xur.Robotics/bridge.py tools/Xur.Robotics/discover_buses.py tools/Xur.Robotics/motor_probe.py /opt/xur/
+COPY tools/Xur.Robotics/image_motion.py /opt/xur/image_motion.py
 COPY LICENSE docs/licensing.md /opt/licenses/
 ENV PATH=/opt/robot-venv/bin:$PATH SDL_VIDEODRIVER=dummy PYTHONDONTWRITEBYTECODE=1 HF_HOME=/state/.build/huggingface \
     HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
