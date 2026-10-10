@@ -4,13 +4,14 @@ using System.Text.Json.Serialization.Metadata;
 namespace Xur.Robot;
 public record RobotHealth(string State,string Compilation);
 public record RobotError(string Error);
-public record RobotObservation(JsonElement? Observation,bool Paused,string? Operation,string? Problem);
+public record RobotObservation(JsonElement? Observation,bool Paused,string? Operation,string? Problem,RobotMotorDiagnostic[]? Motors=null);
 public record RobotSkillRequest(RobotSkill Skill);
 public record RobotCameraRequest(string Camera);
 public record RobotToolRequest(RoboticsConfiguration Configuration,string Operation,JsonElement? Request);
 [JsonSerializable(typeof(RobotHealth))]
 [JsonSerializable(typeof(RobotError))]
 [JsonSerializable(typeof(RobotObservation))]
+[JsonSerializable(typeof(RobotMotorDiagnostic[]))]
 [JsonSerializable(typeof(RobotToolRequest))]
 [JsonSerializable(typeof(RobotSkillRequest))]
 [JsonSerializable(typeof(RobotCameraRequest))]
