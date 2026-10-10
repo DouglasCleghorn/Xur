@@ -30,12 +30,83 @@ PID = STATE / ".build/adapter.json"
 JOINTS = ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper")
 ZERO_BASE = {"x.vel": 0.0, "y.vel": 0.0, "theta.vel": 0.0}
 DEVICE_KEYS = ("leftPort", "rightPort", "controllerDevice", "headCamera", "handCamera")
+DEVICE_ALIASES = {"leftPort": "arm_left", "rightPort": "arm_right", "controllerDevice": "xbox",
+                  "headCamera": "camera_head", "handCamera": "camera_hand"}
+ALIAS_ROOT = Path("/dev")
 
 
-def prepared(configuration):
+def alias_matches(configuration, key):
+    selected = configuration.get(key)
+    if not selected:
+        return False
+    alias = ALIAS_ROOT / DEVICE_ALIASES[key]
+    try:
+        return alias.is_symlink() and alias.resolve(strict=True) == Path(selected).resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+
+
+def prepared(configuration, require_controller=False):
     mapped = json.loads((STATE / ".build/devices.json").read_text())
     if any(mapped.get(key) != configuration[key] for key in DEVICE_KEYS):
         raise ValueError("Device selection changed; prepare the tools container again")
+    for key in DEVICE_KEYS:
+        if key == "controllerDevice" and not require_controller:
+            continue
+        if not alias_matches(configuration, key):
+            raise ValueError(f"Selected device alias is missing or mismatched ({key}); reconnect it and prepare again")
+
+
+def prepare(configuration, request=None):
+    """Rebuild ephemeral aliases while main holds the adapter ownership lease.
+
+    The saved controller selection is informational when it is disconnected.
+    Serial/camera readiness must be complete before the manifest is published.
+    This operation never imports robot drivers or accesses motor registers.
+    """
+    manifest = STATE / ".build/devices.json"
+    manifest.unlink(missing_ok=True)
+    temporary = None
+    try:
+        targets = {}
+        for key in DEVICE_KEYS:
+            selected = configuration[key]
+            try:
+                target = Path(selected).resolve(strict=True) if selected else None
+            except (OSError, RuntimeError):
+                target = None
+            if target is None and key != "controllerDevice":
+                raise ValueError(f"Selected robot device is disconnected ({key}): {selected}")
+            targets[key] = target
+        # Resolve every required device before changing any existing alias.
+        for key, target in targets.items():
+            alias = ALIAS_ROOT / DEVICE_ALIASES[key]
+            if alias.exists() and not alias.is_symlink():
+                raise ValueError(f"Refusing to replace a non-alias device: {alias}")
+        for key, target in targets.items():
+            alias = ALIAS_ROOT / DEVICE_ALIASES[key]
+            alias.unlink(missing_ok=True)
+            if target is not None:
+                alias.symlink_to(target)
+        (STATE / "calibration").mkdir(parents=True, exist_ok=True)
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(mode="w", dir=manifest.parent, prefix="devices-", delete=False) as output:
+            temporary = Path(output.name)
+            json.dump({key: configuration[key] for key in DEVICE_KEYS}, output)
+            output.flush()
+            os.fsync(output.fileno())
+        temporary.replace(manifest)
+        prepared(configuration)
+        controller_available = alias_matches(configuration, "controllerDevice")
+        if not controller_available:
+            (ALIAS_ROOT / "xbox").unlink(missing_ok=True)
+        return {"controllerAvailable": controller_available}
+    except BaseException:
+        manifest.unlink(missing_ok=True)
+        raise
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def bounded_action(action, observation, values):
@@ -369,7 +440,7 @@ def inspect_markers(configuration, request):
 
 def probe(configuration, request):
     result = {"lerobot": importlib.metadata.version("lerobot"), "baseMotion": False}
-    if configuration.get("controllerDevice"):
+    if alias_matches(configuration, "controllerDevice"):
         xbox = Xbox()
         try:
             xbox.update()
@@ -378,6 +449,8 @@ def probe(configuration, request):
             xbox.close()
     else:
         result["controller"] = None
+        if configuration.get("controllerDevice"):
+            result["controllerProblem"] = "The selected controller is disconnected; reconnect it and prepare again"
     try:
         calibration(configuration)
         result["calibrated"] = True
@@ -973,8 +1046,14 @@ def main():
                 return
             data = json.load(sys.stdin)
             configuration, request = data["configuration"], data.get("request")
-            prepared(configuration)
             operation = data["operation"]
+            if operation == "prepare":
+                json.dump(prepare(configuration), sys.stdout)
+                return
+            # Local ACT training reads datasets/checkpoints only. It remains
+            # available while robot hardware is disconnected or unprepared.
+            if operation != "train":
+                prepared(configuration, require_controller=operation in ("controller", "record"))
             operations = {"probe": probe, "camera": camera, "dashboard": dashboard, "inspect-markers": inspect_markers, "controller": controller, "train": train,
                 "sort": skill, "emote": lambda c, r: skill(c, r, True), "record": lambda c, r: controller(c, r, True)}
             if operation not in operations:

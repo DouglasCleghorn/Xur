@@ -26,6 +26,11 @@ if len(sys.argv)>1:
 request=json.loads(sys.stdin.readline())
 with open(os.environ["XUR_ROBOT_TEST_CALLS"],"a") as calls:
     calls.write(json.dumps(request)+"\\n")
+if request["operation"]=="prepare":
+    if request.get("request") is not None: raise SystemExit("Unexpected preparation payload")
+    # This fixture supplies synthetic frames, not device aliases. Startup's
+    # filesystem-only preparation must fail visibly without claiming readiness.
+    raise SystemExit("Synthetic fixture devices are unavailable; no aliases were created")
 if request["operation"]!="inspect-markers": raise SystemExit("Unexpected operation")
 fixture=json.load(open(os.environ["XUR_ROBOT_POSE_FIXTURE"]))
 now=datetime.now(timezone.utc)
@@ -212,18 +217,26 @@ def main():
             start()
             check(api('metrology') == (200, settings), 'Metrology survives an app restart')
             status = api('status')[1]
-            check(status['stopLatched'] and status['mode'] == 'disarmed' and not (state / 'calibration/receipt.json').exists(),
-                  'Restart and measurement configuration never arm or create a calibration receipt')
+            check(status['stopLatched'] and status['mode'] == 'disarmed'
+                  and any('Robot device preparation failed' in problem for problem in status['problems'])
+                  and not (state / '.build/devices.json').exists() and not (state / 'calibration/receipt.json').exists(),
+                  'Unavailable synthetic devices remain unprepared and visibly disarmed after restart without a calibration receipt')
             pixel_only = dict(version=1, cameras=[], tags=[], maximumReprojectionRmsPixels=2, minimumCandidateSeparationPixels=.5)
             api('metrology', 'POST', pixel_only)
             check('metric' not in scan(), 'Pixel-only mode is restored without deleting raw observations')
-            check(all(json.loads(line)['operation'] == 'inspect-markers' for line in calls_path.read_text().splitlines()),
-                  'The exact application performs only camera observations; no motor operations')
+            calls = [json.loads(line) for line in calls_path.read_text().splitlines()]
+            preparations = [call for call in calls if call['operation'] == 'prepare']
+            check(all(call['operation'] in ['inspect-markers', 'prepare'] and call.get('request') is None for call in calls)
+                  and len(preparations) == 1 and preparations[0]['configuration'] == configuration
+                  and sum(call['operation'] == 'inspect-markers' for call in calls) == 5,
+                  'Exactly one startup filesystem-preparation attempt and five synthetic camera observations occur; no motor operations')
         finally:
             stop()
             log.close()
             os.chdir(previous_directory)
-    receipt = dict(suite='RobotNativeAotMetrology', scope='Synthetic camera measurements and actual pinned native estimator; no robot hardware', passed=passed)
+    receipt = dict(suite='RobotNativeAotMetrology', scope='Synthetic camera measurements and actual pinned native estimator; no robot hardware',
+        operationCounts={operation: sum(call['operation'] == operation for call in calls) for operation in ['prepare', 'inspect-markers']},
+        preparationOutcome='Synthetic devices unavailable; no aliases, readiness manifest or motor writes', passed=passed)
     (evidence / 'api-validation.json').write_text(json.dumps(receipt, indent=2) + '\n')
     print(json.dumps(receipt))
 
