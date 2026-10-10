@@ -14,7 +14,7 @@ RUN dotnet publish containers/robot/Xur.Robot.csproj -c Release -r linux-x64 --n
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3.12 python3.12-venv libpython3.12t64 ca-certificates git gcc g++ pkg-config ffmpeg libgl1 libglib2.0-0 \
-      libusb-1.0-0 libsm6 libxext6 && rm -rf /var/lib/apt/lists/*
+      libusb-1.0-0 libsm6 libxext6 v4l-utils && rm -rf /var/lib/apt/lists/*
 
 # Reviewed interfaces: LeRobot 0.6.0 and the pinned XLeRobot plugin/example.
 # CPU ACT inference/training is the initial supported path; no GPU passthrough.
@@ -53,6 +53,7 @@ RUN git init /opt/apriltag && \
     rm -rf /opt/apriltag/.git
 
 COPY tools/Xur.Robotics/bridge.py tools/Xur.Robotics/discover_buses.py tools/Xur.Robotics/motor_probe.py /opt/xur/
+COPY tools/Xur.Robotics/image_motion.py /opt/xur/image_motion.py
 COPY LICENSE docs/licensing.md /opt/licenses/
 ENV PATH=/opt/robot-venv/bin:$PATH SDL_VIDEODRIVER=dummy PYTHONDONTWRITEBYTECODE=1 HF_HOME=/state/.build/huggingface \
     HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1

@@ -12,7 +12,9 @@ public sealed class RoboticsRuntime
     readonly RoboticsContainer container;
     readonly Func<RobotDevices> deviceInventory;
     readonly RecordingBackups backups;
+    readonly RobotCameraCapabilities cameraCapabilities;
     readonly Dictionary<string, RobotJob> jobs = new();
+    readonly RobotMotorDiagnostics motorDiagnostics=new();
     string? workloadId;
     RoboticsConfiguration? configuration;
     CancellationTokenSource? cancellation;
@@ -33,8 +35,8 @@ public sealed class RoboticsRuntime
     long emergencyStopEpoch;
     string EmergencyStopPath=>Path.Combine(directory,"estop-latched");
 
-    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null,RecordingBackups? backups=null,RobotMetrology? metrology=null)
-    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory);this.metrology=metrology??new(directory); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
+    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null,RecordingBackups? backups=null,RobotMetrology? metrology=null,RobotCameraCapabilities? cameraCapabilities=null)
+    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory);this.metrology=metrology??new(directory);this.cameraCapabilities=cameraCapabilities??new(); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
 
     public RobotStatus Status()
     {
@@ -78,7 +80,7 @@ public sealed class RoboticsRuntime
         {
             if(workloadId!=null)throw new InvalidOperationException("The robot app is already active.");
             if(worker is {IsCompleted:false})throw new InvalidOperationException("Wait for the previous robot operation to stop.");
-            ReadConfiguration();observation=null;observationReadAt=null;observationProblem=null;calibrationAssessment=null;
+            ReadConfiguration();observation=null;observationReadAt=null;observationProblem=null;calibrationAssessment=null;motorDiagnostics.Clear();
             emergencyStop=File.Exists(EmergencyStopPath);workloadId=id;stopLatched=true;armedUntil=null;
         }
     }
@@ -169,7 +171,7 @@ public sealed class RoboticsRuntime
                     var value=motor.Value;var min=value.GetProperty("range_min").GetInt32();var max=value.GetProperty("range_max").GetInt32();
                     var joint=motor.Name.Replace("left_arm_","",StringComparison.Ordinal).Replace("right_arm_","",StringComparison.Ordinal);
                     var expectedId=motor.Name switch{"head_motor_1"=>7,"head_motor_2"=>8,"base_left_wheel"=>7,"base_back_wheel"=>8,"base_right_wheel"=>9,_=>Array.IndexOf(joints,joint)+1};
-                    if(min<0||max>4095||max-min<32||value.GetProperty("id").GetInt32()!=expectedId
+                    if(min is <0 or >4095||max is <0 or >4095||min>=max||max-min<32||value.GetProperty("id").GetInt32()!=expectedId
                         ||value.GetProperty("drive_mode").GetInt32()!=0||value.GetProperty("homing_offset").GetInt32() is <-4095 or >4095)throw new JsonException();
                 }
             }
@@ -203,6 +205,7 @@ public sealed class RoboticsRuntime
                 catch(DirectoryNotFoundException){} // First setup has no calibration directory.
             }
             var path=Path.Combine(directory,"config.json");File.WriteAllText(path+".tmp",RobotJson.Serialize(selected));File.Move(path+".tmp",path,true);
+            if(configuration==null||configuration.RobotId!=selected.RobotId||configuration.LeftPort!=selected.LeftPort||configuration.RightPort!=selected.RightPort)motorDiagnostics.Clear();
             configuration=selected;configurationProblems=[];observation=null;observationReadAt=null;observationProblem=null;calibrationAssessment=null;return Status();
         }
     }
@@ -350,7 +353,7 @@ public sealed class RoboticsRuntime
             return Launch("auto-calibrate",false,async(c,token)=>
             {
                 var telemetry=await tools.Run(c,"dashboard",null,60,token);
-                lock(sync){observation=telemetry;observationReadAt=clock.GetUtcNow();}
+                lock(sync){observation=telemetry;observationReadAt=clock.GetUtcNow();motorDiagnostics.Observe(c,telemetry,observationReadAt.Value);}
                 var survey=RobotMarkerSurvey.Read(await tools.Run(c,"inspect-markers",null,75,token));
                 var metric=await metrology.Apply(survey.Report,c,token);
                 var blockers=new List<string>();
@@ -399,8 +402,8 @@ public sealed class RoboticsRuntime
         {
             RequireConfiguration();
             if(activeJob!=null||stopping||!stopLatched)
-                return new RobotObservation(observation,true,activeJob==null?"armed session":jobs[activeJob].Kind,null);
-            if(observationReadAt>clock.GetUtcNow().AddSeconds(-5))return new RobotObservation(observation,false,null,null);
+                return ObservationReply(true,activeJob==null?"armed session":jobs[activeJob].Kind,null);
+            if(observationReadAt>clock.GetUtcNow().AddSeconds(-5))return ObservationReply(false,null,null);
             if(!observing)
             {
                 var c=RequireConfiguration();
@@ -410,7 +413,7 @@ public sealed class RoboticsRuntime
                     try
                     {
                         var data=await tools.Run(c,"dashboard",null,60,source.Token);
-                        lock(sync){observation=data;observationReadAt=clock.GetUtcNow();observationProblem=null;}
+                        lock(sync){observation=data;observationReadAt=clock.GetUtcNow();observationProblem=null;motorDiagnostics.Observe(c,data,observationReadAt.Value);}
                     }
                     catch(Exception e){lock(sync)observationProblem=Xur.Domain.Redaction.Logs(e.Message);}
                     finally{lock(sync){observing=false;cancellation=null;source.Dispose();}}
@@ -420,8 +423,10 @@ public sealed class RoboticsRuntime
         }
         // Browser disconnects do not cancel a snapshot shared by other viewers.
         await pending.WaitAsync(token);
-        lock(sync)return new RobotObservation(observation,false,null,observationProblem);
+        lock(sync)return ObservationReply(false,null,observationProblem);
     }
+    RobotObservation ObservationReply(bool paused,string? operation,string? problem)=>new(observation,paused,operation,problem,
+        configuration==null?[]:motorDiagnostics.Report(directory,configuration,observation,clock.GetUtcNow()));
     void ReserveController(RoboticsConfiguration c)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(reservation)!);
@@ -529,6 +534,22 @@ public sealed class RoboticsRuntime
         if(Job(job.Id)?.State!="completed" || bytes==null)throw new InvalidOperationException(Job(job.Id)?.Detail??"Camera capture failed.");
         if(bytes.Length>2*1024*1024)throw new IOException("Camera image exceeds its limit.");
         return bytes;
+    }
+    public async Task<RobotCameraCapabilityReport> CameraCapabilities(CancellationToken token)
+    {
+        RobotJob job;RobotCameraCapabilityReport? report=null;Task pending;
+        lock(sync)
+        {
+            RequireLoaded();Idle();if(!stopLatched)throw new InvalidOperationException("Stop and disarm before inspecting camera controls.");
+            var cameras=deviceInventory().Cameras;var selected=configuration;
+            job=LaunchOperation("camera-capabilities",false,async cancel=>
+            {report=await cameraCapabilities.Read(cameras,selected,cancel);return "Read-only camera driver capabilities inspected; no settings or motor state changed.";});
+            pending=worker!;
+        }
+        using var registration=token.Register(()=>{lock(sync)if(activeJob==job.Id)cancellation?.Cancel();});
+        await pending;
+        if(Job(job.Id)?.State!="completed"||report is null)throw new InvalidOperationException(Job(job.Id)?.Detail??"Camera capability inspection failed.");
+        return report;
     }
     public RobotJob Probe()
     {lock(sync){Idle();RequireConfiguration();return Launch("probe",false,async(c,token)=>(await tools.Run(c,"probe",null,15,token)).GetRawText());}}
@@ -686,7 +707,7 @@ public sealed class RoboticsRuntime
                 {
                     if(epoch!=emergencyStopEpoch)throw new OperationCanceledException("E-stop was pressed again.");
                     File.Delete(EmergencyStopPath);emergencyStop=false;
-                    observation=result;observationReadAt=clock.GetUtcNow();stopLatched=true;armedUntil=null;
+                    observation=result;observationReadAt=clock.GetUtcNow();motorDiagnostics.Observe(c,result,observationReadAt.Value);stopLatched=true;armedUntil=null;
                 }
                 return "E-stop reset after checking all motors. The robot remains disarmed; start a new operator session separately.";
             });

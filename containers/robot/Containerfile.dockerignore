@@ -16,6 +16,7 @@
 !tools/Xur.Robotics/bridge.py
 !tools/Xur.Robotics/discover_buses.py
 !tools/Xur.Robotics/motor_probe.py
+!tools/Xur.Robotics/image_motion.py
 !tools/Xur.Robotics/detect_markers.c
 !tools/Xur.Robotics/estimate_marker_pose.c
 

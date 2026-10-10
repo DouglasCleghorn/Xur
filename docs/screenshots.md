@@ -1,5 +1,36 @@
 # Screenshot and artwork register
 
+- 2026-10-10: Attended camera-mount motor identification capture family under
+  `.build/evidence/robot-camera-mount-discovery-20261010/`, with per-test
+  `head/hand-{ready,before,displaced,after}.jpg` and matching motor feedback.
+  Captured on xur-255 around 17:11 UTC onward with Xur 26.10.032 and deployed
+  robot image from `bd2f18c`; the source private diagnostic matched SHA-256
+  `35f85071ced3a303fe7bd8477a89419bad93d8d23fd0a0c65badbb2cce24ec58`.
+  Purpose: compare global image movement with individual bounded joint tests
+  using classical registration, without a trained pose model or tag detector.
+  These tests can issue small arm/head motor commands while the operator is
+  beside the robot; the mobile base remains stationary. The family also includes
+  an independently timestamped stationary baseline without motor writes.
+  Privacy review: head/hand after-tilt and stationary after frames inspected;
+  robot, tray, floor, wall and room furnishings are visible, with no people or
+  credentials in those reviewed frames. Other scored frames remain private
+  within this capture family and require review before publication. Keep all
+  captures ignored/private and exclude them from source archives. Regenerate
+  after changes to camera mounts, motor binding, capture mode or test protocol.
+
+- 2026-10-10: Private stationary head-camera comparison under
+  `.build/evidence/calibration-ir-20261010/` (`head-ir.png`, 640×480 grayscale,
+  and `head-rgb.png`, 1920×1080 colour), captured at approximately 12:24 UTC
+  on xur-255 running host 26.10.032 and robot source `bd2f18c`.
+  Purpose: check whether the infrared interface can see the arms and compare
+  its coverage and contrast with the colour interface. IR shows both arms
+  and grippers but the printed patterns have little contrast; RGB is well lit
+  and shows much of both arms, with some lower links outside the frame.
+  Camera-only FFmpeg captures issued no motor commands or configuration writes.
+  Privacy review: private room/furnishings and robot hardware, no people or
+  credentials visible. Keep ignored/private; these are diagnostic evidence,
+  not release artwork. Reassess after lighting, camera or robot pose changes.
+
 - 2026-10-09: Private read-only Lenovo RGB diagnostic capture family under
   `.build/evidence/calibration-rgb/`, captured on xur-255 using host 26.10.031
   and robot image source `55c5f1b`. Purpose: assess head-camera coverage after
@@ -485,6 +516,18 @@ capture date, privacy review, and the features whose next changes require a refr
   focused style probes, not captures of a running workstation. Regenerate after
   changes to desktop control colors or states; review full desktop picker and
   review-screen captures before release.
+
+- 2026-10-10: Stationary head camera capture-mode comparison family:
+  `.build/evidence/robot-camera-controls-20261010/head-640x480.png` and
+  `head-1920x1080.png`, captured around 16:55 UTC on xur-255 running Xur
+  26.10.032 with the robotics container from commit `bd2f18c`.
+  Purpose: compare actual arm coverage across advertised RGB capture modes
+  before motorized re-aiming or segmentation work. No motor commands were sent;
+  image controls were unchanged, and capture mode was negotiated for each image.
+  Privacy review: visible robot arms, tags, tray, exposed camera board and nearby
+  room surfaces; no people, credentials, screens or readable personal documents.
+  Keep these live room images private and exclude them from source archives.
+  Regenerate after camera mounting, head pose, capture mode or arm pose changes.
 
 - 2026-10-08: SO-101 tag-mount prototype v1 CAD capture family:
   `.build/evidence/so101-tag-mount/upstream-links.png`,

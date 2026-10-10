@@ -191,12 +191,22 @@ def main():
                 check(status == 200 and text in data, 'Serves ' + page)
                 check(b'id="estop"' in data and b'id="reset-estop"' in data, 'E-stop and reset are available on ' + page)
                 check('blob: data:' in headers['Content-Security-Policy'], 'Camera CSP survives the proxy response')
-            for asset in ['robot.js', 'robot.css', 'setup.js', 'setup.css', 'backups.js']:
+            for asset in ['robot.js', 'robot.css', 'setup.js', 'setup.css', 'backups.js', 'camera-capabilities.js']:
                 check(request(app_socket, '/robot/' + asset)[0] == 200, 'Serves local ' + asset)
             check(request(app_socket, '/robot/Program.cs')[0] == 404, 'Does not expose source files')
             initial = api('status')
             check(initial['workloadId'] == 'isolated-test' and initial['mode'] == 'disarmed' and not initial['configured'],
                   'Container owns unconfigured status without any agent socket')
+            capabilities = api('camera-capabilities')
+            check(capabilities['selectedHeadCamera'] is None and capabilities['selectedHandCamera'] is None
+                  and not capabilities['cameraSettingsChanged'] and not capabilities['motorCommandsIssued']
+                  and isinstance(capabilities['devices'], list) and isinstance(capabilities['problems'], list)
+                  and not calls_path.read_text(),
+                  'Native camera capability inventory works before setup without robot/capture tool calls')
+            check(request(app_socket, '/robot/api/camera-capabilities?device=/dev/video0&args=--set-ctrl')[0] == 400
+                  and request(app_socket, '/robot/api/camera-capabilities', 'GET', b'{"pan":1}')[0] == 400
+                  and post('camera-capabilities', {})[0] == 405 and not calls_path.read_text(),
+                  'Native camera capability endpoint rejects supplied device/options/body and control-setting writes')
             check(api('backups/settings') == {'url': '', 'tokenStored': False} and api('backups/recordings') == [],
                   'Unconfigured backup settings remain inside the independent app and never claim verification')
             check(post('backups/settings', dict(url='http://xur-epyc/', token='t' * 64))[0] == 409,

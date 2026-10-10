@@ -16,6 +16,7 @@ on:
       - 'tests/Xur.Integration.Tests/robot-web.py'
       - 'tests/Xur.Integration.Tests/robot-metrology-native.py'
       - 'tests/Xur.Integration.Tests/robot-metrology-web.py'
+      - 'tests/Xur.Integration.Tests/robot-image-motion.py'
       - 'tests/Xur.Unit.Tests/RoboticsTests.cs'
       - 'tests/Xur.Robot.Tests/**'
       - 'tests/Xur.Integration.Tests/robot-boundary.py'
@@ -68,6 +69,20 @@ jobs:
         # Exercise the independent app with container-local fake subprocess tools.
         # No agent socket, physical devices or container-engine socket enter it.
         run: sudo python3 tests/Xur.Integration.Tests/robot-web.py --container "localhost/xur-robot-test:$GITHUB_SHA" --engine docker
+      - name: Validate classical image motion without hardware or model weights
+        run: |
+          mkdir -p .build/evidence/image-motion
+          docker run --rm --pull=never --network=none --cap-drop=ALL \
+            --user "$(id -u):$(id -g)" \
+            --env OPENBLAS_NUM_THREADS=1 --env OMP_NUM_THREADS=1 \
+            --env XUR_IMAGE_MOTION_SCRIPT=/opt/xur/image_motion.py \
+            --security-opt=no-new-privileges --read-only --memory=512m --pids-limit=64 \
+            --tmpfs=/tmp:rw,nosuid,nodev,size=32m \
+            --volume "$PWD/tests/Xur.Integration.Tests/robot-image-motion.py:/test/tests/Xur.Integration.Tests/robot-image-motion.py:ro" \
+            --volume "$PWD/LICENSE:/test/LICENSE:ro" \
+            --volume "$PWD/.build/evidence/image-motion:/test/.build/evidence/image-motion:rw" \
+            --entrypoint python "localhost/xur-robot-test:$GITHUB_SHA" \
+            /test/tests/Xur.Integration.Tests/robot-image-motion.py
       - name: Validate metric marker estimation without hardware
         run: |
           mkdir -p .build/evidence/metrology
@@ -89,6 +104,7 @@ jobs:
           path: |
             .build/evidence/robot-web/
             .build/evidence/metrology/
+            .build/evidence/image-motion/
           retention-days: 7
       - name: Save tested image for publication
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

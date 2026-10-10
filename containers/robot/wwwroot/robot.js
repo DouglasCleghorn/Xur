@@ -65,28 +65,61 @@
   if (error) { img.hidden = true; placeholder.hidden = false; placeholder.textContent = error; }
   set(`${camera}-time`, error || `${time(capturedAt)} · ${ago(capturedAt)}`);
  }
- function motors(observation) {
-  motorData = { observedAt: observation.observedAt, buses: observation.buses };
+ function positionChart(motor, diagnostic) {
+  const r = motor.registers || {}, range = diagnostic?.calibratedRange, ns = 'http://www.w3.org/2000/svg';
+  const figure = document.createElement('figure'); figure.className = 'motor-chart';
+  const calibrated = range?.state === 'verified';
+  const label = calibrated ? `Calibrated range: ${range.minimumCounts}–${range.maximumCounts} counts` : range?.state === 'not-applicable' ? 'Angular range not applicable' : 'Not calibrated';
+  const caption = document.createElement('figcaption'); caption.textContent = label;
+  const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', '0 0 360 54'); svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', `${label}. Encoder position ${r.Present_Position ?? 'unavailable'} counts. Display scale 0 to 4095 counts.`);
+  const element = (name, attributes) => { const item = document.createElementNS(ns, name); for (const [key, value] of Object.entries(attributes)) item.setAttribute(key, value); svg.append(item); return item; };
+  element('rect', { x: 12, y: 10, width: 336, height: 12, rx: 3, class: 'encoder-track' });
+  const x = counts => 12 + counts / 4095 * 336;
+  if (calibrated) element('rect', { x: x(range.minimumCounts), y: 10, width: x(range.maximumCounts) - x(range.minimumCounts), height: 12, class: 'calibrated-range' });
+  if (Number.isInteger(r.Present_Position) && r.Present_Position >= 0 && r.Present_Position <= 4095)
+   element('line', { x1: x(r.Present_Position), x2: x(r.Present_Position), y1: 5, y2: 29, class: 'encoder-position' });
+  element('text', { x: 12, y: 47 }).textContent = '0 counts';
+  element('text', { x: 348, y: 47, 'text-anchor': 'end' }).textContent = '4095 counts';
+  const explanation = document.createElement('p'); explanation.className = 'subtle';
+  explanation.textContent = `${range?.detail || 'Calibration evidence is unavailable.'}${calibrated ? ` Source: ${range.sourceFile}. ${range.convention}.` : ''}`;
+  const stored = document.createElement('p'); stored.className = 'subtle';
+  stored.textContent = `Stored EEPROM position limits: ${value(r, 'Min_Position_Limit')}–${value(r, 'Max_Position_Limit')} counts. These do not establish a calibrated range.`;
+  figure.append(caption, svg, explanation, stored); return figure;
+ }
+ function motors(observation, diagnostics) {
+  motorData = { observedAt: observation.observedAt, buses: observation.buses, diagnostics: diagnostics || [] };
+  const byMotor = new Map((diagnostics || []).map(item => [JSON.stringify([item.port, item.id]), item]));
   const open = new Set([...$('motors').querySelectorAll('details[open]')].map(item => item.dataset.motor));
   const rows = [];
   for (const bus of observation.buses || []) {
    if (bus.error) {
-    const row = document.createElement('tr'), cell = document.createElement('td'); cell.colSpan = 10;
+    const row = document.createElement('tr'), cell = document.createElement('td'); cell.colSpan = 11;
     cell.textContent = `${bus.role}: ${bus.error}`; row.append(cell); rows.push(row);
    }
    for (const motor of bus.motors || []) {
     const row = document.createElement('tr'), first = document.createElement('td'), details = document.createElement('details');
-    const key = `${bus.role}-${motor.id}`; details.dataset.motor = key; details.open = open.has(key);
-    const title = document.createElement('summary'); title.textContent = motor.name.replaceAll('_', ' ');
+    const key = JSON.stringify([bus.port, motor.id]), diagnostic = byMotor.get(key); details.dataset.motor = key; details.open = open.has(key);
+    const title = document.createElement('summary'); title.textContent = (diagnostic?.name || motor.name || `Motor ${motor.id}`).replaceAll('_', ' ');
     const raw = document.createElement('pre'); raw.textContent = JSON.stringify({ bus: bus.port, ...motor }, null, 2);
-    details.append(title, raw); first.append(details); row.append(first);
+    details.append(title, positionChart(motor, diagnostic), raw); first.append(details); row.append(first);
     const r = motor.registers || {};
     const cells = [`${bus.role} · ${motor.id}`, value(r, 'Present_Position', ' counts'), value(r, 'Present_Velocity', ' raw'),
      value(r, 'Present_Load', ' raw'), value(r, 'Present_Current', ' raw'), value(r, 'Present_Temperature', '°C'),
+     diagnostic?.temperature.maximumCelsius == null ? '—' : `${diagnostic.temperature.maximumCelsius}°C`,
      r.Present_Voltage === undefined ? '—' : `${(r.Present_Voltage / 10).toFixed(1)} V`,
      r.Torque_Enable === undefined ? '—' : r.Torque_Enable ? 'Enabled' : 'Off',
      motor.error || (r.Status ? `Status ${r.Status}` : r.Moving ? 'Moving' : 'Stationary')];
-    for (const text of cells) { const cell = document.createElement('td'); cell.textContent = text; row.append(cell); }
+    cells.forEach((text, index) => {
+     const cell = document.createElement('td'); cell.textContent = text;
+     if (index === 6) {
+      const window = diagnostic?.temperature, note = document.createElement('small'); note.className = 'temperature-coverage';
+      note.textContent = window?.sampleCount ? `${window.sampleCount} samples · ${Math.round(window.observedSpanSeconds)}s span${window.latestAgeSeconds >= 60 ? ' · stale' : ''}` : 'No fresh samples';
+      cell.title = window?.sampleCount ? `${window.coverage}. First: ${window.firstSampleAt}. Latest: ${window.lastSampleAt}. History resets when the app restarts.` : 'No accepted temperature samples in the last five minutes.';
+      cell.append(note);
+     }
+     row.append(cell);
+    });
     rows.push(row);
    }
   }
@@ -102,7 +135,7 @@
    if (observation) {
     for (const camera of observation.cameras || [])
      image(camera.name, camera.jpeg ? `data:image/jpeg;base64,${camera.jpeg}` : null, camera.capturedAt, camera.error);
-    motors(observation);
+    motors(observation, data.motors);
    }
    set('observation-status', data.paused ? `Refresh paused during ${data.operation || 'robot operation'} · last capture ${ago(observation?.observedAt)}` : `Updated ${time(observation?.observedAt)} · refreshes every 5 seconds`);
    if (data.problem) throw Error(data.problem);
