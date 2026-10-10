@@ -353,7 +353,7 @@ public sealed class RoboticsRuntime
             return Launch("auto-calibrate",false,async(c,token)=>
             {
                 var telemetry=await tools.Run(c,"dashboard",null,60,token);
-                lock(sync){observation=telemetry;observationReadAt=clock.GetUtcNow();}
+                lock(sync){observation=telemetry;observationReadAt=clock.GetUtcNow();motorDiagnostics.Observe(c,telemetry,observationReadAt.Value);}
                 var survey=RobotMarkerSurvey.Read(await tools.Run(c,"inspect-markers",null,75,token));
                 var metric=await metrology.Apply(survey.Report,c,token);
                 var blockers=new List<string>();
@@ -707,7 +707,7 @@ public sealed class RoboticsRuntime
                 {
                     if(epoch!=emergencyStopEpoch)throw new OperationCanceledException("E-stop was pressed again.");
                     File.Delete(EmergencyStopPath);emergencyStop=false;
-                    observation=result;observationReadAt=clock.GetUtcNow();stopLatched=true;armedUntil=null;
+                    observation=result;observationReadAt=clock.GetUtcNow();motorDiagnostics.Observe(c,result,observationReadAt.Value);stopLatched=true;armedUntil=null;
                 }
                 return "E-stop reset after checking all motors. The robot remains disarmed; start a new operator session separately.";
             });
