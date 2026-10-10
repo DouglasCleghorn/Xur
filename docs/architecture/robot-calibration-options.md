@@ -8,8 +8,9 @@ button remains a read-only readiness assessment.
 ## What the cameras can currently see
 
 Stationary captures from xur-255 on 2026-10-10 showed a clear, well-lit 1920×1080
-head colour image of both arms and grippers, although some lower links extend
-outside the frame. The separate 640×480 infrared interface also showed the
+head colour image of both arms and grippers. The left distal outline is cropped
+at the image edge, and both proximal chains and their base/pan references are
+cut off by the bottom of the frame. The separate 640×480 infrared interface also showed the
 arms, but the printed tags had little contrast. IR is a grayscale image source,
 not a depth measurement. These captures establish visibility in one pose only.
 Private evidence is registered in [the screenshot register](../screenshots.md).
@@ -41,8 +42,12 @@ the arms. It does not establish motor zero angles or mechanical endpoints.
 Start with colour-image geometry fitting, entirely offline and without motor
 access. Use the pinned upstream arm model, retaining mesh licenses. Fit the
 visible model to saved images and compare its projected outlines with the
-actual links. Preserve competing poses and report which joints cannot be
-observed. Do not label a visually plausible overlay as a verified joint pose.
+actual links. With unknown camera intrinsics, a sensitivity sweep can screen
+possible overlays, but cannot establish metric angles. Preserve competing poses
+and report which joints cannot be observed. Do not label a visually plausible
+overlay as a verified joint pose. A first metric experiment needs camera
+intrinsics at the actual capture mode and independent image landmarks reserved
+for validation.
 
 The pinned [XLeRobot model source](https://github.com/Vector-Wangel/XLeRobot/tree/b017b5e6354bd9f61f4247a920c72622ca0aade0/simulation/xlerobot)
 contains separate link meshes and an arm URDF under the upstream Apache-2.0
