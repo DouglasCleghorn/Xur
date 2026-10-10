@@ -21,8 +21,18 @@ public sealed class RoboticsWebContainer(string runDirectory,
     string Ownership=>Path.Combine(runDirectory,"robot-ownership","active");
     string StateDirectory=>stateDirectory??"/var/lib/xur/robotics";
     string BootId=>File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim();
-    Task<ProcessResult> Command(string executable,IEnumerable<string> args,int seconds=30)=>run!=null?run(executable,args,seconds,CancellationToken.None):Processes.Run(executable,args,seconds);
+    async Task<ProcessResult> Command(string executable,IEnumerable<string> args,int seconds=30)
+    {
+        var result=run!=null?await run(executable,args,seconds,CancellationToken.None):await Processes.Run(executable,args,seconds);
+        if(result.StandardError.Length!=0)Console.Error.WriteLine("Robotics container "+executable+" diagnostics: "+Diagnostic(result.StandardError));
+        return result;
+    }
     Task<ProcessResult> Run(IEnumerable<string> args,int seconds=30)=>Command("podman",args,seconds);
+    static string Diagnostic(string value)
+    {
+        var redacted=Redaction.Logs(value).Trim();return redacted.Length>8192?redacted[^8192..]:redacted;
+    }
+    static InvalidOperationException Failure(string message,ProcessResult result)=>new(message+" (exit code "+result.ExitCode+"): "+Diagnostic(result.Output));
 
     // Only stable serial/camera aliases and physical gamepad event interfaces
     // are eligible. No host disks, USB bus nodes, keyboards or arbitrary /dev.
@@ -60,10 +70,10 @@ public sealed class RoboticsWebContainer(string runDirectory,
     {
         var exists=await Run(["container","exists",name]);
         if(exists.ExitCode==1)return null;
-        if(exists.ExitCode!=0)throw new InvalidOperationException("Could not inspect the robotics container.");
+        if(exists.ExitCode!=0)throw Failure("Could not inspect the robotics container",exists);
         var observed=await Run(["inspect",name]);
-        if(observed.ExitCode!=0)throw new InvalidOperationException("Could not inspect the robotics container identity.");
-        using var document=JsonDocument.Parse(observed.Output);var item=document.RootElement[0];
+        if(observed.ExitCode!=0)throw Failure("Could not inspect the robotics container identity",observed);
+        using var document=JsonDocument.Parse(observed.StandardOutput);var item=document.RootElement[0];
         var config=item.GetProperty("Config");var labels=config.GetProperty("Labels");
         string Label(string key)=>labels.ValueKind==JsonValueKind.Object&&labels.TryGetProperty(key,out var value)?value.GetString()??"":"";
         var state=item.GetProperty("State");
@@ -153,7 +163,7 @@ public sealed class RoboticsWebContainer(string runDirectory,
         if(!image.StartsWith("ghcr.io/",StringComparison.Ordinal)&&!image.StartsWith("localhost/",StringComparison.Ordinal))
             throw new InvalidOperationException("Use the published GHCR robot image or an explicitly prepared localhost image.");
         var exists=await Run(["image","exists",image]);
-        if(exists.ExitCode is not (0 or 1))throw new InvalidOperationException("Could not inspect the robotics image.");
+        if(exists.ExitCode is not (0 or 1))throw Failure("Could not inspect the robotics image",exists);
         if(image.StartsWith("ghcr.io/",StringComparison.Ordinal))
         {
             var pulled=await Run(["pull",image],900);
@@ -161,7 +171,8 @@ public sealed class RoboticsWebContainer(string runDirectory,
         }
         else if(exists.ExitCode!=0)throw new InvalidOperationException("The prepared localhost robotics image is unavailable.");
         var runtime=await Run(["image","inspect","--format","{{index .Labels \"io.xur.robot.runtime\"}}",image]);
-        if(runtime.ExitCode!=0||runtime.Output.Trim()!=RuntimeLabel)throw new InvalidOperationException("The selected robotics image does not contain the standalone container runtime. Pull a current robotics nightly image.");
+        if(runtime.ExitCode!=0)throw Failure("Could not inspect the robotics image runtime label",runtime);
+        if(runtime.StandardOutput.Trim()!=RuntimeLabel)throw new InvalidOperationException("The selected robotics image does not contain the standalone container runtime. Pull a current robotics nightly image.");
         if(current!=null)
         {
             if(current.Pid!=0)throw new InvalidOperationException("The previous robotics container still has processes. Stop it before restarting.");
