@@ -44,7 +44,8 @@ motors on the selected left/head bus, whose adapter serial ends `7688`:
 
 The role names come from the pinned upstream motor map. This observation does
 not experimentally establish positive/negative camera movement, an absolute
-head angle or safe mechanical endpoints. No head motor was moved. A different
+head angle or safe mechanical endpoints. That read-only observation did not
+move a head motor. A different
 robot must supply or establish its own camera-mount joint binding; bus IDs 7/8
 are not a universal camera-control interface.
 
@@ -55,6 +56,45 @@ reached 2830 from 2809 while that fixed tag moved upward by about 50 pixels;
 afterward it settled at 2814. These short observations identify the installed
 axes' local effect, not a calibrated angle, full travel range or a guaranteed
 view-improvement trajectory. Their private capture family is already registered.
+
+## Attended motor/image comparison on 2026-10-10
+
+An operator confirmed they were beside the robot with motor power within reach.
+The installed private diagnostic used the pinned LeRobot motor interface to test
+individual eligible positional joints; wheel commands were excluded. Its goals
+were limited to 24 raw counts (about 2.1 degrees), with a 32-count observed
+envelope, speed/output caps, continuous camera freshness and measured
+load/current/temperature/supply checks. Stored limits were additional guards,
+not approved mechanical calibration. No EEPROM limits or offsets were changed.
+
+Both head axes moved by up to 22 measured counts. Classical OpenCV registration
+of the before/displaced images gave the following local evidence at 1920×1080:
+
+| Joint | Head phase-correlation translation | Distributed feature evidence | Hand view |
+| --- | --- | --- | --- |
+| Left/head bus ID 7, upstream `head_pan` | About 26 pixels left, 1 pixel down | 90% homography inliers over 42% of the image and 9/12 grid cells | About 0.14-pixel projected movement |
+| Left/head bus ID 8, upstream `head_tilt` | About 52 pixels up, 1 pixel right | 97% homography inliers over 70% of the image and 11/12 grid cells | About 0.06-pixel projected movement |
+
+The image shift supports the installed pan/tilt bindings and positive encoder
+direction in the tested neighborhood. Rotation is not a pure image translation;
+phase correlation and projected feature motion therefore need not have equal
+magnitudes. These values are relative image observations, not degrees per pixel
+or a universal motor-to-camera map. The scoring tool uses no tags or model
+weights. A scene moving across the whole view can produce similar scores.
+
+Both completed head tests verified torque disabled. The low-output return
+attempts did not reach their exact starting positions: pan ended at 2088 after
+starting at 2083; tilt ended at 2834 after starting at 2814. Their return images
+must not be described as a repeated starting-pose control. The diagnostic's
+`ready` and `before` frames were also identical copies, so an independent
+stationary sequence is needed to characterize camera jitter and exposure.
+
+Arm tests retain measured encoder displacement alongside image scores. A joint
+that does not move under the output cap is inconclusive; a joint blocked by the
+preflight range guard is untested. A hand camera's entire view may move with
+multiple upstream joints, so these tests can identify contributing joints
+without uniquely identifying its physical mounting link. Private captures and
+operator-attended test provenance are recorded in the screenshot register.
 
 ## Capture-mode comparison
 
@@ -70,12 +110,18 @@ Private image locations and privacy review are in
 The next view-improvement step needs to distinguish a head-angle change from a
 mounting/field-of-view limitation. Image controls can improve exposure and
 contrast, but cannot reveal geometry outside the frame. Discovering these
-controls does not approve motorized re-aiming or automatic calibration.
+controls and the bounded tests above do not establish a calibrated operating
+range or automatic calibration.
+
+The reusable [saved-frame comparison tool](robot-camera-motion-evidence.md)
+ships with the container's existing OpenCV environment. Its JSON retains raw
+measurements and ambiguity for copying; the scorer itself has no hardware
+access or motor-command interface.
 
 ## App implementation scope
 
-The read-only capability panel is being prepared in the application container;
-it is not present in the deployed `bd2f18c` image. It should preserve each
+The read-only capability panel is implemented in the application container;
+it is not present in the older deployed `bd2f18c` image. It preserves each
 device's failures, unsupported payloads and raw driver output for copying, and
 report selected roles from saved configuration. Queries use fixed local tool
 arguments and inventory-approved device aliases. No control-setting endpoint

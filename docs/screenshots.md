@@ -1,5 +1,23 @@
 # Screenshot and artwork register
 
+- 2026-10-10: Attended camera-mount motor identification capture family under
+  `.build/evidence/robot-camera-mount-discovery-20261010/`, with per-test
+  `head/hand-{ready,before,displaced,after}.jpg` and matching motor feedback.
+  Captured on xur-255 around 17:11 UTC onward with Xur 26.10.032 and deployed
+  robot image from `bd2f18c`; the source private diagnostic matched SHA-256
+  `35f85071ced3a303fe7bd8477a89419bad93d8d23fd0a0c65badbb2cce24ec58`.
+  Purpose: compare global image movement with individual bounded joint tests
+  using classical registration, without a trained pose model or tag detector.
+  These tests can issue small arm/head motor commands while the operator is
+  beside the robot; the mobile base remains stationary. The family also includes
+  an independently timestamped stationary baseline without motor writes.
+  Privacy review: head/hand after-tilt and stationary after frames inspected;
+  robot, tray, floor, wall and room furnishings are visible, with no people or
+  credentials in those reviewed frames. Other scored frames remain private
+  within this capture family and require review before publication. Keep all
+  captures ignored/private and exclude them from source archives. Regenerate
+  after changes to camera mounts, motor binding, capture mode or test protocol.
+
 - 2026-10-10: Private stationary head-camera comparison under
   `.build/evidence/calibration-ir-20261010/` (`head-ir.png`, 640×480 grayscale,
   and `head-rgb.png`, 1920×1080 colour), captured at approximately 12:24 UTC

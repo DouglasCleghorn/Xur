@@ -10,7 +10,7 @@ unproven target. This design is not an implemented or trained pose estimator.
 
 | Phase | Goal | Evidence needed to advance |
 | --- | --- | --- |
-| 1. Camera discovery and coverage | Identify capture streams, image controls and any separate camera-mount joints; get a usable view of the arms | Read-only capability reports, checked RGB/IR selection, actual capture modes and visible/hidden arm regions; any physical re-aiming is a separate bounded motor operation |
+| 1. Camera discovery and coverage | Identify capture streams, image controls and camera-mount joints; get a usable view of the arms | Capability reports plus bounded individual-joint tests, measured encoder changes and classical before/displaced/after image registration; distinguish whole-scene motion from local arm motion and report untested or inconclusive joints |
 | 2. Segmentation and tracking | Extract arm instances and useful link features | Independently checked masks/tracks on varied images, with ambiguous selections and occlusions reported |
 | 3. Joint correspondence | Associate tracked visual changes with measured joint channels | Synchronized varied recordings with enough independent joint variation to reject confounded associations |
 | 4. Local adaptation | Fit a small per-installation visual pose adapter automatically | Held-out image-only accuracy, coverage and model-version rollback; uncertain or worse candidates are rejected |
@@ -20,6 +20,32 @@ Phase 1 is the immediate milestone. Segmentation and adaptation can be tested
 offline using existing licensed recordings while physical calibration remains
 unfinished. The Xbox input-only path can be checked independently of all phases.
 See the [camera discovery evidence](robot-camera-controls.md).
+
+### Phase 1: discover camera movement without a learned model
+
+Read driver capabilities first, then use the upstream robot's private, attended
+bounded-motion diagnostic to perturb one eligible positional joint at a time.
+Keep drive wheels disabled. Capture both cameras before, during displacement
+and after the return attempt, with measured encoder/effort feedback. Reject
+joints that fail the existing range, temperature, supply or effort guards;
+do not rewrite limits to force discovery. A command with no measured movement
+is inconclusive, not evidence that the joint cannot move a camera.
+
+Use OpenCV phase correlation for a translation score and feature matching with
+RANSAC homography for distributed image movement. A rotating camera need not
+produce a pure translation, so retain inlier coverage, projected image motion
+and photometric residuals alongside the shift. Independent stationary frames
+measure jitter/exposure variation. The return image must be checked against
+the actual return encoder value, rather than assuming the starting pose was
+reached. Existing duplicate pre-test frames are not independent controls.
+
+Whole-image motion is a camera-mount candidate when paired with an isolated
+joint change in a stationary room. A moving scene can produce the same image
+score. Several ancestors of a hand camera can also move its entire view; this
+identifies a contributing chain, not necessarily the joint physically holding
+the camera. Store uncertain associations for review before using them to
+improve coverage. This phase establishes local direction, not physical zero,
+safe endpoints or automatic motor calibration.
 
 ## Segmentation followed by local adaptation
 
