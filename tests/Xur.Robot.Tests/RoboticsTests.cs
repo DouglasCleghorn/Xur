@@ -30,6 +30,19 @@ static class RoboticsTests
                 "dashboard"=>new{observedAt=DateTimeOffset.UtcNow,buses=Array.Empty<object>(),cameras=Array.Empty<object>()},_=>new{done=true}},new JsonSerializerOptions(JsonSerializerDefaults.Web));
         }
     }
+    sealed class PreparationTools:IRobotTools
+    {
+        public bool Fail;
+        public RoboticsConfiguration? Selected;
+        public readonly List<string> Calls=[];
+        public Task<JsonElement> Run(RoboticsConfiguration c,string operation,object? request,int seconds,CancellationToken token)
+        {
+            if(operation!="prepare"||request!=null||seconds!=10)throw new Exception("Unexpected preparation request");
+            Calls.Add(operation);Selected=c;
+            if(Fail)throw new InvalidOperationException("Adapter lease is busy");
+            return Task.FromResult(JsonSerializer.SerializeToElement(new{controllerAvailable=File.Exists(c.ControllerDevice)}));
+        }
+    }
     static JsonElement MotorFeedback(int torque=0,int count=17)=>JsonSerializer.SerializeToElement(new
     {
         observedAt=DateTimeOffset.UtcNow,
@@ -358,15 +371,15 @@ static class RoboticsTests
     {
         var files=Enumerable.Range(0,5).Select(i=>Path.Combine(root,"device-"+i)).ToArray();foreach(var file in files)File.WriteAllText(file,"");
         var c=new RoboticsConfiguration("fixture",files[0],files[1],files[2],files[3],files[4],[]);
-        List<string[]> calls=[];RoboticsConfiguration? aliases=null;
+        List<string[]> calls=[];var preparation=new PreparationTools();
         var container=new RoboticsContainer(Path.Combine(root,"container"),(executable,args,seconds,token)=>
-        {check(executable==RoboticsContainer.Python,"Tools run through the local Python interpreter");calls.Add(args.ToArray());return Task.FromResult(new ProcessResult(0,""));},prepareAliases:selected=>aliases=selected);
-        await container.Prepare(c,CancellationToken.None);
-        check(calls.Single().SequenceEqual([Path.Combine(RoboticsContainer.ToolsDirectory,"bridge.py"),"--idle"])
-            &&aliases==c&&File.Exists(Path.Combine(root,"container/.build/devices.json")),
-            "Preparation checks local operation ownership and persists selected device aliases without a container engine");
+        {check(executable==RoboticsContainer.Python,"Tools run through the local Python interpreter");calls.Add(args.ToArray());return Task.FromResult(new ProcessResult(0,""));},preparationTools:preparation);
+        check(await container.Prepare(c,CancellationToken.None)&&preparation.Selected==c&&preparation.Calls.SequenceEqual(["prepare"])&&calls.Count==0,
+            "Preparation sends a bounded fixed operation that owns the lease throughout alias updates");
         calls.Clear();await container.Prepare(c with{ControllerDevice=""},CancellationToken.None);
-        check(aliases?.ControllerDevice=="","Camera inspection does not require an unpaired controller");
+        check(preparation.Selected?.ControllerDevice=="","Camera inspection does not require an unpaired controller");
+        File.Delete(files[2]);check(!await container.Prepare(c,CancellationToken.None)&&preparation.Selected==c,
+            "A disconnected optional controller does not clear its saved selection or fail serial/camera preparation");
         calls.Clear();
         var discovery=new RoboticsContainer(root,(_,args,_,_)=>
         {
@@ -377,15 +390,41 @@ static class RoboticsTests
         check(detected.LeftPort==files[1]&&detected.RightPort==files[0]
             &&calls.Single().SequenceEqual([Path.Combine(RoboticsContainer.ToolsDirectory,"discover_buses.py"),files[0],files[1]]),
             "Read-only discovery invokes upstream tools locally, preserves adapter identities and tolerates trailing diagnostics");
-        calls.Clear();var busy=new RoboticsContainer(root,(_,args,_,_)=>
-        {calls.Add(args.ToArray());return Task.FromResult(new ProcessResult(1,"busy"));},prepareAliases:_=>throw new Exception("Aliases changed while busy"));
+        calls.Clear();var busyPreparation=new PreparationTools{Fail=true};var busy=new RoboticsContainer(root,preparationTools:busyPreparation);
         bool rejected=false;try{await busy.Prepare(c,CancellationToken.None);}catch(InvalidOperationException){rejected=true;}
-        check(rejected&&calls.Count==1,"Preparation cannot change aliases during an active interactive operation");
-        calls.Clear();File.WriteAllText(Path.Combine(root,"container","reservation"),"old controller");
+        check(rejected&&busyPreparation.Calls.Count==1,"Preparation propagates exclusive adapter ownership failures");
+        var state=Path.Combine(root,"container");Directory.CreateDirectory(Path.Combine(state,".build"));
+        File.WriteAllText(Path.Combine(state,".build","devices.json"),"{}");File.WriteAllText(Path.Combine(state,"reservation"),"old controller");
+        var saved=Configuration(true) with{ControllerDevice="/dev/input/event99999999"};
+        File.WriteAllText(Path.Combine(state,"config.json"),RobotJson.Serialize(saved));Calibrate(state,saved);
+        var receipt=File.ReadAllText(Path.Combine(state,"calibration","receipt.json"));
+        calls.Clear();var startupPreparation=new PreparationTools();
         var recovered=new RoboticsRuntime(Path.Combine(root,"container"),Path.Combine(root,"container","reservation"),toolContainer:new RoboticsContainer(root,(_,args,_,_)=>
-        {calls.Add(args.ToArray());return Task.FromResult(new ProcessResult(0,""));}));
-        await recovered.Recover();
-        check(calls.Any(a=>a.Last()=="--stop")&&!File.Exists(Path.Combine(root,"container","reservation"))&&recovered.Status().StopLatched,
-            "App recovery stops surviving local tools and releases stale controller ownership without resuming motion");
+        {calls.Add(args.ToArray());return Task.FromResult(new ProcessResult(0,""));},preparationTools:startupPreparation));
+        await recovered.Recover();recovered.Start("robot");
+        check(calls.Select(a=>a.Last()).SequenceEqual(["--stop","--idle"])&&RobotJson.Serialize(startupPreparation.Selected!)==RobotJson.Serialize(saved)&&!File.Exists(Path.Combine(state,"reservation"))&&recovered.Status().StopLatched,
+            "App recreation stops stale owners before rebuilding saved aliases without resuming motion");
+        check(RobotJson.Serialize(recovered.Configuration()!)==RobotJson.Serialize(saved)&&File.ReadAllText(Path.Combine(state,"calibration","receipt.json"))==receipt
+            &&Rejected(()=>recovered.StartController(new(60)))&&Rejected(()=>recovered.Record(new("demo","left","Pick block")))&&recovered.Status().StopLatched,
+            "Recovery preserves configuration and calibration while an absent selected controller blocks recording and arming through controller start");
+        var failedRecovery=new RoboticsRuntime(state,Path.Combine(state,"reservation"),toolContainer:new RoboticsContainer(state,
+            (_,_,_,_)=>Task.FromResult(new ProcessResult(0,"")),preparationTools:new PreparationTools{Fail=true}));
+        await failedRecovery.Recover();failedRecovery.Start("robot");
+        check(failedRecovery.Status().Problems.Any(p=>p.Contains("device preparation failed"))&&Rejected(()=>failedRecovery.Arm(new()))&&RobotJson.Serialize(failedRecovery.Configuration()!)==RobotJson.Serialize(saved),
+            "Startup preparation failures remain visible and cannot grant motion approval");
+        File.Delete(Path.Combine(state,".build","devices.json"));calls.Clear();
+        var unpreparedStop=new RoboticsRuntime(state,Path.Combine(state,"reservation"),toolContainer:new RoboticsContainer(state,
+            (_,args,_,_)=>{calls.Add(args.ToArray());return Task.FromResult(new ProcessResult(0,""));}));
+        unpreparedStop.Start("robot");unpreparedStop.EmergencyStop();await unpreparedStop.Stop();
+        check(calls.Select(a=>a.Last()).SequenceEqual(["--stop","--idle"])&&unpreparedStop.Status().EmergencyStopLatched&&unpreparedStop.Status().StopLatched,
+            "Software E-stop still interrupts an adapter owner when failed preparation has removed the readiness manifest");
+        check(Rejected(()=>unpreparedStop.Recover().GetAwaiter().GetResult()),
+            "Alias recovery cannot run concurrently with an already started app");
+        var stopFailurePreparation=new PreparationTools();
+        var stopFailure=new RoboticsRuntime(state,Path.Combine(state,"reservation"),toolContainer:new RoboticsContainer(state,
+            (_,_,_,_)=>Task.FromResult(new ProcessResult(1,"busy")),preparationTools:stopFailurePreparation));
+        await stopFailure.Recover();
+        check(stopFailurePreparation.Calls.Count==0&&stopFailure.Status().Problems.Any(p=>p.Contains("Previous robot tool could not be stopped")),
+            "Failed stale-owner stop prevents startup alias changes");
     }
 }

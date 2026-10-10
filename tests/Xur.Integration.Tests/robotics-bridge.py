@@ -2,6 +2,8 @@
 """Exercise adapter safety without installing robotics packages or opening hardware."""
 import importlib.util
 import contextlib
+import fcntl
+import io
 from dataclasses import make_dataclass
 import json
 import math
@@ -472,12 +474,142 @@ class Safety(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=root, prefix="robotics-mapping-") as temp:
             state = Path(temp)
             (state / ".build").mkdir()
-            configured = {key: key for key in bridge.DEVICE_KEYS}
+            aliases = state / "aliases"
+            aliases.mkdir()
+            configured = {}
+            for key in bridge.DEVICE_KEYS:
+                device = state / key
+                device.touch()
+                configured[key] = str(device)
+                (aliases / bridge.DEVICE_ALIASES[key]).symlink_to(device)
             (state / ".build/devices.json").write_text(json.dumps(configured))
-            with patch.object(bridge, "STATE", state):
+            with patch.object(bridge, "STATE", state), patch.object(bridge, "ALIAS_ROOT", aliases):
                 bridge.prepared(configured)
                 with self.assertRaises(ValueError):
                     bridge.prepared({**configured, "leftPort": "other-bus"})
+
+
+class DeviceAliasRecovery(unittest.TestCase):
+    def setUp(self):
+        (repo / ".build").mkdir(exist_ok=True)
+        self.temp = tempfile.TemporaryDirectory(dir=repo / ".build", prefix="robotics-aliases-")
+        self.state = Path(self.temp.name)
+        self.aliases = self.state / "aliases"
+        self.aliases.mkdir()
+        (self.state / ".build").mkdir()
+        self.configuration = {}
+        for key in bridge.DEVICE_KEYS:
+            node = self.state / key
+            node.touch()
+            stable = self.state / (key + "-stable")
+            stable.symlink_to(node)
+            self.configuration[key] = str(stable)
+        self.state_patch = patch.object(bridge, "STATE", self.state)
+        self.alias_patch = patch.object(bridge, "ALIAS_ROOT", self.aliases)
+        self.pid_patch = patch.object(bridge, "PID", self.state / ".build/adapter.json")
+        for value in (self.state_patch, self.alias_patch, self.pid_patch):
+            value.start()
+            self.addCleanup(value.stop)
+        self.addCleanup(self.temp.cleanup)
+
+    def dispatch(self, operation):
+        output = io.StringIO()
+        request = json.dumps({"operation": operation, "configuration": self.configuration})
+        with patch.object(bridge.sys, "argv", ["bridge.py"]), patch.object(bridge.sys, "stdin", io.StringIO(request)), patch.object(bridge.sys, "stdout", output):
+            bridge.main()
+        return json.loads(output.getvalue())
+
+    def test_recreation_rebuilds_all_required_aliases_without_optional_controller(self):
+        self.assertTrue(self.dispatch("prepare")["controllerAvailable"])
+        for alias in self.aliases.iterdir():
+            alias.unlink()
+        Path(self.configuration["controllerDevice"]).resolve().unlink()
+        with self.assertRaises(ValueError):
+            bridge.prepared(self.configuration)
+        self.assertFalse(self.dispatch("prepare")["controllerAvailable"])
+        bridge.prepared(self.configuration)
+        self.assertEqual(json.loads((self.state / ".build/devices.json").read_text()), self.configuration)
+        self.assertFalse((self.aliases / "xbox").is_symlink())
+        for key in ("leftPort", "rightPort", "headCamera", "handCamera"):
+            self.assertTrue(bridge.alias_matches(self.configuration, key))
+        with self.assertRaises(ValueError):
+            bridge.prepared(self.configuration, require_controller=True)
+        (self.state / "controllerDevice").touch()
+        self.assertTrue(self.dispatch("prepare")["controllerAvailable"])
+        bridge.prepared(self.configuration, require_controller=True)
+
+    def test_required_preflight_failure_drops_readiness_before_alias_changes(self):
+        self.dispatch("prepare")
+        before = {path.name: path.readlink() for path in self.aliases.iterdir()}
+        Path(self.configuration["handCamera"]).resolve().unlink()
+        with self.assertRaisesRegex(ValueError, "handCamera"):
+            self.dispatch("prepare")
+        self.assertFalse((self.state / ".build/devices.json").exists())
+        self.assertEqual({path.name: path.readlink() for path in self.aliases.iterdir()}, before)
+
+    def test_partial_alias_failure_never_publishes_ready_manifest(self):
+        self.dispatch("prepare")
+        original = Path.symlink_to
+        def failed(path, *args, **kwargs):
+            if path.name == "camera_hand":
+                raise PermissionError("Fixture alias failure")
+            return original(path, *args, **kwargs)
+        with patch.object(Path, "symlink_to", failed):
+            with self.assertRaises(PermissionError):
+                self.dispatch("prepare")
+        self.assertFalse((self.state / ".build/devices.json").exists())
+        self.assertTrue(self.dispatch("prepare")["controllerAvailable"])
+        bridge.prepared(self.configuration, require_controller=True)
+
+    def test_active_owner_contention_preserves_its_manifest_and_aliases(self):
+        self.dispatch("prepare")
+        manifest = self.state / ".build/devices.json"
+        before = manifest.read_bytes()
+        before_aliases = {path.name: path.readlink() for path in self.aliases.iterdir()}
+        with (self.state / ".build/adapter.lock").open("w") as owner:
+            fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaises(BlockingIOError):
+                self.dispatch("prepare")
+        self.assertEqual(manifest.read_bytes(), before)
+        self.assertEqual({path.name: path.readlink() for path in self.aliases.iterdir()}, before_aliases)
+
+    def test_mismatched_required_and_controller_aliases_fail_before_hardware(self):
+        self.dispatch("prepare")
+        for key in bridge.DEVICE_KEYS:
+            alias = self.aliases / bridge.DEVICE_ALIASES[key]
+            expected = alias.readlink()
+            alias.unlink()
+            alias.symlink_to(self.state / ("headCamera" if key != "headCamera" else "handCamera"))
+            with patch.object(bridge, "controller", side_effect=AssertionError("No robot connection permitted")), patch.object(bridge, "dashboard", side_effect=AssertionError("No device opening permitted")):
+                with self.assertRaises(ValueError):
+                    self.dispatch("controller" if key == "controllerDevice" else "dashboard")
+            alias.unlink()
+            alias.symlink_to(expected)
+        bridge.prepared(self.configuration, require_controller=True)
+
+    def test_prepare_preserves_configuration_and_calibration(self):
+        (self.state / "calibration").mkdir()
+        (self.state / "calibration/receipt.json").write_text("unchanged receipt")
+        (self.state / "config.json").write_text(json.dumps(self.configuration))
+        self.dispatch("prepare")
+        self.assertEqual((self.state / "calibration/receipt.json").read_text(), "unchanged receipt")
+        self.assertEqual(json.loads((self.state / "config.json").read_text()), self.configuration)
+
+    def test_missing_optional_controller_probe_reports_unavailable_without_opening_it(self):
+        Path(self.configuration["controllerDevice"]).resolve().unlink()
+        self.dispatch("prepare")
+        with patch.object(bridge.importlib.metadata, "version", return_value="fixture"), patch.object(bridge, "Xbox", side_effect=AssertionError("Disconnected controller must not be opened")), patch.object(bridge, "calibration", side_effect=ValueError("unapproved")):
+            result = self.dispatch("probe")
+        self.assertIsNone(result["controller"])
+        self.assertIn("disconnected", result["controllerProblem"])
+
+    def test_local_training_dispatch_does_not_require_hardware_or_manifest(self):
+        for key in bridge.DEVICE_KEYS:
+            Path(self.configuration[key]).resolve().unlink()
+        with patch.object(bridge, "train", return_value={"fixture": "training preflight only"}) as training:
+            self.assertEqual(self.dispatch("train"), {"fixture": "training preflight only"})
+        training.assert_called_once_with(self.configuration, None)
+        self.assertFalse((self.state / ".build/devices.json").exists())
 
 
 if __name__ == "__main__":

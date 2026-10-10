@@ -61,6 +61,7 @@ with open(os.environ["XUR_ROBOT_TEST_CALLS"],"a") as calls:
 operation=request["operation"]
 now=datetime.now(timezone.utc)
 if operation=="camera": result={"jpeg":"/9j/2Q=="}
+elif operation=="prepare": raise SystemExit("Selected fixture devices are unavailable")
 elif operation=="dashboard":
     result={"observedAt":now.isoformat(),"buses":[
         {"role":role,"motors":[{"id":i,"registers":{"Torque_Enable":0,"Moving":0,"Status":0}} for i in range(1,count+1)]}
@@ -286,8 +287,8 @@ def main():
             check(not api('status')['emergencyStopLatched'] and api('status')['stopLatched']
                   and not (state / 'estop-latched').exists(), 'Checked reset retains disarmed state')
             calls = [json.loads(line) for line in calls_path.read_text().splitlines()]
-            check(calls and all(c['operation'] in ['camera', 'dashboard', 'inspect-markers'] for c in calls),
-                  'All adapter calls remain read-only observations; no motor operation is issued')
+            check(calls and all(c['operation'] in ['camera', 'dashboard', 'inspect-markers', 'prepare'] for c in calls),
+                  'Adapter calls use observations or filesystem preparation only; no motor operation is issued')
             check(not (directory / 'agent.sock').exists(), 'Independent robotics app never requires an agent socket')
         finally:
             stop()

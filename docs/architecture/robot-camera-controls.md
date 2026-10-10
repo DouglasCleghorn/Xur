@@ -145,3 +145,15 @@ device's failures, unsupported payloads and raw driver output for copying, and
 report selected roles from saved configuration. Queries use fixed local tool
 arguments and inventory-approved device aliases. No control-setting endpoint
 or public motor-target API is part of this phase.
+
+Container startup and explicit preparation rebuild the selected serial/camera
+aliases under the adapter's exclusive ownership lock. All required targets must
+exist before aliases change, and a failed preparation cannot leave a ready
+manifest. Hardware operations also verify alias targets rather than trusting
+the persistent manifest after container recreation. Startup first requests a
+bounded software stop of any previous adapter owner. Alias preparation changes
+filesystem aliases only; it does not enable torque, write motor registers or
+approve calibration. A disconnected selected controller remains saved while
+its alias is absent; controller motion and recording fail closed until it is
+connected and prepared. Local dataset training remains independent of connected
+hardware.

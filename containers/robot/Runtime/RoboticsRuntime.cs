@@ -65,9 +65,15 @@ public sealed class RoboticsRuntime
     {
         // A restarted app must stop any surviving local tool before releasing
         // its controller reservation. Recovery never resumes motor motion.
-        if(tools is not LeRobotTools || !File.Exists(Path.Combine(directory,".build","devices.json")))return;
+        lock(sync){Idle();if(workloadId!=null||!stopLatched)throw new InvalidOperationException("Device recovery runs only during disarmed app startup.");}
+        if(tools is not LeRobotTools || !File.Exists(Path.Combine(directory,".build","devices.json"))
+            && !File.Exists(Path.Combine(directory,"config.json")))return;
         try{await container.Interrupt();File.Delete(reservation);}
-        catch(Exception e){lock(sync)recoveryProblem="Previous robot tool could not be stopped. Inspect motor power before motion: "+Xur.Domain.Redaction.Logs(e.Message);}
+        catch(Exception e){lock(sync)recoveryProblem="Previous robot tool could not be stopped. Inspect motor power before motion: "+Xur.Domain.Redaction.Logs(e.Message);return;}
+        RoboticsConfiguration? saved;lock(sync){ReadConfiguration();saved=configuration;}
+        if(saved==null)return;
+        try{await container.Prepare(saved,CancellationToken.None);}
+        catch(Exception e){lock(sync)recoveryProblem="Robot device preparation failed; reconnect the selected devices and prepare again: "+Xur.Domain.Redaction.Logs(e.Message);}
     }
     string? CalibrationHash()
     {
@@ -124,7 +130,16 @@ public sealed class RoboticsRuntime
     {RequireLoaded();return configuration??throw new InvalidOperationException(string.Join(" ",configurationProblems));}
     void Idle(){if(activeJob!=null||stopping||observing)throw new InvalidOperationException("Stop or finish the current robot operation first.");}
     void RequireController()
-    {if(string.IsNullOrEmpty(RequireConfiguration().ControllerDevice))throw new InvalidOperationException("Select a connected controller and prepare the tools container before controller motion or recording.");}
+    {
+        var selected=RequireConfiguration().ControllerDevice;
+        if(string.IsNullOrEmpty(selected) || tools is LeRobotTools && !ControllerAliasMatches(selected))
+            throw new InvalidOperationException("The selected controller is unavailable. Connect it and prepare the tools container before controller motion or recording.");
+    }
+    static bool ControllerAliasMatches(string selected)
+    {
+        try{return File.Exists(selected)&&File.Exists("/dev/xbox")&&File.ResolveLinkTarget("/dev/xbox",true)?.FullName==(File.ResolveLinkTarget(selected,true)?.FullName??selected);}
+        catch(Exception e) when(e is IOException or UnauthorizedAccessException){return false;}
+    }
     void Motion()
     {
         if(emergencyStop)throw new InvalidOperationException("E-stop is latched. Inspect and reset it before arming.");
@@ -237,7 +252,7 @@ public sealed class RoboticsRuntime
         }
     }
     public RobotJob Prepare()
-    {lock(sync){Idle();RequireConfiguration();if(!stopLatched)throw new InvalidOperationException("Disarm before preparing containers.");return Launch("prepare",false,async(c,token)=>{await container.Prepare(c,token);lock(sync)recoveryProblem=null;return "LeRobot/XLeRobot tools are ready in this container. Calibration and skills remain disarmed.";});}}
+    {lock(sync){Idle();RequireConfiguration();if(!stopLatched)throw new InvalidOperationException("Disarm before preparing containers.");return Launch("prepare",false,async(c,token)=>{var controllerAvailable=await container.Prepare(c,token);lock(sync)recoveryProblem=null;return "Selected serial/camera aliases are ready. Calibration and skills remain disarmed."+(c.ControllerDevice!=""&&!controllerAvailable?" The selected controller is disconnected; controller motion and recording remain unavailable.":"");});}}
     public RobotJob Record(RobotRecordRequest request)
     {
         lock(sync)
@@ -642,7 +657,7 @@ public sealed class RoboticsRuntime
                 try
                 {
                     try{if(pending!=null)await pending;}
-                    finally{if(tools is LeRobotTools && File.Exists(Path.Combine(directory,".build","devices.json")))await container.Interrupt();}
+                    finally{if(tools is LeRobotTools)await container.Interrupt();}
                     lock(sync)stopProblem=null;
                     return Status();
                 }

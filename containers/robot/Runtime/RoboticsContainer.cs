@@ -2,34 +2,19 @@ using System.Text;
 using System.Text.Json;
 namespace Xur.Robot;
 // Container-local tools. No engine socket, host agent API or client-supplied commands.
-public sealed class RoboticsContainer(string directory,Func<string,IEnumerable<string>,int,CancellationToken,Task<ProcessResult>>? run=null,Action<RoboticsConfiguration>? prepareAliases=null)
+public sealed class RoboticsContainer(string directory,Func<string,IEnumerable<string>,int,CancellationToken,Task<ProcessResult>>? run=null,IRobotTools? preparationTools=null)
 {
     public const string Name="xur-robot-web";
     public static string Python=>Environment.GetEnvironmentVariable("XUR_ROBOT_PYTHON")??"python";
     public static string ToolsDirectory=>Environment.GetEnvironmentVariable("XUR_ROBOT_TOOLS")??"/opt/xur";
     Task<ProcessResult> Run(IEnumerable<string> args,int seconds,CancellationToken token)=>run!=null?run(Python,args,seconds,token):Processes.Run(Python,args,seconds,token);
-    public async Task Prepare(RoboticsConfiguration configuration,CancellationToken cancellation)
+    public async Task<bool> Prepare(RoboticsConfiguration configuration,CancellationToken cancellation)
     {
-        // The app serializes preparation against every controller/camera/motor job.
-        if((await Run([Path.Combine(ToolsDirectory,"bridge.py"),"--idle"],10,cancellation)).ExitCode!=0)
-            throw new InvalidOperationException("Finish or stop the active robot tool before changing device aliases.");
-        Directory.CreateDirectory(Path.Combine(directory,".build"));Directory.CreateDirectory(Path.Combine(directory,"calibration"));
-        if(prepareAliases!=null)prepareAliases(configuration);
-        else
-        {
-        foreach(var (device,alias) in new[]{(configuration.LeftPort,"arm_left"),(configuration.RightPort,"arm_right"),
-            (configuration.ControllerDevice,"xbox"),(configuration.HeadCamera,"camera_head"),(configuration.HandCamera,"camera_hand")})
-        {
-            var path="/dev/"+alias;
-            File.Delete(path);
-            if(device=="" && alias=="xbox")continue;
-            if(!File.Exists(device))throw new InvalidOperationException("Robot device is disconnected. Reconnect it and reload the Robotics profile: "+device);
-            File.CreateSymbolicLink(path,File.ResolveLinkTarget(device,true)?.FullName??device);
-        }
-        }
-        var mapping=new Dictionary<string,string>{{"leftPort",configuration.LeftPort},{"rightPort",configuration.RightPort},
-            {"controllerDevice",configuration.ControllerDevice},{"headCamera",configuration.HeadCamera},{"handCamera",configuration.HandCamera}};
-        File.WriteAllText(Path.Combine(directory,".build","devices.json"),RobotJson.Serialize(mapping));
+        // The adapter holds its cross-process ownership lease throughout alias
+        // validation and atomic readiness publication, including startup recovery.
+        Directory.CreateDirectory(directory);
+        var result=await (preparationTools??new LeRobotTools()).Run(configuration,"prepare",null,10,cancellation);
+        return result.GetProperty("controllerAvailable").GetBoolean();
     }
     public async Task<RobotBusDetection> DetectBuses(string[] ports,CancellationToken cancellation)
     {
