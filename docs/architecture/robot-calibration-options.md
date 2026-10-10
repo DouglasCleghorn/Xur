@@ -60,10 +60,12 @@ mounted on moving head joints, provided the visible chassis geometry constrains
 the camera-to-base transform. A cropped or occluded base may defeat that fit.
 
 Only after independent pose validation should candidate robot-space angles be
-compared with read-only raw encoder observations. A modular offset fitter can
-serve camera estimates, a measured cradle, or future joint references. It must
-handle encoder wrap, direction, inadequate variation and held-out failures;
-it must not silently turn unknown mount or pose conventions into physical zero.
+compared with read-only raw encoder observations. The pure .NET
+[offline offset fitter](robot-encoder-offset-fit.md) now supports such declared
+angle references with an explicit known direction, full encoder cycle,
+inadequate-variation rejection and separate held-out validation. Its tests use
+synthetic observations. No camera joint-angle estimator or mechanical range
+solver is implemented by that component, and its output cannot approve motion.
 
 ## Calibration is more than pose estimation
 
