@@ -499,6 +499,18 @@ capture date, privacy review, and the features whose next changes require a refr
   changes to desktop control colors or states; review full desktop picker and
   review-screen captures before release.
 
+- 2026-10-10: Stationary head camera capture-mode comparison family:
+  `.build/evidence/robot-camera-controls-20261010/head-640x480.png` and
+  `head-1920x1080.png`, captured around 16:55 UTC on xur-255 running Xur
+  26.10.032 with the robotics container from commit `bd2f18c`.
+  Purpose: compare actual arm coverage across advertised RGB capture modes
+  before motorized re-aiming or segmentation work. No motor commands were sent;
+  image controls were unchanged, and capture mode was negotiated for each image.
+  Privacy review: visible robot arms, tags, tray, exposed camera board and nearby
+  room surfaces; no people, credentials, screens or readable personal documents.
+  Keep these live room images private and exclude them from source archives.
+  Regenerate after camera mounting, head pose, capture mode or arm pose changes.
+
 - 2026-10-08: SO-101 tag-mount prototype v1 CAD capture family:
   `.build/evidence/so101-tag-mount/upstream-links.png`,
   `upstream-sections.png`, `clip-review.png`, and `clip-on-link.png`.

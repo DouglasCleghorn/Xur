@@ -129,6 +129,11 @@ receipts or treat existing EEPROM limits as verified mechanical limits. The
 existing upstream hand-guided routine does not satisfy marker-only automatic
 calibration. See the [design and acceptance gates](../../docs/architecture/robot-marker-calibration.md)
 and the [options for calibration with fewer user steps](../../docs/architecture/robot-calibration-options.md).
+The [cross-robot visual model design](../../docs/architecture/robot-visual-pose-model.md)
+uses segmentation and per-installation adaptation from images and measured
+joint states without requiring CAD. That pose-learning pipeline is not yet
+implemented, and learning unverified encoder coordinates cannot independently
+establish motor calibration.
 
 Camera/tag measurements are configured in the container app at `/robot/setup`,
 with `GET/POST /robot/api/metrology`. No default intrinsics or tag dimensions are

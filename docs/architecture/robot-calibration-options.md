@@ -5,6 +5,12 @@ container. Robot profiles still own only deployment, devices and the `/robot`
 proxy. There is no working automatic joint-calibration solver yet; the current
 button remains a read-only readiness assessment.
 
+The primary direction is now a shared visual model with per-installation
+adaptation from images and measured joint states. Users should not need robot
+CAD, arm markers or a fixed six-joint layout. See the
+[segmentation and pose-learning design](robot-visual-pose-model.md). CAD fitting
+below remains an optional comparison or synthetic-data source.
+
 ## What the cameras can currently see
 
 Stationary captures from xur-255 on 2026-10-10 showed a clear, well-lit 1920×1080
@@ -19,6 +25,7 @@ Private evidence is registered in [the screenshot register](../screenshots.md).
 
 | Method | User setup | What it can establish | Remaining limitations |
 | --- | --- | --- | --- |
+| Segment the robot and adapt a visual pose model from recordings | Select camera and joint channels; verify which image regions are the robot | Candidate visible joint states in the recording's coordinate convention, with installation-specific adaptation | Requires synchronized, varied examples and independent validation; encoder labels alone do not establish physical zero or travel limits |
 | Match known robot CAD to colour images | Select the robot model and give the camera a clear view; an uncalibrated webcam still needs optical calibration | Candidate visible joint angles and camera-to-robot alignment | Hidden links, similar silhouettes, symmetric joints and incorrect CAD can leave multiple answers; accuracy on this robot is unverified |
 | Match robot CAD to a calibrated depth camera | Connect a supported camera with usable metric depth and the correct model | Candidate joint geometry and alignment using 3D surfaces | Additional hardware, minimum working distance, occlusion and depth errors; it still needs installed-robot validation |
 | Reusable calibration cradle | Place each torque-disabled arm into a known supported pose using a model-specific removable fixture | A physical reference for the joints constrained by the fixture, without arm labels | Requires human placement and does not independently establish full travel ranges; does not meet a completely unattended calibration goal |
@@ -26,12 +33,9 @@ Private evidence is registered in [the screenshot register](../screenshots.md).
 
 The [RoboPose research](https://www.di.ens.fr/willow/research/robopose/)
 demonstrates estimating joint angles and camera-to-robot pose from an image of
-a known articulated robot. This is evidence that the approach is possible,
-not evidence of SO-101 support or installed XLeRobot accuracy. Its published
-models are for other arms, and a repository license must not be assumed to
-license model weights. The first experiment should use geometric fitting with
-no downloaded pretrained weights. Any later model must have its code and weight
-licenses reviewed separately.
+a known articulated robot. This is evidence for a model-specific alternative,
+not a general solution for unfamiliar robots. Any model used in the shared
+visual pipeline must have its code and weight licenses reviewed separately.
 
 A single reusable camera-calibration board is another way to reduce printed
 materials: it can establish webcam intrinsics without attaching anything to
@@ -39,7 +43,21 @@ the arms. It does not establish motor zero angles or mechanical endpoints.
 
 ## First experiment with existing hardware
 
-Start with colour-image geometry fitting, entirely offline and without motor
+Start with offline arm segmentation and feature tracking on saved colour
+images. Verify robot/background separation before gathering more data. A
+stationary image can test segmentation, but cannot train or validate a joint
+state estimator. No segmentation worker is implemented or installed yet.
+
+Then evaluate image-only predictions on curated, synchronized recordings with
+measured joint states. Keep each source's joint conventions separate and split
+validation by recording session and physical robot. Adaptation for an
+uncalibrated installation initially predicts its existing encoder coordinates;
+it does not establish an independent physical angle reference. The new design
+defines the distinction and the acceptance experiments.
+
+## Optional geometric comparison
+
+Colour-image geometry fitting can be compared entirely offline and without motor
 access. Use the pinned upstream arm model, retaining mesh licenses. Fit the
 visible model to saved images and compare its projected outlines with the
 actual links. With unknown camera intrinsics, a sensitivity sweep can screen
