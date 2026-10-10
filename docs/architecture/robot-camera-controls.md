@@ -86,8 +86,12 @@ Both completed head tests verified torque disabled. The low-output return
 attempts did not reach their exact starting positions: pan ended at 2088 after
 starting at 2083; tilt ended at 2834 after starting at 2814. Their return images
 must not be described as a repeated starting-pose control. The diagnostic's
-`ready` and `before` frames were also identical copies, so an independent
-stationary sequence is needed to characterize camera jitter and exposure.
+`ready` and `before` frames were also identical copies. A separate stationary
+sequence was therefore captured with distinct timestamps/content and no motor
+writes. Five pairs per camera were all classified static-or-jitter; the largest
+median projected movement was 0.057 pixels for the head and 0.120 for the hand.
+That short baseline supports this comparison but does not validate thresholds
+for every lighting or capture condition.
 
 Arm tests retain measured encoder displacement alongside image scores. A joint
 that does not move under the output cap is inconclusive; a joint blocked by the
@@ -95,6 +99,21 @@ preflight range guard is untested. A hand camera's entire view may move with
 multiple upstream joints, so these tests can identify contributing joints
 without uniquely identifying its physical mounting link. Private captures and
 operator-attended test provenance are recorded in the screenshot register.
+
+All 14 positional selections were considered: 11 completed bounded tests, and
+left wrist roll, right shoulder lift and right elbow were blocked before any
+writes by the existing range guard. One earlier tilt attempt was also blocked
+by the shared adapter lease and was retried after ownership cleared. Four arm
+tests had no measured displacement and left wrist flex changed by one count,
+so those five tests provide no useful exclusion evidence. Both grippers moved
+19–20 counts while broad image features stayed steady. Right shoulder pan and
+wrist flex changed the hand view by about 37–38 projected pixels, but the
+classifier retained ambiguity because of phase/feature disagreement or limited
+spatial coverage. No physical hand-camera mount was automatically assigned.
+
+A fresh final dashboard observation around 17:24 UTC read all 17 motors with
+torque off, no motor-command writes and a maximum reported temperature of 36°C.
+The low-output tests did not force motion against resistance or widen limits.
 
 ## Capture-mode comparison
 
