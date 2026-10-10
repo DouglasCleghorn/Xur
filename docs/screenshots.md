@@ -1,5 +1,18 @@
 # Screenshot and artwork register
 
+- 2026-10-10: Private stationary head-camera comparison under
+  `.build/evidence/calibration-ir-20261010/` (`head-ir.png`, 640×480 grayscale,
+  and `head-rgb.png`, 1920×1080 colour), captured at approximately 12:24 UTC
+  on xur-255 running host 26.10.032 and robot source `bd2f18c`.
+  Purpose: check whether the infrared interface can see the arms and compare
+  its coverage and contrast with the colour interface. IR shows both arms
+  and grippers but the printed patterns have little contrast; RGB is well lit
+  and shows much of both arms, with some lower links outside the frame.
+  Camera-only FFmpeg captures issued no motor commands or configuration writes.
+  Privacy review: private room/furnishings and robot hardware, no people or
+  credentials visible. Keep ignored/private; these are diagnostic evidence,
+  not release artwork. Reassess after lighting, camera or robot pose changes.
+
 - 2026-10-09: Private read-only Lenovo RGB diagnostic capture family under
   `.build/evidence/calibration-rgb/`, captured on xur-255 using host 26.10.031
   and robot image source `55c5f1b`. Purpose: assess head-camera coverage after
