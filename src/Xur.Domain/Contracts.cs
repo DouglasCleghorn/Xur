@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Xur.Domain;
 
@@ -14,7 +15,13 @@ public record InstallPlan(string Id, string Digest, string Generation, Disk Targ
 public record Approval(string Id, string Digest);
 public record InstallationProgress(int CompletedSteps,string CurrentStep,string Detail="");
 public record Operation(string Id, string Stage, string Message, DateTimeOffset Updated,InstallationProgress? Progress=null);
-public record ProcessResult(int ExitCode, string Output);
+public record ProcessResult(int ExitCode, string Output)
+{
+    // Output remains the combined diagnostic text for existing callers. Machine
+    // readers must use stdout without treating command warnings as response data.
+    [JsonIgnore] public string StandardOutput { get; init; } = Output;
+    [JsonIgnore] public string StandardError { get; init; } = "";
+}
 
 public static class Canonical
 {
@@ -28,7 +35,8 @@ public static class Processes
         int seconds = 30, CancellationToken cancellation = default)
     {
         var result = await Xur.IO.CommandRunner.Run(executable, args, seconds, cancellation);
-        return new(result.ExitCode, Encoding.UTF8.GetString(result.Output) + Encoding.UTF8.GetString(result.Error));
+        var stdout=Encoding.UTF8.GetString(result.Output);var stderr=Encoding.UTF8.GetString(result.Error);
+        return new(result.ExitCode,stdout+stderr){StandardOutput=stdout,StandardError=stderr};
     }
 }
 

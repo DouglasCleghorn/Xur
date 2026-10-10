@@ -36,9 +36,80 @@ static class RoboticsTests
         }
         check(!ApiKeys.Allows("robotics","POST","/api/power/reboot"),"Robotics keys do not gain host power control");
         Inventory(check);
+        await InspectStreams(workload,check);
         await Container(workload,check);
         await Proxy(check);
         await Migration(workload,check);
+    }
+    static async Task InspectStreams(Workload workload,Action<bool,string> check)
+    {
+        // Reproduce Podman's successful inspect plus its real warning when a
+        // previously mapped Xbox input device vanishes. No host devices are used.
+        const string warning="time=\"2026-10-10T11:40:12-06:00\" level=warning msg=\"Could not locate device 13:77 on host\"\n";
+        const string instance="73ac46d471aed3c1b9e0cf9fcc717df388cf3898755a08d06bb279b553643895";
+        var json=JsonSerializer.Serialize(new[]{new
+        {
+            Id=instance,
+            Config=new{Image=RoboticsWebContainer.NightlyImage,Labels=new Dictionary<string,string>{{"io.xur.id",workload.Id},{"io.xur.fingerprint",workload.Fingerprint},{"io.xur.robot.runtime",RoboticsWebContainer.RuntimeLabel}}},
+            State=new{Pid=882055,Status="running"}
+        }});
+        Task<ProcessResult> Capture(string stdout,string stderr,int exitCode=0)=>Processes.Run("/bin/sh",
+            ["-c","printf '%s' \"$1\"; printf '%s' \"$2\" >&2; exit \"$3\"","robot-inspect-streams",stdout,stderr,exitCode.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+        var mixed=await Capture(json,warning);var mixedLabel=await Capture(RoboticsWebContainer.RuntimeLabel+"\n",warning);
+        check(mixed.ExitCode==0&&mixed.StandardOutput==json&&mixed.StandardError==warning&&mixed.Output==json+warning,
+            "Real process execution preserves stdout, stderr and existing combined diagnostics independently");
+        var oldStub=new ProcessResult(0,json);
+        check(oldStub.StandardOutput==json&&oldStub.StandardError=="","Existing two-argument process stubs retain stdout compatibility");
+        using(var serialized=JsonDocument.Parse(JsonSerializer.Serialize(mixed)))
+            check(serialized.RootElement.EnumerateObject().Select(property=>property.Name).Order().SequenceEqual(new[]{"ExitCode","Output"}),
+                "Split process streams do not change the public serialized ProcessResult contract");
+        var root=Path.GetFullPath(".build/robot-streams-"+Guid.NewGuid().ToString("N")[..12]);Directory.CreateDirectory(root);
+        var previousError=Console.Error;using var logged=new StringWriter();Console.SetError(logged);
+        try
+        {
+            var present=true;var inspection=mixed;var imageInspection=mixedLabel;var inspectCalls=0;var launchCalls=0;
+            var container=new RoboticsWebContainer(root,(_,arguments,_,_)=>
+            {
+                var args=arguments.ToArray();
+                if(args[0]=="container")return Task.FromResult(new ProcessResult(present&&args.Last()==RoboticsWebContainer.Name?0:1,""));
+                if(args[0]=="inspect"){inspectCalls++;return Task.FromResult(inspection);}
+                if(args.Take(2).SequenceEqual(["image","inspect"]))return Task.FromResult(imageInspection);
+                if(args.Contains("/usr/bin/podman")){launchCalls++;present=true;}
+                return Task.FromResult(new ProcessResult(0,""));
+            },stateDirectory:Path.Combine(root,"state"),hardware:()=>new([],[],[]),healthy:()=>Task.FromResult(true));
+            var observed=await container.Inspect(workload);
+            check(observed?.InstanceId==instance&&observed.Pid==882055&&observed.State=="running",
+                "A vanished mapped controller warning does not corrupt successful robotics container identity inspection");
+            check(logged.ToString().Contains("Could not locate device 13:77 on host"),"Successful inspection keeps the missing-device warning in host diagnostics");
+            foreach(var stdout in new[]{json+" trailing garbage","",json[..^1]})
+            {
+                inspection=await Capture(stdout,warning+json);bool rejected=false;
+                try{await container.Inspect(workload);}catch(JsonException){rejected=true;}
+                check(rejected,"Robotics inspect rejects malformed stdout instead of trimming garbage or reading valid JSON from stderr");
+            }
+            inspection=await Capture(json,warning+"fatal inspect failure secret=private-test-value\n",125);
+            string failure="";try{await container.Inspect(workload);}catch(InvalidOperationException error){failure=error.Message;}
+            check(failure.Contains("exit code 125")&&failure.Contains("fatal inspect failure")&&failure.Contains("[REDACTED]")&&!failure.Contains("private-test-value"),
+                "A failed inspect cannot adopt valid JSON and retains redacted stderr and exit diagnostics");
+            check(!logged.ToString().Contains("private-test-value"),"Inspection stderr is redacted before host logging");
+            inspection=mixed;present=false;var before=inspectCalls;
+            check(await container.Inspect(workload)==null&&inspectCalls==before,
+                "An actually absent container remains absent without inspecting or adopting a cached response");
+            var started=await container.Start(workload);
+            check(started.InstanceId==instance&&launchCalls==1,
+                "Image runtime labels are parsed from stdout despite independent missing-device warnings");
+            foreach(var label in new[]{RoboticsWebContainer.RuntimeLabel+" trailing garbage",""})
+            {
+                present=false;imageInspection=await Capture(label,warning+RoboticsWebContainer.RuntimeLabel);bool rejected=false;before=launchCalls;
+                try{await container.Start(workload);}catch(InvalidOperationException){rejected=true;}
+                check(rejected&&launchCalls==before,"Image labels cannot be recovered from malformed stdout or supplied through stderr");
+            }
+            present=false;imageInspection=await Capture(RoboticsWebContainer.RuntimeLabel,warning+"image inspection failed",125);before=launchCalls;failure="";
+            try{await container.Start(workload);}catch(InvalidOperationException error){failure=error.Message;}
+            check(launchCalls==before&&failure.Contains("exit code 125")&&failure.Contains("image inspection failed"),
+                "A failed image-label command cannot launch a container even when stdout has the expected label");
+        }
+        finally{Console.SetError(previousError);Directory.Delete(root,true);}
     }
     static void Inventory(Action<bool,string> check)
     {
