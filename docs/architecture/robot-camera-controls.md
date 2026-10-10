@@ -48,6 +48,14 @@ head angle or safe mechanical endpoints. No head motor was moved. A different
 robot must supply or establish its own camera-mount joint binding; bus IDs 7/8
 are not a universal camera-control interface.
 
+Earlier attended identification evidence from 2026-10-09 does support a local
+image-direction association. The pan test changed reported encoder position
+2078→2082 while tray tag 00 moved left by about 5 pixels. The tilt test briefly
+reached 2830 from 2809 while that fixed tag moved upward by about 50 pixels;
+afterward it settled at 2814. These short observations identify the installed
+axes' local effect, not a calibrated angle, full travel range or a guaranteed
+view-improvement trajectory. Their private capture family is already registered.
+
 ## Capture-mode comparison
 
 Stationary head RGB frames were captured at 640×480 and 1920×1080 around 16:55
