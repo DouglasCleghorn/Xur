@@ -12,6 +12,7 @@ public sealed class RoboticsRuntime
     readonly RoboticsContainer container;
     readonly Func<RobotDevices> deviceInventory;
     readonly RecordingBackups backups;
+    readonly RobotCameraCapabilities cameraCapabilities;
     readonly Dictionary<string, RobotJob> jobs = new();
     string? workloadId;
     RoboticsConfiguration? configuration;
@@ -33,8 +34,8 @@ public sealed class RoboticsRuntime
     long emergencyStopEpoch;
     string EmergencyStopPath=>Path.Combine(directory,"estop-latched");
 
-    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null,RecordingBackups? backups=null,RobotMetrology? metrology=null)
-    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory);this.metrology=metrology??new(directory); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
+    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null,RecordingBackups? backups=null,RobotMetrology? metrology=null,RobotCameraCapabilities? cameraCapabilities=null)
+    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory);this.metrology=metrology??new(directory);this.cameraCapabilities=cameraCapabilities??new(); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
 
     public RobotStatus Status()
     {
@@ -529,6 +530,22 @@ public sealed class RoboticsRuntime
         if(Job(job.Id)?.State!="completed" || bytes==null)throw new InvalidOperationException(Job(job.Id)?.Detail??"Camera capture failed.");
         if(bytes.Length>2*1024*1024)throw new IOException("Camera image exceeds its limit.");
         return bytes;
+    }
+    public async Task<RobotCameraCapabilityReport> CameraCapabilities(CancellationToken token)
+    {
+        RobotJob job;RobotCameraCapabilityReport? report=null;Task pending;
+        lock(sync)
+        {
+            RequireLoaded();Idle();if(!stopLatched)throw new InvalidOperationException("Stop and disarm before inspecting camera controls.");
+            var cameras=deviceInventory().Cameras;var selected=configuration;
+            job=LaunchOperation("camera-capabilities",false,async cancel=>
+            {report=await cameraCapabilities.Read(cameras,selected,cancel);return "Read-only camera driver capabilities inspected; no settings or motor state changed.";});
+            pending=worker!;
+        }
+        using var registration=token.Register(()=>{lock(sync)if(activeJob==job.Id)cancellation?.Cancel();});
+        await pending;
+        if(Job(job.Id)?.State!="completed"||report is null)throw new InvalidOperationException(Job(job.Id)?.Detail??"Camera capability inspection failed.");
+        return report;
     }
     public RobotJob Probe()
     {lock(sync){Idle();RequireConfiguration();return Launch("probe",false,async(c,token)=>(await tools.Run(c,"probe",null,15,token)).GetRawText());}}

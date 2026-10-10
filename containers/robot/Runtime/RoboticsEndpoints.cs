@@ -30,6 +30,12 @@ public static class RoboticsEndpoints
         app.MapPost("/api/auto-calibrate",async Task<IResult>(HttpContext c)=>await Call<RobotCalibrationRequest>(c,r=>Task.FromResult<IResult>(Reply(robot.AutoCalibrate(),statusCode:202))));
         app.MapPost("/api/start-controller",async Task<IResult>(HttpContext c)=>await Call<RobotControllerRequest>(c,r=>Task.FromResult<IResult>(Reply(robot.StartController(r),statusCode:202))));
         app.MapGet("/api/devices",()=>Reply(RoboticsRuntime.Devices()));
+        app.MapGet("/api/camera-capabilities",async Task<IResult>(HttpContext c)=>
+        {
+            if(c.Request.QueryString.HasValue||c.Request.ContentLength is >0||c.Request.Headers.ContainsKey("Transfer-Encoding"))
+                return BadRequest(new RobotError("Camera inventory inspection takes no device, options or request body."));
+            try{return Reply(await robot.CameraCapabilities(c.RequestAborted));}catch(InvalidOperationException e){return Conflict(new RobotError(e.Message));}
+        });
         app.MapGet("/api/detection",()=>Reply(robot.Detection()));
         app.MapPost("/api/detect-buses",async Task<IResult>(HttpContext c)=>await Call<RobotResetStopRequest>(c,r=>Task.FromResult<IResult>(Reply(robot.DetectBuses(),statusCode:202))));
         app.MapGet("/api/configuration",()=>Reply(robot.Configuration()));

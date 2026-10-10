@@ -18,6 +18,7 @@ public record RobotToolRequest(RoboticsConfiguration Configuration,string Operat
 [JsonSerializable(typeof(RoboticsConfiguration))]
 [JsonSerializable(typeof(RobotCalibrationAssessment))]
 [JsonSerializable(typeof(RobotDevices))]
+[JsonSerializable(typeof(RobotCameraCapabilityReport))]
 [JsonSerializable(typeof(RobotBusDetection))]
 [JsonSerializable(typeof(RobotJob))]
 [JsonSerializable(typeof(RobotJob[]))]
