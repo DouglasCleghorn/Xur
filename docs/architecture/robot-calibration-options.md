@@ -3,7 +3,8 @@
 The robotics workload should support different reference methods inside the
 container. Robot profiles still own only deployment, devices and the `/robot`
 proxy. There is no working automatic joint-calibration solver yet; the current
-button remains a read-only readiness assessment.
+button now collects sealed, read-only camera/encoder observations and reports
+the remaining calibration phases. It does not approve joint calibration.
 
 The primary direction is now a shared visual model with per-installation
 adaptation from images and measured joint states. Users should not need robot
@@ -20,6 +21,11 @@ cut off by the bottom of the frame. The separate 640×480 infrared interface als
 arms, but the printed tags had little contrast. IR is a grayscale image source,
 not a depth measurement. These captures establish visibility in one pose only.
 Private evidence is registered in [the screenshot register](../screenshots.md).
+Later attended tilt tests improved lower-link visibility while both bases
+remained partly cropped; a separate late infrared capture remained nearly
+black. Coverage depends on the current view and illumination, rather than the
+camera name. See the [follow-up camera evidence](robot-camera-controls.md) and
+the implemented [stationary observation journal](robot-calibration-observations.md).
 
 ## Alternatives to markers on the arms
 

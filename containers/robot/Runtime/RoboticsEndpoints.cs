@@ -24,6 +24,13 @@ public static class RoboticsEndpoints
         app.MapGet("/api/observation",async Task<IResult>(HttpContext c)=>
         {try{return Reply(await robot.Observation(c.RequestAborted));}catch(InvalidOperationException e){return Conflict(new RobotError(e.Message));}});
         app.MapGet("/api/calibration-assessment",()=>Reply(robot.CalibrationAssessment()));
+        app.MapGet("/api/calibration-observations",()=>
+        {try{return Reply(robot.CalibrationObservation());}catch(Exception e) when(e is IOException or InvalidOperationException or System.Text.Json.JsonException){return Conflict(new RobotError(e.Message));}});
+        app.MapPost("/api/calibration-observations",async Task<IResult>(HttpContext c)=>await Call<RobotCalibrationObservationRequest>(c,r=>Task.FromResult<IResult>(Reply(robot.CaptureCalibrationObservation(r),statusCode:202))));
+        app.MapGet("/api/calibration-observations/{id}/manifest",(string id)=>
+        {try{return Results.Bytes(robot.CalibrationObservationManifest(id),"application/json");}catch(Exception e) when(e is IOException or InvalidOperationException or System.Text.Json.JsonException){return NotFound(new RobotError("Preserved observation manifest is unavailable or failed verification."));}});
+        app.MapGet("/api/calibration-observations/{id}/files/{name}",(string id,string name)=>
+        {try{return Results.Bytes(robot.CalibrationObservationArtifact(id,name),name.EndsWith(".png",StringComparison.Ordinal)?"image/png":name.EndsWith(".json",StringComparison.Ordinal)?"application/json":"application/octet-stream");}catch(Exception e) when(e is IOException or InvalidOperationException or System.Text.Json.JsonException){return NotFound(new RobotError("Preserved observation artifact is unavailable or failed verification."));}});
         app.MapGet("/api/metrology",()=>
         {try{return Reply(robot.Metrology());}catch(Exception error) when(error is IOException or UnauthorizedAccessException or InvalidOperationException){return Conflict(new RobotError(error.Message));}});
         app.MapPost("/api/metrology",async Task<IResult>(HttpContext c)=>await Call<RobotMetrologySettings>(c,r=>Task.FromResult<IResult>(Reply(robot.ConfigureMetrology(r)))));

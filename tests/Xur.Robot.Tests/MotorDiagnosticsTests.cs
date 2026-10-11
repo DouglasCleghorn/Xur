@@ -15,9 +15,9 @@ static class MotorDiagnosticsTests
             Calls++;return Task.FromResult(Reading(c,clock.Now,Temperature));
         }
     }
-    sealed class AssessmentTools(Clock clock):IRobotTools
+    sealed class AssessmentTools(Clock clock,string directory):IRobotTools
     {
-        public int DashboardCalls,MarkerCalls,Temperature=57;
+        public int DashboardCalls,CaptureCalls,Temperature=57;
         public Task<JsonElement> Run(RoboticsConfiguration c,string operation,object? request,int seconds,CancellationToken token)
         {
             if(operation=="dashboard")
@@ -33,12 +33,9 @@ static class MotorDiagnosticsTests
                     }).ToArray(),cameras=Array.Empty<object>()
                 }));
             }
-            if(operation!="inspect-markers")throw new Exception("Cached dashboard ingestion attempted an extra hardware operation.");
-            MarkerCalls++;
-            RobotMarkerSurvey.AdapterCamera Camera(string name)=>new(name,Enumerable.Range(0,3).Select(i=>
-                new RobotMarkerSurvey.AdapterFrame(clock.Now.AddMilliseconds(i),100,100,
-                    [new RobotMarkerDetection(0,0,100,[15,15],[[10,10],[20,10],[20,20],[10,20]])])).ToArray(),"/9j/2Q==");
-            return Task.FromResult(RobotJson.Element(new RobotMarkerSurvey.AdapterResult("tagStandard41h12",new string('a',64),[Camera("head"),Camera("hand")])));
+            if(operation!="capture-calibration-observation")throw new Exception("Cached dashboard ingestion attempted an extra hardware operation.");
+            CaptureCalls++;
+            return Task.FromResult(CalibrationObservationTests.Capture(directory,c,((RobotCalibrationObservationRequest)request!).Samples));
         }
     }
     static RoboticsConfiguration Configuration()=>new("fixture","/dev/serial/by-id/left","/dev/serial/by-id/right","",
@@ -138,12 +135,12 @@ static class MotorDiagnosticsTests
                 "Hash-valid calibration endpoints that overflow span subtraction cannot arm motion or trigger motor tools");
             await CachedAssessmentAndReset(directory,c,check);
         }
-        finally{Directory.Delete(directory,true);}
+        finally{CalibrationObservationTests.Unseal(directory);Directory.Delete(directory,true);}
     }
     static async Task CachedAssessmentAndReset(string directory,RoboticsConfiguration c,Action<bool,string> check)
     {
         var clock=new Clock{Now=new DateTimeOffset(2026,10,10,12,0,0,TimeSpan.Zero)};
-        var tools=new AssessmentTools(clock);var path=Path.Combine(directory,"cached-assessment");
+        var path=Path.Combine(directory,"cached-assessment");var tools=new AssessmentTools(clock,path);
         var runtime=new RoboticsRuntime(path,Path.Combine(path,"reservation"),tools,clock);
         runtime.Start("fixture");runtime.Configure(c);
         try
@@ -151,13 +148,13 @@ static class MotorDiagnosticsTests
             var assessment=runtime.AutoCalibrate();await Finished(assessment.Id);
             var cached=await runtime.Observation(CancellationToken.None);
             check(runtime.Job(assessment.Id)?.State=="completed"&&cached.Motors?[0].Temperature is{MaximumCelsius:57,SampleCount:1}
-                &&tools.DashboardCalls==1&&tools.MarkerCalls==1&&!runtime.CalibrationAssessment()!.JointCalibrationApproved,
+                &&tools.DashboardCalls==1&&tools.CaptureCalls==1&&!runtime.CalibrationAssessment()!.JointCalibrationApproved,
                 "Fresh assessment feedback enters temperature history before cache reuse without an extra dashboard poll or approval");
             runtime.EmergencyStop();await runtime.Stop();clock.Now=clock.Now.AddSeconds(6);tools.Temperature=34;
             var reset=runtime.ResetEmergencyStop();await Finished(reset.Id);
             cached=await runtime.Observation(CancellationToken.None);
             check(runtime.Job(reset.Id)?.State=="completed"&&cached.Motors?[0].Temperature is{MaximumCelsius:57,SampleCount:2}
-                &&tools.DashboardCalls==2&&tools.MarkerCalls==1&&runtime.Status().StopLatched,
+                &&tools.DashboardCalls==2&&tools.CaptureCalls==1&&runtime.Status().StopLatched,
                 "Successful reset feedback enters sampled temperature history while cached reads retain prior peaks without extra polls");
         }
         finally{await runtime.Shutdown();}

@@ -20,6 +20,10 @@ Phase 1 is the immediate milestone. Segmentation and adaptation can be tested
 offline using existing licensed recordings while physical calibration remains
 unfinished. The Xbox input-only path can be checked independently of all phases.
 See the [camera discovery evidence](robot-camera-controls.md).
+The implemented [stationary observation journal](robot-calibration-observations.md)
+preserves raw camera arrays, lossless previews and bracketed raw motor reads for
+offline inspection. Its samples are sequential, not hardware-synchronized, and
+do not provide the pose variation needed to learn joint correspondence.
 
 ### Phase 1: discover camera movement without a learned model
 
@@ -151,7 +155,9 @@ If additional visual features improve measured results, standard
 explicit Apache-2.0 code and weight licensing. Cell-DINO and XRay-DINO have
 separate restrictions and are excluded. Pin every selected code revision and
 checkpoint checksum, preserve notices, and review data licenses separately.
-No checkpoint or training dataset has been downloaded for this design.
+A private local prototype downloaded the Apache-2.0 SAM 2.1 Hiera tiny
+checkpoint and pinned its code revision and checksum. No training dataset has
+been downloaded, and the deployed app does not run this segmentation pipeline.
 
 The ASP.NET Core Native AOT robotics app owns dataset selection, masks/corrections,
 adaptation jobs, model versions and results. A private Python/PyTorch worker is
@@ -163,6 +169,26 @@ Host Xur remains responsible only for container setup, devices and `/robot`.
 No public raw motor-target API is added.
 
 ## First acceptance experiments
+
+An offline prototype on the saved attended xur-255 captures combined prompted
+SAM 2.1 arm/finger masks with background-registered optical flow. Right shoulder
+pan changed by 24 raw counts and moved the head image-right arm by a median
+21.15 pixels, versus 0.25 pixels on the opposite arm; right wrist flex changed
+by 23 counts and moved the same region 6.53 pixels, versus 0.11 pixels. Right
+gripper motion of 20 counts moved the hand image-left finger 22.72 pixels,
+versus 0.38 pixels on its other finger and 0.11 pixels on the background. Left
+gripper motion of 19 counts moved the head image-left arm 2.05 pixels, versus
+0.11 pixels on the opposite arm. A zero-count control had head-arm medians of
+0.12 and 0.07 pixels; four channels without measured movement remain separate
+negative controls. These are correspondence candidates from one intervention
+per channel, not joint centers or physical calibration. Capture timestamps were
+paired with approximately 20–24 ms encoder brackets, without precise exposure
+synchronization. Hand-view background shifts also reflect camera ancestors;
+one wrist-flex hand registration had insufficient spatial support and remains
+inconclusive. Scripts, mask provenance and inside/outside change measurements
+remain private ignored evidence under
+`.build/evidence/robot-segmentation-motion-20261010/`; this pipeline is not
+deployed, and no pose training or calibration approval was performed.
 
 First test stationary segmentation on the saved RGB captures without motor
 access. Independently check arm-mask boundaries and separation from the tray,
