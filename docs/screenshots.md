@@ -2,7 +2,7 @@
 
 - 2026-10-11: Replaced the illustrative calibration SVG with the unmodified
   Hugging Face follower middle-position photograph at
-  `containers/robot/wwwroot/reference/so101-follower-middle.webp` (1368×1824).
+  `containers/robot/wwwroot/reference/so101-follower-middle.webp` (1536×2048).
   Used by both arm-reference steps on `/robot/calibrate`, linked to its full-size
   local copy. Source: Hugging Face documentation-images, revision
   `e0f0921e0c4341dcb41873906046d10ad08e2410`, `lerobot/follower_middle.webp`,
