@@ -38,7 +38,9 @@ static class ControlPanelRender
         StationStreamStatus[] streams=[];
         agent.MapGet("/workstations",()=>streams);
         agent.MapGet("/station-allocations",()=>Array.Empty<StationDeviceAllocation>());
-        agent.MapGet("/station-users",()=>new[]{new StationAccount("doug",1000,"Doug","/var/home/doug")});
+        agent.MapGet("/station-users",()=>documentation
+            ?new[]{new StationAccount("example-user",1000,"Example user","/var/home/example-user")}
+            :new[]{new StationAccount("doug",1000,"Doug","/var/home/doug")});
         agent.MapGet("/update-all",()=>new UpdateAllStatus(false,null));
         agent.MapGet("/displays",()=>new DisplayPowerStatus([
             new("display-console","card0-HDMI-A-1","0000:01:00.0","Example TV",null,"native",true,null),
@@ -59,6 +61,15 @@ static class ControlPanelRender
         {
             await agent.StartAsync();var services=new ServiceCollection();services.AddLogging();var context=new DefaultHttpContext();context.Request.Scheme="https";context.Request.Host=new HostString("stations.test");services.AddSingleton<IHttpContextAccessor>(new HttpContextAccessor{HttpContext=context});services.AddSingleton(new Appliance());services.AddSingleton(manager);services.AddSingleton(new ProfileAccessSettings(root+"/profile-access.json"));services.AddSingleton(new RecipeCatalog(root+"/catalog"));services.AddSingleton(new Bootstrap(directory:root));services.AddSingleton<NavigationManager>(new Navigation());
             await using var provider=services.BuildServiceProvider();await using var renderer=new HtmlRenderer(provider,provider.GetRequiredService<ILoggerFactory>());
+            if(documentation)
+            {
+                foreach(var (page,type) in new[]{("login",typeof(Xur.Control.Components.Pages.Login)),("setup-account",typeof(Xur.Control.Components.Pages.SetupAccount))})
+                {
+                    RenderFragment body=b=>{b.OpenComponent(0,type);b.CloseComponent();};
+                    var html=await renderer.Dispatcher.InvokeAsync(async()=> (await renderer.RenderComponentAsync<Xur.Control.Components.Layout.LoginLayout>(ParameterView.FromDictionary(new Dictionary<string,object?>{{"Body",body}}))).ToHtmlString());
+                    await File.WriteAllTextAsync(Path.Combine(output,page+".html"),"<!doctype html><html lang=\"en\"><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><link rel=stylesheet href='/setup.css'></head><body>"+html+"</body></html>");
+                }
+            }
             foreach(var page in new[]{"home","displays","workstations","endpoints","monitoring","files","model-lab","api-keys","settings","settings-ssh-enabled","diagnostics","network-settings","storage","profile-edit","profile-switch"})
             {
                 diagnosticSsh=page=="settings-ssh-enabled"?new(true,2):new();

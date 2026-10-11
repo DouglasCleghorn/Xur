@@ -44,6 +44,34 @@
   source archives. Review individual images before publication and regenerate
   after camera mounting, capture mode, lighting or physical pose changes.
 
+- 2026-10-10: Phone setup capture family under
+  `.build/evidence/website-setup/`: `phone-{sign-in,account,profile,home}.png`,
+  generated Razor HTML in `fixtures/`, and local guide browser previews.
+  Actual Xur components from the working tree based on `21feb9e`, with
+  synthetic documentation fixtures and a Chromium 390×844 phone viewport in
+  the collaborative browser; no physical phone or native Safari capture.
+  Purpose: illustrate first sign-in, administrator creation, profile editing
+  and loading for `/guides/setup/`. Privacy review: all four selected captures
+  visually reviewed; account/code inputs are empty (ABC-DEF is the existing
+  placeholder), hardware and profiles are synthetic, and no private host,
+  account, password, prompt, file path or QR code appears in image pixels.
+  The preliminary profile capture with Home highlighted is superseded by the
+  corrected Profiles-navigation capture. Original T3 snapshots remain private
+  in the browser-artifacts capture family; their metadata includes the local
+  preview address. Only the four reviewed, metadata-free JPEGs listed below
+  are website assets. Regenerate after login, account, profile, Home or shared
+  mobile-navigation changes.
+
+- 2026-10-10: Responsive website regression family in
+  `.build/evidence/website/`, including `home`, `guide`, `guides-setup` and
+  other named guide/download pages at 1440, 768, 390 and 320 px as applicable,
+  with `accessibility.json` for all ten pages at 1440 and 390 px. Working tree
+  based on `21feb9e` plus the phone setup guide. Privacy review: static site
+  text and reviewed synthetic documentation images only, no live credentials,
+  accounts or host data injected. Private test evidence; not publication assets.
+  This replaces `.build/website/` as the site-test evidence location. Refresh
+  when site content, navigation, screenshots or responsive layout changes.
+
 - 2026-10-10: Attended camera-mount motor identification capture family under
   `.build/evidence/robot-camera-mount-discovery-20261010/`, with per-test
   `head/hand-{ready,before,displaced,after}.jpg` and matching motor feedback.
@@ -287,6 +315,20 @@ not imply a released app version.
 All five JPEGs were visually reviewed and have no EXIF or location metadata.
 Guide captions identify their example data. Full-resolution images are linked for
 readability; key actions are also described in text.
+
+Phone setup images were captured on 2026-10-10 from the working tree based on
+`21feb9e`, using the actual Razor renderer with synthetic fixtures and the
+collaborative browser at 390×844. `eng/capture-website.cjs` can regenerate this
+family. Each JPEG was visually reviewed, has no EXIF/location metadata, and
+is linked at full size from the guide. These captures are separate from the
+September desktop images and do not establish physical-device acceptance.
+
+| Image | Used in / purpose | Capture / privacy review | Next review |
+| --- | --- | --- | --- |
+| `docs/assets/setup-phone-sign-in.jpg` | `/guides/setup/`, step 3: enter the console code | 2026-10-10; empty code field with ABC-DEF placeholder; no real code, 390×844 | Login or mobile layout changes |
+| `docs/assets/setup-phone-account.jpg` | `/guides/setup/`, step 4: create the administrator | 2026-10-10; empty username/password fields; no credentials, 390×844 | Account creation or password-help changes |
+| `docs/assets/setup-phone-profile.jpg` | `/guides/setup/`, step 5: choose a workstation and GPU | 2026-10-10; synthetic Gaming desk, workstation and GPU, correct Profiles navigation; no personal data, 390×844 | Profile fields, device assignments or mobile navigation changes |
+| `docs/assets/setup-phone-home.jpg` | `/guides/setup/`, step 6: load a saved profile | 2026-10-10; synthetic Gaming/Studio profiles, idle state and update notice; no private data, 390×844 | Home/profile picker or mobile navigation changes |
 
 ## Release review — 2026-10-04
 

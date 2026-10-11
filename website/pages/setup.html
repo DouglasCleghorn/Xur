@@ -1,0 +1,86 @@
+<div class="guide wrap">
+<aside><nav aria-label="Guides"><a href="/guides/setup/" aria-current="page">Setup with a phone</a><a href="/guides/getting-started/">Getting started</a><a href="/guides/workstations/">Workstations</a><a href="/guides/models/">Models and APIs</a><a href="/guides/updates/">Updates and recovery</a></nav></aside>
+<article>
+<p class="eyebrow">Installation + first sign-in</p>
+<h1>Set up Xur from your phone.</h1>
+<p class="intro">Install Xur on your GPU host, then use your phone’s browser to create an account and load your first profile.</p>
+<p>The USB installer runs on the host’s screen with a keyboard. After reboot, your phone becomes the web-manager client. The screenshots below show the real Xur interface at a phone-sized viewport, with example data.</p>
+<nav class="setup-contents" aria-label="Setup steps"><a href="#before-you-start">What you need</a><a href="#install">Install the host</a><a href="#connect">Connect your phone</a><a href="#account">Create an account</a><a href="#profile">Create a profile</a><a href="#load">Load and check</a></nav>
+
+<h2 id="before-you-start">1. Gather what you need</h2>
+<ul>
+<li>A UEFI-capable x86-64 host with a target disk of at least 64 GiB. Allow extra storage for models, games and container images; check the release notes for tested hardware.</li>
+<li>A screen and keyboard connected to the host, Internet access for installation, and a USB drive of at least 16 GB.</li>
+<li>A computer to write the installer USB. The <a href="/download/">download page</a> includes Windows instructions using Rufus and links for other operating systems.</li>
+<li>A phone with a browser and a Wi-Fi connection to the same local network as the host. The host can use Ethernet or Wi-Fi.</li>
+</ul>
+<p class="note"><strong>Back up first.</strong> Writing the installer erases the USB drive. Installing Xur erases the host disk you select. Xur is in early development; keep recovery media available.</p>
+
+<h2 id="install">2. Install on the host</h2>
+<ol>
+<li>Download the online installer ISO and write it to USB. In Rufus, use <strong>GPT</strong>, <strong>UEFI (non CSM)</strong>, <strong>FAT32</strong> and <strong>ISO Image mode</strong> when prompted.</li>
+<li>Boot the host from the USB’s UEFI entry. Open <strong>Setup and installation</strong>, save a server name, then configure Ethernet or Wi-Fi. Use the host’s keyboard to move through the console with <strong>Up/Down</strong> and <strong>Enter</strong>.</li>
+<li>Choose <strong>Continue to disk selection</strong>. Check the disk’s identity and erase plan, then choose <strong>Yes</strong> to install. <strong>No</strong> is selected by default.</li>
+<li>Wait for installation to finish, confirm reboot and remove the USB. Saved networking, including Wi-Fi, carries over to the installed system.</li>
+</ol>
+<p>Leave the installed console visible: it shows the HTTPS web-manager address and initial access code. For static networking or a USB answer file, see <a href="/guides/network-and-answers/">Network settings and answer YAML</a>.</p>
+
+<h2 id="connect">3. Open Xur on your phone</h2>
+<div class="setup-step">
+<div>
+<ol>
+<li>Connect your phone to the same local network as the host. Avoid a guest Wi-Fi network that blocks access to other devices.</li>
+<li>Open your phone’s browser and enter the <strong>exact HTTPS address displayed on the console</strong>, including <code>:8443</code>. For example, <code>https://192.0.2.10:8443</code> shows the format; use your host’s address.</li>
+<li>LAN access uses a self-signed certificate. Check that the address matches your console, then use the browser’s certificate-warning option to continue to this host. The warning’s wording depends on your browser.</li>
+<li>Enter the console’s <strong>Access code</strong> and tap <strong>Sign in</strong>.</li>
+</ol>
+<p>The initial code remains usable until the administrator account is created. It is a setup credential; keep it private.</p>
+<p>If the page will not open, check that the host has rebooted into the installed system, that both devices are on the same network, and that you included <code>https://</code> and port <code>8443</code>. A self-signed-certificate warning is expected on the LAN.</p>
+</div>
+<figure class="guide-screenshot phone-screenshot"><a href="/assets/setup-phone-sign-in.jpg" aria-label="View full-size phone sign-in screenshot"><img src="/assets/setup-phone-sign-in.jpg" width="390" height="844" loading="lazy" decoding="async" alt="Phone-sized Xur sign-in page with an empty Access code field and a Sign in button."></a><figcaption>Enter the code from the host’s console. No real access code is shown. Tap the screenshot to enlarge.</figcaption></figure>
+</div>
+
+<h2 id="account">4. Create your administrator account</h2>
+<div class="setup-step">
+<div>
+<ol>
+<li>On <strong>Create your account</strong>, enter a username or email and a password of at least eight characters.</li>
+<li>Use your phone’s password manager to suggest and save a strong password. Suggestions depend on your browser’s settings and trust in the site.</li>
+<li>Tap <strong>Create account</strong>. Use this username and password for future sign-ins.</li>
+</ol>
+<p>Account creation disables the initial access code and setup-only sessions. Keep the saved password available before closing the browser. If setup fails, the page offers <strong>Download setup logs</strong>.</p>
+</div>
+<figure class="guide-screenshot phone-screenshot"><a href="/assets/setup-phone-account.jpg" aria-label="View full-size phone account-creation screenshot"><img src="/assets/setup-phone-account.jpg" width="390" height="844" loading="lazy" decoding="async" alt="Phone-sized Create your account page with empty Username or email and Password fields and a Create account button."></a><figcaption>Create the required administrator account in your phone’s browser. The fields are empty in this example.</figcaption></figure>
+</div>
+
+<h2 id="profile">5. Make your first profile</h2>
+<div class="setup-step">
+<div>
+<ol>
+<li>Open <strong>Profiles</strong> and tap <strong>Create profile</strong>. You can also create a profile from <strong>Home</strong> when none exist yet.</li>
+<li>Tap <strong>Rename</strong> to give it a descriptive name, such as <strong>Gaming desk</strong>, then tap <strong>Done</strong>. Start with a single workload so you can check its setup before adding more.</li>
+<li>Choose <strong>Workstation</strong> under <strong>Workload type</strong>. Under <strong>Workstation</strong>, choose <strong>New workstation</strong> or reuse an existing one. For a new workstation, enter its name and choose an existing <strong>User</strong> or tap <strong>Add user</strong>. A named user keeps its home and game logins across profiles.</li>
+<li>Select the GPU for the workload. Each GPU belongs to one workload at a time. For multiple workstations, use distinct GPUs and users.</li>
+<li>Review the controller and USB options below the GPU selection, then tap <strong>Save profile</strong>.</li>
+</ol>
+<p>The example shows one workstation and one GPU. For model workloads, follow <a href="/guides/models/">Models and APIs</a>; for desktop streaming and peripherals, use the <a href="/guides/workstations/">workstation guide</a>.</p>
+</div>
+<figure class="guide-screenshot phone-screenshot"><a href="/assets/setup-phone-profile.jpg" aria-label="View full-size phone profile-editor screenshot"><img src="/assets/setup-phone-profile.jpg" width="390" height="844" loading="lazy" decoding="async" alt="Xur profile editor at phone width, showing the Gaming desk profile, workstation and GPU selectors, and Save profile button."></a><figcaption>A single-workstation profile in the real editor, reusing an example desktop. Scroll to review device options, then tap Save profile.</figcaption></figure>
+</div>
+
+<h2 id="load">6. Load the profile and check it</h2>
+<div class="setup-step">
+<div>
+<ol>
+<li>Return to <strong>Home</strong>, select your saved profile and tap <strong>Load profile</strong>. Saving a profile alone does not start it.</li>
+<li>Allow time for the first start, especially when model files or container images need downloading. Open <strong>Profiles</strong> to follow the change and review any errors.</li>
+<li>Tap <strong>More</strong>, then <strong>Monitoring</strong> to check resource use and running workloads. For a desktop, use <strong>More → Workstations</strong> to manage its identity and Moonlight pairing.</li>
+</ol>
+<p>Your phone manages the host through the web interface. To stream a workstation desktop, follow <a href="/guides/workstations/">Workstations and Moonlight</a>.</p>
+<p>For access away from home, open <strong>More → Tailscale</strong>, authorize the installed host and use its HTTPS Serve address from a client connected to your tailnet. Keep the LAN URL for local access.</p>
+</div>
+<figure class="guide-screenshot phone-screenshot"><a href="/assets/setup-phone-home.jpg" aria-label="View full-size phone control-panel screenshot"><img src="/assets/setup-phone-home.jpg" width="390" height="844" loading="lazy" decoding="async" alt="Phone-sized Xur control panel with Gaming desk selected in the saved-profile picker and a Load profile button."></a><figcaption>Select your profile on Home, then tap Load profile. This example shows the host before a profile is loaded.</figcaption></figure>
+</div>
+<p>Continue with <a href="/guides/getting-started/">Getting started</a> for everyday navigation, files and profile switching, or <a href="/guides/updates/">Updates and recovery</a> to keep the host current.</p>
+</article>
+</div>
