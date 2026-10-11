@@ -371,6 +371,22 @@ See [release preparation](development/release-preparation.md).
 
 ## Change log
 
+- 2026-10-11: Robot camera preview review family under
+  `.build/evidence/robot-cameras/`, based on `3f5cb0a` plus the dynamic camera
+  inventory and larger preview changes. `desktop-1920.png` is a private
+  collaborative-browser capture of the actual dashboard HTML, CSS and script
+  with three synthetic labeled camera frames. Browser assertions also covered
+  zero, one, two, three, five and twelve cameras, refresh/reordering, isolated
+  camera errors/recovery, paused observations, native image aspect ratios and
+  layouts at 1920, 1440, 390 and 320 px without horizontal overflow. Local server
+  navigation was unavailable, so the source document and fixture responses were
+  loaded directly into the collaborative browser. Privacy review: synthetic
+  camera names, device paths and generated grid images only; no live robot,
+  people, room imagery, accounts or credentials. Browser metadata may contain
+  the local fixture address. Keep private and regenerate after preview layout,
+  inventory or capture changes. The older `.build/robot/preview/` dashboard
+  captures predate these larger dynamic views and must be refreshed before reuse.
+
 - 2026-10-07: Added Diagnostic SSH in Settings and the system report download in
   Diagnostics. Reviewed the actual Razor fixtures at 1280, 390 and 320 px in the
   collaborative browser; the new controls have no horizontal overflow. Checked
