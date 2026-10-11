@@ -46,6 +46,7 @@ app.Use(async(context,next)=>
 });
 app.MapGet("/health",()=>TypedResults.Json(new RobotHealth("ready","native-aot"),RobotJson.Default.RobotHealth));
 app.MapGet("/",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/index.html"),"text/html"));
+app.MapGet("/emotes",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/emotes.html"),"text/html"));
 app.MapGet("/controller",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/controller.html"),"text/html"));
 app.MapGet("/tags",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/tags.html"),"text/html"));
 app.MapGet("/setup",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/setup.html"),"text/html"));

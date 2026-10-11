@@ -33,6 +33,7 @@ public sealed class RoboticsRuntime
     DateTimeOffset? observationReadAt;
     RobotCalibrationAssessment? calibrationAssessment;
     bool observing;
+    Task? observationWorker;
     string? observationProblem;
     bool emergencyStop;
     long emergencyStopEpoch;
@@ -61,13 +62,19 @@ public sealed class RoboticsRuntime
     {
         lock(sync)
         {
-            RequireLoaded();Idle();if(!stopLatched)throw new InvalidOperationException("Stop and disarm before setup.");
+            RequireLoaded();if(activeJob!=null||stopping)Idle();
+            if(!stopLatched)throw new InvalidOperationException("Stop and disarm before setup.");
             if(emergencyStop||stopProblem!=null||recoveryProblem!=null)throw new InvalidOperationException("Clear any stop problem and reset E-stop before hardware setup.");
             if(RequireConfiguration().MotionEnabled)throw new InvalidOperationException("Disable motion in hardware setup before hand-guided calibration.");
             handCalibration.Begin(request);
+            // A dashboard refresh is a cancellable read, not an operator job.
+            // Reserve the calibration job now, then wait for that read's cleanup
+            // before opening either motor bus. Other operations remain excluded.
+            var pendingObservation=observing?observationWorker:null;
+            if(pendingObservation!=null)cancellation?.Cancel();
             return LaunchOperation("hand-calibration",false,async token=>
             {
-                await handCalibration.Run(configuration,handCalibrationAdapter,token);
+                await handCalibration.Run(configuration,handCalibrationAdapter,token,pendingObservation);
                 lock(sync)
                 {
                     var problems=CalibrationProblems(configuration!);
@@ -492,22 +499,23 @@ public sealed class RoboticsRuntime
             {
                 var c=RequireConfiguration();
                 observing=true;var source=new CancellationTokenSource();cancellation=source;
-                worker=System.Threading.Tasks.Task.Run(async()=>
+                worker=observationWorker=System.Threading.Tasks.Task.Run(async()=>
                 {
                     try
                     {
                         var data=await ReadDashboard(c,source.Token);
                         lock(sync){observation=data;observationReadAt=clock.GetUtcNow();observationProblem=null;motorDiagnostics.Observe(c,data,observationReadAt.Value);}
                     }
+                    catch(OperationCanceledException) when(source.IsCancellationRequested){}
                     catch(Exception e){lock(sync)observationProblem=Xur.Domain.Redaction.Logs(e.Message);}
-                    finally{lock(sync){observing=false;cancellation=null;source.Dispose();}}
+                    finally{lock(sync){observing=false;if(ReferenceEquals(cancellation,source))cancellation=null;source.Dispose();}}
                 });
             }
-            pending=worker!;
+            pending=observationWorker!;
         }
         // Browser disconnects do not cancel a snapshot shared by other viewers.
         await pending.WaitAsync(token);
-        lock(sync)return ObservationReply(false,null,observationProblem);
+        lock(sync)return ObservationReply(activeJob!=null,activeJob==null?null:jobs[activeJob].Kind,observationProblem);
     }
     RobotObservation ObservationReply(bool paused,string? operation,string? problem)=>new(observation,paused,operation,problem,
         configuration==null?[]:motorDiagnostics.Report(directory,configuration,observation,clock.GetUtcNow()));

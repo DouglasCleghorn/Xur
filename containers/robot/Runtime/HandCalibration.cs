@@ -73,7 +73,7 @@ public sealed class HandCalibration(TimeProvider? time=null)
                 TorqueOffVerified=true,Motors=progress.Motors,Updated=clock.GetUtcNow(),LeaseUntil=progress.Phase=="completed"?null:state.LeaseUntil};
         }
     }
-    public async Task Run(RoboticsConfiguration? configuration,IHandCalibrationAdapter adapter,CancellationToken token)
+    public async Task Run(RoboticsConfiguration? configuration,IHandCalibrationAdapter adapter,CancellationToken token,Task? pendingObservation=null)
     {
         using var source=CancellationTokenSource.CreateLinkedTokenSource(token);
         async Task Watch()
@@ -88,6 +88,8 @@ public sealed class HandCalibration(TimeProvider? time=null)
         var watcher=Watch();
         try
         {
+            if(pendingObservation!=null)await pendingObservation.WaitAsync(source.Token);
+            source.Token.ThrowIfCancellationRequested();
             await adapter.Run(configuration??throw new InvalidOperationException("Save hardware setup first."),Publish,commands!.Reader,source.Token);
             if(State().Phase!="completed")throw new InvalidOperationException("Calibration ended before review and save.");
         }

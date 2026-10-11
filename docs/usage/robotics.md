@@ -187,18 +187,17 @@ The generator provides five gestures for each arm, using one empty arm at a time
 
 | Gesture | Movement | Duration |
 | --- | --- | --- |
-| Wave | Raised hand, two wrist/shoulder sweeps, return | 23.7 seconds |
-| Welcome | Open gripper, extend and present outward | 25 seconds |
-| Celebrate | Raised hand with two small victory pumps | 25 seconds |
-| Curious | Raise the hand and examine both faces with a wrist turn | 23 seconds |
-| Point | Hold an extended diagonal direction, then return | 22 seconds |
+| Wave | Raised hand, two wrist/shoulder sweeps, return | 3.40 seconds |
+| Welcome | Open gripper, extend and present outward | 3.08 seconds |
+| Celebrate | Raised hand with two small victory pumps | 3.08 seconds |
+| Curious | Raise the hand and examine both faces with a wrist turn | 2.88 seconds |
+| Point | Hold an extended diagonal direction, then return | 2.68 seconds |
 
-Each recording saves 10 Hz commands, actual simulated joint feedback and
+Each fast recording saves 100 Hz commands, actual simulated joint feedback and
 velocities in `recording.jsonl` and `trajectory.npz`. Rendered runs also save
-`preview.gif`; export adds a local H.264 MP4 and a portable `<gesture>-<arm>.xuremot`
-ZIP file. The MP4 preserves the 5 Hz rendered poses and real simulation pacing;
-10 Hz video encoding duplicates frames to represent durations such as 23.7
-seconds exactly. Export verifies video duration, decoded frame count and payload
+`preview.gif`; export adds a local H.264 MP4 and a portable `<gesture>-<arm>-fast.xuremot`
+ZIP file. The MP4 preserves the 25 Hz rendered poses and real simulation pacing.
+Legacy 10 Hz recordings and their original video timing remain importable. Export verifies video duration, decoded frame count and payload
 checksums. Each bundle contains its versioned manifest, recording files, MP4,
 metadata and license notices. It includes no encoder executable.
 
@@ -207,10 +206,11 @@ adaptation: equality constraints hold the base, wheels and head at zero while
 retaining upstream arm geometry, inertias, actuators, limits and contact filters.
 The generator rejects contacts, non-finite state, excessive tracking error/speed,
 inactive-arm drift and failure to return to the initial pose. Target changes are
-limited to one degree per 10 Hz sample. These checks describe the simulated
+limited to one degree per sample; the denser 100 Hz recording supports
+expressive timing without increasing that sample bound. These checks describe the simulated
 model; physical clearances still require robot-specific review.
 
-Open `/robot`, select one or more `.xuremot` files in **Emotes**, then choose
+Open `/robot/emotes`, select one or more `.xuremot` files, then choose
 **Import emotes**. Watch each video using its playback controls and inspect its
 arm, duration and recording details. **Download emote file** preserves the
 original bundle. Imports are limited to 16 MiB per file and stored under the
@@ -241,7 +241,7 @@ which documents manually guided recording, JSON trajectory save/load and camera
 recording during replay. Its inspected repository contains a README and script,
 with no bundled gesture trajectories or visible license; Xur does not copy its
 code or treat its recordings as compatible calibrated emotes. The ten generated
-candidates above use Xur's original gesture definitions.
+fast candidates above use Xur's original gesture definitions.
 
 ## Xbox control
 

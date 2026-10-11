@@ -221,14 +221,14 @@
  async function refresh() {
   if (document.hidden) return;
   try {
-   const [status, jobs] = await Promise.all([api('status'), ['guide', 'setup'].includes(page) ? Promise.resolve([]) : api('jobs')]);
+   const [status, jobs] = await Promise.all([api('status'), ['guide', 'setup', 'emotes'].includes(page) ? Promise.resolve([]) : api('jobs')]);
    set('mode', status.mode); list('problems', status.problems || []);
    const latched = status.emergencyStopLatched === true;
    $('estop').closest('.stop-bar').classList.toggle('latched', latched);
    set('estop-state', latched ? 'E-stop latched · motion disabled' : 'Software emergency stop');
    $('reset-estop').hidden = !latched;
    for (const id of ['controller', 'calibrate']) if ($(id)) $(id).disabled = latched;
-   if (page === 'guide' || page === 'setup') return;
+   if (['guide', 'setup', 'emotes'].includes(page)) return;
    if (page === 'tags') await tags(jobs);
    else {
     set('identity', status.workloadId ? `${status.workloadId} · ${status.stopLatched ? 'disarmed' : 'operator session'} · base movement disabled` : 'Load the Robotics workload in your Xur profile.');

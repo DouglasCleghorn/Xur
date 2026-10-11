@@ -274,13 +274,22 @@ def main():
             start()
             check(json.loads(request(app_socket, '/robot/health')[2])['compilation'] == 'native-aot',
                   'Native AOT health endpoint runs')
-            for page, text in [('/robot/', b'Every motor'), ('/robot/tags', b'Raw observations'), ('/robot/controller', b'Button map'), ('/robot/setup', b'<h1>Robot setup</h1>'), ('/robot/calibrate', b'<h1>Hand-guided calibration</h1>')]:
+            for page, text in [('/robot/', b'Every motor'), ('/robot/emotes', b'<h1>Emotes</h1>'), ('/robot/tags', b'Raw observations'), ('/robot/controller', b'Button map'), ('/robot/setup', b'<h1>Robot setup</h1>'), ('/robot/calibrate', b'<h1>Hand-guided calibration</h1>')]:
                 status, headers, data = request(app_socket, page)
                 check(status == 200 and text in data, 'Serves ' + page)
                 check(b'id="estop"' in data and b'id="reset-estop"' in data, 'E-stop and reset are available on ' + page)
                 check('blob: data:' in headers['Content-Security-Policy'], 'Camera CSP survives the proxy response')
+                check(b'href="/robot/emotes"' in data, 'Emotes navigation is available on ' + page)
             for asset in ['robot.js', 'robot.css', 'setup.js', 'setup.css', 'emotes.js', 'emote-files.js', 'emote-files.css', 'backups.js', 'camera-capabilities.js', 'calibration-observations.js', 'calibrate.js', 'calibrate.css', 'vendor/signalr/signalr.min.js', 'vendor/signalr/LICENSE.txt', 'vendor/signalr/third-party-notices.txt']:
                 check(request(app_socket, '/robot/' + asset)[0] == 200, 'Serves local ' + asset)
+            dashboard = request(app_socket, '/robot/')[2]
+            emotes = request(app_socket, '/robot/emotes')[2]
+            check(b'id="emote-import"' not in dashboard and b'emote-files.js' not in dashboard
+                  and b'emote-files.css' not in dashboard, 'Dashboard has no emote import panel or assets')
+            check(b'data-page="emotes"' in emotes and b'id="emote-import"' in emotes
+                  and b'/robot/emote-files.js' in emotes and b'/robot/emote-files.css' in emotes
+                  and b'href="/robot/emotes" aria-current="page"' in emotes,
+                  'Dedicated Emotes page provides local file import and video library')
             for removed in ['/robot/api/simulation', '/robot/api/simulation/emote', '/robot/api/simulation/stop']:
                 check(request(app_socket, removed)[0] == 404, 'Embedded simulator route removed: ' + removed)
             guided = request(app_socket, '/robot/calibrate')[2]

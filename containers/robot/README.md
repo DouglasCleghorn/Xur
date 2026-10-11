@@ -15,8 +15,8 @@ to perform robot operations or launch another tools container.
 The pages are:
 
 - `/robot/`: large snapshots from every detected camera, every motor's available registers,
-  calibration assessment, controller start, emote file imports with video
-  previews and recent operations.
+  calibration assessment, controller start and recent operations.
+- `/robot/emotes`: emote file imports, video previews and original downloads.
 - `/robot/setup`: device selection and automatic bus-role detection, effort
   limits, measured camera/tag metrology, session arming, demonstration recording,
   ACT training, skill evaluation and review, emotes and sorting tasks.
@@ -27,7 +27,7 @@ The pages are:
   and copyable/downloadable JSON for all three frames from each camera.
 - `/robot/controller`: the supported Xbox button map and session instructions.
 
-All five pages include the software E-stop and reset controls. Dashboard cameras
+All six pages include the software E-stop and reset controls. Dashboard cameras
 are captured separately, requesting 1920 × 1080 where the driver supports it;
 they are not synchronized stereo. Head and hand keep their saved roles, and
 additional capture interfaces appear automatically without changing setup.
@@ -55,7 +55,7 @@ MuJoCo simulation. See [the recording script](../../eng/xlerobot-record-emotes.p
 and [its workflow](../../docs/usage/robotics.md#simulation-recordings). The app has
 no embedded simulator or practice calibration mode.
 
-The dashboard accepts `.xuremot` ZIP bundles containing a versioned manifest,
+The Emotes page accepts `.xuremot` ZIP bundles containing a versioned manifest,
 checksummed recording, trajectory, MP4 and license notices. Imports are bounded
 to 16 MiB, preserved byte for byte and deduplicated by SHA-256 under
 `/state/emotes/imports`. Videos are served locally with byte ranges for seeking.
@@ -63,7 +63,9 @@ Imported model-radian recordings remain preview candidates: they cannot add a
 reviewed skill, change calibration or enable motion. See the recording workflow
 for the bundle schema and physical transfer requirements.
 
-Hand-guided setup is an exclusive runtime job. Phase acknowledgements include
+Hand-guided setup is an exclusive runtime job. Starting setup cancels an active
+background dashboard read and waits for its cleanup before opening motor buses;
+other dashboard tabs then pause their reads. Phase acknowledgements include
 a session ID and revision, and duplicate/stale commands fail. The controlling
 page renews a 15-second lease; loss of its heartbeat cancels the adapter. SignalR
 uses server-sent events with long polling fallback through the authenticated Unix-socket proxy, with CSRF headers

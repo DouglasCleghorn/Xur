@@ -20,7 +20,7 @@
    const download = node('a', 'Download emote file', 'button'); download.href = `/robot/api/emote-files/${encodeURIComponent(item.key)}/download`; download.download = `${m.id}.xuremot`;
    const source = node('a', 'Source model'); source.href = m.source.repository; source.rel = 'noreferrer';
    const actions = node('div', '', 'actions'); actions.append(download, source);
-   card.append(node('h3', m.name), video, details, node('p', m.task), state, node('p', item.detail, 'emote-file-state'), actions); library.append(card);
+   card.append(node('h2', m.name), video, details, node('p', m.task), state, node('p', item.detail, 'emote-file-state'), actions); library.append(card);
   }
  }
  form.addEventListener('submit', async event => {
