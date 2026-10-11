@@ -103,7 +103,7 @@ elif operation=="capture-calibration-observation":
             first=stamp()
             buses=[{"role":role,"port":configuration[key],"motors":[{"id":number,"name":role.replace("/","-")+"-joint-"+str(number),
                 "model":"STS3215","observedAt":datetime.now(timezone.utc).isoformat(),
-                "registers":{"Present_Position":1024+number,"Torque_Enable":0,"Moving":0,"Status":0}} for number in range(1,count+1)]}
+                "registers":{"Present_Position":1024+number,"Torque_Enable":0,"Present_Velocity":0,"Operating_Mode":0,"Moving":0,"Status":0}} for number in range(1,count+1)]}
                 for role,key,count in [("left/head","leftPort",8),("right/wheels","rightPort",9)]]
             last=stamp();name=stem+"-motors-"+phase+".json"
             add(name,{"phase":phase,"readStartedAt":first,"readCompletedAt":last,"buses":buses})

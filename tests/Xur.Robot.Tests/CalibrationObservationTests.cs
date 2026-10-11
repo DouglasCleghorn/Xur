@@ -29,7 +29,7 @@ static class CalibrationObservationTests
         writer.Write(new byte[]{0x93,0x4e,0x55,0x4d,0x50,0x59,1,0});writer.Write((ushort)header.Length);writer.Write(header);writer.Write(new byte[16*16*3]);
         return output.ToArray();
     }
-    internal static JsonElement Capture(string directory,RoboticsConfiguration c,int samples=1,bool complete=true)
+    internal static JsonElement Capture(string directory,RoboticsConfiguration c,int samples=1,bool complete=true,bool retainPartialImages=false)
     {
         var id=Guid.NewGuid().ToString("N");var original=Path.Combine(directory,Originals,id);
         var backup=Path.Combine(directory,"backups/calibration-observations",id);Directory.CreateDirectory(original);Directory.CreateDirectory(backup);
@@ -41,7 +41,7 @@ static class CalibrationObservationTests
             cameras=new[]{"head","hand"},motorCommandsIssued=false,jointCalibrationApproved=false,synchronizedStereoFrames=false,
             exposureTimestampsAvailable=false,registerValuesNormalized=false,timestampMeaning="Synthetic host read brackets; no simultaneous exposure.",
             imageFormat="lossless PNG plus unmodified NumPy uint8 BGR arrays"});
-        var count=complete?samples:0;
+        var count=complete||retainPartialImages?samples:0;
         for(var index=0;index<count;index++)
         {
             var stem=$"sample-{index:00}";var start=index*20;
@@ -49,7 +49,7 @@ static class CalibrationObservationTests
             object Motors(string phase,int first,int last)=>new{phase,readStartedAt=Stamp(first),readCompletedAt=Stamp(last),
                 buses=new[]{(Role:"left/head",Port:c.LeftPort,Count:8),(Role:"right/wheels",Port:c.RightPort,Count:9)}.Select(bus=>new
                 {role=bus.Role,port=bus.Port,motors=Enumerable.Range(1,bus.Count).Select(number=>new{id=number,name=bus.Role.Replace('/', '-')+"-joint-"+number,
-                    model="STS3215",observedAt=DateTimeOffset.Parse("2026-10-10T20:00:00Z").AddTicks(last),registers=new{Present_Position=1024+number,Torque_Enable=0,Moving=0,Status=0}}).ToArray()}).ToArray()};
+                    model="STS3215",observedAt=DateTimeOffset.Parse("2026-10-10T20:00:00Z").AddTicks(last),registers=new{Present_Position=1024+number,Torque_Enable=0,Present_Velocity=0,Operating_Mode=0,Moving=0,Status=0}}).ToArray()}).ToArray()};
             Add(before,Motors("before-cameras",start+1,start+2));Add(after,Motors("after-cameras",start+7,start+8));
             object Camera(string name,int first,int last)
             {
@@ -153,6 +153,20 @@ static class CalibrationObservationTests
                 result=Capture(directory,c);result=ChangeArtifact(directory,result,"sample-00-motors-before-cameras.json",s=>s["buses"]![0]!["motors"]![0]!["registers"]![register]=1);
                 check(Reject(()=>store.Save(c,result,1)),"Measured motor activity invalidates stationary evidence despite forged completion flags: "+register);
             }
+            result=Capture(directory,c);
+            foreach(var phase in new[]{"before-cameras","after-cameras"})
+                result=ChangeArtifact(directory,result,"sample-00-motors-"+phase+".json",s=>
+                {var registers=s["buses"]![1]!["motors"]![6]!["registers"]!;registers["Operating_Mode"]=1;registers["Moving"]=1;});
+            check(store.Save(c,result,1).Complete,"A torque-off velocity-mode wheel with a set Moving flag requires zero measured velocity and stable encoder brackets");
+            result=ChangeArtifact(directory,result,"sample-00-motors-before-cameras.json",s=>s["buses"]![1]!["motors"]![6]!["registers"]!["Present_Velocity"]=1);
+            check(Reject(()=>store.Save(c,result,1)),"A velocity-mode wheel reporting actual velocity cannot be accepted as stationary");
+            foreach(var register in new[]{"Operating_Mode","Present_Velocity"})
+            {
+                result=Capture(directory,c);result=ChangeArtifact(directory,result,"sample-00-motors-before-cameras.json",s=>s["buses"]![0]!["motors"]![0]!["registers"]!.AsObject().Remove(register));
+                check(Reject(()=>store.Save(c,result,1)),"Stationary evidence requires measured mode and velocity: "+register);
+            }
+            result=Capture(directory,c);result=ChangeArtifact(directory,result,"sample-00-motors-before-cameras.json",s=>s["buses"]![0]!["motors"]![0]!["registers"]!["Operating_Mode"]=2);
+            check(Reject(()=>store.Save(c,result,1)),"An unsupported operating mode cannot borrow velocity-mode stationarity rules");
             result=Capture(directory,c);result=ChangeArtifact(directory,result,"sample-00-motors-after-cameras.json",s=>s["buses"]![0]!["motors"]![0]!["registers"]!["Present_Position"]=2048);
             check(Reject(()=>store.Save(c,result,1)),"Position drift is recomputed from raw measurements instead of trusting a claimed zero delta");
             result=Capture(directory,c);result=ChangeArtifact(directory,result,"sample-00.json",s=>s["cameras"]![0]!["readStartedAt"]!["monotonicNanoseconds"]=0);
@@ -165,6 +179,15 @@ static class CalibrationObservationTests
             var partial=store.Save(c,Capture(directory,c,complete:false),1);
             check(partial is{Complete:false,SampleCount:0,BackupVerified:true,JointCalibrationApproved:false},
                 "Interrupted zero-sample capture retains sealed provenance and verified local backup without fabricating calibration");
+            result=Capture(directory,c,complete:false,retainPartialImages:true);
+            foreach(var phase in new[]{"before-cameras","after-cameras"})
+                result=ChangeArtifact(directory,result,"sample-00-motors-"+phase+".json",s=>
+                {var registers=s["buses"]![1]!["motors"]![6]!["registers"]!;registers["Operating_Mode"]=1;registers["Present_Velocity"]=50;});
+            result=ChangeArtifact(directory,result,"sample-00.json",s=>s["stationaryAcrossReadBrackets"]=false);
+            partial=store.Save(c,result,1);
+            check(partial is{Complete:false,SampleCount:1,BackupVerified:true,JointCalibrationApproved:false}
+                &&store.ReadArtifact(partial.Id,"sample-00-head.png").SequenceEqual(Png),
+                "Torque-off evidence with unresolved velocity retains original images and backup while remaining explicitly incomplete");
             foreach(var json in new[]{"{\"samples\":1,\"motors\":{\"goal\":180}}","{\"samples\":1,\"device\":\"/dev/video0\"}"})
                 check(Reject(()=>RobotJson.Deserialize<RobotCalibrationObservationRequest>(json)),"Source-generated observation requests reject hardware targets or device overrides");
             var recoveryPath=Path.Combine(directory,"sealed-recovery");var interruptedResult=Capture(recoveryPath,c);var interruptedReport=Report(interruptedResult);

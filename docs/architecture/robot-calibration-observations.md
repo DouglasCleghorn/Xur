@@ -49,6 +49,16 @@ quality checks. A few stationary samples are not a training corpus or evidence
 of joint correspondence. Future varied observations require independently
 validated timing, coverage and joint-channel conventions.
 
+Stationarity requires torque disabled, measured velocity zero and no more than
+two raw encoder counts of drift across the read brackets. Position-mode motors
+also require their `Moving` flag to be clear. A continuous-rotation motor in
+velocity mode may retain that flag while disabled; its measured velocity and
+encoder brackets still have to pass. Missing register values and unsupported
+operating modes are rejected, and all original register values are retained.
+When torque is verified off but stationarity is unresolved, camera images and
+both motor brackets are still retained as incomplete evidence. Unreadable motor
+positions, unreadable buses or unverified torque stop collection before images.
+
 The compact status records completeness, manifest checksum, problems, backup
 state and the explicit flags `motorCommandsIssued: false`,
 `jointCalibrationApproved: false` and `synchronizedStereoFrames: false`.

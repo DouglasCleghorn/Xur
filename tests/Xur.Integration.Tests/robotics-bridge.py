@@ -203,7 +203,7 @@ class CalibrationObservationPreservation(unittest.TestCase):
             reports.append({"role": role, "port": role, "motors": [
                 {"id": index + 1, "name": role + "-joint-" + str(index), "model": "test-model",
                     "registers": {"Present_Position": 500 + index, "Present_Current": 0, "Present_Load": 0,
-                                  "Torque_Enable": 0, "Moving": 0}}
+                                  "Operating_Mode": 0, "Present_Velocity": 0, "Torque_Enable": 0, "Moving": 0}}
                 for index in range(count)]})
         return reports
 
@@ -338,8 +338,8 @@ class CalibrationObservationPreservation(unittest.TestCase):
         self.assertIn("Observation interrupted", result["problems"])
         self.assertTrue((folder / "sample-00-motors-before-cameras.json").exists())
 
-    def test_active_or_missing_motor_state_stops_before_camera_reads_without_cleanup(self):
-        for register, value in (("Torque_Enable", 1), ("Moving", 1), ("Present_Position", None)):
+    def test_unverified_torque_or_position_stops_before_camera_reads_without_cleanup(self):
+        for register, value in (("Torque_Enable", 1), ("Torque_Enable", None), ("Torque_Enable", False), ("Present_Position", None)):
             with self.subTest(register=register):
                 reports = self.motor_reports(self.configuration)
                 reports[0]["motors"][0]["registers"][register] = value
@@ -350,6 +350,163 @@ class CalibrationObservationPreservation(unittest.TestCase):
                 self.assertEqual(result["sampleCount"], 0)
                 self.assertFalse(any(event[0].startswith("camera") for event in self.events))
                 self.assertTrue((folder / "sample-00-motors-before-cameras.json").exists())
+
+    def test_velocity_mode_sticky_moving_flag_is_accepted_only_with_zero_measured_velocity(self):
+        for moving in (0, 1):
+            with self.subTest(moving=moving):
+                reports = self.motor_reports(self.configuration)
+                registers = reports[1]["motors"][8]["registers"]
+                registers.update(Operating_Mode=1, Moving=moving, Present_Velocity=0, Torque_Enable=0)
+                with patch.object(bridge, "motor_details", return_value=reports): result = self.capture()
+                folder, _ = self.verify_receipt(result)
+                self.assertTrue(result["complete"])
+                for phase in ("before-cameras", "after-cameras"):
+                    report = json.loads((folder / ("sample-00-motors-" + phase + ".json")).read_text())
+                    self.assertEqual(report["buses"][1]["motors"][8]["registers"], registers)
+                session = json.loads((folder / "session.json").read_text())
+                self.assertIn("Velocity mode 1 permits Moving=0 or 1", session["motorStationarityRule"])
+                self.assertFalse(result["motorCommandsIssued"])
+                self.assertFalse(result["jointCalibrationApproved"])
+
+    def test_position_mode_moving_flag_retains_images_as_unverified_partial_evidence(self):
+        reports = self.motor_reports(self.configuration)
+        reports[0]["motors"][0]["registers"].update(Operating_Mode=0, Moving=1, Present_Velocity=0)
+        self.events.clear()
+        with patch.object(bridge, "motor_details", return_value=reports): result = self.capture()
+        folder, _ = self.verify_receipt(result)
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["sampleCount"], 1)
+        self.assertTrue((folder / "sample-00-head.png").exists())
+        self.assertFalse(json.loads((folder / "sample-00.json").read_text())["stationaryAcrossReadBrackets"])
+
+    def test_velocity_mode_nonzero_velocity_retains_partial_evidence_but_enabled_torque_stops_acquisition(self):
+        for register, value in (("Present_Velocity", 1), ("Present_Velocity", -1), ("Torque_Enable", 1), ("Moving", 2)):
+            with self.subTest(register=register, value=value):
+                reports = self.motor_reports(self.configuration)
+                reports[1]["motors"][8]["registers"].update(Operating_Mode=1, Moving=1, Present_Velocity=0, Torque_Enable=0)
+                reports[1]["motors"][8]["registers"][register] = value
+                self.events.clear()
+                with patch.object(bridge, "motor_details", return_value=reports): result = self.capture()
+                folder, _ = self.verify_receipt(result)
+                self.assertFalse(result["complete"])
+                if register == "Torque_Enable":
+                    self.assertEqual(result["sampleCount"], 0)
+                    self.assertFalse(any(event[0].startswith("camera") for event in self.events))
+                else:
+                    self.assertEqual(result["sampleCount"], 1)
+                    self.assertTrue((folder / "sample-00-head.png").exists())
+                    self.assertFalse(json.loads((folder / "sample-00.json").read_text())["stationaryAcrossReadBrackets"])
+
+    def test_invalid_stationarity_telemetry_retains_unverified_images_only_when_torque_off_is_known(self):
+        for register, value in (("Operating_Mode", None), ("Operating_Mode", 2), ("Operating_Mode", True),
+                                ("Operating_Mode", "1"), ("Present_Velocity", None), ("Present_Velocity", 0.0),
+                                ("Present_Velocity", False), ("Present_Velocity", 1), ("Present_Velocity", -1),
+                                ("Torque_Enable", None), ("Torque_Enable", False), ("Moving", None), ("Moving", False)):
+            with self.subTest(register=register, value=value):
+                reports = self.motor_reports(self.configuration)
+                if value is None:
+                    reports[0]["motors"][0]["registers"].pop(register)
+                else:
+                    reports[0]["motors"][0]["registers"][register] = value
+                self.events.clear()
+                with patch.object(bridge, "motor_details", return_value=reports): result = self.capture()
+                folder, _ = self.verify_receipt(result)
+                self.assertFalse(result["complete"])
+                if register == "Torque_Enable":
+                    self.assertEqual(result["sampleCount"], 0)
+                    self.assertFalse(any(event[0].startswith("camera") for event in self.events))
+                else:
+                    self.assertEqual(result["sampleCount"], 1)
+                    self.assertTrue((folder / "sample-00-head.png").exists())
+                    self.assertFalse(json.loads((folder / "sample-00.json").read_text())["stationaryAcrossReadBrackets"])
+
+    def test_torque_disabled_velocity_fifty_preserves_images_and_raw_measurements_without_stationarity_claim(self):
+        reports = self.motor_reports(self.configuration)
+        registers = reports[1]["motors"][7]["registers"]
+        registers.update(Operating_Mode=1, Moving=0, Present_Velocity=50, Torque_Enable=0)
+        with patch.object(bridge, "motor_details", return_value=reports): result = self.capture()
+        folder, _ = self.verify_receipt(result)
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["sampleCount"], 1)
+        self.assertTrue(result["backupVerified"])
+        self.assertTrue(result["problems"])
+        for name in ("head", "hand"):
+            self.assertTrue((folder / ("sample-00-" + name + ".png")).exists())
+            self.assertTrue((folder / ("sample-00-" + name + ".npy")).exists())
+        for phase in ("before-cameras", "after-cameras"):
+            report = json.loads((folder / ("sample-00-motors-" + phase + ".json")).read_text())
+            self.assertEqual(report["buses"][1]["motors"][7]["registers"], registers)
+        sample = json.loads((folder / "sample-00.json").read_text())
+        self.assertFalse(sample["stationaryAcrossReadBrackets"])
+        self.assertEqual(sample["maxObservedEncoderDeltaRaw"], 0)
+        self.assertFalse(result["jointCalibrationApproved"])
+
+    def test_unverified_first_bracket_cannot_become_stationary_when_second_bracket_looks_valid(self):
+        before = self.motor_reports(self.configuration)
+        after = self.motor_reports(self.configuration)
+        before[0]["motors"][0]["registers"]["Operating_Mode"] = 2
+        with patch.object(bridge, "motor_details", side_effect=[before, after]): result = self.capture()
+        folder, _ = self.verify_receipt(result)
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["sampleCount"], 1)
+        self.assertTrue((folder / "sample-00-head.png").exists())
+        self.assertFalse(json.loads((folder / "sample-00.json").read_text())["stationaryAcrossReadBrackets"])
+
+    def test_unverified_velocity_channel_still_contributes_its_actual_encoder_delta(self):
+        before = self.motor_reports(self.configuration)
+        after = self.motor_reports(self.configuration)
+        for report in (before, after):
+            report[1]["motors"][7]["registers"].update(Operating_Mode=1, Moving=0, Present_Velocity=50, Torque_Enable=0)
+        after[1]["motors"][7]["registers"]["Present_Position"] += 5
+        with patch.object(bridge, "motor_details", side_effect=[before, after]): result = self.capture()
+        folder, _ = self.verify_receipt(result)
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["sampleCount"], 1)
+        self.assertTrue(result["backupVerified"])
+        sample = json.loads((folder / "sample-00.json").read_text())
+        self.assertFalse(sample["stationaryAcrossReadBrackets"])
+        self.assertEqual(sample["maxObservedEncoderDeltaRaw"], 5)
+        self.assertTrue((folder / "sample-00-head.png").exists())
+
+    def test_unreadable_or_empty_bus_stops_before_camera_acquisition(self):
+        for issue in ("error", "empty"):
+            with self.subTest(issue=issue):
+                reports = self.motor_reports(self.configuration)
+                if issue == "error": reports[0]["error"] = "No valid bus response"
+                else: reports[0]["motors"] = []
+                self.events.clear()
+                with patch.object(bridge, "motor_details", return_value=reports): result = self.capture()
+                self.verify_receipt(result)
+                self.assertFalse(result["complete"])
+                self.assertEqual(result["sampleCount"], 0)
+                self.assertFalse(any(event[0].startswith("camera") for event in self.events))
+
+    def test_velocity_is_verified_again_after_camera_reads_and_raw_evidence_is_retained(self):
+        before = self.motor_reports(self.configuration)
+        after = self.motor_reports(self.configuration)
+        before[1]["motors"][8]["registers"].update(Operating_Mode=1, Moving=1, Present_Velocity=0)
+        after[1]["motors"][8]["registers"].update(Operating_Mode=1, Moving=1, Present_Velocity=1)
+        with patch.object(bridge, "motor_details", side_effect=[before, after]): result = self.capture()
+        folder, _ = self.verify_receipt(result)
+        self.assertFalse(result["complete"])
+        self.assertTrue((folder / "sample-00-head.png").exists())
+        report = json.loads((folder / "sample-00-motors-after-cameras.json").read_text())
+        self.assertEqual(report["buses"][1]["motors"][8]["registers"]["Present_Velocity"], 1)
+        sample = json.loads((folder / "sample-00.json").read_text())
+        self.assertFalse(sample["stationaryAcrossReadBrackets"])
+
+    def test_sticky_velocity_mode_flag_does_not_relax_the_raw_encoder_delta_limit(self):
+        before = self.motor_reports(self.configuration)
+        after = self.motor_reports(self.configuration)
+        for report in (before, after):
+            report[1]["motors"][8]["registers"].update(Operating_Mode=1, Moving=1, Present_Velocity=0, Torque_Enable=0)
+        after[1]["motors"][8]["registers"]["Present_Position"] += 3
+        with patch.object(bridge, "motor_details", side_effect=[before, after]): result = self.capture()
+        folder, _ = self.verify_receipt(result)
+        self.assertFalse(result["complete"])
+        sample = json.loads((folder / "sample-00.json").read_text())
+        self.assertFalse(sample["stationaryAcrossReadBrackets"])
+        self.assertEqual(sample["maxObservedEncoderDeltaRaw"], 3)
 
     def test_position_change_across_camera_brackets_is_not_approved(self):
         before = self.motor_reports(self.configuration)

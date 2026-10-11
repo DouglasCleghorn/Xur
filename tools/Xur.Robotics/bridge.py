@@ -608,21 +608,32 @@ def observation_image(folder, stem, frame):
 
 
 def observation_motor_positions(reports):
-    positions, problems = {}, []
+    positions, problems, torque_off_acquisition = {}, [], bool(reports)
     for report in reports:
         if report.get("error"):
             problems.append("Motor bus read failed: " + str(report["role"]))
+            torque_off_acquisition = False
         if not report.get("motors"):
             problems.append("Motor bus returned no channels: " + str(report["role"]))
+            torque_off_acquisition = False
         for motor in report.get("motors", []):
             key = (report["role"], motor["id"], motor["name"])
             registers = motor.get("registers", {})
             value = registers.get("Present_Position")
-            if motor.get("error") or type(value) is not int or registers.get("Torque_Enable") != 0 or registers.get("Moving") != 0:
-                problems.append("Stationary motor state is unverified: " + str(motor["name"]))
-            else:
+            if type(value) is int:
                 positions[key] = value
-    return positions, problems
+            if type(value) is not int or type(registers.get("Torque_Enable")) is not int or registers["Torque_Enable"] != 0:
+                torque_off_acquisition = False
+            keys = ("Operating_Mode", "Present_Velocity", "Torque_Enable", "Moving")
+            readable = all(type(registers.get(name)) is int for name in keys)
+            mode = registers.get("Operating_Mode")
+            # STS velocity-mode Moving can remain set after torque is disabled.
+            # Its measured velocity must still be zero in each read bracket.
+            stationary = readable and mode in (0, 1) and registers["Torque_Enable"] == 0 and registers["Present_Velocity"] == 0 \
+                and (registers["Moving"] == 0 if mode == 0 else registers["Moving"] in (0, 1))
+            if motor.get("error") or type(value) is not int or not stationary:
+                problems.append("Stationary motor state is unverified: " + str(motor["name"]))
+    return positions, problems, torque_off_acquisition
 
 
 def observation_backup(folder, identity):
@@ -667,7 +678,12 @@ def capture_calibration_observation(configuration, request):
         "cameras": ["head", "hand"], "motorCommandsIssued": False, "jointCalibrationApproved": False,
         "synchronizedStereoFrames": False, "exposureTimestampsAvailable": False,
         "timestampMeaning": "Host read-call intervals; sensors are read sequentially without a hardware trigger.",
-        "imageFormat": "lossless PNG plus unmodified NumPy uint8 BGR arrays", "registerValuesNormalized": False})
+        "imageFormat": "lossless PNG plus unmodified NumPy uint8 BGR arrays", "registerValuesNormalized": False,
+        "motorStationarityRule": "Every channel requires integer mode, position, velocity, torque and Moving reads; torque and measured velocity must be zero. "
+            "Position mode 0 requires Moving=0. Velocity mode 1 permits Moving=0 or 1 with measured velocity=0. Unsupported modes are rejected. "
+            "Encoder changes across both read brackets must not exceed two raw counts.",
+        "cameraAcquisitionRule": "Camera evidence may be retained when every bus is readable and nonempty, every position is an integer and every Torque_Enable is integer zero. "
+            "This does not verify stationarity: invalid mode, velocity or Moving telemetry produces incomplete, unverified evidence."})
     try:
         for index in range(samples):
             # The .NET operation deadline interrupts blocking driver calls. This
@@ -699,19 +715,22 @@ def capture_calibration_observation(configuration, request):
                 observation_json(folder / filename, motor_sample)
                 sample["motorSamples"].append({"phase": phase, "file": filename,
                     "readStartedAt": motor_sample["readStartedAt"], "readCompletedAt": motor_sample["readCompletedAt"]})
-                positions, motor_problems = observation_motor_positions(motor_sample["buses"])
+                positions, motor_problems, torque_off_acquisition = observation_motor_positions(motor_sample["buses"])
                 problems.extend(motor_problems)
                 if phase == "before-cameras":
                     before = positions
-                    if motor_problems or not positions:
-                        # Read-only capture cannot turn torque off. Save the
-                        # measured report and stop before collecting images.
-                        raise RuntimeError("Motor state is not verified stationary with torque disabled; camera collection stopped")
+                    before_stationary = not motor_problems
+                    if not torque_off_acquisition or not positions:
+                        # Read-only capture cannot disable torque or repair
+                        # unreadable positions. Stationarity is a separate
+                        # acceptance check; unverified motion telemetry can
+                        # still accompany explicitly incomplete camera evidence.
+                        raise RuntimeError("Motor torque-off and encoder acquisition is unverified; camera collection stopped")
                 else:
                     common = before.keys() & positions.keys()
                     delta = max((abs(before[key] - positions[key]) for key in common), default=None)
                     sample["maxObservedEncoderDeltaRaw"] = delta
-                    sample["stationaryAcrossReadBrackets"] = bool(common) and before.keys() == positions.keys() and not motor_problems and delta <= 2
+                    sample["stationaryAcrossReadBrackets"] = bool(common) and before.keys() == positions.keys() and before_stationary and not motor_problems and delta <= 2
                     if not sample["stationaryAcrossReadBrackets"]:
                         problems.append("Motor stationarity was not verified across sample " + str(index))
             observation_json(folder / (stem + ".json"), sample)

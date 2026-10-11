@@ -278,8 +278,10 @@ public sealed class RobotCalibrationObservations(string directory)
                 foreach(var motor in channels)
                 {
                     var id=motor.GetProperty("id").GetInt32();var name=motor.GetProperty("name").GetString()??"";var registers=motor.GetProperty("registers");
+                    var mode=registers.GetProperty("Operating_Mode").GetInt32();var moving=registers.GetProperty("Moving").GetInt32();
                     if(motor.TryGetProperty("error",out _)||id is <1 or >253||!ids.Add(id)||string.IsNullOrWhiteSpace(name)
-                        ||registers.GetProperty("Torque_Enable").GetInt32()!=0||registers.GetProperty("Moving").GetInt32()!=0)
+                        ||registers.GetProperty("Torque_Enable").GetInt32()!=0||registers.GetProperty("Present_Velocity").GetInt32()!=0
+                        ||mode is <0 or >1||moving is <0 or >1||mode==0&&moving!=0)
                         throw new InvalidOperationException("Motor sample is not verified stationary with torque off.");
                     positions.Add((port,id,name),registers.GetProperty("Present_Position").GetInt32());
                 }
