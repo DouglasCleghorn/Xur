@@ -136,7 +136,7 @@ not appear on both sides of a validation split.
 Back up originals and immutable manifests before adaptation. Keep generated
 masks, corrections, training splits and checkpoints as versioned derivatives;
 never overwrite the samples that produced them. Existing local backup support
-and the [remote receiver](../../containers/robot-backup/README.md) are foundations,
+and the [remote receiver](../../containers/robot-cluster/README.md) are foundations,
 but xur-255-to-EPYC delivery still needs a verified network route. A deployed
 receiver alone is not a verified remote backup of a recording.
 

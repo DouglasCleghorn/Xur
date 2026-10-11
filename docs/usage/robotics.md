@@ -334,4 +334,4 @@ The container app preserves byte-for-byte local snapshots after completed or
 interrupted recording sessions and retains the original datasets. Configure the
 HTTPS receiver and its dedicated token in `/robot/setup`. Verification, retry
 status and interrupted-episode labels appear per recording. See the
-[receiver setup and recovery guide](../../containers/robot-backup/README.md).
+[receiver setup and recovery guide](../../containers/robot-cluster/README.md).
