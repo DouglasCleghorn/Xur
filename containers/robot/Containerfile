@@ -2,7 +2,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble AS build
 RUN apt-get update && apt-get install -y --no-install-recommends clang zlib1g-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /source
 COPY global.json Directory.Build.props ./
-COPY containers/robot/Xur.Robot.csproj containers/robot/packages.lock.json containers/robot/
+COPY containers/robot/Xur.Robot.csproj containers/robot/packages.lock.json containers/robot/libman.json containers/robot/
 COPY containers/robot-backup/Shared/ containers/robot-backup/Shared/
 RUN dotnet restore containers/robot/Xur.Robot.csproj --locked-mode -r linux-x64
 COPY containers/robot/ containers/robot/
@@ -54,6 +54,7 @@ RUN git init /opt/apriltag && \
 
 COPY tools/Xur.Robotics/bridge.py tools/Xur.Robotics/discover_buses.py tools/Xur.Robotics/motor_probe.py /opt/xur/
 COPY tools/Xur.Robotics/image_motion.py /opt/xur/image_motion.py
+COPY tools/Xur.Robotics/hand_calibration.py /opt/xur/hand_calibration.py
 COPY LICENSE docs/licensing.md /opt/licenses/
 ENV PATH=/opt/robot-venv/bin:$PATH SDL_VIDEODRIVER=dummy PYTHONDONTWRITEBYTECODE=1 HF_HOME=/state/.build/huggingface \
     HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1

@@ -31,5 +31,6 @@ public static class RobotProxy
         app.MapMethods("/api/robotics/{**path}",["GET","HEAD","POST"],Forward);
         app.MapMethods("/robot",["GET","HEAD"],Forward);
         app.MapMethods("/robot/{**path}",["GET","HEAD","POST"],Forward);
+        app.MapMethods("/robot/realtime",["DELETE"],Forward);
     }
 }

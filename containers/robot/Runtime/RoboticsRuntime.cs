@@ -14,6 +14,8 @@ public sealed class RoboticsRuntime
     readonly RecordingBackups backups;
     readonly RobotCameraCapabilities cameraCapabilities;
     readonly RobotCalibrationObservations calibrationObservations;
+    readonly HandCalibration handCalibration;
+    readonly IHandCalibrationAdapter handCalibrationAdapter;
     readonly Dictionary<string, RobotJob> jobs = new();
     readonly RobotMotorDiagnostics motorDiagnostics=new();
     string? workloadId;
@@ -36,8 +38,8 @@ public sealed class RoboticsRuntime
     long emergencyStopEpoch;
     string EmergencyStopPath=>Path.Combine(directory,"estop-latched");
 
-    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null,RecordingBackups? backups=null,RobotMetrology? metrology=null,RobotCameraCapabilities? cameraCapabilities=null)
-    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory);this.metrology=metrology??new(directory);this.cameraCapabilities=cameraCapabilities??new();calibrationObservations=new(directory); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
+    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null,RecordingBackups? backups=null,RobotMetrology? metrology=null,RobotCameraCapabilities? cameraCapabilities=null,IHandCalibrationAdapter? handCalibrationAdapter=null)
+    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory);this.metrology=metrology??new(directory);this.cameraCapabilities=cameraCapabilities??new();calibrationObservations=new(directory); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;handCalibration=new(this.clock);this.handCalibrationAdapter=handCalibrationAdapter??new HandCalibrationAdapter();container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
 
     public RobotStatus Status()
     {
@@ -52,6 +54,30 @@ public sealed class RoboticsRuntime
     public RobotJob[] Jobs(){lock(sync)return jobs.Values.Reverse().ToArray();}
     public RobotJob? Job(string id){lock(sync)return jobs.GetValueOrDefault(id);}
     public RoboticsConfiguration? Configuration(){lock(sync)return configuration;}
+    public HandCalibrationState HandCalibration()=>handCalibration.State();
+    public void HandCalibrationHeartbeat(HandCalibrationHeartbeat request)=>handCalibration.Heartbeat(request);
+    public void HandCalibrationAdvance(HandCalibrationAdvance request)=>handCalibration.Advance(request);
+    public RobotJob StartHandCalibration(HandCalibrationStart request)
+    {
+        lock(sync)
+        {
+            RequireLoaded();Idle();if(!stopLatched)throw new InvalidOperationException("Stop and disarm before setup.");
+            if(emergencyStop||stopProblem!=null||recoveryProblem!=null)throw new InvalidOperationException("Clear any stop problem and reset E-stop before hardware setup.");
+            if(RequireConfiguration().MotionEnabled)throw new InvalidOperationException("Disable motion in hardware setup before hand-guided calibration.");
+            handCalibration.Begin(request);
+            return LaunchOperation("hand-calibration",false,async token=>
+            {
+                await handCalibration.Run(configuration,handCalibrationAdapter,token);
+                lock(sync)
+                {
+                    var problems=CalibrationProblems(configuration!);
+                    if(problems.Length!=0)throw new InvalidOperationException(string.Join(" ",problems));
+                    calibrationAssessment=null;observation=null;motorDiagnostics.Clear();
+                }
+                return "Hand-guided calibration saved. Motion remains disabled; motor limits and supervised review are still required.";
+            });
+        }
+    }
     public RobotCalibrationAssessment? CalibrationAssessment(){lock(sync)return calibrationAssessment;}
     public RobotCalibrationObservationCapture? CalibrationObservation(){lock(sync)return configuration==null?null:calibrationObservations.Latest(configuration);}
     public byte[] CalibrationObservationManifest(string id)=>calibrationObservations.Manifest(id);

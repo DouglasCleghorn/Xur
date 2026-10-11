@@ -1,5 +1,42 @@
 # Screenshot and artwork register
 
+- 2026-10-11: Upstream XLeRobot MuJoCo emote recording/render family under
+  `.build/evidence/xlerobot-emotes/<run>/<gesture>-<arm>/preview.gif` and
+  `preview.mp4`, including the same MP4 bytes in exported `.xuremot` bundles
+  and the `/robot` imported-video library. Extracted `review-*.png` frames and
+  contact sheets remain in the same ignored evidence family.
+  Purpose: inspect Wave, Welcome, Celebrate, Curious and Point simulation
+  recordings made by `eng/xlerobot-record-emotes.py`, outside the robot app.
+  Source model: XLeRobot `b017b5e6354bd9f61f4247a920c72622ca0aade0`, MuJoCo
+  3.3.0, with base/wheel/head equality constraints recorded in each manifest.
+  Final 22–25 second candidates were captured on 2026-10-11 in runs
+  `20261011T191701838152Z` (five right-arm gestures) and
+  `20261011T191946273534Z` (five left-arm gestures). MP4s retain 5 Hz pose
+  sampling with 10 Hz encoded timing; preview frames come from simulated
+  feedback. Reviewed `review-wave-timing.png` and `review-left-poses.png`
+  cover movement stages and the mirrored poses. Earlier 16/40 second iterations
+  are superseded for gesture review.
+  Privacy review: synthetic robot meshes and an empty simulated scene only;
+  no real cameras, people, credentials or user files. Upstream model/license
+  provenance is retained. Regenerate after model, gesture or renderer changes.
+  Earlier embedded gesture and practice-setup UI validations below are retired;
+  the robot app now has hardware-only calibration and no embedded simulator.
+
+- 2026-10-11: Guided robot setup validation on xur-255, using the private
+  `guided-00b52dfe534f` development image (base commit `3f5cb0a` plus the emote
+  and guided-setup changes). The T3 browser completed the simulated reference,
+  range and review flow, previewed Wave, checked hardware confirmation gates,
+  and checked layout at 1280, 390 and 320 px. Snapshot capture returned a client
+  error on two attempts, so no screenshots were captured or published for this
+  follow-up. Non-image assertions are in `.build/evidence/robot-emotes-live/`.
+  A range-accumulation correction was subsequently installed as
+  `guided-df8cb3a4634d`; its final simulated phase/range checks used the private
+  app socket after the desktop preview disconnected. No additional images
+  were captured.
+  Privacy review: synthetic encoder/gesture state and app controls only; no
+  live camera images or credentials were captured. Earlier dashboard/setup
+  captures show older navigation and should be regenerated before release.
+
 - 2026-10-11: Private camera-mode modal review family under
   `.build/evidence/robot-camera-modes/`, with `desktop.png` (1280×800),
   `mobile.png` (390×844), and preliminary `mobile-initial.png` and
@@ -385,6 +422,19 @@ See [release preparation](development/release-preparation.md).
 | User-supplied bug screenshots | Reproduce reported defects | T3 attachments; referenced in conversation, not copied into source | Keep private; add a sanitized published-image entry before reuse |
 
 ## Change log
+
+- 2026-10-10: Reviewed transient T3 collaborative browser snapshots of the
+  robot Setup emote cards at 1280 and 390 px, with layout assertions also at
+  320 px. Working tree based on `3f5cb0a` plus the emote options changes.
+  Purpose: review the five recording ideas, left/right selection, saved emote
+  library and responsive controls. Synthetic fixtures and text evidence live
+  under `.build/evidence/robot-emotes/`; snapshots remain in the private T3
+  conversation and were not saved or published. Privacy review: synthetic
+  robot/device identities, dataset names, calibration hashes and a dummy
+  request token only; no live hardware images, personal information or
+  credentials. The preview could not reach the fixture server, so actual HTML,
+  CSS and scripts were loaded directly with a simulated API. Regenerate after
+  emote, recording or skill review UI changes.
 
 - 2026-10-11: Robot camera preview review family under
   `.build/evidence/robot-cameras/`, based on `3f5cb0a` plus the dynamic camera
