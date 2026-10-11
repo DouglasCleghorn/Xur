@@ -7,6 +7,8 @@ public record RobotError(string Error);
 public record RobotObservation(JsonElement? Observation,bool Paused,string? Operation,string? Problem,RobotMotorDiagnostic[]? Motors=null);
 public record RobotSkillRequest(RobotSkill Skill);
 public record RobotCameraRequest(string Camera);
+public record RobotPreviewCamera(string Name,string Device);
+public record RobotDashboardRequest(RobotPreviewCamera[] Cameras);
 public record RobotToolRequest(RoboticsConfiguration Configuration,string Operation,JsonElement? Request);
 [JsonSerializable(typeof(RobotHealth))]
 [JsonSerializable(typeof(RobotError))]
@@ -15,6 +17,7 @@ public record RobotToolRequest(RoboticsConfiguration Configuration,string Operat
 [JsonSerializable(typeof(RobotToolRequest))]
 [JsonSerializable(typeof(RobotSkillRequest))]
 [JsonSerializable(typeof(RobotCameraRequest))]
+[JsonSerializable(typeof(RobotDashboardRequest))]
 [JsonSerializable(typeof(RobotStatus))]
 [JsonSerializable(typeof(RoboticsConfiguration))]
 [JsonSerializable(typeof(RobotCalibrationAssessment))]

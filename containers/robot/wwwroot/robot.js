@@ -2,6 +2,7 @@
  'use strict';
  const $ = id => document.getElementById(id), page = document.body.dataset.page;
  let csrf, mutating = false, observationRequest, markerReport, markerJob, motorData, renderedTagJob;
+ const cameraViews = new Map();
  const set = (id, text) => { if ($(id)) $(id).textContent = text; };
  const showError = error => { $('error').hidden = false; $('error').textContent = error.message; };
  const clearError = () => { $('error').hidden = true; };
@@ -64,6 +65,39 @@
   if (source) { img.src = source; img.hidden = false; placeholder.hidden = true; }
   if (error) { img.hidden = true; placeholder.hidden = false; placeholder.textContent = error; }
   set(`${camera}-time`, error || `${time(capturedAt)} · ${ago(capturedAt)}`);
+ }
+ function cameras(readings) {
+  const grid = $('camera-views'), current = new Set();
+  for (const camera of readings) {
+   const key = camera.device || camera.name;
+   current.add(key);
+   let view = cameraViews.get(key);
+   if (!view) {
+    const element = (tag, className) => { const node = document.createElement(tag); if (className) node.className = className; return node; };
+    const figure = element('figure', 'panel camera'), header = element('div', 'camera-title'), title = element('h3'), stamp = element('span');
+    const wrap = element('div', 'image-wrap'), img = element('img'), empty = element('p'), device = element('figcaption');
+    img.hidden = true;
+    img.addEventListener('load', () => { if (img.naturalWidth && img.naturalHeight) wrap.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`; });
+    img.addEventListener('error', () => { img.hidden = true; empty.hidden = false; empty.textContent = 'Camera frame could not be displayed.'; });
+    header.append(title, stamp); wrap.append(img, empty); figure.append(header, wrap, device);
+    view = { figure, title, stamp, img, empty, device }; cameraViews.set(key, view);
+   }
+   const label = camera.name === 'head' ? 'Head camera' : camera.name === 'hand' ? 'Hand camera' : camera.name.replace(/^camera-/, 'Camera ');
+   view.title.textContent = label; view.img.alt = `${label} view`; view.device.textContent = camera.device || '';
+   view.stamp.textContent = camera.error ? `Unavailable · ${time(camera.capturedAt)}` : camera.jpeg ? `${time(camera.capturedAt)} · ${ago(camera.capturedAt)}` : 'No frame';
+   view.img.hidden = !camera.jpeg || !!camera.error; view.empty.hidden = !view.img.hidden;
+   view.empty.textContent = camera.error || `Waiting for ${label.toLowerCase()}`;
+   if (!view.img.hidden) view.img.src = `data:image/jpeg;base64,${camera.jpeg}`;
+  }
+  for (const [key, view] of cameraViews) if (!current.has(key)) { view.figure.remove(); cameraViews.delete(key); }
+  // Preserve existing image nodes across polls and only move cards when the
+  // inventory order changes, so a refresh does not interrupt image decoding.
+  readings.forEach((camera, index) => {
+   const figure = cameraViews.get(camera.device || camera.name).figure;
+   if (grid.children[index] !== figure) grid.insertBefore(figure, grid.children[index] || null);
+  });
+  $('cameras-empty').hidden = readings.length > 0;
+  if (!readings.length) $('cameras-empty').textContent = 'No cameras reported.';
  }
  function positionChart(motor, diagnostic) {
   const r = motor.registers || {}, range = diagnostic?.calibratedRange, ns = 'http://www.w3.org/2000/svg';
@@ -133,8 +167,7 @@
   observationRequest = (async () => {
    const data = await api('observation'), observation = data.observation;
    if (observation) {
-    for (const camera of observation.cameras || [])
-     image(camera.name, camera.jpeg ? `data:image/jpeg;base64,${camera.jpeg}` : null, camera.capturedAt, camera.error);
+    cameras(observation.cameras || []);
     motors(observation, data.motors);
    }
    set('observation-status', data.paused ? `Refresh paused during ${data.operation || 'robot operation'} · last capture ${ago(observation?.observedAt)}` : `Updated ${time(observation?.observedAt)} · refreshes every 5 seconds`);
@@ -220,8 +253,6 @@
  async function start() {
   await refresh();
   if (page === 'dashboard') {
-   try { const configuration = await api('configuration'); set('head-device', configuration?.headCamera || 'Head camera not configured'); set('hand-device', configuration?.handCamera || 'Hand camera not configured'); }
-   catch (error) { showError(error); }
    await observe();
   }
   setInterval(() => refresh(), 3000);

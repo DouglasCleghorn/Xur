@@ -586,7 +586,7 @@ class CalibrationObservationPreservation(unittest.TestCase):
         result = json.loads(stdout.getvalue())
         self.verify_receipt(result)
         self.assertTrue(result["complete"])
-        prepared.assert_called_once_with(self.configuration, require_controller=False)
+        prepared.assert_called_once_with(self.configuration, require_controller=False, require_cameras=True)
         self.assertFalse(pid.exists())
 
 
@@ -674,6 +674,54 @@ class DiscoverySafety(unittest.TestCase):
 
 
 class Safety(unittest.TestCase):
+    def test_dashboard_captures_any_inventory_and_isolates_camera_failures(self):
+        from datetime import datetime, timezone
+        selected = [{"name": name, "device": f"/dev/v4l/by-path/{name}-video-index0"}
+                    for name in ("head", "hand", "camera-3", "camera-4", "camera-5")]
+        opened = []
+        @contextlib.contextmanager
+        def capture(name, full_resolution=False, device=None):
+            opened.append((name, full_resolution, device))
+            if name == "hand":
+                raise RuntimeError("Camera is disconnected")
+            yield types.SimpleNamespace(read=lambda: (name != "camera-4", name))
+        for inventory in ([], selected[:1], selected[:3], selected):
+            with self.subTest(count=len(inventory)), patch.object(bridge, "opened_camera", capture), \
+                    patch.object(bridge, "encoded_camera_frame", side_effect=lambda frame: "jpeg-" + frame), \
+                    patch.object(bridge, "motor_details", return_value=[]):
+                result = bridge.dashboard({}, {"cameras": inventory})
+                self.assertEqual([c["device"] for c in result["cameras"]], [c["device"] for c in inventory])
+                self.assertFalse(result["motorCommandsIssued"])
+                for camera in result["cameras"]:
+                    self.assertEqual(datetime.fromisoformat(camera["capturedAt"]).tzinfo, timezone.utc)
+                    if camera["name"] in ("hand", "camera-4"):
+                        self.assertIn("error", camera)
+                        self.assertNotIn("jpeg", camera)
+                    else:
+                        self.assertEqual(camera["jpeg"], "jpeg-" + camera["name"])
+        self.assertTrue(all(full_resolution for _, full_resolution, _ in opened))
+
+    def test_preview_capture_opens_only_stable_camera_interfaces_and_releases_them(self):
+        events = []
+        capture = types.SimpleNamespace(isOpened=lambda: True, set=lambda *args: events.append(("set", *args)),
+                                        read=lambda: (True, object()), release=lambda: events.append("released"))
+        cv2 = types.SimpleNamespace(VideoCapture=lambda *args: events.append(("open", *args)) or capture,
+                                    CAP_V4L2=1, CAP_PROP_FOURCC=2, CAP_PROP_FRAME_WIDTH=3,
+                                    CAP_PROP_FRAME_HEIGHT=4, CAP_PROP_BUFFERSIZE=5, VideoWriter_fourcc=lambda *args: "MJPG")
+        with patch.dict("sys.modules", {"cv2": cv2}), patch.object(bridge.time, "monotonic", side_effect=[0, 2]):
+            with bridge.opened_camera("camera-3", full_resolution=True, device="/dev/v4l/by-path/third-video-index0"):
+                pass
+            self.assertIn(("open", "/dev/v4l/by-path/third-video-index0", 1), events)
+            self.assertIn(("set", 3, 1920), events)
+            self.assertIn(("set", 4, 1080), events)
+            self.assertEqual(events[-1], "released")
+            events.clear()
+            for device in ("/dev/mem", "/dev/video3", "/dev/v4l/by-path/../../video3", "/dev/v4l/by-id/metadata-video-index1"):
+                with self.subTest(device=device), self.assertRaises(ValueError):
+                    with bridge.opened_camera("camera-3", device=device):
+                        pass
+            self.assertEqual(events, [])
+
     def test_stop_targets_identification_and_bridge_but_rejects_lookalike_argv(self):
         identity = types.SimpleNamespace(exists=lambda:True,read_text=lambda:json.dumps({"pid":10,"started":"3"}))
         for script,allowed in ((b"/opt/xur/bridge.py",True),(b"/opt/xur/motor_probe.py",True),(b"/opt/xur/motor_probe.py-copy",False)):
@@ -1018,12 +1066,21 @@ class DeviceAliasRecovery(unittest.TestCase):
             expected = alias.readlink()
             alias.unlink()
             alias.symlink_to(self.state / ("headCamera" if key != "headCamera" else "handCamera"))
-            with patch.object(bridge, "controller", side_effect=AssertionError("No robot connection permitted")), patch.object(bridge, "dashboard", side_effect=AssertionError("No device opening permitted")):
+            with patch.object(bridge, "controller", side_effect=AssertionError("No robot connection permitted")), patch.object(bridge, "dashboard", side_effect=AssertionError("No device opening permitted")), patch.object(bridge, "probe", side_effect=AssertionError("No device opening permitted")):
                 with self.assertRaises(ValueError):
-                    self.dispatch("controller" if key == "controllerDevice" else "dashboard")
+                    self.dispatch("controller" if key == "controllerDevice" else "probe" if key in ("headCamera", "handCamera") else "dashboard")
             alias.unlink()
             alias.symlink_to(expected)
         bridge.prepared(self.configuration, require_controller=True)
+
+    def test_dashboard_keeps_other_previews_available_when_a_selected_camera_disconnects(self):
+        self.dispatch("prepare")
+        Path(self.configuration["handCamera"]).resolve().unlink()
+        with patch.object(bridge, "dashboard", return_value={"fixture": "other cameras remain available"}) as dashboard:
+            self.assertEqual(self.dispatch("dashboard"), {"fixture": "other cameras remain available"})
+            dashboard.assert_called_once()
+        with self.assertRaisesRegex(ValueError, "handCamera"):
+            bridge.prepared(self.configuration)
 
     def test_prepare_preserves_configuration_and_calibration(self):
         (self.state / "calibration").mkdir()
