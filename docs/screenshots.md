@@ -1,5 +1,20 @@
 # Screenshot and artwork register
 
+- 2026-10-11: Private camera-mode modal review family under
+  `.build/evidence/robot-camera-modes/`, with `desktop.png` (1280×800),
+  `mobile.png` (390×844), and preliminary `mobile-initial.png` and
+  `desktop-initial-retired.png`. Original collaborative-browser captures are
+  under `/home/doug/.t3/userdata/browser-artifacts/` with names
+  `browser-screenshot-192-168-0-134-mv47{a557,ahpq,cnkh,d3k3}-*.png`.
+  Captured from actual working-tree dashboard assets based on `3b93628`, using
+  synthetic head, hand and infrared driver reports. Purpose: review mode tables,
+  responsive layout and the modal's close/E-stop controls. The initial desktop
+  capture had a blank modal paint and is retired; final captures supersede the
+  preliminary pair. Privacy review: all four images inspected; fixture device
+  paths and empty camera views only, with no people, credentials or live hardware
+  imagery. Browser metadata includes a private local preview address; keep these
+  captures ignored and private. Refresh after camera-mode modal/layout changes.
+
 - 2026-10-11 UTC (2026-10-10 MDT): Private derived segmentation diagnostic
   family `.build/evidence/robot-segmentation-prototype-20261010/` and
   `.build/evidence/robot-segmentation-motion-20261010/`, including
