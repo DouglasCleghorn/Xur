@@ -1,5 +1,16 @@
 # Screenshot and artwork register
 
+- 2026-10-11: Faster XLeRobot MuJoCo emote review family in
+  `.build/evidence/xlerobot-emotes/20261011T200600621640Z/`, including each
+  `*-<arm>/preview.gif`, `preview.mp4`, exported `*-fast.xuremot` video and
+  `review-fast-*.png` timing/contact sheets. Generated from the pinned upstream
+  model with 100 Hz commands and 25 Hz renders, durations 2.68–3.40 seconds.
+  Purpose: review actual faster simulated motion and the dedicated Emotes page.
+  Privacy review: synthetic robot geometry only, no people, live camera images,
+  credentials or personal data. These replace the slow 22–25 second candidates
+  for current emote review; earlier originals remain private historical evidence.
+  Regenerate when gesture poses, timing, model, camera or renderer changes.
+
 - 2026-10-11: Upstream XLeRobot MuJoCo emote recording/render family under
   `.build/evidence/xlerobot-emotes/<run>/<gesture>-<arm>/preview.gif` and
   `preview.mp4`, including the same MP4 bytes in exported `.xuremot` bundles

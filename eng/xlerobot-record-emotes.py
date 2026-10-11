@@ -21,8 +21,8 @@ LOCK = ROOT / "tools/Xur.Robotics/upstream-lock.json"
 NAMES = ("Rotation", "Pitch", "Elbow", "Wrist_Pitch", "Wrist_Roll", "Jaw")
 EMOTES = ("wave", "welcome", "celebrate", "curious", "point")
 HOME = (0, 1.1, 1.5, -.8, 0, .4)
-FPS = 10
-PREVIEW_FPS = 5
+FPS = 100
+PREVIEW_FPS = 25
 
 
 def digest(data):
@@ -95,8 +95,8 @@ def keyframes(emote, np, arm="right"):
     """Distinct, staged gestures in model radians, mirrored away from the body.
 
     Positive shoulder pitch raises the upstream hand. Each movement has enough
-    time for quintic easing to stay below one degree per 100 ms recording frame.
-    The slow pacing is intentional: these are reviewable simulation candidates.
+    time for quintic easing to stay below one degree per 10 ms recording frame.
+    Expressive timing is simulated directly, with tracking and velocity guards.
     """
     rest = [0]*6
     if emote == "wave":
@@ -104,31 +104,31 @@ def keyframes(emote, np, arm="right"):
         raised = [-.25, .45, -.40, .40, 0, .08]
         outward = [-.33, .45, -.40, .40, -.14, .08]
         inward = [-.17, .45, -.40, .40, .14, .08]
-        points = [(0, rest), (5, raised), (6.7, outward), (9.8, inward),
-                  (12.9, outward), (16, inward), (17.7, raised),
-                  (22.7, rest), (23.7, rest)]
+        points = [(0, rest), (.72, raised), (1, outward), (1.36, inward),
+                  (1.72, outward), (2.08, inward), (2.36, raised),
+                  (3.12, rest), (3.40, rest)]
     elif emote == "welcome":
         # Open the empty gripper, extend it, then sweep outward to present space.
         offer = [-.10, .05, -.65, .40, .30, .20]
         present = [-.65, .05, -.65, .40, .60, .20]
-        points = [(0, rest), (7, offer), (13, present), (16, present),
-                  (24, rest), (25, rest)]
+        points = [(0, rest), (.84, offer), (1.56, present), (1.96, present),
+                  (2.80, rest), (3.08, rest)]
     elif emote == "celebrate":
         # A high hand with two deliberate victory pumps; no gripper clapping.
         high = [-.28, .60, -.45, .35, 0, 0]
         low = [-.28, .38, -.30, .20, 0, 0]
-        points = [(0, rest), (6.5, high), (9, low), (11.5, high),
-                  (14, low), (16.5, high), (17.5, high), (24, rest), (25, rest)]
+        points = [(0, rest), (.72, high), (1, low), (1.28, high),
+                  (1.56, low), (1.84, high), (2.04, high), (2.80, rest), (3.08, rest)]
     elif emote == "curious":
         # Bring the empty hand up, inspect both faces with a broad wrist turn.
         examine = [-.10, .35, -.20, .55, -.35, .12]
         turned = [-.10, .35, -.20, .55, .35, .12]
-        points = [(0, rest), (6, examine), (7, examine), (15, turned),
-                  (16, turned), (22, rest), (23, rest)]
+        points = [(0, rest), (.72, examine), (.88, examine), (1.72, turned),
+                  (1.88, turned), (2.60, rest), (2.88, rest)]
     elif emote == "point":
         # A straightened arm holds a clear diagonal direction with quiet wrist.
         aim = [-.48, -.05, -.80, .35, 0, -.12]
-        points = [(0, rest), (9, aim), (12, aim), (21, rest), (22, rest)]
+        points = [(0, rest), (.96, aim), (1.44, aim), (2.40, rest), (2.68, rest)]
     else:
         raise ValueError("Unknown emote: " + emote)
     mirror = np.array([-1, 1, 1, 1, -1, 1]) if arm == "left" else np.ones(6)
@@ -196,7 +196,7 @@ def record(model, emote, arm, output, render, mujoco, np):
                 if frames:
                     max_step = max(max_step, float(np.abs(command-np.array(frames[-1]["action"])).max()))
                     if max_step > np.deg2rad(1):
-                        raise RuntimeError("Recorded targets exceed a one-degree step at 10 Hz.")
+                        raise RuntimeError(f"Recorded targets exceed a one-degree step at {FPS} Hz.")
                 frames.append({"frame": len(frames), "timestamp": time,
                                "simulationTime": float(data.time-initial_time),
                                "action": command.tolist(), "observation.state": data.qpos[addresses].tolist(),
@@ -249,44 +249,49 @@ def export_bundle(directory, pin, simulation):
     metadata = json.loads((directory / "metadata.json").read_text())
     if metadata["hardwareApproved"] or metadata["physicalCalibrationHash"] is not None:
         raise RuntimeError("Simulation export cannot claim physical calibration or approval.")
-    if metadata["positionUnits"] != "radians" or metadata["fps"] != FPS:
+    if metadata["positionUnits"] != "radians" or metadata["fps"] not in (10, 100):
         raise RuntimeError("Unexpected simulation recording units or cadence.")
     for name, checksum in metadata["files"].items():
         if Path(name).name != name or digest((directory / name).read_bytes()) != checksum:
             raise RuntimeError("Recording checksum failed: " + name)
     if "preview.gif" not in metadata["files"]:
         raise RuntimeError("A rendered preview is required; record with --render first.")
-    # Keep the 5 Hz render timing, duplicate to 10 Hz solely to represent a
-    # possible final half-frame (e.g. the 23.7 s wave) without changing its pace.
+    # Preserve recorded timing. Legacy 5 Hz GIFs need 10 Hz encoding to
+    # represent their half-frame endpoints; new 25 Hz renders encode directly.
+    render_fps = metadata["previewFps"]
+    if render_fps not in (5, 25):
+        raise RuntimeError("Unexpected preview render cadence.")
+    encoded_fps = 10 if render_fps == 5 else render_fps
     duration = metadata["durationSeconds"]
     video = directory / "preview.mp4"
     encoder = imageio_ffmpeg.get_ffmpeg_exe()
     subprocess.run([encoder, "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
                     "-i", str(directory / "preview.gif"), "-an", "-t", str(duration),
-                    "-r", str(FPS), "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-r", str(encoded_fps), "-c:v", "libx264", "-pix_fmt", "yuv420p",
                     "-crf", "20", "-movflags", "+faststart", str(video)], check=True)
     reader = imageio_ffmpeg.read_frames(str(video))
     video_info = next(reader)
     frame_count = sum(1 for _ in reader)
-    if (frame_count != round(duration*FPS) or abs(video_info["duration"]-duration) > .02
-            or abs(video_info["fps"]-FPS) > .001):
+    if (frame_count != round(duration*encoded_fps) or abs(video_info["duration"]-duration) > .02
+            or abs(video_info["fps"]-encoded_fps) > .001):
         raise RuntimeError("Encoded video timing does not match the simulated recording.")
     licenses = {"LICENSE": ROOT / "LICENSE", "licensing.md": ROOT / "docs/licensing.md",
                 "XLeRobot-LICENSE": directory.parent / "XLeRobot-LICENSE"}
     for name, path in licenses.items():
         (directory / name).write_bytes(path.read_bytes())
     payloads = ("recording.jsonl", "trajectory.npz", "preview.mp4", "metadata.json", *licenses)
-    identifier = metadata["emote"] + "-" + metadata["arm"]
+    fast = metadata["fps"] == 100
+    identifier = metadata["emote"] + "-" + metadata["arm"] + ("-fast" if fast else "")
     manifest = {"schemaVersion": 1, "kind": "xur-emote-candidate", "id": identifier,
-                "name": metadata["emote"].capitalize() + " · " + metadata["arm"].capitalize() + " arm",
+                "name": metadata["emote"].capitalize() + " · " + metadata["arm"].capitalize() + " arm" + (" (fast)" if fast else ""),
                 "arm": metadata["arm"], "task": metadata["emote"],
                 "coordinateSpace": "xlerobot-model-radians", "fps": metadata["fps"],
                 "durationSeconds": duration, "jointNames": metadata["jointNames"],
                 "source": {"repository": pin["url"], "revision": pin["revision"],
                            "simulator": "MuJoCo", "hardwareApproved": False},
                 "hardwareApproved": False, "physicalCalibrationHash": None,
-                "preview": {"file": "preview.mp4", "renderFps": PREVIEW_FPS,
-                            "encodedFps": FPS, "durationSeconds": duration,
+                "preview": {"file": "preview.mp4", "renderFps": render_fps,
+                            "encodedFps": encoded_fps, "durationSeconds": duration,
                             "source": "Actual MuJoCo simulated joint feedback; stationary base and head."},
                 "transfer": metadata["transfer"],
                 "files": {name: digest((directory / name).read_bytes()) for name in payloads}}

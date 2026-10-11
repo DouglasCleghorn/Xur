@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Emotes · Xur Robot</title><link rel="stylesheet" href="/robot/robot.css"><link rel="stylesheet" href="/robot/emote-files.css"><script src="/robot/robot.js" defer></script><script src="/robot/emote-files.js" defer></script></head>
+<body data-page="emotes">
+<header><a class="brand" href="/">XUR <span>/ Robot</span></a><nav aria-label="Robot"><a href="/robot/">Dashboard</a><a href="/robot/emotes" aria-current="page">Emotes</a><a href="/robot/calibrate">Guided setup</a><a href="/robot/setup">Setup</a><a href="/robot/tags">AprilTags</a><a href="/robot/controller">Controller guide</a></nav><span class="badge" id="mode">Connecting</span></header>
+<aside class="stop-bar" aria-label="Emergency stop"><button id="estop" class="estop">E-STOP</button><div><strong id="estop-state" role="status">Software emergency stop</strong><p>Stops the session and latches motion off. Disconnect motor power for a physical emergency.</p></div><button id="reset-estop" hidden>Reset E-stop</button></aside>
+<main>
+<div class="title"><h1>Emotes</h1><button id="stop" class="danger">Stop &amp; disarm</button></div>
+<div id="error" class="notice error" role="alert" hidden></div><p id="action-status" role="status" class="subtle"></p>
+<section class="panel" aria-label="Emote files"><form id="emote-import"><label for="emote-file">Emote files (.xuremot)</label><input id="emote-file" type="file" accept=".xuremot,.zip,application/zip" multiple required><button id="emote-import-button" type="submit">Import emotes</button></form><p id="emote-import-status" role="status">Import a file to watch its video and inspect the recording.</p><div id="emote-file-library" class="emote-file-grid"></div></section>
+</main></body></html>

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Guided setup · Xur Robot</title><link rel="stylesheet" href="/robot/robot.css"><link rel="stylesheet" href="/robot/calibrate.css"><script src="/robot/vendor/signalr/signalr.min.js" defer></script><script src="/robot/robot.js" defer></script><script src="/robot/calibrate.js" defer></script></head>
 <body data-page="setup">
-<header><a class="brand" href="/">XUR <span>/ Robot</span></a><nav aria-label="Robot"><a href="/robot/">Dashboard</a><a href="/robot/calibrate" aria-current="page">Guided setup</a><a href="/robot/setup">Hardware &amp; skills</a></nav><span class="badge" id="mode">Connecting</span></header>
+<header><a class="brand" href="/">XUR <span>/ Robot</span></a><nav aria-label="Robot"><a href="/robot/">Dashboard</a><a href="/robot/emotes">Emotes</a><a href="/robot/calibrate" aria-current="page">Guided setup</a><a href="/robot/setup">Hardware &amp; skills</a></nav><span class="badge" id="mode">Connecting</span></header>
 <aside class="stop-bar" aria-label="Emergency stop"><button id="estop" class="estop">E-STOP</button><div><strong id="estop-state" role="status">Software emergency stop</strong><p>Stops the session and latches motion off. Disconnect motor power for a physical emergency.</p></div><button id="reset-estop" hidden>Reset E-stop</button></aside>
 <main class="guided-page">
 <div class="title"><div><h1>Hand-guided calibration</h1><p>Hand-guided calibration keeps torque off. You position the arms; we record their ranges.</p></div><span id="live-state" class="badge" role="status">Connecting live updates…</span></div>

@@ -34,7 +34,7 @@ public sealed class EmoteFiles(string stateDirectory)
     {
         if(m.SchemaVersion!=1||m.Kind!="xur-emote-candidate"||!RobotIdentifiers.Valid(m.Id)||string.IsNullOrWhiteSpace(m.Name)||m.Name.Length>80
             ||string.IsNullOrWhiteSpace(m.Task)||m.Task.Length>500||m.Arm is not ("left" or "right")||m.CoordinateSpace!="xlerobot-model-radians"
-            ||m.Fps!=10||!double.IsFinite(m.DurationSeconds)||m.DurationSeconds is < 1 or > 60||Math.Abs(m.DurationSeconds*10-Math.Round(m.DurationSeconds*10))>1e-7
+            ||m.Fps is not (10 or 100)||!double.IsFinite(m.DurationSeconds)||m.DurationSeconds is < 1 or > 60||Math.Abs(m.DurationSeconds*m.Fps-Math.Round(m.DurationSeconds*m.Fps))>1e-7
             ||m.HardwareApproved||m.PhysicalCalibrationHash!=null||m.Source==null||m.Source.HardwareApproved||m.Source.Simulator!="MuJoCo"
             ||!Hash(m.Source.Revision,40)||(m.Source.GeneratorSha256!=null&&!Hash(m.Source.GeneratorSha256))
             ||!Uri.TryCreate(m.Source.Repository,UriKind.Absolute,out var uri)||uri.Scheme!="https"
@@ -52,11 +52,11 @@ public sealed class EmoteFiles(string stateDirectory)
         string? line;
         while((line=reader.ReadLine())!=null)
         {
-            if(line.Length is 0 or > 4096||count>600)throw new InvalidOperationException("Recording frame count or line length exceeds its bounds.");
+            if(line.Length is 0 or > 4096||count>60*manifest.Fps)throw new InvalidOperationException("Recording frame count or line length exceeds its bounds.");
             var frame=RobotJson.Deserialize<EmoteRecordingFrame>(line)??throw new InvalidOperationException("Recording frame is missing.");
             var arrays=new[]{frame.Action,frame.ObservationState,frame.ObservationVelocity};
             if(frame.Frame!=count||!double.IsFinite(frame.Timestamp)||!double.IsFinite(frame.SimulationTime)
-                ||Math.Abs(frame.Timestamp-count/10d)>1e-6||Math.Abs(frame.SimulationTime-frame.Timestamp)>1e-5||frame.Contacts!=0
+                ||Math.Abs(frame.Timestamp-count/(double)manifest.Fps)>1e-6||Math.Abs(frame.SimulationTime-frame.Timestamp)>1e-5||frame.Contacts!=0
                 ||arrays.Any(a=>a==null||a.Length!=6||a.Any(v=>!double.IsFinite(v)))
                 ||frame.Action.Any(v=>Math.Abs(v)>4)||frame.ObservationState.Any(v=>Math.Abs(v)>4)||frame.ObservationVelocity.Any(v=>Math.Abs(v)>3)
                 ||frame.Action.Where((v,i)=>Math.Abs(v-frame.ObservationState[i])>.2).Any()
@@ -64,7 +64,7 @@ public sealed class EmoteFiles(string stateDirectory)
                 throw new InvalidOperationException("Recording timestamps, joint values, contacts or command steps failed validation.");
             first??=frame.Action;firstObserved??=frame.ObservationState;previous=frame.Action;lastObserved=frame.ObservationState;count++;
         }
-        if(count!=Math.Round(manifest.DurationSeconds*10)+1||first==null||previous==null||firstObserved==null||lastObserved==null
+        if(count!=Math.Round(manifest.DurationSeconds*manifest.Fps)+1||first==null||previous==null||firstObserved==null||lastObserved==null
             ||first.Where((v,i)=>Math.Abs(v-previous[i])>1e-6).Any()||firstObserved.Where((v,i)=>Math.Abs(v-lastObserved[i])>.01).Any())
             throw new InvalidOperationException("Recording duration or return to its starting pose differs from the manifest.");
         return count;
