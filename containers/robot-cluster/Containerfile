@@ -2,9 +2,9 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble AS build
 RUN apt-get update && apt-get install -y --no-install-recommends clang zlib1g-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /source
 COPY global.json Directory.Build.props ./
-COPY containers/robot-backup/ containers/robot-backup/
-RUN dotnet restore containers/robot-backup/Xur.Robot.Backup.csproj --locked-mode -r linux-x64 && \
-    dotnet publish containers/robot-backup/Xur.Robot.Backup.csproj -c Release -r linux-x64 --no-restore \
+COPY containers/robot-cluster/ containers/robot-cluster/
+RUN dotnet restore containers/robot-cluster/Xur.Robot.Backup.csproj --locked-mode -r linux-x64 && \
+    dotnet publish containers/robot-cluster/Xur.Robot.Backup.csproj -c Release -r linux-x64 --no-restore \
       -p:TreatWarningsAsErrors=true -o /out && test ! -e /out/libcoreclr.so
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble
 WORKDIR /app

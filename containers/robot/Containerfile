@@ -3,7 +3,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends clang zlib1g-de
 WORKDIR /source
 COPY global.json Directory.Build.props ./
 COPY containers/robot/Xur.Robot.csproj containers/robot/packages.lock.json containers/robot/
-COPY containers/robot-backup/Shared/ containers/robot-backup/Shared/
+COPY containers/robot-cluster/Shared/ containers/robot-cluster/Shared/
 RUN dotnet restore containers/robot/Xur.Robot.csproj --locked-mode -r linux-x64
 COPY containers/robot/ containers/robot/
 COPY src/Xur.Domain/Redaction.cs src/Xur.Domain/Redaction.cs

@@ -5,8 +5,8 @@
 !docs/
 !docs/licensing.md
 !containers/
-!containers/robot-backup/
-!containers/robot-backup/**
+!containers/robot-cluster/
+!containers/robot-cluster/**
 **/bin/**
 **/obj/**
 **/.build/**

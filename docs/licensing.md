@@ -83,7 +83,7 @@ alongside Xur's license and this document. The `mcr.microsoft.com` SDK and
 runtime-dependencies images retain their upstream and operating-system licenses.
 No third-party browser libraries are used by this dashboard.
 
-The `containers/robot-backup` Native AOT receiver ships Xur's MIT license and
+The `containers/robot-cluster` Native AOT receiver ships Xur's MIT license and
 this document, plus the .NET license and third-party notices. Recording manifests
 and byte-for-byte backups preserve user data; they do not change dataset or
 model-weight licenses.

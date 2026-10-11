@@ -77,7 +77,7 @@ success.
 This is protection against accidental edits to the original dataset, not a
 verified off-device backup or protection against loss of the robot's disk.
 Remote recording backups use the separate
-[backup receiver](../../containers/robot-backup/README.md) and must be checked
+[backup receiver](../../containers/robot-cluster/README.md) and must be checked
 end to end for the configured network route and actual samples.
 
 Camera images can contain people or private room details. Runtime captures stay
