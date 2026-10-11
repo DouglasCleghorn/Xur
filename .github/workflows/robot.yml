@@ -21,6 +21,8 @@ on:
       - 'tests/Xur.Robot.Tests/**'
       - 'tests/Xur.Integration.Tests/robot-boundary.py'
       - 'tests/Xur.Integration.Tests/robotics-tools.py'
+      - 'tests/Xur.Integration.Tests/hand-calibration.py'
+      - 'eng/xlerobot-record-emotes.py'
       - '.github/workflows/robot.yml'
       - 'Directory.Build.props'
       - 'global.json'
@@ -46,6 +48,7 @@ jobs:
           dotnet run --project tests/Xur.Robot.Tests -c Release
           python3 tests/Xur.Integration.Tests/robot-boundary.py
           PYTHONPYCACHEPREFIX=.build/robot/pycache python3 tests/Xur.Integration.Tests/robotics-bridge.py
+          PYTHONPYCACHEPREFIX=.build/robot/pycache python3 tests/Xur.Integration.Tests/hand-calibration.py
           python3 eng/check-web-assets.py
       - name: Build Native AOT container
         run: >-
