@@ -72,6 +72,35 @@
   This replaces `.build/website/` as the site-test evidence location. Refresh
   when site content, navigation, screenshots or responsive layout changes.
 
+- 2026-10-11: Persisted Compute resource-profile and removal design family under
+  `.build/evidence/persisted-compute/design-review/2026-10-11/`. T3 collaborative
+  browser captures of the revised synthetic prototype, source base `d025ad9`
+  plus the working design. Includes desktop effective resources, profile-change
+  previews at desktop/320 px, mobile overview, explicit data-removal choices,
+  and intermediate review images. Purpose: review defaults versus active-profile
+  overrides, restart disclosure, Off-service resource changes and keep/delete/
+  cancel choices. Privacy review: synthetic services, readings and HTTPS names;
+  no credentials, user data, real GPU measurements or robot imagery. Keep private
+  and ignored; native browser metadata may identify the development host.
+  This family supersedes the earlier overview for resource-profile design;
+  neither family validates application runtime behavior. Regenerate when these
+  controls change and replace prototype images before any release use.
+
+- 2026-10-10: Persisted Compute design review capture family under
+  `.build/evidence/persisted-compute/design-review/`, including initial desktop
+  and mobile renders, an initial browser connection-error capture, and revised
+  responsive/editor/state captures. T3 collaborative browser renders of the
+  interactive prototype in `.build/evidence/persisted-compute/design/`, based on
+  `d025ad9` plus the working design; no implemented application version.
+  Purpose: review service rows, lifecycle controls, RAM/VRAM attribution, easy
+  HTTPS settings, keyboard interaction and narrow layouts. Privacy review:
+  synthetic service names and readings only; no credentials, personal files,
+  live container data or robot imagery. Browser metadata may identify the
+  development host. Keep these private, ignored design evidence. The initial
+  error image is connection troubleshooting evidence, not UI acceptance.
+  Regenerate after layout or behavior changes; do not use prototype captures
+  as evidence of implemented runtime behavior or as release screenshots.
+
 - 2026-10-10: Attended camera-mount motor identification capture family under
   `.build/evidence/robot-camera-mount-discovery-20261010/`, with per-test
   `head/hand-{ready,before,displaced,after}.jpg` and matching motor feedback.
