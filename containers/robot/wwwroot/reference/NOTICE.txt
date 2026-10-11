@@ -1,0 +1,11 @@
+SO-101 follower middle-position photograph
+Source: Hugging Face documentation-images dataset, Hugging Face team
+Original: https://huggingface.co/datasets/huggingface/documentation-images/resolve/e0f0921e0c4341dcb41873906046d10ad08e2410/lerobot/follower_middle.webp
+Documentation: https://huggingface.co/docs/lerobot/main/en/assemble_so101#calibrate
+Dataset revision: e0f0921e0c4341dcb41873906046d10ad08e2410
+SHA-256: 84d449ec596d5d3668db2ff28f0124dcd02ef7d132a515149e95264f07cedb86
+License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+https://creativecommons.org/licenses/by-nc-sa/4.0/
+Full license: CC-BY-NC-SA-4.0.txt (alongside this notice)
+Unmodified photograph; filename changed for local distribution.
+This photograph is not covered by Xur's MIT license.

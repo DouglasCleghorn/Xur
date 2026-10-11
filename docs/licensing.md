@@ -12,6 +12,11 @@ packages, container images, games or downloaded model weights.
 
 Existing notices include:
 
+- Guided-calibration reference photograph: Hugging Face documentation-images,
+  **CC BY-NC-SA 4.0**, unchanged. Attribution, pinned source and the full license
+  ship in `containers/robot/wwwroot/reference/NOTICE.txt` and
+  `CC-BY-NC-SA-4.0.txt`. The photograph is not MIT licensed.
+
 - Sunshine: `tools/Xur.Streaming/LICENSE`, its pinned upstream information, and
   license files retained in the extracted streaming runtime.
 - Virtual-display protocol: `tools/Xur.VirtualDisplay/COPYING` and the copyright
