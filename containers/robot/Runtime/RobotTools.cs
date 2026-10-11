@@ -25,12 +25,16 @@ public sealed class LeRobotTools : IRobotTools
         using var process = Process.Start(info) ?? throw new IOException("Could not start the LeRobot adapter.");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         deadline.CancelAfter(TimeSpan.FromSeconds(seconds));
+        // Each preview JPEG is bounded independently. Let the response grow
+        // with the actual inventory instead of imposing a camera-count limit.
+        var outputLimit=request is RobotDashboardRequest dashboard
+            ? 8L*1024*1024+dashboard.Cameras.Length*3L*1024*1024 : 8L*1024*1024;
         async Task<string> ReadBounded(StreamReader reader,bool progress=false)
         {
             var text = new System.Text.StringBuilder(); var buffer = new char[8192]; int count;
             while((count = await reader.ReadAsync(buffer, deadline.Token)) != 0)
             {
-                if(!progress && text.Length + count > 8 * 1024 * 1024) throw new IOException("Robot adapter output exceeded its limit.");
+                if(!progress && text.Length + count > outputLimit) throw new IOException("Robot adapter output exceeded its limit.");
                 text.Append(buffer, 0, count);
                 if(progress && text.Length>65536)text.Remove(0,text.Length-65536);
             }

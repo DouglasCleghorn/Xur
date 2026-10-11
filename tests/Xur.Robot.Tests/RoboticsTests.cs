@@ -18,6 +18,7 @@ static class RoboticsTests
         public bool Block;
         public JsonElement? MarkerObservations;
         public JsonElement? Dashboard;
+        public RobotDashboardRequest? DashboardRequest;
         public string? ObservationDirectory;
         public List<string> Calls=[];
         public TaskCompletionSource Started=new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -26,7 +27,7 @@ static class RoboticsTests
             lock(Calls)Calls.Add(operation);Started.TrySetResult();
             if(Block)await Task.Delay(Timeout.Infinite,token);
             if(operation=="inspect-markers" && MarkerObservations is {} observations)return observations;
-            if(operation=="dashboard")return Dashboard??MotorFeedback();
+            if(operation=="dashboard"){DashboardRequest=request as RobotDashboardRequest??throw new Exception("Dashboard inventory request is missing.");return Dashboard??MotorFeedback();}
             if(operation=="capture-calibration-observation")return CalibrationObservationTests.Capture(ObservationDirectory??throw new Exception("No observation fixture directory."),c,((RobotCalibrationObservationRequest)request!).Samples);
             return JsonSerializer.SerializeToElement(operation switch{"camera"=>(object)new{jpeg="/9j/2Q=="},"inspect-markers"=>MarkerResult(),
                 "dashboard"=>new{observedAt=DateTimeOffset.UtcNow,buses=Array.Empty<object>(),cameras=Array.Empty<object>()},_=>new{done=true}},new JsonSerializerOptions(JsonSerializerDefaults.Web));
@@ -94,7 +95,8 @@ static class RoboticsTests
             var wrong=Bus("wrong-model",9);wrong.Motors[1]=2825;
             check(Rejected(()=>RobotBusDetection.MatchXLeRobot([headBus,wrong])),"Incompatible motor models block automatic bus assignment");
             check(Rejected(()=>RobotBusDetection.MatchXLeRobot([headBus,Bus("extra",10)])),"Unexpected extra motor identities block bus assignment");
-            var tools=new Tools{ObservationDirectory=root};var clock=new Clock();var robot=new RoboticsRuntime(root,Path.Combine(root,"reservation"),tools,clock);
+            var cameras=new[]{new RobotDevice("/dev/v4l/by-id/third-video-index0","Third camera")};
+            var tools=new Tools{ObservationDirectory=root};var clock=new Clock();var robot=new RoboticsRuntime(root,Path.Combine(root,"reservation"),tools,clock,deviceInventory:()=>new([],[],cameras));
             robot.Start("robot");
             check(robot.Status().StopLatched && tools.Calls.Count==0,"Loading Robotics never connects motors or starts motion");
             var c=Configuration();robot.Configure(c);
@@ -123,6 +125,13 @@ static class RoboticsTests
             await robot.Observation(CancellationToken.None);await robot.Observation(CancellationToken.None);
             check(tools.Calls.Count(call=>call=="dashboard")==1&&robot.Jobs().Length==jobsBeforeSnapshot,
                 "Dashboard snapshots share a cache and cannot evict inspection evidence with polling jobs");
+            check(tools.DashboardRequest?.Cameras is [{Name:"head"},{Name:"hand"},{Name:"camera-3",Device:var third}]&&third==cameras[0].Path,
+                "Dashboard passes every detected camera to the adapter while retaining the selected head and hand roles");
+            cameras=[..cameras,new("/dev/v4l/by-id/fourth-video-index0","Fourth camera"),new("/dev/v4l/by-path/fifth-video-index0","Fifth camera")];
+            clock.Now=clock.Now.AddSeconds(6);await robot.Observation(CancellationToken.None);
+            var previewRequest=RobotJson.Deserialize<RobotDashboardRequest>(RobotJson.Serialize(tools.DashboardRequest!));
+            check(previewRequest?.Cameras.Length==5&&cameras.All(camera=>previewRequest.Cameras.Any(preview=>preview.Device==camera.Path)),
+                "A fresh dashboard snapshot discovers newly connected cameras and its request supports source-generated JSON");
             var markersBeforeAssessment=tools.Calls.Count(call=>call=="inspect-markers");robot.AutoCalibrate();await Finished(robot);
             check(robot.CalibrationAssessment() is {State:"blocked",MotorCommandsIssued:false,JointCalibrationApproved:false}
                 &&!File.Exists(Path.Combine(root,"calibration","receipt.json"))&&robot.Status().StopLatched,
@@ -179,6 +188,7 @@ static class RoboticsTests
             await FreshDetection(root,check);
             await EmergencyStops(root,check);
             await Container(root,check);
+            await DashboardTools(root,check);
             await ChildCleanup(root,check);
 
         }
@@ -210,6 +220,13 @@ static class RoboticsTests
         check(!RobotCameraDevices.Valid(basePath+"1.0-video-index1")&&!RobotCameraDevices.Valid("/dev/video3")
             &&!RobotCameraDevices.Valid("/dev/v4l/by-path/../../video3"),
             "Camera validation rejects metadata interfaces, unstable raw nodes and path traversal");
+        var configuration=Configuration();var third="/dev/v4l/by-path/third-video-index0";
+        var previews=RobotCameraDevices.Previews(configuration,[new(configuration.HeadCamera,"Head"),new(configuration.HandCamera,"Hand"),
+            new(third,"Third"),new(third,"Duplicate alias"),new("/dev/video3","Unstable"),new("/dev/v4l/by-id/metadata-video-index1","Metadata")]);
+        check(previews.Select(camera=>camera.Device).SequenceEqual([configuration.HeadCamera,configuration.HandCamera,third]),
+            "Preview inventory deduplicates selected and extra cameras and rejects non-capture paths");
+        check(RobotCameraDevices.Previews(configuration,[]).Length==2,
+            "Disconnected selected cameras retain their preview cards for visible capture errors");
     }
     static async Task FreshDetection(string root,Action<bool,string> check)
     {
@@ -348,6 +365,25 @@ static class RoboticsTests
         check(reset.StatusCode==System.Net.HttpStatusCode.Accepted&&!robot.Status().EmergencyStopLatched&&robot.Status().StopLatched,
             "Minimal API resets E-stop through a checked job while leaving motion disarmed");
         await app.StopAsync();
+    }
+    static async Task DashboardTools(string root,Action<bool,string> check)
+    {
+        var directory=Path.Combine(root,"preview-tools");Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory,"bridge.py"),
+            "import json,sys\npayload=json.load(sys.stdin)\ncameras=payload['request']['cameras']\nprint(json.dumps({'cameras':[{**camera,'jpeg':'A'*(2*1024*1024)} for camera in cameras]}))\n");
+        var previousTools=Environment.GetEnvironmentVariable("XUR_ROBOT_TOOLS");var previousPython=Environment.GetEnvironmentVariable("XUR_ROBOT_PYTHON");
+        Environment.SetEnvironmentVariable("XUR_ROBOT_TOOLS",directory);Environment.SetEnvironmentVariable("XUR_ROBOT_PYTHON","python3");
+        try
+        {
+            var cameras=Enumerable.Range(1,5).Select(index=>new RobotPreviewCamera("camera-"+index,"/dev/v4l/by-path/fixture-"+index+"-video-index0")).ToArray();
+            var response=await new LeRobotTools().Run(Configuration(),"dashboard",new RobotDashboardRequest(cameras),15,CancellationToken.None);
+            check(response.GetProperty("cameras").GetArrayLength()==5&&response.GetRawText().Length>8*1024*1024,
+                "The real subprocess boundary accepts multi-camera snapshots beyond the old fixed output limit");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("XUR_ROBOT_TOOLS",previousTools);Environment.SetEnvironmentVariable("XUR_ROBOT_PYTHON",previousPython);
+        }
     }
     static async Task ChildCleanup(string root,Action<bool,string> check)
     {

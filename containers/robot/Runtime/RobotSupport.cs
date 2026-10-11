@@ -17,6 +17,18 @@ public static class RobotCameraDevices
         try{return File.Exists(left)&&File.Exists(right)&&Node(left)==Node(right);}
         catch(Exception error) when(error is IOException or UnauthorizedAccessException){return false;}
     }
+    public static RobotPreviewCamera[] Previews(RoboticsConfiguration configuration,RobotDevice[] inventory)
+    {
+        // Keep the saved roles visible even if disconnected. Other capture
+        // interfaces need no role assignment to appear on the dashboard.
+        var cameras=new List<RobotPreviewCamera>{new("head",configuration.HeadCamera),new("hand",configuration.HandCamera)};
+        foreach(var device in inventory.OrderBy(device=>device.Path,StringComparer.Ordinal))
+        {
+            if(!Valid(device.Path)||cameras.Any(camera=>SameNode(camera.Device,device.Path)))continue;
+            cameras.Add(new("camera-"+(cameras.Count+1),device.Path));
+        }
+        return cameras.ToArray();
+    }
     public static RobotDevice[] Read(string byId="/dev/v4l/by-id",string byPath="/dev/v4l/by-path")
     {
         var aliases=new List<(string Path,string Node,bool ByPath)>();

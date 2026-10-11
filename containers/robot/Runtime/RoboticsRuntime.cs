@@ -402,7 +402,7 @@ public sealed class RoboticsRuntime
             calibrationAssessment=null;
             return Launch("auto-calibrate",false,async(c,token)=>
             {
-                var telemetry=await tools.Run(c,"dashboard",null,60,token);
+                var telemetry=await ReadDashboard(c,token);
                 lock(sync){observation=telemetry;observationReadAt=clock.GetUtcNow();motorDiagnostics.Observe(c,telemetry,observationReadAt.Value);}
                 var evidence=await CaptureCalibrationObservation(c,new(1),token);
                 var blockers=new List<string>();
@@ -448,6 +448,11 @@ public sealed class RoboticsRuntime
             });
         }
     }
+    Task<JsonElement> ReadDashboard(RoboticsConfiguration c,CancellationToken token)
+    {
+        var cameras=RobotCameraDevices.Previews(c,deviceInventory().Cameras);
+        return tools.Run(c,"dashboard",new RobotDashboardRequest(cameras),Math.Max(60,30+cameras.Length*15),token);
+    }
     public async Task<RobotObservation> Observation(CancellationToken token)
     {
         Task pending;
@@ -465,7 +470,7 @@ public sealed class RoboticsRuntime
                 {
                     try
                     {
-                        var data=await tools.Run(c,"dashboard",null,60,source.Token);
+                        var data=await ReadDashboard(c,source.Token);
                         lock(sync){observation=data;observationReadAt=clock.GetUtcNow();observationProblem=null;motorDiagnostics.Observe(c,data,observationReadAt.Value);}
                     }
                     catch(Exception e){lock(sync)observationProblem=Xur.Domain.Redaction.Logs(e.Message);}
@@ -736,7 +741,7 @@ public sealed class RoboticsRuntime
             var epoch=emergencyStopEpoch;
             return Launch("reset-estop",false,async(c,token)=>
             {
-                var result=await tools.Run(c,"dashboard",null,60,token);
+                var result=await ReadDashboard(c,token);
                 if(!result.TryGetProperty("buses",out var buses)||buses.GetArrayLength()!=2)
                     throw new InvalidOperationException("Fresh feedback from both motor buses is required to reset E-stop.");
                 var count=0;
