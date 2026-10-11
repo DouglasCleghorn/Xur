@@ -40,6 +40,24 @@ Existing notices include:
   licenses, including the minimal discovery image's Feetech SDK, pyserial,
   DeepDiff, NumPy, tqdm and draccus package notices. No model weights are bundled
   or relabeled as MIT.
+- Offline robotics simulation: upstream XLeRobot models retain their Apache-2.0
+  notice, copied into each recording run as `XLeRobot-LICENSE`. MuJoCo retains
+  Apache-2.0, NumPy its BSD notice, and Pillow its HPND notice. These dependencies
+  stay in the local simulation environment and are not relabeled as MIT.
+- Offline emote video export: imageio-ffmpeg 0.6.0 retains its
+  [BSD-2-Clause license](https://github.com/imageio/imageio-ffmpeg/blob/v0.6.0/LICENSE)
+  (copyright 2019–2025, imageio). Its installed distribution retains that notice.
+  The Linux x86-64 wheel used for these previews supplies FFmpeg 7.0.2-static;
+  its `-version` output enables GPL, version 3 and libx264, and its `-L` output
+  declares GPL-3.0-or-later. Do not describe this executable as LGPL-only:
+  [FFmpeg's license guidance](https://ffmpeg.org/legal.html) explains how optional
+  GPL components affect the build. The encoder and Python wrapper stay in the
+  ignored offline authoring environment; neither is included in the robot app
+  or `.xuremot` files. Export receipts record the encoder version and binary
+  SHA-256. Candidate bundles carry the generated MP4, recording data, Xur's
+  `LICENSE` and this `licensing.md`, plus `XLeRobot-LICENSE` for the upstream
+  model provenance. The generator's original gesture definitions remain MIT;
+  the model and third-party tools retain their own licenses.
 - Robotics marker artwork: the generator downloads unmodified
   `tagStandard41h12` patterns from AprilRobotics/apriltag-imgs at
   `f3fd9a7add5bfd82a886fc65240fdb8e3c9ac5a1`. That artwork retains its
@@ -62,6 +80,10 @@ third-party notices remain in their component directories.
 - Files grid: AG Grid Community (MIT), selected in `src/Xur.Control/libman.json`.
   LibMan restores its JavaScript and copyright notice during the build; both
   ship under `wwwroot/vendor/ag-grid/`. No Enterprise modules are used.
+- Robot setup live updates: Microsoft's SignalR JavaScript client (MIT), pinned
+  in `containers/robot/libman.json`. LibMan restores its browser bundle, the
+  matching ASP.NET Core MIT license and package third-party notices into ignored
+  build paths; all three ship under `wwwroot/vendor/signalr/`.
 
 `xurutil` uses Microsoft's MIT-licensed `System.CommandLine` and the .NET Native
 AOT runtime, plus [TeeForge](https://github.com/DouglasCleghorn/TeeForge) 0.1.0

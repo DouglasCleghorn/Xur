@@ -1,4 +1,4 @@
-#robotics{display:grid;gap:24px}
+#robotics{display:grid;grid-template-columns:minmax(0,1fr);gap:24px}
 #robotics form{display:grid;gap:12px;margin:18px 0}
 #robotics label{display:grid;gap:6px;min-width:0}
 #robotics input:not([type=checkbox]),#robotics select{width:100%;min-width:0}
@@ -10,6 +10,12 @@
 #robot-jobs p{overflow-wrap:anywhere;border-top:1px solid var(--line);padding-top:12px}
 #metrology-form .actions button{white-space:normal;text-align:left;max-width:100%}
 #metrology-document:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.emote-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:14px;margin-top:20px}
+.emote-card{display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-width:0;padding:18px;background:#0b111b;border:1px solid var(--line);border-radius:10px;overflow-wrap:anywhere}
+.emote-card p{margin:0}.emote-card .emote-mood,.emote-state{color:var(--accent);font-size:13px}.emote-card>button,.emote-card>.actions{margin-top:auto}.emote-card button{white-space:normal;text-align:left;max-width:100%}.emote-card button:disabled{cursor:not-allowed}
+.emote-library-title{margin-top:28px}#robot-emotes .section-heading>label{min-width:160px}#robot-emotes .eyebrow{margin-top:0}#robot-emote-message{margin-top:18px}#robot-emote-session{margin-bottom:0}
+#robot-record,#robot-skill,#robot-emotes{scroll-margin-top:140px}
+#robot-use-recording{white-space:normal;text-align:left;max-width:100%}
 .camera-capability-device{min-width:0;margin-top:20px;padding-top:16px;border-top:1px solid var(--line);overflow-wrap:anywhere}
 #camera-capabilities-panel,#camera-capabilities-devices{min-width:0;max-width:100%}
 .camera-capability-table{overflow-x:auto;max-width:100%;min-width:0}.camera-capability-table table{width:100%;min-width:600px;white-space:normal;border-collapse:collapse;font-size:.9rem}

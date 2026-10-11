@@ -1279,6 +1279,12 @@ def main():
         started = Path("/proc/self/stat").read_text().split(") ", 1)[1].split()[19]
         PID.write_text(json.dumps({"pid": os.getpid(), "started": started}))
         try:
+            if sys.argv[1:] == ["--hand-calibrate"]:
+                from hand_calibration import run
+                configuration = json.loads(sys.stdin.readline())
+                prepared(configuration)
+                run(configuration)
+                return
             if sys.argv[1:] == ["--calibrate"]:
                 configuration = json.loads((STATE / "config.json").read_text())
                 prepared(configuration)

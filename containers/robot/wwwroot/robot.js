@@ -19,7 +19,7 @@
    csrf = (await response.json()).token;
   }
   const response = await fetch(`/robot/api/${path}`, body === undefined ? { cache: 'no-store' } : {
-   method: 'POST', headers: { 'Content-Type': 'application/json', RequestVerificationToken: csrf }, body: JSON.stringify(body)
+   method: 'POST', headers: { 'Content-Type': body instanceof Blob ? 'application/zip' : 'application/json', RequestVerificationToken: csrf }, body: body instanceof Blob ? body : JSON.stringify(body)
   });
   const data = await response.json().catch(() => null);
   if (!response.ok) throw Error(data?.error || `Robot request failed (${response.status}).`);

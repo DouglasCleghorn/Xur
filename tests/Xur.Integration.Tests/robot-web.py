@@ -8,6 +8,7 @@ import argparse
 import base64
 import http.client
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -16,10 +17,37 @@ import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 JPEG = base64.b64decode('/9j/2Q==')
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAEElEQVR4nGNgGAWjYBTAAAADEAABPywr7AAAAABJRU5ErkJggg==')
+
+
+def emote_fixture():
+    # This minimal MP4 signature tests HTTP storage/ranges, not video decoding.
+    # Actual generated MP4s are decoded and reviewed separately in MuJoCo exports.
+    video = b'\x00\x00\x00\x28ftyp' + bytes(32)
+    frames = [dict(frame=i, timestamp=i/10, simulationTime=i/10, action=[0]*6,
+                   **{'observation.state': [0]*6, 'observation.velocity': [0]*6}, contacts=0) for i in range(11)]
+    files = {'recording.jsonl': ''.join(json.dumps(frame)+'\n' for frame in frames).encode(),
+             'trajectory.npz': b'fixture', 'preview.mp4': video,
+             'XLeRobot-LICENSE': b'Apache-2.0 fixture', 'LICENSE': b'MIT fixture', 'licensing.md': b'Fixture notices'}
+    manifest = dict(schemaVersion=1, kind='xur-emote-candidate', id='wave-right', name='Wave', arm='right', task='wave',
+        coordinateSpace='xlerobot-model-radians', fps=10, durationSeconds=1,
+        jointNames=[name+'_R' for name in ['Rotation', 'Pitch', 'Elbow', 'Wrist_Pitch', 'Wrist_Roll', 'Jaw']],
+        source=dict(repository='https://github.com/Vector-Wangel/XLeRobot', revision='a'*40, simulator='MuJoCo', hardwareApproved=False),
+        hardwareApproved=False, physicalCalibrationHash=None,
+        files={name: hashlib.sha256(data).hexdigest() for name, data in files.items()})
+    files['manifest.json'] = json.dumps(manifest).encode()
+    def archive(payloads):
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, 'w', zipfile.ZIP_DEFLATED) as package:
+            for name, data in payloads.items(): package.writestr(name, data)
+        return stream.getvalue()
+    valid = archive(files)
+    files['preview.mp4'] += b'changed'
+    return valid, video, archive(files)
 
 
 class UnixHTTP(http.client.HTTPConnection):
@@ -246,17 +274,60 @@ def main():
             start()
             check(json.loads(request(app_socket, '/robot/health')[2])['compilation'] == 'native-aot',
                   'Native AOT health endpoint runs')
-            for page, text in [('/robot/', b'Every motor'), ('/robot/tags', b'Raw observations'), ('/robot/controller', b'Button map'), ('/robot/setup', b'Hardware, demonstrations and skills.')]:
+            for page, text in [('/robot/', b'Every motor'), ('/robot/tags', b'Raw observations'), ('/robot/controller', b'Button map'), ('/robot/setup', b'<h1>Robot setup</h1>'), ('/robot/calibrate', b'<h1>Hand-guided calibration</h1>')]:
                 status, headers, data = request(app_socket, page)
                 check(status == 200 and text in data, 'Serves ' + page)
                 check(b'id="estop"' in data and b'id="reset-estop"' in data, 'E-stop and reset are available on ' + page)
                 check('blob: data:' in headers['Content-Security-Policy'], 'Camera CSP survives the proxy response')
-            for asset in ['robot.js', 'robot.css', 'setup.js', 'setup.css', 'backups.js', 'camera-capabilities.js', 'calibration-observations.js']:
+            for asset in ['robot.js', 'robot.css', 'setup.js', 'setup.css', 'emotes.js', 'emote-files.js', 'emote-files.css', 'backups.js', 'camera-capabilities.js', 'calibration-observations.js', 'calibrate.js', 'calibrate.css', 'vendor/signalr/signalr.min.js', 'vendor/signalr/LICENSE.txt', 'vendor/signalr/third-party-notices.txt']:
                 check(request(app_socket, '/robot/' + asset)[0] == 200, 'Serves local ' + asset)
+            for removed in ['/robot/api/simulation', '/robot/api/simulation/emote', '/robot/api/simulation/stop']:
+                check(request(app_socket, removed)[0] == 404, 'Embedded simulator route removed: ' + removed)
+            guided = request(app_socket, '/robot/calibrate')[2]
+            check(b'setup-mode' not in guided and b'gesture-simulation' not in guided
+                  and b'Start hand-guided setup' in guided and b'id="hardware-checks" hidden' not in guided,
+                  'Guided setup offers only real hand calibration with visible operator checks')
+            status, _, negotiated = request(app_socket, '/robot/realtime/negotiate?negotiateVersion=1', 'POST', b'')
+            check(status == 200, 'Real calibration SignalR transport negotiates')
+            realtime = '/robot/realtime?id=' + json.loads(negotiated)['connectionToken']
+            request(app_socket, realtime)
+            request(app_socket, realtime, 'POST', b'{"protocol":"json","version":1}\x1e')
+            updates = []
+            for _ in range(3):
+                frames = request(app_socket, realtime)[2].decode().split('\x1e')
+                updates.extend(json.loads(frame) for frame in frames if frame)
+                if any(frame.get('target') == 'setup' for frame in updates):
+                    break
+            setup = next(frame for frame in updates if frame.get('target') == 'setup')
+            update = json.loads(setup['arguments'][0])
+            check(update['calibration']['mode'] == 'hardware' and 'simulation' not in update,
+                  'SignalR streams actual calibration state without embedded simulation')
+            request(app_socket, realtime, 'DELETE')
             check(request(app_socket, '/robot/Program.cs')[0] == 404, 'Does not expose source files')
             initial = api('status')
             check(initial['workloadId'] == 'isolated-test' and initial['mode'] == 'disarmed' and not initial['configured'],
                   'Container owns unconfigured status without any agent socket')
+            check(api('emote-files') == [], 'Emote library starts empty without hardware setup')
+            package, video, corrupt_package = emote_fixture()
+            status, _, data = request(app_socket, '/robot/api/emote-files', 'POST', package, {'Content-Type': 'application/zip'})
+            candidate = json.loads(data)
+            check(status == 201 and candidate['state'] == 'preview-only' and not candidate['manifest']['hardwareApproved']
+                  and candidate['manifest']['physicalCalibrationHash'] is None, 'Native ZIP upload imports an unapproved preview candidate')
+            key = candidate['key']
+            check(request(app_socket, '/robot/api/emote-files', 'POST', package, {'Content-Type': 'application/zip'})[0] == 201
+                  and len(api('emote-files')) == 1, 'Identical candidate uploads preserve and deduplicate the original')
+            status, headers, data = request(app_socket, '/robot/api/emote-files/'+key+'/preview', headers={'Range': 'bytes=4-7'})
+            check(status == 206 and data == b'ftyp' and headers['Content-Type'] == 'video/mp4'
+                  and headers['Content-Range'] == 'bytes 4-7/40', 'Local MP4 preview supports byte ranges for browser seeking')
+            check(request(app_socket, '/robot/api/emote-files/'+key+'/download')[2] == package,
+                  'Candidate download retains the byte-identical portable emote archive')
+            check(request(app_socket, '/robot/api/emote-files', 'POST', corrupt_package, {'Content-Type': 'application/zip'})[0] == 400
+                  and request(app_socket, '/robot/api/emote-files', 'POST', b'{}', {'Content-Type': 'application/json'})[0] == 415
+                  and request(app_socket, '/robot/api/emote-files', 'POST', b'x'*(16*1024*1024+1), {'Content-Type': 'application/zip'})[0] == 413,
+                  'Native upload rejects corrupted payloads, wrong media types and oversized files')
+            check(api('status') == initial and not calls_path.read_text() and not (state/'config.json').exists()
+                  and not (state/'calibration').exists() and not (state/'datasets').exists(),
+                  'Import and video downloads do not invoke hardware, approve motion or create replay datasets')
             capabilities = api('camera-capabilities')
             check(capabilities['selectedHeadCamera'] is None and capabilities['selectedHandCamera'] is None
                   and not capabilities['cameraSettingsChanged'] and not capabilities['motorCommandsIssued']
@@ -387,6 +458,9 @@ def main():
             stop()
             start()
             restarted = api('status')
+            check(api('emote-files')[0]['key'] == key
+                  and request(app_socket, '/robot/api/emote-files/'+key+'/preview')[2] == video,
+                  'Imported emote and its verified video survive a native app restart')
             check(restarted['configured'] and restarted['emergencyStopLatched'] and restarted['stopLatched']
                   and restarted['armedUntil'] is None and api('configuration') == configuration,
                   'Container restart preserves settings and E-stop while never resuming a motion session')
