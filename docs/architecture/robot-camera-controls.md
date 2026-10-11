@@ -179,6 +179,13 @@ report selected roles from saved configuration. Queries use fixed local tool
 arguments and inventory-approved device aliases. No control-setting endpoint
 or public motor-target API is part of this phase.
 
+The dashboard's **Camera modes** button beside Camera views opens a modal using
+the same read-only capability endpoint as Setup. It lists codecs/pixel formats,
+resolutions and frame rates for every discovered capture interface, with saved
+head/hand roles and the reported current mode. Driver controls and raw output
+are expandable, and the full report is copyable as JSON. Inspection requires a
+disarmed robot; the modal retains access to E-STOP.
+
 Container startup and explicit preparation rebuild the selected serial/camera
 aliases under the adapter's exclusive ownership lock. All required targets must
 exist before aliases change, and a failed preparation cannot leave a ready
