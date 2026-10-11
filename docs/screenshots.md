@@ -1,5 +1,18 @@
 # Screenshot and artwork register
 
+- 2026-10-11: Replaced the illustrative calibration SVG with the unmodified
+  Hugging Face follower middle-position photograph at
+  `containers/robot/wwwroot/reference/so101-follower-middle.webp` (1368×1824).
+  Used by both arm-reference steps on `/robot/calibrate`, linked to its full-size
+  local copy. Source: Hugging Face documentation-images, revision
+  `e0f0921e0c4341dcb41873906046d10ad08e2410`, `lerobot/follower_middle.webp`,
+  as used by its SO-101 assembly calibration guide. CC BY-NC-SA 4.0; attribution
+  and full license accompany the image. Privacy review: public documentation
+  photo, robot on a plain table, a supporting fingertip; no faces, credentials,
+  host information or identifying text. No crop, mirroring or retouching.
+  Review if the supported arm hardware or reference-pose convention changes.
+
+
 - 2026-10-11: Faster XLeRobot MuJoCo emote review family in
   `.build/evidence/xlerobot-emotes/20261011T200600621640Z/`, including each
   `*-<arm>/preview.gif`, `preview.mp4`, exported `*-fast.xuremot` video and
