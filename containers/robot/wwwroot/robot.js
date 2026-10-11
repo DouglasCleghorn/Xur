@@ -41,7 +41,7 @@
  operation('stop', 'stop', {}, 'Stopped and disarmed.');
  operation('estop', 'estop', {}, 'E-stop requested. Motion is latched off; disconnect motor power if necessary.');
  operation('reset-estop', 'reset-estop', {}, 'Checking fresh motor feedback before resetting E-stop…');
- operation('calibrate', 'auto-calibrate', {}, 'Checking motors and visual references for automatic calibration…');
+ operation('calibrate', 'auto-calibrate', {}, 'Capturing read-only evidence and assessing automatic calibration phases…');
  operation('controller', 'start-controller', { seconds: 60 }, 'Controller session requested. Hold Start / Menu to move; Back / View stops.');
  operation('prepare', 'prepare', {}, 'Checking the installed LeRobot tools…');
  operation('scan-tags', 'tasks', { kind: 'inspect-markers' }, 'Capturing three frames from each camera and detecting AprilTags…');
@@ -202,7 +202,18 @@
     list('jobs', jobs.slice(0, 8).map(job => `${time(job.updated)} · ${job.kind} · ${job.state}: ${job.detail}`));
     if (status.job && ['auto-calibrate', 'controller', 'prepare', 'reset-estop'].includes(status.job.kind)) set('action-status', `${status.job.kind} · ${status.job.state}: ${status.job.detail}`);
     const calibration = await api('calibration-assessment');
-    if (calibration) { set('calibration-status', calibration.summary); list('calibration-blockers', calibration.blockers || []); }
+    if (calibration) {
+     set('calibration-status', calibration.summary); list('calibration-blockers', calibration.blockers || []);
+     if ($('calibration-phases')) {
+      $('calibration-phases').replaceChildren(...(calibration.phases || []).map(phase => {
+       const item = document.createElement('li'), heading = document.createElement('strong'), state = document.createElement('span'), detail = document.createElement('p');
+       heading.textContent = phase.name; state.className = 'badge'; state.textContent = String(phase.state).replaceAll('-', ' '); detail.textContent = phase.detail;
+       item.append(heading, ' ', state, detail); return item;
+      }));
+     }
+     const evidence = calibration.evidence;
+     set('calibration-evidence', evidence ? `${evidence.complete ? 'Captured' : 'Incomplete'}: ${evidence.sampleCount} observation sample(s) · ${time(evidence.capturedAt)}. ${evidence.backupVerified ? 'Local independent copy checksum verified.' : 'Local independent copy not verified.'} Joint calibration remains unapproved.` : 'No saved calibration observation reported yet.');
+    }
    }
   } catch (error) { showError(error); set('mode', 'Unavailable'); }
  }

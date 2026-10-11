@@ -11,6 +11,7 @@ public record RobotMotorLimits(int MaxLoadRaw,int MaxCurrentRaw,double MaxFollow
 public record RobotArmRequest(int Seconds = 60);
 public record RobotControllerRequest(int Seconds = 60);
 public record RobotCalibrationRequest();
+public record RobotCalibrationObservationRequest(int Samples=1);
 public record RobotResetStopRequest();
 public record RobotEmoteRequest(string Skill);
 public record RobotSortItem(string Object, string Bin, string Skill);
@@ -43,4 +44,9 @@ public record RobotStatus(string? WorkloadId, string Mode, bool Configured,
     bool MotionEnabled, DateTimeOffset? ArmedUntil, bool StopLatched,
     RobotJob? Job, RobotSkill[] Skills, string[] Problems, string? CalibrationHash = null,bool EmergencyStopLatched=false);
 public record RobotCalibrationAssessment(DateTimeOffset ObservedAt,string State,string Summary,
-    string[] Blockers,bool MotorCommandsIssued=false,bool JointCalibrationApproved=false);
+    string[] Blockers,bool MotorCommandsIssued=false,bool JointCalibrationApproved=false,
+    RobotCalibrationPhase[]? Phases=null,RobotCalibrationObservationCapture? Evidence=null);
+public record RobotCalibrationPhase(string Id,string Name,string State,string Detail);
+public record RobotCalibrationObservationCapture(int Version,string Id,DateTimeOffset CapturedAt,int SampleCount,
+    bool Complete,string ManifestRelativePath,string ManifestSha256,string? BackupRelativePath,bool BackupVerified,
+    bool MotorCommandsIssued,bool JointCalibrationApproved,bool SynchronizedStereoFrames,string[] Problems);

@@ -13,6 +13,7 @@ public sealed class RoboticsRuntime
     readonly Func<RobotDevices> deviceInventory;
     readonly RecordingBackups backups;
     readonly RobotCameraCapabilities cameraCapabilities;
+    readonly RobotCalibrationObservations calibrationObservations;
     readonly Dictionary<string, RobotJob> jobs = new();
     readonly RobotMotorDiagnostics motorDiagnostics=new();
     string? workloadId;
@@ -36,7 +37,7 @@ public sealed class RoboticsRuntime
     string EmergencyStopPath=>Path.Combine(directory,"estop-latched");
 
     public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null,RecordingBackups? backups=null,RobotMetrology? metrology=null,RobotCameraCapabilities? cameraCapabilities=null)
-    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory);this.metrology=metrology??new(directory);this.cameraCapabilities=cameraCapabilities??new(); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
+    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory);this.metrology=metrology??new(directory);this.cameraCapabilities=cameraCapabilities??new();calibrationObservations=new(directory); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
 
     public RobotStatus Status()
     {
@@ -52,6 +53,9 @@ public sealed class RoboticsRuntime
     public RobotJob? Job(string id){lock(sync)return jobs.GetValueOrDefault(id);}
     public RoboticsConfiguration? Configuration(){lock(sync)return configuration;}
     public RobotCalibrationAssessment? CalibrationAssessment(){lock(sync)return calibrationAssessment;}
+    public RobotCalibrationObservationCapture? CalibrationObservation(){lock(sync)return configuration==null?null:calibrationObservations.Latest(configuration);}
+    public byte[] CalibrationObservationManifest(string id)=>calibrationObservations.Manifest(id);
+    public byte[] CalibrationObservationArtifact(string id,string name)=>calibrationObservations.ReadArtifact(id,name);
     public RobotMetrologySettings? Metrology(){lock(sync)return metrology.Read();}
     public RobotMetrologySettings ConfigureMetrology(RobotMetrologySettings settings)
     {
@@ -74,6 +78,7 @@ public sealed class RoboticsRuntime
         if(saved==null)return;
         try{await container.Prepare(saved,CancellationToken.None);}
         catch(Exception e){lock(sync)recoveryProblem="Robot device preparation failed; reconnect the selected devices and prepare again: "+Xur.Domain.Redaction.Logs(e.Message);}
+        calibrationObservations.Recover(saved);
     }
     string? CalibrationHash()
     {
@@ -358,6 +363,36 @@ public sealed class RoboticsRuntime
             catch{stopLatched=true;armedUntil=null;throw;}
         }
     }
+    async Task<RobotCalibrationObservationCapture> CaptureCalibrationObservation(RoboticsConfiguration c,RobotCalibrationObservationRequest request,CancellationToken token)
+    {
+        try
+        {
+            var result=await tools.Run(c,"capture-calibration-observation",request,60,token);
+            // Index sealed bytes even if cancellation arrived after acquisition.
+            return calibrationObservations.Save(c,result,request.Samples);
+        }
+        finally
+        {
+            // A canceled adapter can still finish sealing its partial originals.
+            // Recovery has no hardware access and never changes those bytes.
+            calibrationObservations.Recover(c);
+        }
+    }
+    public RobotJob CaptureCalibrationObservation(RobotCalibrationObservationRequest request)
+    {
+        lock(sync)
+        {
+            Idle();RequireConfiguration();
+            if(!stopLatched)throw new InvalidOperationException("Stop and disarm before collecting calibration observations.");
+            if(request.Samples is <1 or >3)throw new InvalidOperationException("Capture one to three stationary calibration samples.");
+            return Launch("calibration-observations",false,async(c,token)=>
+            {
+                var evidence=await CaptureCalibrationObservation(c,request,token);
+                return (evidence.Complete?"Stationary calibration observations saved.":"Partial calibration observations preserved; inspect the reported problems.")
+                    +(evidence.BackupVerified?" Independent local backup verified.":" Local backup is not verified.")+" Joint calibration remains unverified; no motor commands were issued.";
+            });
+        }
+    }
     public RobotJob AutoCalibrate()
     {
         lock(sync)
@@ -369,8 +404,7 @@ public sealed class RoboticsRuntime
             {
                 var telemetry=await tools.Run(c,"dashboard",null,60,token);
                 lock(sync){observation=telemetry;observationReadAt=clock.GetUtcNow();motorDiagnostics.Observe(c,telemetry,observationReadAt.Value);}
-                var survey=RobotMarkerSurvey.Read(await tools.Run(c,"inspect-markers",null,75,token));
-                var metric=await metrology.Apply(survey.Report,c,token);
+                var evidence=await CaptureCalibrationObservation(c,new(1),token);
                 var blockers=new List<string>();
                 if(telemetry.TryGetProperty("buses",out var buses))
                     foreach(var bus in buses.EnumerateArray())
@@ -378,31 +412,35 @@ public sealed class RoboticsRuntime
                         if(bus.TryGetProperty("error",out var error))blockers.Add("Motor inventory: "+error.GetString());
                         if(bus.TryGetProperty("motors",out var motors))foreach(var motor in motors.EnumerateArray())
                         {
-                            if(motor.TryGetProperty("error",out var motorError))blockers.Add(motor.GetProperty("name").GetString()+": "+motorError.GetString());
+                            var name=motor.TryGetProperty("name",out var named)?named.GetString():"Motor";
+                            if(motor.TryGetProperty("error",out var motorError))blockers.Add(name+": "+motorError.GetString());
                             if(motor.TryGetProperty("registers",out var registers))
                             {
                                 if(registers.TryGetProperty("Torque_Enable",out var torque)&&torque.GetInt32()!=0)blockers.Add("Disable motor torque before calibration.");
                                 if(registers.TryGetProperty("Min_Position_Limit",out var low)&&registers.TryGetProperty("Max_Position_Limit",out var high)&&high.GetInt32()-low.GetInt32()<32)
-                                    blockers.Add(motor.GetProperty("name").GetString()+" has a suspicious stored travel range; it cannot be used as a verified mechanical limit.");
+                                    blockers.Add(name+" has a suspicious stored travel range; it cannot be used as a verified mechanical limit.");
                             }
                         }
                     }
                 else blockers.Add("Motor inventory is unavailable.");
-                foreach(var camera in survey.Report.Cameras)
-                    if(camera.Markers.Length==0)blockers.Add(camera.Name+" camera has no repeatedly visible, unambiguous tags.");
-                // No supported solver has established these transforms on this robot.
-                // Never turn readable tags or existing EEPROM values into a calibration receipt.
-                if(metric.Metric==null)blockers.Add("Measured camera intrinsics, explicit lens distortion and actual tag reference sizes are not configured.");
-                else foreach(var camera in metric.Metric.Cameras)
-                    if(camera.State!="estimated"||camera.Tags.Any(t=>t.State!="estimated"))
-                        blockers.Add(camera.Name+" metric references are missing, rejected or ambiguous; supplied metrology does not approve joint calibration.");
+                blockers.AddRange(evidence.Problems);
+                if(!evidence.Complete)blockers.Add("Stationary camera/encoder acquisition is incomplete; preserved samples require review.");
+                if(!evidence.BackupVerified)blockers.Add("The preserved calibration observations do not have a verified independent local backup.");
                 blockers.AddRange([
-                    "Measured rigid marker mounts and marker-to-link transforms are not configured.",
-                    "The cameras have not established joint zero references and safe travel limits for every arm/head joint.",
-                    "A verified physical motor-power emergency stop is required before powered automatic calibration.",
-                    "The automatic joint-calibration solver is not implemented; this run performs its read-only assessment."]);
+                    "Complete-arm camera coverage and a reviewed motor-to-camera association remain unverified for this setup.",
+                    "Arm segmentation and tracking are not implemented.",
+                    "Stationary samples cannot establish visual joint correspondence; independently varied, timed observations are still needed.",
+                    "Physical coordinate references and accepted operating ranges remain unverified for the arm/head joints.",
+                    "The powered automatic-calibration solver and its independent motor-power stop have not been validated."]);
+                RobotCalibrationPhase[] phases=[
+                    new("acquisition","Camera and encoder acquisition",evidence.Complete?"captured":"incomplete",$"{evidence.SampleCount} stationary sample(s) preserved with individual read intervals. "+(evidence.BackupVerified?"Independent local backup verified.":"Local backup is unverified.")),
+                    new("camera-mount","Camera motor association","unverified","Prior attended discovery can provide evidence; this capture does not establish or approve a motor-to-camera binding."),
+                    new("coverage","Arm and base visibility","unverified","Successful camera capture does not establish visibility of every required link and joint."),
+                    new("segmentation","Arm segmentation and tracking","not-implemented","Markers and CAD are optional. Independently checked arm masks and link features are still needed."),
+                    new("correspondence","Visual joint correspondence","insufficient-data","Independently varied joints and measured image/state timing are needed; raw encoder labels do not establish physical zero."),
+                    new("physical-references","Joint references and operating ranges","unverified","A stated physical coordinate convention and independently accepted operating intervals are required before motion.")];
                 var assessment=new RobotCalibrationAssessment(clock.GetUtcNow(),"blocked",
-                    "Automatic calibration is blocked. Motor and AprilTag checks completed without motion; no calibration was approved.",blockers.Distinct().ToArray());
+                    "Calibration observations were preserved without motion. Remaining phases are unresolved; no joint calibration was approved.",blockers.Distinct().ToArray(),Phases:phases,Evidence:evidence);
                 var path=Path.Combine(directory,".build");Directory.CreateDirectory(path);
                 await File.WriteAllTextAsync(Path.Combine(path,"calibration-assessment.json"),RobotJson.Serialize(assessment),token);
                 lock(sync)calibrationAssessment=assessment;

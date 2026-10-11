@@ -18,6 +18,7 @@ static class RoboticsTests
         public bool Block;
         public JsonElement? MarkerObservations;
         public JsonElement? Dashboard;
+        public string? ObservationDirectory;
         public List<string> Calls=[];
         public TaskCompletionSource Started=new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async Task<JsonElement> Run(RoboticsConfiguration c,string operation,object? request,int seconds,CancellationToken token)
@@ -26,6 +27,7 @@ static class RoboticsTests
             if(Block)await Task.Delay(Timeout.Infinite,token);
             if(operation=="inspect-markers" && MarkerObservations is {} observations)return observations;
             if(operation=="dashboard")return Dashboard??MotorFeedback();
+            if(operation=="capture-calibration-observation")return CalibrationObservationTests.Capture(ObservationDirectory??throw new Exception("No observation fixture directory."),c,((RobotCalibrationObservationRequest)request!).Samples);
             return JsonSerializer.SerializeToElement(operation switch{"camera"=>(object)new{jpeg="/9j/2Q=="},"inspect-markers"=>MarkerResult(),
                 "dashboard"=>new{observedAt=DateTimeOffset.UtcNow,buses=Array.Empty<object>(),cameras=Array.Empty<object>()},_=>new{done=true}},new JsonSerializerOptions(JsonSerializerDefaults.Web));
         }
@@ -92,7 +94,7 @@ static class RoboticsTests
             var wrong=Bus("wrong-model",9);wrong.Motors[1]=2825;
             check(Rejected(()=>RobotBusDetection.MatchXLeRobot([headBus,wrong])),"Incompatible motor models block automatic bus assignment");
             check(Rejected(()=>RobotBusDetection.MatchXLeRobot([headBus,Bus("extra",10)])),"Unexpected extra motor identities block bus assignment");
-            var tools=new Tools();var clock=new Clock();var robot=new RoboticsRuntime(root,Path.Combine(root,"reservation"),tools,clock);
+            var tools=new Tools{ObservationDirectory=root};var clock=new Clock();var robot=new RoboticsRuntime(root,Path.Combine(root,"reservation"),tools,clock);
             robot.Start("robot");
             check(robot.Status().StopLatched && tools.Calls.Count==0,"Loading Robotics never connects motors or starts motion");
             var c=Configuration();robot.Configure(c);
@@ -121,10 +123,13 @@ static class RoboticsTests
             await robot.Observation(CancellationToken.None);await robot.Observation(CancellationToken.None);
             check(tools.Calls.Count(call=>call=="dashboard")==1&&robot.Jobs().Length==jobsBeforeSnapshot,
                 "Dashboard snapshots share a cache and cannot evict inspection evidence with polling jobs");
-            robot.AutoCalibrate();await Finished(robot);
+            var markersBeforeAssessment=tools.Calls.Count(call=>call=="inspect-markers");robot.AutoCalibrate();await Finished(robot);
             check(robot.CalibrationAssessment() is {State:"blocked",MotorCommandsIssued:false,JointCalibrationApproved:false}
                 &&!File.Exists(Path.Combine(root,"calibration","receipt.json"))&&robot.Status().StopLatched,
-                "Automatic calibration assessment performs read-only checks without fabricating approval or moving motors");
+                "Automatic calibration assessment performs read-only checks without fabricating approval or moving motors: "+robot.Status().Job?.Detail);
+            check(tools.Calls.Last()=="capture-calibration-observation"&&tools.Calls.Count(call=>call=="inspect-markers")==markersBeforeAssessment
+                &&robot.CalibrationAssessment()?.Evidence is{Complete:true,BackupVerified:true}&&robot.CalibrationAssessment()?.Phases?.Length==6,
+                "Automatic calibration preserves unmarked camera/encoder evidence and reports remaining phases without requiring tag inspection");
             check(Rejected(()=>robot.StartController(new(60)))&&robot.Status().StopLatched,"One-click controller start cannot bypass missing calibration");
             c=c with{MotionEnabled=true};robot.Configure(c);
             check(Rejected(()=>robot.Arm(new())),"Motion enablement does not bypass missing calibration");
@@ -177,7 +182,7 @@ static class RoboticsTests
             await ChildCleanup(root,check);
 
         }
-        finally{Directory.Delete(root,true);}
+        finally{CalibrationObservationTests.Unseal(root);Directory.Delete(root,true);}
     }
     static void CameraInventory(string root,Action<bool,string> check)
     {

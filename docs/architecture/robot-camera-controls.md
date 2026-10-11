@@ -57,6 +57,39 @@ afterward it settled at 2814. These short observations identify the installed
 axes' local effect, not a calibrated angle, full travel range or a guaranteed
 view-improvement trajectory. Their private capture family is already registered.
 
+## Follow-up view improvement
+
+After 23:48 UTC on 2026-10-10, a fresh operator-presence confirmation allowed
+seven further bounded head-tilt tests with the same installed diagnostic and
+unchanged output/effort/temperature guards. Each test displaced the encoder by
+up to 21 counts; incomplete low-output returns left a cumulative position change
+from 2834 to 2905 counts, about 6.2 degrees of encoder rotation. This is not an
+absolute calibrated head angle. One additional attempt was rejected by the
+shared ownership lease before motion.
+
+All seven before/displaced comparisons showed broad global motion: roughly
+50–52 pixels upward at 1920×1080, with 93–97% homography inliers. The lower links
+became more visible, but the fixed shoulder bases remained partly outside the
+frame. Some outer links also approach the horizontal image edges. Re-aiming
+therefore improved acquisition without proving complete-arm coverage. Multiple
+reviewed views may help; a usable image cannot itself establish hidden-joint
+geometry or physical zero. No learned segmentation was run in these checks.
+
+The selected motor's peak observed load was 40 raw, current 1 raw and temperature
+36°C. Each completed test verified torque disabled. A final read-only inventory
+checked every motor after the tests. Stored limits and offsets were unchanged;
+no wheel commands were issued. A separate infrared capture after discarding 15
+warm-up frames remained almost black (maximum grayscale value 4/255), so that
+particular capture supplies no additional coverage evidence. It does not prove
+the infrared interface is incapable under different illumination/settings.
+
+The next acquisition capability is the
+[read-only calibration observation journal](robot-calibration-observations.md).
+It preserves full-resolution decoded pixels, measured encoder states, separate
+read intervals and verified local copies without requiring markers or controller
+motion. Camera mounting identification and full-arm visibility remain separate
+parts of phase 1.
+
 ## Attended motor/image comparison on 2026-10-10
 
 An operator confirmed they were beside the robot with motor power within reach.

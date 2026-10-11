@@ -120,14 +120,18 @@ settings.
 
 ## Current calibration and monitoring limits
 
-**Auto calibrate currently runs a read-only automatic-calibration assessment.**
-It checks motor inventories, stored ranges and repeated marker visibility, then
-reports missing intrinsics, measured rigid marker transforms, joint references,
-travel limits and a verified physical motor-power stop. Powered automatic
-joint calibration is not implemented. The assessment does not create approval
-receipts or treat existing EEPROM limits as verified mechanical limits. The
-existing upstream hand-guided routine does not satisfy marker-only automatic
-calibration. See the [design and acceptance gates](../../docs/architecture/robot-marker-calibration.md)
+**Auto calibrate currently preserves read-only camera/encoder observations and
+reports the remaining calibration phases.**
+It checks motor inventories and stores one stationary sample with decoded
+camera arrays, lossless PNGs, separately timed encoder reads and a verified
+independent local copy. Setup can capture one to three samples and download
+their manifests and original artifacts. Camera coverage, segmentation, joint
+correspondence and physical references remain separate unresolved phases;
+markers and CAD are optional. Powered automatic joint calibration is not
+implemented. The assessment does not create approval receipts or treat stored
+EEPROM limits as accepted mechanical limits. The existing upstream hand-guided
+routine is a separate capability. See the
+[observation journal](../../docs/architecture/robot-calibration-observations.md)
 and the [options for calibration with fewer user steps](../../docs/architecture/robot-calibration-options.md).
 The [cross-robot visual model design](../../docs/architecture/robot-visual-pose-model.md)
 uses segmentation and per-installation adaptation from images and measured

@@ -525,6 +525,246 @@ def dashboard(configuration, request):
     return result
 
 
+OBSERVATION_MAX_BYTES = 256 * 1024 * 1024
+OBSERVATION_METADATA_RESERVE = 16 * 1024 * 1024
+
+
+def observation_stamp():
+    # These bracket host read calls. They are not camera exposure timestamps.
+    return {"utc": datetime.now(timezone.utc).isoformat(), "monotonicNanoseconds": time.monotonic_ns()}
+
+
+def observation_directory(relative):
+    """Create private storage without following any pre-existing linked parent."""
+    current = STATE
+    if current.is_symlink() or not current.is_dir():
+        raise ValueError("Calibration observation storage must be a plain state directory")
+    for part in relative.parts:
+        if part in ("", ".", ".."):
+            raise ValueError("Invalid calibration observation storage path")
+        current = current / part
+        if current.is_symlink():
+            raise ValueError("Calibration observation storage cannot be a symbolic link")
+        if not current.exists():
+            current.mkdir(mode=0o700)
+            flush_directory(current.parent)
+        elif not current.is_dir():
+            raise ValueError("Calibration observation storage must be a directory")
+    return current
+
+
+def observation_write(path, write):
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "wb") as output:
+        write(output)
+        output.flush()
+        os.fsync(output.fileno())
+    flush_directory(path.parent)
+
+
+def observation_json(path, value):
+    data = json.dumps(value, allow_nan=False, sort_keys=True, separators=(",", ":")).encode()
+    if len(data) > 1024 * 1024:
+        raise ValueError("Calibration observation metadata exceeded its size limit")
+    observation_write(path, lambda output: output.write(data))
+
+
+def observation_files(folder):
+    files = []
+    for path in sorted(folder.iterdir()):
+        if path.name == "manifest.json":
+            continue
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("Calibration observation contains an unexpected file")
+        with path.open("rb") as source:
+            digest = hashlib.file_digest(source, "sha256").hexdigest()
+        files.append({"name": path.name, "bytes": path.stat().st_size, "sha256": digest})
+    if sum(item["bytes"] for item in files) > OBSERVATION_MAX_BYTES:
+        raise ValueError("Calibration observation exceeded its storage limit")
+    return files
+
+
+def observation_image(folder, stem, frame):
+    import cv2
+    import numpy as np
+    if len(frame.shape) != 3 or frame.shape[2] != 3 or frame.dtype != np.uint8:
+        raise ValueError("Calibration camera must return an unmodified uint8 BGR image")
+    height, width = frame.shape[:2]
+    if not 16 <= width <= 3840 or not 16 <= height <= 2160 or frame.nbytes != width * height * 3:
+        raise ValueError("Calibration camera returned unsupported image geometry")
+    success, encoded = cv2.imencode(".png", frame, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+    if not success or len(encoded) > 32 * 1024 * 1024:
+        raise RuntimeError("Lossless calibration image encoding failed or exceeded its limit")
+    consumed = sum(item["bytes"] for item in observation_files(folder))
+    # Leave room to seal a partial session if later image writes hit the cap.
+    if consumed + frame.nbytes + 1024 + len(encoded) > OBSERVATION_MAX_BYTES - OBSERVATION_METADATA_RESERVE:
+        raise ValueError("Calibration observation exceeded its storage limit")
+    raw = stem + ".npy"
+    image = stem + ".png"
+    observation_write(folder / raw, lambda output: np.save(output, frame, allow_pickle=False))
+    observation_write(folder / image, lambda output: output.write(encoded.tobytes()))
+    return {"width": width, "height": height, "channels": 3, "dtype": "uint8", "colorOrder": "BGR",
+            "rawArrayFile": raw, "losslessImageFile": image}
+
+
+def observation_motor_positions(reports):
+    positions, problems, torque_off_acquisition = {}, [], bool(reports)
+    for report in reports:
+        if report.get("error"):
+            problems.append("Motor bus read failed: " + str(report["role"]))
+            torque_off_acquisition = False
+        if not report.get("motors"):
+            problems.append("Motor bus returned no channels: " + str(report["role"]))
+            torque_off_acquisition = False
+        for motor in report.get("motors", []):
+            key = (report["role"], motor["id"], motor["name"])
+            registers = motor.get("registers", {})
+            value = registers.get("Present_Position")
+            if type(value) is int:
+                positions[key] = value
+            if type(value) is not int or type(registers.get("Torque_Enable")) is not int or registers["Torque_Enable"] != 0:
+                torque_off_acquisition = False
+            keys = ("Operating_Mode", "Present_Velocity", "Torque_Enable", "Moving")
+            readable = all(type(registers.get(name)) is int for name in keys)
+            mode = registers.get("Operating_Mode")
+            # STS velocity-mode Moving can remain set after torque is disabled.
+            # Its measured velocity must still be zero in each read bracket.
+            stationary = readable and mode in (0, 1) and registers["Torque_Enable"] == 0 and registers["Present_Velocity"] == 0 \
+                and (registers["Moving"] == 0 if mode == 0 else registers["Moving"] in (0, 1))
+            if motor.get("error") or type(value) is not int or not stationary:
+                problems.append("Stationary motor state is unverified: " + str(motor["name"]))
+    return positions, problems, torque_off_acquisition
+
+
+def observation_backup(folder, identity):
+    """Copy sealed bytes separately; this is local redundancy, not off-device backup."""
+    parent = observation_directory(Path("backups/calibration-observations"))
+    backup = parent / identity
+    backup.mkdir(mode=0o700)  # A UUID collision must fail instead of replacing anything.
+    flush_directory(parent)
+    for source in sorted(folder.iterdir()):
+        if source.is_symlink() or not source.is_file():
+            raise ValueError("Unexpected sealed observation artifact")
+        def copy(output):
+            with source.open("rb") as input_file:
+                while block := input_file.read(128 * 1024):
+                    output.write(block)
+        observation_write(backup / source.name, copy)
+    if observation_files(backup) != observation_files(folder) or (backup / "manifest.json").read_bytes() != (folder / "manifest.json").read_bytes():
+        raise RuntimeError("Local calibration observation backup failed byte verification")
+    for path in backup.iterdir():
+        path.chmod(0o400)
+    backup.chmod(0o500)
+    flush_directory(backup)
+    return str(backup.relative_to(STATE))
+
+
+def capture_calibration_observation(configuration, request):
+    """Preserve sequential read-only camera/encoder evidence without calibrating joints."""
+    request = request or {}
+    samples = request.get("samples", 1)
+    if set(request) - {"samples"} or type(samples) is not int or not 1 <= samples <= 3:
+        raise ValueError("Request one to three calibration observation samples")
+    identity = uuid.uuid4().hex
+    parent = observation_directory(Path(".build/evidence/calibration-observations"))
+    folder = parent / identity
+    folder.mkdir(mode=0o700)
+    flush_directory(parent)
+    began = observation_stamp()
+    sample_count, problems = 0, []
+    observation_json(folder / "session.json", {"version": 1, "id": identity, "startedAt": began,
+        "requestedSamples": samples, "robotId": configuration.get("robotId"),
+        "selectedDevices": {key: configuration.get(key) for key in ("leftPort", "rightPort", "headCamera", "handCamera")},
+        "cameras": ["head", "hand"], "motorCommandsIssued": False, "jointCalibrationApproved": False,
+        "synchronizedStereoFrames": False, "exposureTimestampsAvailable": False,
+        "timestampMeaning": "Host read-call intervals; sensors are read sequentially without a hardware trigger.",
+        "imageFormat": "lossless PNG plus unmodified NumPy uint8 BGR arrays", "registerValuesNormalized": False,
+        "motorStationarityRule": "Every channel requires integer mode, position, velocity, torque and Moving reads; torque and measured velocity must be zero. "
+            "Position mode 0 requires Moving=0. Velocity mode 1 permits Moving=0 or 1 with measured velocity=0. Unsupported modes are rejected. "
+            "Encoder changes across both read brackets must not exceed two raw counts.",
+        "cameraAcquisitionRule": "Camera evidence may be retained when every bus is readable and nonempty, every position is an integer and every Torque_Enable is integer zero. "
+            "This does not verify stationarity: invalid mode, velocity or Moving telemetry produces incomplete, unverified evidence."})
+    try:
+        for index in range(samples):
+            # The .NET operation deadline interrupts blocking driver calls. This
+            # additional bound prevents another sample after an overlong read.
+            if time.monotonic_ns() - began["monotonicNanoseconds"] > 45_000_000_000:
+                raise RuntimeError("Calibration observation reached its 45-second sampling limit")
+            stem = "sample-" + str(index).zfill(2)
+            sample = {"index": index, "cameras": [], "motorSamples": []}
+            for phase in ("before-cameras", "after-cameras"):
+                if phase == "after-cameras":
+                    for name in ("head", "hand"):
+                        camera_result = {"name": name, "requestedFullResolution": True}
+                        try:
+                            with opened_camera(name, full_resolution=True) as capture:
+                                camera_result["readStartedAt"] = observation_stamp()
+                                success, frame = capture.read()
+                                camera_result["readCompletedAt"] = observation_stamp()
+                                if not success:
+                                    raise RuntimeError("Camera did not return a calibration observation frame")
+                                camera_result.update(observation_image(folder, stem + "-" + name, frame))
+                        except Exception as error:
+                            camera_result["error"] = str(error)[:512]
+                            problems.append("Camera observation failed: " + name)
+                        sample["cameras"].append(camera_result)
+                motor_sample = {"phase": phase, "readStartedAt": observation_stamp()}
+                motor_sample["buses"] = motor_details(configuration)
+                motor_sample["readCompletedAt"] = observation_stamp()
+                filename = stem + "-motors-" + phase + ".json"
+                observation_json(folder / filename, motor_sample)
+                sample["motorSamples"].append({"phase": phase, "file": filename,
+                    "readStartedAt": motor_sample["readStartedAt"], "readCompletedAt": motor_sample["readCompletedAt"]})
+                positions, motor_problems, torque_off_acquisition = observation_motor_positions(motor_sample["buses"])
+                problems.extend(motor_problems)
+                if phase == "before-cameras":
+                    before = positions
+                    before_stationary = not motor_problems
+                    if not torque_off_acquisition or not positions:
+                        # Read-only capture cannot disable torque or repair
+                        # unreadable positions. Stationarity is a separate
+                        # acceptance check; unverified motion telemetry can
+                        # still accompany explicitly incomplete camera evidence.
+                        raise RuntimeError("Motor torque-off and encoder acquisition is unverified; camera collection stopped")
+                else:
+                    common = before.keys() & positions.keys()
+                    delta = max((abs(before[key] - positions[key]) for key in common), default=None)
+                    sample["maxObservedEncoderDeltaRaw"] = delta
+                    sample["stationaryAcrossReadBrackets"] = bool(common) and before.keys() == positions.keys() and before_stationary and not motor_problems and delta <= 2
+                    if not sample["stationaryAcrossReadBrackets"]:
+                        problems.append("Motor stationarity was not verified across sample " + str(index))
+            observation_json(folder / (stem + ".json"), sample)
+            sample_count += 1
+    except (Exception, KeyboardInterrupt) as error:
+        problems.append("Observation interrupted" if isinstance(error, KeyboardInterrupt) else str(error)[:512])
+    complete = sample_count == samples and not problems
+    ended = observation_stamp()
+    manifest = {"version": 1, "id": identity, "startedAt": began, "completedAt": ended,
+        "sampleCount": sample_count, "requestedSamples": samples, "complete": complete,
+        "motorCommandsIssued": False, "jointCalibrationApproved": False, "synchronizedStereoFrames": False,
+        "problems": list(dict.fromkeys(problems)), "files": observation_files(folder)}
+    observation_json(folder / "manifest.json", manifest)
+    manifest_hash = hashlib.sha256((folder / "manifest.json").read_bytes()).hexdigest()
+    # Seal originals before copying so a failed/interrupted backup cannot leave
+    # a previously completed evidence session writable by this application.
+    for path in folder.iterdir():
+        path.chmod(0o400)
+    folder.chmod(0o500)
+    flush_directory(folder)
+    backup_path, backup_verified = None, False
+    try:
+        backup_path = observation_backup(folder, identity)
+        backup_verified = True
+    except (Exception, KeyboardInterrupt) as error:
+        problems.append("Local observation backup interrupted" if isinstance(error, KeyboardInterrupt)
+                        else "Local observation backup failed: " + str(error)[:512])
+    return {"version": 1, "id": identity, "capturedAt": began["utc"], "sampleCount": sample_count,
+        "complete": complete, "manifestRelativePath": str((folder / "manifest.json").relative_to(STATE)),
+        "manifestSha256": manifest_hash, "backupRelativePath": backup_path, "backupVerified": backup_verified,
+        "motorCommandsIssued": False, "jointCalibrationApproved": False, "synchronizedStereoFrames": False,
+        "problems": list(dict.fromkeys(problems))}
+
+
 def seed_arm(arm, observation):
     arm.target_positions = {joint: observation[f"{arm.prefix}_arm_{joint}.pos"] for joint in JOINTS}
     arm.current_x, arm.current_y = arm.kinematics.forward_kinematics(
@@ -1054,7 +1294,8 @@ def main():
             # available while robot hardware is disconnected or unprepared.
             if operation != "train":
                 prepared(configuration, require_controller=operation in ("controller", "record"))
-            operations = {"probe": probe, "camera": camera, "dashboard": dashboard, "inspect-markers": inspect_markers, "controller": controller, "train": train,
+            operations = {"probe": probe, "camera": camera, "dashboard": dashboard, "inspect-markers": inspect_markers,
+                "capture-calibration-observation": capture_calibration_observation, "controller": controller, "train": train,
                 "sort": skill, "emote": lambda c, r: skill(c, r, True), "record": lambda c, r: controller(c, r, True)}
             if operation not in operations:
                 raise ValueError("Unsupported robotics operation")

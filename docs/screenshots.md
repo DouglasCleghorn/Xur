@@ -1,5 +1,49 @@
 # Screenshot and artwork register
 
+- 2026-10-11 UTC (2026-10-10 MDT): Private derived segmentation diagnostic
+  family `.build/evidence/robot-segmentation-prototype-20261010/` and
+  `.build/evidence/robot-segmentation-motion-20261010/`, including
+  head/hand mask PNGs, candidate overlays and composite JPEGs. Derived from the
+  registered calibration-resumption frames, using a local CPU SAM 2.1 Hiera
+  tiny prototype at code revision `2b90b9f5ceec907a1c18123530e92e794ad901a4`;
+  checkpoint SHA-256 is retained in the ignored provenance receipt. Purpose:
+  compare explicit point/box prompts with automatic mask proposals, without
+  CAD, tag decoding, colour filters or motor access. This is an unshipped
+  prototype, not a trained joint-pose estimator. Privacy review: reviewed head
+  composite and source head/hand frames show robot, tray, wall/floor and nearby
+  furnishings; an unidentifying partial hand may appear at an edge. No
+  identifiable people, credentials or private documents were found.
+  The motion extension contains before/displaced arm and finger overlays plus
+  background-compensated luminance residual views from the registered attended
+  motor captures (`run-09`, `run-10`, `run-13`, `run-15`) and zero-count
+  `run-04` control. Its purpose is offline region/joint correspondence evidence;
+  `mask-provenance.json` records source/mask hashes and prompt coordinates, and
+  `motion-result.json` records software capture times and encoder brackets.
+  Reviewed the shoulder-pan head and hand overlays: robot, tray, room surfaces
+  and a possible partial hand at an image edge; no identifiable people,
+  credentials or readable private documents. No new live captures were made.
+  Keep all source/derived images and model assets private and outside source
+  archives. Review individual images before publication; regenerate after
+  model, prompt, capture mode or source-image changes.
+
+- 2026-10-10: Private calibration-resumption capture family under
+  `.build/evidence/calibration-resume-20261010/`, including stationary head/hand
+  JPEGs, cold/warmed grayscale infrared PNGs, motor snapshots and classical
+  registration summaries. The associated attended tilt captures are in
+  `.build/evidence/robot-camera-mount-discovery-20261010/resume-head-tilt-*/`.
+  Captured on xur-255 after 23:48 UTC with host 26.10.034 and robotics source
+  `d025ad95ff6f993c4d44f8b6b1ac30dd89f07c76`. Purpose: assess arm/base coverage
+  while resuming marker-independent calibration preparation. Seven bounded head
+  tilt tests issued small positional commands with the operator beside motor
+  power; one attempt was blocked by the ownership lease before motion. The
+  stationary snapshots and infrared captures issued no motor commands.
+  Privacy review: inspected head, hand and warmed infrared frames show robot
+  hardware, tray, floor/wall and nearby furnishings; an unidentifying partial
+  hand may appear at an edge. No credentials or readable private documents
+  were found. Keep this family ignored and private, outside
+  source archives. Review individual images before publication and regenerate
+  after camera mounting, capture mode, lighting or physical pose changes.
+
 - 2026-10-10: Attended camera-mount motor identification capture family under
   `.build/evidence/robot-camera-mount-discovery-20261010/`, with per-test
   `head/hand-{ready,before,displaced,after}.jpg` and matching motor feedback.
