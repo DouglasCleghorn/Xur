@@ -2,7 +2,7 @@
 const {chromium}=require('../.build/browser/node_modules/playwright');
 const {execFileSync}=require('child_process'),fs=require('fs'),path=require('path'),assert=require('assert/strict');
 (async()=>{
- const fixtures=path.resolve('.build/website-fixtures');
+ const fixtures=path.resolve('.build/evidence/website-fixtures');
  execFileSync(process.env.XUR_DOTNET||path.join(process.env.HOME,'.local/share/xur-build/dotnet/dotnet'),['run','--project','tests/Xur.Unit.Tests','-c','Release','--','--website-render',fixtures],{stdio:'pipe'});
  const browser=await chromium.launch({headless:true});
  try{
@@ -35,6 +35,11 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
   await capture('profile-edit','profile-editor');
   await capture('model-lab','model-lab',async()=>{await page.getByRole('button',{name:'Run benchmark',exact:true}).waitFor();await page.locator('#bench-prompt').fill('');});
   await capture('settings','update-channel',async()=>{await page.locator('#release-channel').selectOption('nightly');},'#update-channel');
-  console.log('Captured five public documentation screenshots from synthetic Razor fixtures. Review images and docs/screenshots.md before publishing.');
+  await page.setViewportSize({width:390,height:844});
+  await capture('login','setup-phone-sign-in');
+  await capture('setup-account','setup-phone-account');
+  await capture('profile-edit','setup-phone-profile');
+  await capture('home','setup-phone-home');
+  console.log('Captured five desktop and four phone documentation screenshots from synthetic Razor fixtures. Review images and docs/screenshots.md before publishing.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

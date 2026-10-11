@@ -1,7 +1,7 @@
 const {chromium}=require('../../.build/browser/node_modules/playwright');
 const fs=require('fs'),path=require('path'),assert=require('assert/strict');
 (async()=>{
- const root=path.resolve('website/dist');fs.mkdirSync('.build/website',{recursive:true});
+ const root=path.resolve('website/dist'),evidence='.build/evidence/website';fs.mkdirSync(evidence,{recursive:true});
  const browser=await chromium.launch({headless:true});
  try {
   const page=await browser.newPage(), errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -23,12 +23,12 @@ const fs=require('fs'),path=require('path'),assert=require('assert/strict');
    assert((await page.locator('[data-slot="1"]').textContent()).startsWith('Workstation A'));
    assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),'Home overflow at '+width);
    await page.locator('img').evaluateAll(imgs=>Promise.all(imgs.map(img=>{img.loading='eager';return img.decode();})));
-   await page.screenshot({path:'.build/website/home-'+width+'.png',fullPage:true});
+   await page.screenshot({path:evidence+'/home-'+width+'.png',fullPage:true});
    await page.getByRole('link',{name:'Get started',exact:true}).click();
-   assert(await page.getByRole('heading',{name:'Start with one profile.',exact:true}).isVisible());
+   assert(await page.getByRole('heading',{name:'Set up Xur from your phone.',exact:true}).isVisible());
    assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),'Guide overflow at '+width);
    await page.locator('img').evaluateAll(imgs=>Promise.all(imgs.map(img=>{img.loading='eager';return img.decode();})));
-   await page.screenshot({path:'.build/website/guide-'+width+'.png',fullPage:true});
+   await page.screenshot({path:evidence+'/guide-'+width+'.png',fullPage:true});
   }
   function walk(dir){return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):[path.join(dir,e.name)]);}
   for(const file of walk(root).filter(p=>p.endsWith('.html'))){
@@ -38,13 +38,13 @@ const fs=require('fs'),path=require('path'),assert=require('assert/strict');
     let p=match[1].split(/[?#]/)[0];if(p.endsWith('/'))p+='index.html';assert(fs.existsSync(path.join(root,p)),'Broken link '+match[1]);
    }
   }
-  for(const route of ['/download/','/guides/','/guides/models/','/guides/workstations/','/guides/updates/']){
+  for(const route of ['/download/','/guides/','/guides/setup/','/guides/getting-started/','/guides/models/','/guides/workstations/','/guides/updates/']){
    for(const width of [1440,390,320]){
     await page.setViewportSize({width,height:1000});await page.goto('http://website.test'+route);
     assert.equal(await page.locator('h1').count(),1);assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),route+' overflow '+width);
     assert((await page.locator('link[rel=canonical]').getAttribute('href')).startsWith('https://xur.app/'));
     await page.locator('img').evaluateAll(imgs=>Promise.all(imgs.map(img=>{img.loading='eager';return img.decode();})));
-   await page.screenshot({path:'.build/website/'+route.split('/').filter(Boolean).join('-')+'-'+width+'.png',fullPage:true});
+   await page.screenshot({path:evidence+'/'+route.split('/').filter(Boolean).join('-')+'-'+width+'.png',fullPage:true});
    }
   }
   await page.goto('http://website.test/');await page.keyboard.press('Tab');assert.equal(await page.locator(':focus').textContent(),'Skip to content');await page.keyboard.press('Enter');assert.equal(await page.locator(':focus').getAttribute('id'),'main');
