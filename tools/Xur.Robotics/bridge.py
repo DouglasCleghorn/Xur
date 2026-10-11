@@ -15,6 +15,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import runpy
 from pathlib import Path
 import signal
@@ -46,12 +47,14 @@ def alias_matches(configuration, key):
         return False
 
 
-def prepared(configuration, require_controller=False):
+def prepared(configuration, require_controller=False, require_cameras=True):
     mapped = json.loads((STATE / ".build/devices.json").read_text())
     if any(mapped.get(key) != configuration[key] for key in DEVICE_KEYS):
         raise ValueError("Device selection changed; prepare the tools container again")
     for key in DEVICE_KEYS:
         if key == "controllerDevice" and not require_controller:
+            continue
+        if key in ("headCamera", "handCamera") and not require_cameras:
             continue
         if not alias_matches(configuration, key):
             raise ValueError(f"Selected device alias is missing or mismatched ({key}); reconnect it and prepare again")
@@ -353,11 +356,16 @@ class Xbox:
 
 
 @contextlib.contextmanager
-def opened_camera(name, full_resolution=False):
+def opened_camera(name, full_resolution=False, device=None):
     import cv2
-    if name not in ("head", "hand"):
-        raise ValueError("Select head or hand")
-    source = "/dev/camera_" + name
+    if device is None:
+        if name not in ("head", "hand"):
+            raise ValueError("Select head or hand")
+        source = "/dev/camera_" + name
+    else:
+        if not re.fullmatch(r"/dev/v4l/by-(?:id|path)/[A-Za-z0-9._:+-]+-video-index0", device):
+            raise ValueError("Select a stable camera capture interface")
+        source = device
     capture = cv2.VideoCapture(source, cv2.CAP_V4L2)
     try:
         if not capture.isOpened():
@@ -516,12 +524,18 @@ def motor_details(configuration, bus_factory=None, motor_factory=None):
 def dashboard(configuration, request):
     result = {"observedAt": datetime.now(timezone.utc).isoformat(),
               "buses": motor_details(configuration), "cameras": [], "motorCommandsIssued": False}
-    for name in ("head", "hand"):
+    for selected in request["cameras"]:
+        name, device = selected["name"], selected["device"]
+        reading = {"name": name, "device": device}
         try:
-            image = camera(configuration, {"camera": name})
-            result["cameras"].append({"name": name, "capturedAt": datetime.now(timezone.utc).isoformat(), "jpeg": image["jpeg"]})
+            with opened_camera(name, full_resolution=True, device=device) as capture:
+                success, frame = capture.read()
+                if not success:
+                    raise RuntimeError("Camera did not return a frame")
+                reading.update({"capturedAt": datetime.now(timezone.utc).isoformat(), "jpeg": encoded_camera_frame(frame)})
         except Exception as error:
-            result["cameras"].append({"name": name, "capturedAt": datetime.now(timezone.utc).isoformat(), "error": str(error)})
+            reading.update({"capturedAt": datetime.now(timezone.utc).isoformat(), "error": str(error)})
+        result["cameras"].append(reading)
     return result
 
 
@@ -1299,7 +1313,7 @@ def main():
             # Local ACT training reads datasets/checkpoints only. It remains
             # available while robot hardware is disconnected or unprepared.
             if operation != "train":
-                prepared(configuration, require_controller=operation in ("controller", "record"))
+                prepared(configuration, require_controller=operation in ("controller", "record"), require_cameras=operation != "dashboard")
             operations = {"probe": probe, "camera": camera, "dashboard": dashboard, "inspect-markers": inspect_markers,
                 "capture-calibration-observation": capture_calibration_observation, "controller": controller, "train": train,
                 "sort": skill, "emote": lambda c, r: skill(c, r, True), "record": lambda c, r: controller(c, r, True)}

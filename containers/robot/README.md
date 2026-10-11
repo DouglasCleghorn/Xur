@@ -14,7 +14,7 @@ to perform robot operations or launch another tools container.
 
 The pages are:
 
-- `/robot/`: head/hand camera snapshots, every motor's available registers,
+- `/robot/`: large snapshots from every detected camera, every motor's available registers,
   calibration assessment, controller start, emote file imports with video
   previews and recent operations.
 - `/robot/setup`: device selection and automatic bus-role detection, effort
@@ -27,8 +27,13 @@ The pages are:
   and copyable/downloadable JSON for all three frames from each camera.
 - `/robot/controller`: the supported Xbox button map and session instructions.
 
-All five pages include the software E-stop and reset controls. The two cameras
-are captured separately; they are not synchronized stereo.
+All five pages include the software E-stop and reset controls. Dashboard cameras
+are captured separately, requesting 1920 × 1080 where the driver supports it;
+they are not synchronized stereo. Head and hand keep their saved roles, and
+additional capture interfaces appear automatically without changing setup.
+The responsive preview grid keeps views large and wraps onto more rows.
+AprilTag, calibration and recording workflows continue to use the selected
+head and hand cameras.
 
 ## Build and nightly publication
 

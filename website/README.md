@@ -22,6 +22,13 @@ the repository root. Source content is in `website/pages/`; common layout and
 styles are in `template.html` and `assets/`. Brand assets are copied from the
 application and documentation at build time rather than duplicated in Git.
 
+The phone setup walkthrough is at `/guides/setup/`, sourced from
+`pages/setup.html`. It covers console installation, LAN HTTPS access from a
+phone, account creation and the first profile, with four 390×844 screenshots
+from the actual Razor UI. Its images are reviewed public assets in
+`docs/assets/setup-phone-*.jpg`; provenance and refresh requirements are in
+`docs/screenshots.md`. The guide and its required assets work offline.
+
 ## Cloudflare Workers Static Assets
 
 Use **Workers & Pages → Create application → Continue with GitHub**, then select
@@ -90,7 +97,7 @@ Sources: [new-project guidance](https://developers.cloudflare.com/pages/),
 
 Run `node tests/Xur.Integration.Tests/website-ui.cjs` after building. It checks
 local links, profile controls, responsive overflow and guide navigation. Private
-captures go in `.build/website/` and are registered in `docs/screenshots.md`.
+captures go in `.build/evidence/website/` and are registered in `docs/screenshots.md`.
 Use only synthetic examples and the reviewed project artwork. Do not copy live
 server addresses, users, prompts, credentials or screenshots into the site.
 
@@ -130,8 +137,11 @@ Regenerate public screenshots from synthetic app fixtures:
 node eng/capture-website.cjs
 ```
 
-Review every image and `docs/screenshots.md` before publishing. This command
-requires the local .NET SDK and Playwright test environment; it is not part of
+The capture command refreshes five desktop images and the four phone setup
+images. Phone captures use a 390×844 viewport; they do not imply testing on a
+physical phone or in native Safari. Review every image and `docs/screenshots.md`
+before publishing. This command requires the local .NET SDK and Playwright test
+environment; it is not part of
 Cloudflare's build. Only reviewed JPEGs under `docs/assets` enter the static site.
 
 Run site checks (test dependencies stay in ignored `.build`):
