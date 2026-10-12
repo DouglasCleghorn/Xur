@@ -66,7 +66,18 @@ public sealed class HandCalibration(TimeProvider? time=null)
         lock(sync)
         {
             if(progress.Phase is not ("left-reference" or "left-range" or "right-reference" or "right-range" or "review" or "completed"))throw new InvalidOperationException("Unexpected calibration phase.");
-            if(!progress.TorqueOffVerified||progress.Motors.Any(m=>m.Torque!=0||m.Temperature>=45))throw new InvalidOperationException("Torque-off or temperature check failed. Inspect motor power.");
+            string? problem=null;
+            if(!progress.TorqueOffVerified)problem="The adapter did not verify torque off. Inspect motor power before restarting setup.";
+            else if(progress.Motors.FirstOrDefault(m=>m.Torque!=0) is {} powered)
+                problem=$"Torque-off check failed: {powered.Name} reported Torque_Enable={powered.Torque}. Support the arms and disconnect motor power.";
+            else if(progress.Motors.FirstOrDefault(m=>m.Temperature is <0 or >=45) is {} hot)
+                problem=$"Temperature check failed: {hot.Name} reported {hot.Temperature}°C. Setup requires every reading to be between 0°C and 44°C.";
+            if(problem!=null)
+            {
+                // Keep the rejected sample visible for diagnosis without approving it.
+                state=state with{Motors=progress.Motors,CanAdvance=false,TorqueOffVerified=false,Updated=clock.GetUtcNow()};
+                throw new InvalidOperationException(problem);
+            }
             var changed=progress.Phase!=state.Phase;
             if(changed)pending=false;
             state=state with{Phase=progress.Phase,Revision=state.Revision+(changed?1:0),Detail=progress.Detail,CanAdvance=progress.CanAdvance&&!pending,

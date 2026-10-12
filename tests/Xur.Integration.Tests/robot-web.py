@@ -83,6 +83,12 @@ FAKE_BRIDGE = '''import base64, hashlib, json, os, struct, sys, time, uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 if len(sys.argv)>1:
+    if sys.argv[1] == "--hand-calibrate":
+        json.loads(sys.stdin.readline())
+        print(json.dumps(dict(phase="left-reference", detail="Fixture rejected temperature", canAdvance=True,
+            torqueOffVerified=True, motors=[dict(name="left_arm_gripper", position=2047, minimum=2047,
+            maximum=2047, temperature=45, torque=0)])), flush=True)
+        raise SystemExit(0)
     if sys.argv[1] not in ["--idle", "--stop"]: raise SystemExit(2)
     raise SystemExit(0)
 request=json.loads(sys.stdin.readline())
@@ -393,6 +399,15 @@ def main():
                   'Requires JSON for operations')
             check(post('start-controller', dict(seconds=60))[0] == 409 and api('status')['stopLatched'],
                   'Controller start cannot bypass missing calibration')
+            status, _, data = post('hand-calibration/start', dict(mode='hardware', operatorPresent=True,
+                armsSupported=True, disconnectReady=True))
+            check(status == 202 and finished(json.loads(data)['id'])['state'] == 'failed',
+                  'Native calibration rejects the Python subprocess temperature at the exact 45C boundary')
+            failed_setup = api('hand-calibration')
+            check(failed_setup['phase'] == 'failed' and not failed_setup['torqueOffVerified']
+                  and not failed_setup['canAdvance'] and 'left_arm_gripper reported 45°C' in failed_setup['detail']
+                  and failed_setup['motors'][0]['temperature'] == 45 and failed_setup['motors'][0]['torque'] == 0,
+                  'Native feedback preserves the rejected motor reading and names the cause without approving torque')
             status, _, data = post('tasks', dict(kind='inspect-markers'))
             check(status == 202, 'Accepts marker inspection using local tools')
             job = json.loads(data)['id']
