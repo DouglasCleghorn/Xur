@@ -20,6 +20,27 @@ static class HandCalibrationTests
             publish(new("completed","Fixture saved",false,true,[]));
         }
     }
+    sealed class SampleAdapter(HandCalibrationProgress sample):IHandCalibrationAdapter
+    {
+        public Task Run(RoboticsConfiguration configuration,Action<HandCalibrationProgress> publish,ChannelReader<string> commands,CancellationToken token)
+        {publish(sample);return Task.CompletedTask;}
+    }
+    static async Task RejectedFeedback(Action<bool,string> check)
+    {
+        foreach(var (verified,torque,temperature,detail) in new[]{(true,0,45,"left_arm_gripper reported 45°C"),(true,0,-1,"left_arm_gripper reported -1°C"),(true,1,32,"left_arm_gripper reported Torque_Enable=1"),(false,0,32,"adapter did not verify torque off")})
+        {
+            var flow=new HandCalibration();flow.Begin(new("hardware",true,true,true));
+            // Deserialize the same camel-case envelope emitted by the Python adapter.
+            var wire=JsonSerializer.Serialize(new{phase="left-reference",detail="Fixture",canAdvance=true,torqueOffVerified=verified,
+                motors=new[]{new{name="left_arm_gripper",position=2047,minimum=2047,maximum=2047,temperature,torque}}});
+            var sample=RobotJson.Deserialize<HandCalibrationProgress>(wire)!;
+            try{await flow.Run(new("fixture","/dev/left","/dev/right","","/dev/head","/dev/hand",[]),new SampleAdapter(sample),CancellationToken.None);throw new Exception("Unsafe sample accepted");}
+            catch(InvalidOperationException){}
+            var state=flow.State();
+            check(state.Phase=="failed"&&!state.TorqueOffVerified&&!state.CanAdvance&&state.LeaseUntil==null&&state.Detail.Contains(detail),"Rejected feedback identifies the failed check: "+detail);
+            check(state.Motors is [var motor]&&motor.Temperature==temperature&&motor.Torque==torque,"Rejected feedback retains actual readings without approving them: "+detail);
+        }
+    }
     sealed class DashboardRead:IRobotTools
     {
         public TaskCompletionSource Started=new(TaskCreationOptions.RunContinuationsAsynchronously),Cancelled=new(TaskCreationOptions.RunContinuationsAsynchronously),Cleanup=new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -101,6 +122,6 @@ static class HandCalibrationTests
         check(Rejected(()=>flow.Heartbeat(new(flow.State().SessionId!))),"An expired setup lease cannot be revived");
         try{await run;}catch(OperationCanceledException){}
         check(flow.State().Phase=="stopped"&&!flow.State().TorqueOffVerified,"Hardware setup cancels after heartbeat loss and clears torque verification");
-        await DashboardHandoff(check,false);await DashboardHandoff(check,true);
+        await DashboardHandoff(check,false);await DashboardHandoff(check,true);await RejectedFeedback(check);
     }
 }

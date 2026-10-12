@@ -9,6 +9,10 @@
  function availability() {
   const fresh = connected && Date.now() - lastUpdate < 3000;
   const robot = latest?.robot, state = latest?.calibration;
+  const torqueFresh = fresh && state?.torqueOffVerified === true && Date.now() - new Date(state.updated).getTime() < 3000;
+  $('torque-badge').textContent = torqueFresh ? 'Torque off verified' : 'Torque unverified';
+  $('torque-badge').dataset.verified = String(torqueFresh);
+  $('torque-status').textContent = torqueFresh ? `Verified torque off · updated ${new Date(state.updated).toLocaleTimeString()}` : !fresh ? 'Live feedback is unavailable. Current torque state is unverified.' : state?.torqueOffVerified ? 'The last torque-off reading is stale. Current torque state is unverified.' : ['failed', 'stopped'].includes(state?.phase) ? 'Current torque state is unverified. Inspect motor power before restarting hardware setup.' : 'Waiting for a verified torque-off reading.';
   const checks = ['operator-present', 'arms-supported', 'disconnect-ready'].every(id => $(id).checked);
   const ready = robot && robot.stopLatched && !robot.emergencyStopLatched && robot.job?.state !== 'running';
   $('setup-begin').disabled = busy || !fresh || active(state) || !ready || !checks || robot.motionEnabled || !robot.configured;
@@ -23,7 +27,6 @@
   $('step-number').textContent = step >= 0 ? `STEP ${step + 2} OF 6` : '';
   $('step-title').textContent = titles[state.phase] || 'Setup status';
   $('step-instruction').textContent = state.detail;
-  $('torque-status').textContent = state.torqueOffVerified ? `Verified torque off · updated ${new Date(state.updated).toLocaleTimeString()}` : ['failed', 'stopped'].includes(state.phase) ? 'Current torque state is unverified. Inspect motor power before restarting hardware setup.' : 'Waiting for a verified torque-off reading.';
   $('reference-guide').hidden = !state.phase.endsWith('-reference');
   $('step-confirm-label').hidden = !active(state) || state.phase === 'connecting';
   $('setup-next').hidden = !active(state) || state.phase === 'connecting';

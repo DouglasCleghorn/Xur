@@ -1,5 +1,12 @@
 # Screenshot and artwork register
 
+- 2026-10-12: Reviewed private user screenshot
+  `/home/doug/.t3/userdata/attachments/59018970-2da7-4e1c-bed1-1e03ee2d1386-68a41712-9703-4c1b-a455-af3cda22c5f2.png`.
+  Shows a failed hand-guided setup and contradictory static “Torque off” badge.
+  Used to correct live torque status and failure diagnostics; not shipped.
+  No faces, host address, credentials or motor measurements visible.
+
+
 - 2026-10-11: Replaced the illustrative calibration SVG with the unmodified
   Hugging Face follower middle-position photograph at
   `containers/robot/wwwroot/reference/so101-follower-middle.webp` (1536×2048).
