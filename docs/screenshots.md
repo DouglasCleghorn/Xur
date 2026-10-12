@@ -4,7 +4,9 @@
   Hugging Face follower middle-position photograph at
   `containers/robot/wwwroot/reference/so101-follower-middle.webp` (1536×2048).
   Used by both arm-reference steps on `/robot/calibrate`, linked to its full-size
-  local copy. Source: Hugging Face documentation-images, revision
+  local copy. Caption and instructions identify this as an arm-posture reference;
+  the gripper must be positioned separately at mid travel, not copied from the
+  photograph. Source: Hugging Face documentation-images, revision
   `e0f0921e0c4341dcb41873906046d10ad08e2410`, `lerobot/follower_middle.webp`,
   as used by its SO-101 assembly calibration guide. CC BY-NC-SA 4.0; attribution
   and full license accompany the image. Privacy review: public documentation
