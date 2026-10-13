@@ -12,7 +12,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.LibraryManager.Build" Version="3.0.114" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
-    <PackageReference Include="QRCoder" Version="1.8.0" />
+    <PackageReference Include="QRCoder" Version="1.8.1" />
     <PackageReference Include="Spectre.Console" Version="0.57.2" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.23.0" />
   </ItemGroup>
