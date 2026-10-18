@@ -224,5 +224,5 @@ Original datasets stay under persistent `/state/datasets`. The app preserves
 immutable snapshots and can automatically back them up to the separate xur-epyc
 receiver, with manifests, checksums and visible status/errors on Setup. Configure
 its HTTPS URL and dedicated token inside this app; see the
-[receiver and recovery guide](../robot-backup/README.md). CV1 integration remains
+[receiver and recovery guide](../robot-cluster/README.md). CV1 integration remains
 unimplemented. Training and cleanup must preserve original recordings.

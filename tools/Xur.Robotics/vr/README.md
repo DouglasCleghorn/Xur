@@ -160,7 +160,7 @@ Include provenance and XR sidecars in the dataset checksum manifest and verified
 remote backup. Conversion/fine-tuning may create derived datasets; they must not
 rewrite/delete the originals. The robotics app implements verified remote
 backup transport separately; see the
-[receiver guide](../../../containers/robot-backup/README.md). VR timing sidecars
+[receiver guide](../../../containers/robot-cluster/README.md). VR timing sidecars
 and headset input remain unimplemented.
 
 ## Next acceptance steps

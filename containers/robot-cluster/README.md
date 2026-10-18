@@ -1,4 +1,13 @@
-# Verified recording backups
+# Xur Robot Cluster
+
+`xur-robot-cluster` is the container for robot services running on a remote node.
+Its current service receives and verifies recording snapshots.
+
+The [Robot cluster nightly container workflow](../../.github/workflows/robot-cluster.yml)
+builds and tests the image before publishing it to
+`ghcr.io/douglascleghorn/xur-robot-cluster:nightly` and `:sha-<commit>`.
+
+## Verified recording backups
 
 The robot app owns recording preservation, remote connection settings, retry
 status and credentials. Xur's main package supplies the container and existing
@@ -65,19 +74,19 @@ Build this image from the repository root (publication is a separate authorized
 release step):
 
 ```sh
-podman build -f containers/robot-backup/Containerfile -t localhost/xur-robot-backup:prepared .
+podman build -f containers/robot-cluster/Containerfile -t localhost/xur-robot-cluster:prepared .
 ```
 
 Run the receiver behind a loopback listener:
 
 ```sh
-podman run --detach --name xur-robot-backup --pull=never --restart=no \
+podman run --detach --name xur-robot-cluster --pull=never --restart=no \
   --cap-drop=ALL --security-opt=no-new-privileges --read-only \
   --memory=512m --pids-limit=128 --tmpfs=/tmp:rw,nosuid,nodev,size=32m \
   --publish=127.0.0.1:7081:7081 \
   --volume=/var/lib/xur/robot-backups:/backup:rw \
   --volume=/var/lib/xur/robot-backup-secrets/token:/run/secrets/backup-token:ro \
-  localhost/xur-robot-backup:prepared
+  localhost/xur-robot-cluster:prepared
 ```
 
 On an SELinux host, use `:Z` for the dedicated backup directory and token file

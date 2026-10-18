@@ -39,7 +39,7 @@ updates:
       - /os/bootc
       - /tools/Xur.Robotics
       - /containers/robot
-      - /containers/robot-backup
+      - /containers/robot-cluster
     # These images are built locally; their upstream bases are covered separately.
     # Exclude them before Dependabot tries to resolve them on Docker Hub.
     ignore:
