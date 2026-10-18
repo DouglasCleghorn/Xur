@@ -514,6 +514,17 @@ See [release preparation](development/release-preparation.md).
 
 ## Change log
 
+- 2026-10-18: Regenerated private browser regression captures under
+  `.build/fast/` and website checks under `.build/evidence/website/` from
+  `b95b340` plus the control-panel test correction. The Home, Settings and
+  Storage captures exercise the shared three-disk fixture at desktop/mobile
+  widths. CI diagnostics from the same base are retained privately under
+  `.build/evidence/main-build/ci/`. Privacy review: fixture-generated content,
+  example addresses and test account names; no live host or credentials were
+  accessed. These are regression evidence only, not publication assets.
+  Review individual images before sharing and regenerate after affected UI
+  or fixture changes.
+
 - 2026-10-10: Reviewed transient T3 collaborative browser snapshots of the
   robot Setup emote cards at 1280 and 390 px, with layout assertions also at
   320 px. Working tree based on `3f5cb0a` plus the emote options changes.
