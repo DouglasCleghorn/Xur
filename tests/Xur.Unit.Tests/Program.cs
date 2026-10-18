@@ -22,7 +22,13 @@ if(args is ["--control-panel-render",var homeOutput]) { await ControlPanelRender
 if(args is ["--website-render",var websiteOutput]) { await ControlPanelRender.Run(websiteOutput, documentation:true);return; }
 if(args is ["--console-overlay-render",var overlayOutput]) { ConsoleKeyboardOverlayTests.Capture(overlayOutput);return; }
 var results = new List<string>();
-void Check(bool value,string name) { if(!value) throw new Exception(name); results.Add(name); }
+// Keep failures diagnosable even when a native/console fixture redirects stderr.
+AppDomain.CurrentDomain.UnhandledException+=(_,e)=>Console.WriteLine("Unit suite failed after "+results.LastOrDefault()+": "+e.ExceptionObject);
+void Check(bool value,string name)
+{
+    if(!value)throw new Exception(name);results.Add(name);
+    if(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")=="true" && results.Count%50==0)Console.WriteLine($"Unit progress: {results.Count} · {name}");
+}
 if(args is ["--telemetry"]){await TelemetryTests.Run(Check);await ModelLabTests.Run(Check);await ModelLabApiTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="Telemetry",passed=results}));return;}
 if(args is ["--telemetry-server",var telemetrySocket]){using var metricsHttp=Xur.IO.HttpClients.Unix(telemetrySocket,TimeSpan.FromSeconds(30));var store=new VictoriaMetrics(metricsHttp);await TelemetryTests.Run(Check,store);await ModelLabTests.Run(Check,store);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="VictoriaMetrics",passed=results}));return;}
 if(args is ["--manager-account"]){AccountTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ManagerAccount",passed=results}));return;}
