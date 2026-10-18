@@ -4,17 +4,22 @@ namespace Xur.Agent;
 
 // A cached metadata scan. Never mount devices, traverse remote filesystems, or
 // block the HTTP host while a large model or home directory is being measured.
-public sealed class StorageUsage
+public sealed class StorageUsage(VictoriaMetrics? metrics=null,Func<Task<(StorageFilesystem[] Filesystems,StorageDiskUsage[] Disks)>>? diskObserver=null)
 {
     readonly object gate=new();
+    readonly SemaphoreSlim diskScan=new(1);
+    readonly TelemetryBuffer buffer=new(metrics??VictoriaMetrics.Local(),"storage");
+    DateTimeOffset lastDiskScan;
+    static readonly TimeSpan Interval=TimeSpan.FromMinutes(5);
     StorageUsageSnapshot snapshot=new(null,false,[],[],[]);
     Task? worker;
+    public StorageUsageSnapshot Current {get{lock(gate)return snapshot;}}
     public StorageUsageSnapshot Status(bool refresh=false)
     {
         lock(gate)
         {
             if(worker is not {IsCompleted:false} && (refresh || snapshot.CapturedAt==null || DateTimeOffset.UtcNow-snapshot.CapturedAt>TimeSpan.FromMinutes(5)))
-            {snapshot=snapshot with {Scanning=true,Error=null};worker=Task.Run(Collect);}
+            {snapshot=snapshot with {Scanning=true,Error=null};worker=Task.Run(()=>Collect(refresh));}
             return snapshot;
         }
     }
@@ -29,22 +34,64 @@ public sealed class StorageUsage
                 return new StorageFilesystem(g.Key,S(first,"fstype"),mounts,N(first,"size"),N(first,"used"),N(first,"avail"));
             }).OrderByDescending(f=>f.Mounts.Contains("/var")).ThenBy(f=>f.Source).ToArray();
     }
-    async Task Collect()
+    public async Task Run(CancellationToken stop)
+    {
+        while(!stop.IsCancellationRequested)
+        {
+            var delay=Interval;
+            try
+            {
+                await RefreshDisks(false,stop);
+                lock(gate)delay=lastDiskScan+Interval-DateTimeOffset.UtcNow;
+                if(delay<TimeSpan.FromSeconds(1))delay=TimeSpan.FromSeconds(1);
+            }
+            catch(OperationCanceledException)when(stop.IsCancellationRequested){break;}
+            catch{ /* The snapshot exposes sampling failures; retry after the normal interval. */ }
+            try{await Task.Delay(delay,stop);}catch(OperationCanceledException){break;}
+        }
+    }
+    public async Task RefreshDisks(bool refresh=false,CancellationToken stop=default)
+    {
+        await diskScan.WaitAsync(stop);
+        try
+        {
+            // Share one metadata/SMART scan between the background collector and
+            // page requests. Folder traversal is deliberately not in this path.
+            if(!refresh && DateTimeOffset.UtcNow-lastDiskScan<Interval)return;
+            var (filesystems,disks)=await (diskObserver!=null?diskObserver():ReadDisks());
+            var at=DateTimeOffset.UtcNow;
+            StorageUsageSnapshot current;
+            lock(gate){snapshot=snapshot with{Filesystems=filesystems,Disks=disks};current=snapshot;}
+            await buffer.Append(VictoriaMetrics.Storage(current,at),stop);
+            lock(gate){snapshot=snapshot with{TelemetryError=buffer.Error};lastDiskScan=at;}
+        }
+        catch
+        {
+            lock(gate)snapshot=snapshot with{TelemetryError="Disk telemetry could not be sampled. "+buffer.Error};
+            throw;
+        }
+        finally{diskScan.Release();}
+    }
+    static async Task<(StorageFilesystem[] Filesystems,StorageDiskUsage[] Disks)> ReadDisks()
+    {
+        var result=await Processes.Run("findmnt",["--json","--df","--bytes","--output","SOURCE,TARGET,FSTYPE,SIZE,USED,AVAIL"],20);
+        if(result.ExitCode!=0)throw new IOException();
+        var filesystems=Filesystems(result.Output);
+        var nodes=await Storage.Nodes();
+        var disks=nodes.Where(n=>S(n,"type")=="disk" && !S(n,"path").StartsWith("/dev/zram")).Select(n=>new StorageDiskUsage(S(n,"path"),S(n,"model"),N(n,"size"),Storage.Flatten(n).Where(c=>c.GetProperty("mountpoints").EnumerateArray().Any(m=>m.ValueKind==JsonValueKind.String)).Select(c=>S(c,"path")).Distinct().ToArray(),Storage.Flatten(n).SelectMany(c=>c.GetProperty("mountpoints").EnumerateArray().Where(m=>m.ValueKind==JsonValueKind.String).Select(m=>m.GetString()!)).Distinct().ToArray())).ToArray();
+        for(var i=0;i<disks.Length;i++)
+        {
+            var node=nodes.First(n=>S(n,"path")==disks[i].Path);
+            var rotational=S(node,"rota").ToLowerInvariant() switch {"true" or "1"=>true,"false" or "0"=>false,_=>(bool?)null};
+            disks[i]=disks[i] with {Endurance=await StorageEnduranceReader.Read(disks[i].Path,rotational)};
+        }
+        return (filesystems,disks);
+    }
+    async Task Collect(bool refresh)
     {
         try
         {
-            var result=await Processes.Run("findmnt",["--json","--df","--bytes","--output","SOURCE,TARGET,FSTYPE,SIZE,USED,AVAIL"],20);
-            if(result.ExitCode!=0)throw new IOException();
-            var filesystems=Filesystems(result.Output);
-            var nodes=await Storage.Nodes();
-            var disks=nodes.Where(n=>S(n,"type")=="disk" && !S(n,"path").StartsWith("/dev/zram")).Select(n=>new StorageDiskUsage(S(n,"path"),S(n,"model"),N(n,"size"),Storage.Flatten(n).Where(c=>c.GetProperty("mountpoints").EnumerateArray().Any(m=>m.ValueKind==JsonValueKind.String)).Select(c=>S(c,"path")).Distinct().ToArray(),Storage.Flatten(n).SelectMany(c=>c.GetProperty("mountpoints").EnumerateArray().Where(m=>m.ValueKind==JsonValueKind.String).Select(m=>m.GetString()!)).Distinct().ToArray())).ToArray();
-            for(var i=0;i<disks.Length;i++)
-            {
-                var node=nodes.First(n=>S(n,"path")==disks[i].Path);
-                var rotational=S(node,"rota").ToLowerInvariant() switch {"true" or "1"=>true,"false" or "0"=>false,_=>(bool?)null};
-                disks[i]=disks[i] with {Endurance=await StorageEnduranceReader.Read(disks[i].Path,rotational)};
-            }
-            lock(gate)snapshot=snapshot with {Filesystems=filesystems,Disks=disks};
+            await RefreshDisks(refresh);
             var categories=new List<StorageCategory>();
             var caches=ModelCaches("/var/lib/containers/storage/volumes");
             categories.Add(await Measure("Models",["/var/lib/xur/models","/var/lib/xur/model-sets",..caches]));
@@ -56,7 +103,7 @@ public sealed class StorageUsage
             var other=Directory.Exists("/var/lib/xur")?Directory.GetFileSystemEntries("/var/lib/xur").Where(p=>Path.GetFileName(p) is not ("models" or "model-sets" or "app")).ToArray():[];
             categories.Add(await Measure("Xur settings & state",other));
             var volumes=await ContainerLibrary.Volumes();
-            lock(gate)snapshot=new(DateTimeOffset.UtcNow,false,filesystems,disks,categories.ToArray(),Volumes:volumes);
+            lock(gate)snapshot=snapshot with{CapturedAt=DateTimeOffset.UtcNow,Scanning=false,Categories=categories.ToArray(),Volumes=volumes};
         }
         catch {lock(gate)snapshot=snapshot with {CapturedAt=DateTimeOffset.UtcNow,Scanning=false,Error="Storage usage could not be read. Refresh to retry."};}
     }

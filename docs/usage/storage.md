@@ -17,8 +17,9 @@ not an exact partition of total filesystem usage. Hardlinked model files are
 counted once within the model category. Directory scans do not follow symlinks or
 cross filesystem boundaries; separate filesystems still appear in the table.
 
-Measurements run in the privileged agent as background read-only metadata scans,
-cached for five minutes. Opening the page immediately returns the last snapshot
+Disk metadata and endurance are sampled by the privileged agent every five
+minutes, even with no viewers, and stored in local VictoriaMetrics. Page requests
+reuse this cache; folder and volume size scans remain on demand. Opening the page immediately returns the last snapshot
 while a new scan runs. Refresh usage requests a scan without starting concurrent
 scans. The page polls while scanning and keeps disclosure panels open until the
 operator closes them. Errors are shown as unavailable, never as an invented zero.
@@ -49,7 +50,10 @@ scan, with a 15-second per-device timeout. No SMART tests or writes are started;
 rotating or unidentified media are skipped. Supported SSD queries include a
 standby check. Unsupported bridges, a missing tool, and failed reads remain
 available in the API without preventing filesystem usage from loading. This is a current
-snapshot only; no additional history files or polling service are created.
+snapshot in the UI; full-resolution disk capacity, filesystem used/available
+space and reported endurance are retained in VictoriaMetrics. Missing endurance
+values are omitted from history too. The existing RAM buffer handles write
+outages; failures and dropped samples appear in a Storage-page alert.
 
 Smartmontools 7.5 supplies normalized ATA/SCSI/NVMe endurance fields; standard
 NVMe and SCSI fields from older versions are also supported. ATA vendor attribute

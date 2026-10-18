@@ -9,6 +9,7 @@ else
 {
     @if(TrimStarted) { <p class="notice" role="status">TRIM started. Its result appears below when it finishes.</p> }
     @if(usage.Error!=null) { <p class="notice error" role="alert">@usage.Error</p> }
+    @if(usage.TelemetryError!=null) { <p class="notice error" role="alert">@usage.TelemetryError</p> }
     <p class="secondary-text" role="status">@(usage.Scanning?"Calculating storage usage…":usage.CapturedAt is {} captured?"Updated "+captured.ToLocalTime().ToString("HH:mm:ss"):"Waiting for storage usage")</p>
     <section aria-labelledby="storage-devices">
         <h2 id="storage-devices">Disks &amp; mounts</h2>

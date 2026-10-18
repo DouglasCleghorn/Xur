@@ -33,7 +33,7 @@ def start():
         except (OSError,RuntimeError):time.sleep(.1)
     p.terminate();p.wait(timeout=30);raise RuntimeError('VictoriaMetrics did not become ready')
 def dump():
-    content=get('/api/v1/export?'+urllib.parse.urlencode({'match[]':'{kind=~"gpu|network"}','reduce_mem_usage':'1','start':'0','end':str(time.time()+60)})).decode()
+    content=get('/api/v1/export?'+urllib.parse.urlencode({'match[]':'{kind=~"gpu|network|storage"}','reduce_mem_usage':'1','start':'0','end':str(time.time()+60)})).decode()
     points={}
     for line in content.splitlines():
         item=json.loads(line);metric=json.dumps(item['metric'],sort_keys=True)

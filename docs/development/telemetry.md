@@ -1,10 +1,10 @@
 # Telemetry storage
 
 Xur uses one local VictoriaMetrics single-node instance for time-series history.
-GPU monitoring (15-second cadence), network monitoring (5-second cadence), and
-model-benchmark GPU readings (2-second cadence) use the shared
+GPU monitoring (15-second cadence), network monitoring (5-second cadence), disk
+usage/endurance (5-minute cadence), and model-benchmark GPU readings (2-second cadence) use the shared
 `src/Xur.Domain/VictoriaMetrics.cs` codec. Collection continues without viewers.
-CPU, memory and filesystem utilization in the system status are current snapshots,
+CPU and memory utilization in the system status are current snapshots,
 not historical collectors. New histories must use this same storage boundary.
 
 Configuration, trim/boot diagnostic events, benchmark settings, responses and
@@ -93,6 +93,36 @@ coarsening collector cadence. Queries reconstruct raw readings rather than using
 PromQL range evaluation/interpolation. Each read is bounded to 64 MiB / 200,000 rows. Monitoring queries split current
 entities into groups of eight so hosts with many interfaces stay within those
 limits.
+
+Storage uses `kind="storage"`, with `entity="disk:<device path>"` for physical
+capacity/endurance and `entity="filesystem:<source>"` for filesystem capacity,
+used and available bytes. Bind mounts share one filesystem sample; filesystem
+usage is not duplicated across backing disks. Device/source renames create new
+entities; reuse of the same path reuses that series. Mount lists, model strings
+and error messages are not labels. Missing endurance metrics are omitted, and
+zero remaining endurance is preserved.
+
+Fields are `capacity_bytes`, `used_bytes`, `available_bytes`,
+`endurance_remaining_percent` and `endurance_remaining_bytes`. The ordinary byte
+metrics are convenient for graphs. Integer bytes additionally have `_high` and
+`_low` 32-bit halves for exact raw reconstruction above 2^53; reported decimal
+endurance budgets have `_part0` through `_part3` preserving the complete .NET
+decimal representation. The shared codec reconstructs these without rounding.
+There is no byte-budget extrapolation.
+
+The background disk scan shares its five-minute cache with page requests and
+performs only metadata/SMART reads. Manual refresh can request a fresh sample.
+Folder/volume size scans remain on demand. Storage errors and buffered/dropped
+sample counts appear as `telemetryError` in the storage API and an alert on the
+Storage page. Storage history uses the same bounded retry queue, retention and
+buffered-write settings; it creates no secondary history file. To inspect raw
+storage samples locally:
+
+```sh
+sudo curl --unix-socket /run/xur-metrics/metrics.sock -G \
+  --data-urlencode 'match[]={kind="storage",run=""}' \
+  http://localhost/api/v1/export
+```
 
 ## Migration and recovery
 

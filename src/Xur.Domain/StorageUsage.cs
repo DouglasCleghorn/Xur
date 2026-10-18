@@ -1,6 +1,7 @@
 namespace Xur.Domain;
 public record StorageFilesystem(string Source,string Type,string[] Mounts,long Bytes,long Used,long Available);
 public record StorageEndurance(double? RemainingPercent=null,decimal? RemainingBytes=null,string? UnavailableReason=null);
+public record StorageReading(DateTimeOffset At,long? CapacityBytes=null,long? UsedBytes=null,long? AvailableBytes=null,double? EnduranceRemainingPercent=null,decimal? EnduranceRemainingBytes=null);
 public record StorageDiskUsage(string Path,string Model,long Bytes,string[] Filesystems,string[] Mounts,StorageEndurance? Endurance=null);
 public record StorageUsageRow(StorageFilesystem? Filesystem,StorageDiskUsage[] Disks)
 {
@@ -15,4 +16,4 @@ public record StorageUsageRow(StorageFilesystem? Filesystem,StorageDiskUsage[] D
     }
 }
 public record StorageCategory(string Name,string[] Paths,long? Bytes,string? Error=null);
-public record StorageUsageSnapshot(DateTimeOffset? CapturedAt,bool Scanning,StorageFilesystem[] Filesystems,StorageDiskUsage[] Disks,StorageCategory[] Categories,string? Error=null,ContainerVolume[]? Volumes=null);
+public record StorageUsageSnapshot(DateTimeOffset? CapturedAt,bool Scanning,StorageFilesystem[] Filesystems,StorageDiskUsage[] Disks,StorageCategory[] Categories,string? Error=null,ContainerVolume[]? Volumes=null,string? TelemetryError=null);

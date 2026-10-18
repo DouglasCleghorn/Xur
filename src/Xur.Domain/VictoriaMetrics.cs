@@ -36,6 +36,36 @@ public sealed class VictoriaMetrics(HttpClient http)
         long Counter(string prefix)=>((long)p.Values.GetValueOrDefault(prefix+"_high")<<32)|(uint)p.Values.GetValueOrDefault(prefix+"_low");
         return new(p.At,V("receive_bytes_per_second"),V("send_bytes_per_second"),Counter("received"),Counter("sent"));
     }
+    public static Row Storage(string entity,StorageReading p)
+    {
+        var values=new Dictionary<string,double>();
+        void Bytes(string name,long? bytes)
+        {
+            if(bytes is not {} n)return;
+            values[name]=n;values[name+"_high"]=n>>32;values[name+"_low"]=(uint)n;
+        }
+        Bytes("capacity_bytes",p.CapacityBytes);Bytes("used_bytes",p.UsedBytes);Bytes("available_bytes",p.AvailableBytes);
+        if(p.EnduranceRemainingPercent is {} percent&&double.IsFinite(percent))values["endurance_remaining_percent"]=percent;
+        if(p.EnduranceRemainingBytes is {} remaining)
+        {
+            values["endurance_remaining_bytes"]=(double)remaining;
+            // Human/graph-friendly totals plus exact components for lossless raw reads.
+            // decimal can represent byte budgets beyond the integer/double ranges.
+            var bits=decimal.GetBits(remaining);
+            for(var i=0;i<bits.Length;i++)values["endurance_remaining_bytes_part"+i]=(uint)bits[i];
+        }
+        return new(entity,p.At,values);
+    }
+    public static StorageReading Storage(Row p)
+    {
+        long? Bytes(string name)=>p.Values.TryGetValue(name+"_high",out var high)&&p.Values.TryGetValue(name+"_low",out var low)?((long)high<<32)|(uint)low:null;
+        var parts=Enumerable.Range(0,4).Select(i=>p.Values.TryGetValue("endurance_remaining_bytes_part"+i,out var value)?(int?)unchecked((int)(uint)value):null).ToArray();
+        decimal? remaining=parts.All(p=>p.HasValue)?new decimal(parts.Select(p=>p!.Value).ToArray()):null;
+        return new(p.At,Bytes("capacity_bytes"),Bytes("used_bytes"),Bytes("available_bytes"),p.Values.TryGetValue("endurance_remaining_percent",out var percent)?percent:null,remaining);
+    }
+    public static Row[] Storage(StorageUsageSnapshot snapshot,DateTimeOffset at)=>
+        snapshot.Filesystems.Select(f=>Storage("filesystem:"+f.Source,new(at,f.Bytes,f.Used,f.Available)))
+        .Concat(snapshot.Disks.Select(d=>Storage("disk:"+d.Path,new(at,d.Bytes,EnduranceRemainingPercent:d.Endurance?.RemainingPercent,EnduranceRemainingBytes:d.Endurance?.RemainingBytes)))).ToArray();
     public async Task Write(string kind,IEnumerable<Row> rows,string run="",CancellationToken stop=default)
     {
         // Bound individual requests during backfill; an interrupted request can safely be retried.

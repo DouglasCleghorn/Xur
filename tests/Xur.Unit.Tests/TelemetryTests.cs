@@ -59,6 +59,33 @@ static class TelemetryTests
         await store.Write("network",names.Select(n=>VictoriaMetrics.Network(n,net)));await store.Checkpoint();
         var interfaces=await store.ReadEntities("network",net.At,net.At,names);
         check(interfaces.Length==17&&interfaces.All(p=>VictoriaMetrics.Network(p)==net),"History queries split growing interface sets into bounded requests without losing readings");
+        StorageReading[] storage=[new(at.AddMinutes(4),long.MaxValue-7,9007199254740993,0,79.125,7922816251426433759354395.0335m),new(at.AddMinutes(5),1000,EnduranceRemainingPercent:0),new(at.AddMinutes(6),1000)];
+        await store.Write("storage",storage.Select(p=>VictoriaMetrics.Storage("disk:/dev/test-storage",p)));await store.Checkpoint();
+        var storedDisks=await store.Read("storage",storage[0].At,storage[^1].At);
+        check(storedDisks.Select(VictoriaMetrics.Storage).SequenceEqual(storage),"Storage bytes retain exact integer/decimal precision; missing endurance stays absent and zero remains zero");
+        StorageFilesystem fs=new("/dev/test-storage1","btrfs",["/","/var"],1000,400,500);
+        StorageDiskUsage disk=new("/dev/test-storage","Test disk",2000,[fs.Source],fs.Mounts,new(80));
+        var storageRows=VictoriaMetrics.Storage(new(null,false,[fs],[disk],[]),at.AddMinutes(7));
+        await store.Write("storage",storageRows);await store.Checkpoint();
+        var storedUsage=await store.Read("storage",at.AddMinutes(7),at.AddMinutes(7));
+        check(storedUsage.Length==2 && storedUsage.Single(r=>r.Entity.StartsWith("filesystem:")).Values["used_bytes"]==400 && !storedUsage.Single(r=>r.Entity.StartsWith("disk:")).Values.ContainsKey("used_bytes"),"Storage history records one filesystem usage sample and a separate disk endurance sample without duplicated mount totals");
+        check(storageRows.All(r=>r.State==null) && storageRows.All(r=>!r.Values.ContainsKey("endurance_remaining_bytes")),"Storage adds no mount/model/error labels and invents no missing endurance bytes");
+        if(real==null)
+        {
+            var probes=0;var observer=new StorageUsage(store,()=>{probes++;return Task.FromResult((new[]{fs},new[]{disk}));});
+            handler.Offline=true;await observer.RefreshDisks();
+            check(observer.Current.TelemetryError?.Contains("2 samples buffered")==true && observer.Current.Disks.Length==1 && observer.Current.Categories.Length==0,"Storage outages preserve live disk data and expose the bounded retry buffer without folder scans");
+            await observer.RefreshDisks();check(probes==1,"Background and page consumers reuse the five-minute disk sample");
+            handler.Offline=false;await observer.RefreshDisks(true);
+            check(probes==2 && observer.Current.TelemetryError==null,"Storage retries queued samples and clears its outage notice after recovery");
+            var failing=new StorageUsage(store,()=>throw new IOException("fixture"));
+            try{await failing.RefreshDisks();}catch(IOException){}
+            check(failing.Current.TelemetryError?.Contains("could not be sampled")==true,"Disk sampling failures remain visible instead of creating zero-valued history");
+            using var stop=new CancellationTokenSource();var observed=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var background=new StorageUsage(store,()=>{observed.TrySetResult();return Task.FromResult((new[]{fs},new[]{disk}));});
+            var collecting=background.Run(stop.Token);await observed.Task.WaitAsync(TimeSpan.FromSeconds(5));stop.Cancel();await collecting;
+            check(background.Current.Disks.Length==1 && background.Current.Categories.Length==0,"Storage history samples without viewers and does not run directory walks");
+        }
         var directory=Path.Combine(Environment.CurrentDirectory,".build/evidence/telemetry-tests/migration-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);
         var legacy=Path.Combine(directory,"gpu-history.json");var original=JsonSerializer.Serialize(new Dictionary<string,GpuReading[]>{{"0000:01:00.0",readings}});await File.WriteAllTextAsync(legacy,original);
         var monitor=new GpuMonitor(directory,store);await monitor.Migrate();await monitor.Migrate();
