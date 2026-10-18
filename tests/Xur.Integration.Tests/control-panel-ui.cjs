@@ -32,8 +32,15 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
   assert.equal(await page.getByRole('link',{name:'Robotics setup',exact:true}).count(),0);
   assert.equal(await page.locator('a[href="/robotics"]').count(),0);
   await page.getByRole('link',{name:'Monitoring',exact:true}).filter({visible:true}).click();await page.getByRole('heading',{name:'Monitoring',exact:true}).waitFor();
-  assert.equal(await page.locator('.control-disk').count(),2);
-  await page.getByText('Not mounted',{exact:true}).waitFor();
+  const disks=page.locator('.control-disk');
+  assert.deepEqual(await disks.locator('.control-disk-path').allTextContents(),['/dev/nvme0n1','/dev/nvme1n1','/dev/sda']);
+  for(const [model,used] of [['System SSD',120*2**30],['Data SSD',200*2**30]]){
+   const disk=disks.filter({has:page.getByRole('link',{name:model,exact:true})});
+   assert.equal(await disk.locator('meter').getAttribute('value'),String(used),model+' mounted usage');
+  }
+  const archive=disks.filter({has:page.getByRole('link',{name:'USB archive',exact:true})});
+  await archive.getByText('Not mounted',{exact:true}).waitFor();
+  assert.equal(await archive.locator('meter').count(),0,'Unmounted disks must not report usage');
   assert.equal(await page.locator('[data-usage]').count(),5);
   assert.equal(await page.locator('[data-usage="0000:04:00.0"] meter').isVisible(),false);
   assert.equal(await page.locator('#network-panels').count(),1);
@@ -42,4 +49,4 @@ const {execFileSync}=require('child_process'),fs=require('fs'),path=require('pat
  }
  console.log(JSON.stringify({suite:'ControlPanelUi',result:'Passed',desktopAndMobile:true,monitoringMoved:true,explicitLoad:true,rebootConfirmation:true,unknownVramNotZero:true}));
  }finally{await browser.close();}
-})().catch(e=>{console.error(e.message);process.exitCode=1;});
+})().catch(e=>{console.error(e);process.exitCode=1;});
