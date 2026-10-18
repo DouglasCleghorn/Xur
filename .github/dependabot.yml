@@ -19,6 +19,7 @@ updates:
       - /src/Xur.IO
       - /src/Xur.Domain
       - /src/Xur.Gateway
+      - /containers/robot
       - /tools/Xur.Cli
       - /tools/Xur.Util
       - /tests/Xur.Unit.Tests

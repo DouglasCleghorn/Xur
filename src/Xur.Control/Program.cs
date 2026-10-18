@@ -113,6 +113,7 @@ async Task StartHost()
         if(!appliance.Installer)k.ListenUnixSocket(serveSocket,l=>l.Use(next=>connection=>{connection.Features.Set(new EndpointIdentity("serve"));return next(connection);}));
     });
     var app = builder.Build();
+    T3CodeEndpoints.MapEndpoints(app,appliance);
     app.UseBrowserErrors(Path.Combine(identityDirectory,"response-spool"));
     app.Use(async(ctx,next)=>{
         var path=ctx.Request.Path;

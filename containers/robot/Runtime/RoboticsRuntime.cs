@@ -14,6 +14,8 @@ public sealed class RoboticsRuntime
     readonly RecordingBackups backups;
     readonly RobotCameraCapabilities cameraCapabilities;
     readonly RobotCalibrationObservations calibrationObservations;
+    readonly HandCalibration handCalibration;
+    readonly IHandCalibrationAdapter handCalibrationAdapter;
     readonly Dictionary<string, RobotJob> jobs = new();
     readonly RobotMotorDiagnostics motorDiagnostics=new();
     string? workloadId;
@@ -31,13 +33,14 @@ public sealed class RoboticsRuntime
     DateTimeOffset? observationReadAt;
     RobotCalibrationAssessment? calibrationAssessment;
     bool observing;
+    Task? observationWorker;
     string? observationProblem;
     bool emergencyStop;
     long emergencyStopEpoch;
     string EmergencyStopPath=>Path.Combine(directory,"estop-latched");
 
-    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null,RecordingBackups? backups=null,RobotMetrology? metrology=null,RobotCameraCapabilities? cameraCapabilities=null)
-    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory);this.metrology=metrology??new(directory);this.cameraCapabilities=cameraCapabilities??new();calibrationObservations=new(directory); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
+    public RoboticsRuntime(string directory, string reservation, IRobotTools? tools = null, TimeProvider? clock = null,RoboticsContainer? toolContainer=null,Func<RobotDevices>? deviceInventory=null,RecordingBackups? backups=null,RobotMetrology? metrology=null,RobotCameraCapabilities? cameraCapabilities=null,IHandCalibrationAdapter? handCalibrationAdapter=null)
+    {this.directory=directory; this.reservation=reservation;this.backups=backups??new RecordingBackups(directory);this.metrology=metrology??new(directory);this.cameraCapabilities=cameraCapabilities??new();calibrationObservations=new(directory); this.tools=tools??new LeRobotTools(); this.clock=clock??TimeProvider.System;handCalibration=new(this.clock);this.handCalibrationAdapter=handCalibrationAdapter??new HandCalibrationAdapter();container=toolContainer??new(directory);this.deviceInventory=deviceInventory??Devices;emergencyStop=File.Exists(EmergencyStopPath);}
 
     public RobotStatus Status()
     {
@@ -52,6 +55,36 @@ public sealed class RoboticsRuntime
     public RobotJob[] Jobs(){lock(sync)return jobs.Values.Reverse().ToArray();}
     public RobotJob? Job(string id){lock(sync)return jobs.GetValueOrDefault(id);}
     public RoboticsConfiguration? Configuration(){lock(sync)return configuration;}
+    public HandCalibrationState HandCalibration()=>handCalibration.State();
+    public void HandCalibrationHeartbeat(HandCalibrationHeartbeat request)=>handCalibration.Heartbeat(request);
+    public void HandCalibrationAdvance(HandCalibrationAdvance request)=>handCalibration.Advance(request);
+    public RobotJob StartHandCalibration(HandCalibrationStart request)
+    {
+        lock(sync)
+        {
+            RequireLoaded();if(activeJob!=null||stopping)Idle();
+            if(!stopLatched)throw new InvalidOperationException("Stop and disarm before setup.");
+            if(emergencyStop||stopProblem!=null||recoveryProblem!=null)throw new InvalidOperationException("Clear any stop problem and reset E-stop before hardware setup.");
+            if(RequireConfiguration().MotionEnabled)throw new InvalidOperationException("Disable motion in hardware setup before hand-guided calibration.");
+            handCalibration.Begin(request);
+            // A dashboard refresh is a cancellable read, not an operator job.
+            // Reserve the calibration job now, then wait for that read's cleanup
+            // before opening either motor bus. Other operations remain excluded.
+            var pendingObservation=observing?observationWorker:null;
+            if(pendingObservation!=null)cancellation?.Cancel();
+            return LaunchOperation("hand-calibration",false,async token=>
+            {
+                await handCalibration.Run(configuration,handCalibrationAdapter,token,pendingObservation);
+                lock(sync)
+                {
+                    var problems=CalibrationProblems(configuration!);
+                    if(problems.Length!=0)throw new InvalidOperationException(string.Join(" ",problems));
+                    calibrationAssessment=null;observation=null;motorDiagnostics.Clear();
+                }
+                return "Hand-guided calibration saved. Motion remains disabled; motor limits and supervised review are still required.";
+            });
+        }
+    }
     public RobotCalibrationAssessment? CalibrationAssessment(){lock(sync)return calibrationAssessment;}
     public RobotCalibrationObservationCapture? CalibrationObservation(){lock(sync)return configuration==null?null:calibrationObservations.Latest(configuration);}
     public byte[] CalibrationObservationManifest(string id)=>calibrationObservations.Manifest(id);
@@ -402,7 +435,7 @@ public sealed class RoboticsRuntime
             calibrationAssessment=null;
             return Launch("auto-calibrate",false,async(c,token)=>
             {
-                var telemetry=await tools.Run(c,"dashboard",null,60,token);
+                var telemetry=await ReadDashboard(c,token);
                 lock(sync){observation=telemetry;observationReadAt=clock.GetUtcNow();motorDiagnostics.Observe(c,telemetry,observationReadAt.Value);}
                 var evidence=await CaptureCalibrationObservation(c,new(1),token);
                 var blockers=new List<string>();
@@ -448,6 +481,11 @@ public sealed class RoboticsRuntime
             });
         }
     }
+    Task<JsonElement> ReadDashboard(RoboticsConfiguration c,CancellationToken token)
+    {
+        var cameras=RobotCameraDevices.Previews(c,deviceInventory().Cameras);
+        return tools.Run(c,"dashboard",new RobotDashboardRequest(cameras),Math.Max(60,30+cameras.Length*15),token);
+    }
     public async Task<RobotObservation> Observation(CancellationToken token)
     {
         Task pending;
@@ -461,22 +499,23 @@ public sealed class RoboticsRuntime
             {
                 var c=RequireConfiguration();
                 observing=true;var source=new CancellationTokenSource();cancellation=source;
-                worker=System.Threading.Tasks.Task.Run(async()=>
+                worker=observationWorker=System.Threading.Tasks.Task.Run(async()=>
                 {
                     try
                     {
-                        var data=await tools.Run(c,"dashboard",null,60,source.Token);
+                        var data=await ReadDashboard(c,source.Token);
                         lock(sync){observation=data;observationReadAt=clock.GetUtcNow();observationProblem=null;motorDiagnostics.Observe(c,data,observationReadAt.Value);}
                     }
+                    catch(OperationCanceledException) when(source.IsCancellationRequested){}
                     catch(Exception e){lock(sync)observationProblem=Xur.Domain.Redaction.Logs(e.Message);}
-                    finally{lock(sync){observing=false;cancellation=null;source.Dispose();}}
+                    finally{lock(sync){observing=false;if(ReferenceEquals(cancellation,source))cancellation=null;source.Dispose();}}
                 });
             }
-            pending=worker!;
+            pending=observationWorker!;
         }
         // Browser disconnects do not cancel a snapshot shared by other viewers.
         await pending.WaitAsync(token);
-        lock(sync)return ObservationReply(false,null,observationProblem);
+        lock(sync)return ObservationReply(activeJob!=null,activeJob==null?null:jobs[activeJob].Kind,observationProblem);
     }
     RobotObservation ObservationReply(bool paused,string? operation,string? problem)=>new(observation,paused,operation,problem,
         configuration==null?[]:motorDiagnostics.Report(directory,configuration,observation,clock.GetUtcNow()));
@@ -736,7 +775,7 @@ public sealed class RoboticsRuntime
             var epoch=emergencyStopEpoch;
             return Launch("reset-estop",false,async(c,token)=>
             {
-                var result=await tools.Run(c,"dashboard",null,60,token);
+                var result=await ReadDashboard(c,token);
                 if(!result.TryGetProperty("buses",out var buses)||buses.GetArrayLength()!=2)
                     throw new InvalidOperationException("Fresh feedback from both motor buses is required to reset E-stop.");
                 var count=0;

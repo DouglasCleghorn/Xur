@@ -84,7 +84,7 @@ public sealed class ApiKeys
         if(path.Contains('%') || path.Contains("..") || path.Contains('\\') || path.Contains("//"))return false;
         if(path.StartsWith("/robot/api/",StringComparison.Ordinal))path="/api/robotics/"+path[11..];
         if(!path.StartsWith("/api/") && !path.StartsWith("/inference/"))return false;
-        if(path=="/api/api-keys" || path.StartsWith("/api/api-keys/") || path=="/api/bootstrap" || path.StartsWith("/api/auth/") || path.StartsWith("/api/install/"))return false;
+        if(path=="/api/t3-code/pair" || path=="/api/api-keys" || path.StartsWith("/api/api-keys/") || path=="/api/bootstrap" || path.StartsWith("/api/auth/") || path.StartsWith("/api/install/"))return false;
         if(scope=="automation")return true;
         if(scope=="robotics")return (method is "GET" or "HEAD") && (path is "/api/robotics/status" or "/api/robotics/jobs" || Regex.IsMatch(path,@"\A/api/robotics/(jobs/[a-f0-9]{32}(/markers|/captures(/[a-z0-9-]+\.jpg)?)?|cameras/(head|hand))\z"))
             || method=="POST" && (path is "/api/robotics/tasks" or "/api/robotics/emotes" or "/api/robotics/controller" or "/api/robotics/stop" or "/api/robotics/estop" or "/api/robotics/probe");

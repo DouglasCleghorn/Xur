@@ -1,5 +1,99 @@
 # Screenshot and artwork register
 
+- 2026-10-17: T3 Code connection-page validation family from the working tree
+  based on `d217097`. Rendered fixtures are private under
+  `.build/evidence/t3-code/`; transient collaborative-browser snapshots remain
+  in this T3 session, not published or added to source. Purpose: check desktop
+  and 390-pixel phone layouts, pairing controls and the local QR presentation.
+  Privacy review: synthetic workload/volume identities and a nonfunctional
+  `fixture-only` pairing link; no provider credentials or project contents.
+  Refresh after changes to the T3 Code page or navigation.
+
+- 2026-10-12: Reviewed private user screenshot
+  `/home/doug/.t3/userdata/attachments/59018970-2da7-4e1c-bed1-1e03ee2d1386-68a41712-9703-4c1b-a455-af3cda22c5f2.png`.
+  Shows a failed hand-guided setup and contradictory static “Torque off” badge.
+  Used to correct live torque status and failure diagnostics; not shipped.
+  No faces, host address, credentials or motor measurements visible.
+
+
+- 2026-10-11: Replaced the illustrative calibration SVG with the unmodified
+  Hugging Face follower middle-position photograph at
+  `containers/robot/wwwroot/reference/so101-follower-middle.webp` (1536×2048).
+  Used by both arm-reference steps on `/robot/calibrate`, linked to its full-size
+  local copy. Caption and instructions identify this as an arm-posture reference;
+  the gripper must be positioned separately at mid travel, not copied from the
+  photograph. Source: Hugging Face documentation-images, revision
+  `e0f0921e0c4341dcb41873906046d10ad08e2410`, `lerobot/follower_middle.webp`,
+  as used by its SO-101 assembly calibration guide. CC BY-NC-SA 4.0; attribution
+  and full license accompany the image. Privacy review: public documentation
+  photo, robot on a plain table, a supporting fingertip; no faces, credentials,
+  host information or identifying text. No crop, mirroring or retouching.
+  Review if the supported arm hardware or reference-pose convention changes.
+
+
+- 2026-10-11: Faster XLeRobot MuJoCo emote review family in
+  `.build/evidence/xlerobot-emotes/20261011T200600621640Z/`, including each
+  `*-<arm>/preview.gif`, `preview.mp4`, exported `*-fast.xuremot` video and
+  `review-fast-*.png` timing/contact sheets. Generated from the pinned upstream
+  model with 100 Hz commands and 25 Hz renders, durations 2.68–3.40 seconds.
+  Purpose: review actual faster simulated motion and the dedicated Emotes page.
+  Privacy review: synthetic robot geometry only, no people, live camera images,
+  credentials or personal data. These replace the slow 22–25 second candidates
+  for current emote review; earlier originals remain private historical evidence.
+  Regenerate when gesture poses, timing, model, camera or renderer changes.
+
+- 2026-10-11: Upstream XLeRobot MuJoCo emote recording/render family under
+  `.build/evidence/xlerobot-emotes/<run>/<gesture>-<arm>/preview.gif` and
+  `preview.mp4`, including the same MP4 bytes in exported `.xuremot` bundles
+  and the `/robot` imported-video library. Extracted `review-*.png` frames and
+  contact sheets remain in the same ignored evidence family.
+  Purpose: inspect Wave, Welcome, Celebrate, Curious and Point simulation
+  recordings made by `eng/xlerobot-record-emotes.py`, outside the robot app.
+  Source model: XLeRobot `b017b5e6354bd9f61f4247a920c72622ca0aade0`, MuJoCo
+  3.3.0, with base/wheel/head equality constraints recorded in each manifest.
+  Final 22–25 second candidates were captured on 2026-10-11 in runs
+  `20261011T191701838152Z` (five right-arm gestures) and
+  `20261011T191946273534Z` (five left-arm gestures). MP4s retain 5 Hz pose
+  sampling with 10 Hz encoded timing; preview frames come from simulated
+  feedback. Reviewed `review-wave-timing.png` and `review-left-poses.png`
+  cover movement stages and the mirrored poses. Earlier 16/40 second iterations
+  are superseded for gesture review.
+  Privacy review: synthetic robot meshes and an empty simulated scene only;
+  no real cameras, people, credentials or user files. Upstream model/license
+  provenance is retained. Regenerate after model, gesture or renderer changes.
+  Earlier embedded gesture and practice-setup UI validations below are retired;
+  the robot app now has hardware-only calibration and no embedded simulator.
+
+- 2026-10-11: Guided robot setup validation on xur-255, using the private
+  `guided-00b52dfe534f` development image (base commit `3f5cb0a` plus the emote
+  and guided-setup changes). The T3 browser completed the simulated reference,
+  range and review flow, previewed Wave, checked hardware confirmation gates,
+  and checked layout at 1280, 390 and 320 px. Snapshot capture returned a client
+  error on two attempts, so no screenshots were captured or published for this
+  follow-up. Non-image assertions are in `.build/evidence/robot-emotes-live/`.
+  A range-accumulation correction was subsequently installed as
+  `guided-df8cb3a4634d`; its final simulated phase/range checks used the private
+  app socket after the desktop preview disconnected. No additional images
+  were captured.
+  Privacy review: synthetic encoder/gesture state and app controls only; no
+  live camera images or credentials were captured. Earlier dashboard/setup
+  captures show older navigation and should be regenerated before release.
+
+- 2026-10-11: Private camera-mode modal review family under
+  `.build/evidence/robot-camera-modes/`, with `desktop.png` (1280×800),
+  `mobile.png` (390×844), and preliminary `mobile-initial.png` and
+  `desktop-initial-retired.png`. Original collaborative-browser captures are
+  under `/home/doug/.t3/userdata/browser-artifacts/` with names
+  `browser-screenshot-192-168-0-134-mv47{a557,ahpq,cnkh,d3k3}-*.png`.
+  Captured from actual working-tree dashboard assets based on `3b93628`, using
+  synthetic head, hand and infrared driver reports. Purpose: review mode tables,
+  responsive layout and the modal's close/E-stop controls. The initial desktop
+  capture had a blank modal paint and is retired; final captures supersede the
+  preliminary pair. Privacy review: all four images inspected; fixture device
+  paths and empty camera views only, with no people, credentials or live hardware
+  imagery. Browser metadata includes a private local preview address; keep these
+  captures ignored and private. Refresh after camera-mode modal/layout changes.
+
 - 2026-10-11 UTC (2026-10-10 MDT): Private derived segmentation diagnostic
   family `.build/evidence/robot-segmentation-prototype-20261010/` and
   `.build/evidence/robot-segmentation-motion-20261010/`, including
@@ -370,6 +464,35 @@ See [release preparation](development/release-preparation.md).
 | User-supplied bug screenshots | Reproduce reported defects | T3 attachments; referenced in conversation, not copied into source | Keep private; add a sanitized published-image entry before reuse |
 
 ## Change log
+
+- 2026-10-10: Reviewed transient T3 collaborative browser snapshots of the
+  robot Setup emote cards at 1280 and 390 px, with layout assertions also at
+  320 px. Working tree based on `3f5cb0a` plus the emote options changes.
+  Purpose: review the five recording ideas, left/right selection, saved emote
+  library and responsive controls. Synthetic fixtures and text evidence live
+  under `.build/evidence/robot-emotes/`; snapshots remain in the private T3
+  conversation and were not saved or published. Privacy review: synthetic
+  robot/device identities, dataset names, calibration hashes and a dummy
+  request token only; no live hardware images, personal information or
+  credentials. The preview could not reach the fixture server, so actual HTML,
+  CSS and scripts were loaded directly with a simulated API. Regenerate after
+  emote, recording or skill review UI changes.
+
+- 2026-10-11: Robot camera preview review family under
+  `.build/evidence/robot-cameras/`, based on `3f5cb0a` plus the dynamic camera
+  inventory and larger preview changes. `desktop-1920.png` is a private
+  collaborative-browser capture of the actual dashboard HTML, CSS and script
+  with three synthetic labeled camera frames. Browser assertions also covered
+  zero, one, two, three, five and twelve cameras, refresh/reordering, isolated
+  camera errors/recovery, paused observations, native image aspect ratios and
+  layouts at 1920, 1440, 390 and 320 px without horizontal overflow. Local server
+  navigation was unavailable, so the source document and fixture responses were
+  loaded directly into the collaborative browser. Privacy review: synthetic
+  camera names, device paths and generated grid images only; no live robot,
+  people, room imagery, accounts or credentials. Browser metadata may contain
+  the local fixture address. Keep private and regenerate after preview layout,
+  inventory or capture changes. The older `.build/robot/preview/` dashboard
+  captures predate these larger dynamic views and must be refreshed before reuse.
 
 - 2026-10-07: Added Diagnostic SSH in Settings and the system report download in
   Diagnostics. Reviewed the actual Razor fixtures at 1280, 390 and 320 px in the

@@ -14,6 +14,12 @@
         "resolved": "10.0.12",
         "contentHash": "xi+BDjFpW+Sb+MHFHaH6Y/gV9I8BluFwRXc1QyCdoZbIK26eNiBeFuMTe/FMwc33G1wdHCyDg7CVTmb8OdQrMQ=="
       },
+      "Microsoft.Web.LibraryManager.Build": {
+        "type": "Direct",
+        "requested": "[3.0.114, )",
+        "resolved": "3.0.114",
+        "contentHash": "9E7B1ixZR2to7ZTPZKIcTfQwGKuBu11F7tFykmi2X+icjTy6bJY9N/LLJ9tAW7PhaAmgM15o3t7P9aBg0kbUxw=="
+      },
       "xur.robot.backup.protocol": {
         "type": "Project"
       }

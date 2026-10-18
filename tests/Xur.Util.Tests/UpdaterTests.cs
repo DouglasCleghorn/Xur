@@ -367,6 +367,11 @@ static class UpdaterTests
         fixture.Write("catalog-selected/custom.json", "{\"kind\":\"Container\"}");
         await Verify.Reject(async () => await updater.Compatible(entry), "Container rollback guarded", "containers");
         fixture.Write("app/releases/" + identity + "/host/application-features.json", "[\"station-users-v1\",\"manager-account-v1\",\"container-workloads-v1\"]");
+        fixture.Write("catalog-selected/t3.json", "{\"kind\":\"Container\",\"engine\":\"T3 Code\"}");
+        await Verify.Reject(async () => await updater.Compatible(entry), "T3 Code recipes reject rollback to a version that cannot read them", "T3 Code");
+        fixture.Write("app/releases/" + identity + "/host/application-features.json", "[\"station-users-v1\",\"manager-account-v1\",\"container-workloads-v1\",\"t3-code-v1\"]");
+        await updater.Compatible(entry);
+        File.Delete(fixture.PathOf("catalog-selected/t3.json"));
         fixture.Write("station-seats.json", "[]");
         await Verify.Reject(async () => await updater.Compatible(entry), "Seat rollback guarded", "multiseat");
         fixture.Write("app/releases/" + identity + "/host/application-features.json", "[\"station-users-v1\",\"manager-account-v1\",\"container-workloads-v1\",\"multiseat-v1\",\"btrfs-root-v1\"]");

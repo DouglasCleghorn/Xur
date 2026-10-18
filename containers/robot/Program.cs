@@ -1,6 +1,7 @@
 using Xur.Robot;
 var builder=WebApplication.CreateSlimBuilder(args);
 builder.Services.ConfigureHttpJsonOptions(options=>options.SerializerOptions.TypeInfoResolverChain.Insert(0,RobotJson.Default));
+builder.Services.AddSignalR(options=>options.MaximumReceiveMessageSize=16*1024).AddJsonProtocol(options=>options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0,RobotJson.Default));
 var socket=Environment.GetEnvironmentVariable("XUR_ROBOT_SOCKET")??"/run/xur/robot-web/app.sock";
 if(Environment.GetEnvironmentVariable("XUR_ROBOT_DEV_URL") is {Length:>0} developmentUrl)builder.WebHost.UseUrls(developmentUrl);
 else
@@ -12,6 +13,7 @@ var state=Environment.GetEnvironmentVariable("XUR_ROBOT_STATE")??"/state";
 Directory.CreateDirectory(state);
 var backups=new RecordingBackups(state);builder.Services.AddSingleton(backups);builder.Services.AddHostedService<RecordingBackupWorker>();
 var robot=new RoboticsRuntime(state,Path.Combine(state,".build","controller-reservation"),backups:backups);
+builder.Services.AddSingleton(robot);builder.Services.AddHostedService<RobotSetupUpdates>();
 await robot.Recover();
 robot.Start(Environment.GetEnvironmentVariable("XUR_ROBOT_WORKLOAD_ID")??"robot");
 var app=builder.Build();
@@ -21,7 +23,13 @@ app.Use(async(context,next)=>
     context.Response.Headers.CacheControl="no-store";
     context.Response.Headers.XContentTypeOptions="nosniff";
     context.Response.Headers.ContentSecurityPolicy="default-src 'self'; img-src 'self' blob: data:; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
-    if(HttpMethods.IsPost(context.Request.Method))
+    if(HttpMethods.IsPost(context.Request.Method)&&context.Request.Path=="/api/emote-files")
+    {
+        if(context.Request.ContentType?.Split(';')[0].Trim()!="application/zip")
+        {context.Response.StatusCode=415;return;}
+        await next(context);return;
+    }
+    if(HttpMethods.IsPost(context.Request.Method)&&!context.Request.Path.StartsWithSegments("/realtime"))
     {
         if(!context.Request.HasJsonContentType())
         {context.Response.StatusCode=415;return;}
@@ -38,10 +46,15 @@ app.Use(async(context,next)=>
 });
 app.MapGet("/health",()=>TypedResults.Json(new RobotHealth("ready","native-aot"),RobotJson.Default.RobotHealth));
 app.MapGet("/",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/index.html"),"text/html"));
+app.MapGet("/emotes",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/emotes.html"),"text/html"));
 app.MapGet("/controller",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/controller.html"),"text/html"));
 app.MapGet("/tags",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/tags.html"),"text/html"));
 app.MapGet("/setup",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/setup.html"),"text/html"));
+app.MapGet("/calibrate",()=>TypedResults.PhysicalFile(Path.Combine(app.Environment.ContentRootPath,"wwwroot/calibrate.html"),"text/html"));
+if(Environment.GetEnvironmentVariable("XUR_ROBOT_DEV_URL")!=null)
+    app.MapGet("/csrf",()=>TypedResults.Json(new RobotDevelopmentCsrf("local-development"),RobotJson.Default.RobotDevelopmentCsrf));
+app.MapHub<RobotSetupHub>("/realtime",options=>options.Transports=Microsoft.AspNetCore.Http.Connections.HttpTransportType.ServerSentEvents|Microsoft.AspNetCore.Http.Connections.HttpTransportType.LongPolling);
 app.UseStaticFiles();
-app.MapRobotics(robot);app.MapRecordingBackups(backups);
+app.MapRobotics(robot);app.MapRecordingBackups(backups);app.MapEmoteFiles(new EmoteFiles(state));
 app.Lifetime.ApplicationStopping.Register(()=>robot.Shutdown().GetAwaiter().GetResult());
 await app.RunAsync();

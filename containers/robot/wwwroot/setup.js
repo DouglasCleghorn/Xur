@@ -8,13 +8,14 @@
   if(refreshing)return;refreshing=true;
   try{
   const status=await api('status');skills=status.skills;
+  window.dispatchEvent(new CustomEvent('xur-robot-status',{detail:status}));
   byId('robot-status').textContent=status.workloadId?`${status.mode} · ${status.job?.detail??'No active job'}`:'Load the Robotics profile to begin.';
   const problems=byId('robot-problems');problems.replaceChildren();for(const text of status.problems){const p=document.createElement('p');p.textContent=text;problems.append(p);}
   const container=byId('robot-skills'),select=byId('robot-sort').elements.skill,chosen=select.value;container.replaceChildren();select.replaceChildren(new Option('Select reviewed skill',''));
   for(const skill of skills){
+   if(skill.kind==='emote')continue;
    const p=document.createElement('p');p.append(`${skill.name} · ${skill.kind} · ${skill.arm} arm `);
    const verified=skill.verified&&skill.calibrationHash===status.calibrationHash;
-   if(skill.kind==='emote'&&verified){const button=document.createElement('button');button.type='button';button.textContent='Trigger emote';button.addEventListener('click',()=>run('emotes',{skill:skill.id}));p.append(button);}
    if(skill.kind==='sort'&&verified)select.add(new Option(`${skill.name} → ${skill.bin}`,skill.id));
    if(!verified)p.append('Review required');container.append(p);
   }
@@ -79,6 +80,20 @@
   byId(id).addEventListener('submit',event=>{event.preventDefault();const body={};for(const name of fields)body[name]=numbers.includes(name)?Number(event.target.elements[name].value):event.target.elements[name].value;run(path,body);});
  }
  function skillRequest(){const form=byId('robot-skill').elements,skill={policyType:'act'};for(const name of ['id','name','kind','arm','task','assetPath','bin','episode','seconds'])skill[name]=['episode','seconds'].includes(name)?Number(form[name].value):form[name].value;return {skill};}
+ const skillForm=byId('robot-skill');
+ function skillKind(){
+  const emote=skillForm.elements.kind.value==='emote';
+  for(const [name,visible] of [['bin',!emote],['episode',emote]]){const field=skillForm.elements[name];field.closest('label').hidden=!visible;field.disabled=!visible;}
+  skillForm.elements.bin.required=!emote;
+  skillForm.elements.assetPath.placeholder=emote?'/state/datasets/wave-right':'/state/policies/red-left/checkpoints/last/pretrained_model';
+ }
+ skillForm.elements.kind.addEventListener('change',skillKind);skillKind();
+ skillForm.addEventListener('input',event=>{if(event.target!==skillForm.elements.reviewed)skillForm.elements.reviewed.checked=false;});
+ skillForm.addEventListener('change',event=>{if(event.target!==skillForm.elements.reviewed)skillForm.elements.reviewed.checked=false;});
+ window.addEventListener('xur-robot-select-skill',event=>{
+  for(const name of ['id','name','kind','arm','task','assetPath','bin','episode','seconds'])skillForm.elements[name].value=event.detail[name]??'';
+  skillForm.elements.reviewed.checked=false;skillKind();
+ });
  byId('robot-skill').addEventListener('submit',event=>{event.preventDefault();run('skills/review',skillRequest());});
  byId('robot-evaluate').addEventListener('click',()=>run('skills/evaluate',skillRequest()));
  byId('robot-sort').addEventListener('submit',event=>{event.preventDefault();const form=event.target.elements,skill=skills.find(s=>s.id===form.skill.value);if(!skill)return;run('tasks',{kind:'sort',instructions:form.instructions.value,items:[{object:form.object.value,bin:skill.bin,skill:skill.id}]});});

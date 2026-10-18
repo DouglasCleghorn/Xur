@@ -38,7 +38,7 @@ public sealed class ContainerLibrary
             var job=new ContainerJob(Guid.NewGuid().ToString("N"),"Preparing","",null,DateTimeOffset.UtcNow);Save(job);worker=Task.Run(()=>Run(job,request));return job;
         }
     }
-    static Recipe Recipe(ContainerPrepareRequest r,string id,string image,ContainerMount[] mounts)=>new(id,string.IsNullOrWhiteSpace(r.Name)?"Container "+id[^6..]:r.Name.Trim(),image,r.Command??[],r.Port,r.HealthPath,r.Vendor,r.GpuCount,0,"Custom container",Kind:"Container",Engine:"Podman",Container:new(mounts,r.Environment??[]));
+    static Recipe Recipe(ContainerPrepareRequest r,string id,string image,ContainerMount[] mounts)=>new(id,string.IsNullOrWhiteSpace(r.Name)?"Container "+id[^6..]:r.Name.Trim(),image,r.Command??[],r.Port,r.HealthPath,r.Vendor,r.GpuCount,0,r.Engine==T3CodeWorkload.Engine?"Persistent T3 Code server":"Custom container",Kind:"Container",Engine:r.Engine,Container:new(mounts,r.Environment??[]));
     async Task Run(ContainerJob job,ContainerPrepareRequest request)
     {
         var context=Path.Combine(directory,job.Id);Directory.CreateDirectory(context);

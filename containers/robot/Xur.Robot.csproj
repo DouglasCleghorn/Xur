@@ -8,4 +8,12 @@
   </PropertyGroup>
   <ItemGroup><Compile Include="../../src/Xur.Domain/Redaction.cs" Link="Runtime/Redaction.cs" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../robot-cluster/Shared/Xur.Robot.Backup.Protocol.csproj" /></ItemGroup>
+  <ItemGroup><PackageReference Include="Microsoft.Web.LibraryManager.Build" Version="3.0.114" PrivateAssets="all" /></ItemGroup>
+  <Target Name="IncludeClientLibraries" BeforeTargets="AssignTargetPaths;ResolveProjectStaticWebAssets" DependsOnTargets="LibraryManagerRestore">
+    <ItemGroup>
+      <Content Include=".build/libman/signalr/dist/browser/signalr.min.js" Link="wwwroot/vendor/signalr/signalr.min.js" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+      <Content Include=".build/libman/signalr/LICENSE.txt" Link="wwwroot/vendor/signalr/LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+      <Content Include=".build/libman/signalr/src/third-party-notices.txt" Link="wwwroot/vendor/signalr/third-party-notices.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 </Project>

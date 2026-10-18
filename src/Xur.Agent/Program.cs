@@ -48,7 +48,7 @@ app.MapGet("/diagnostics/system",async Task<IResult>()=>{
     try{return Results.Json(await systemDiagnostics.Collect());}
     catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
 });
-if(!installer)_=Task.Run(async()=>{try{if((await Processes.Run("systemctl",["is-active","firewalld"],5)).ExitCode==0)await Processes.Run("firewall-cmd",["--add-port=8443/tcp"],10);}catch{}});
+if(!installer)_=Task.Run(async()=>{try{if((await Processes.Run("systemctl",["is-active","firewalld"],5)).ExitCode==0)await Processes.Run("firewall-cmd",["--add-port=8443/tcp","--add-port=3773/tcp"],10);}catch{}});
 Directory.CreateDirectory(stateDir);
 RegistryMirror.Ensure();
 var displayConsoles=new DisplayConsoles(Path.Combine(stateDir,"workloads"),run);
@@ -265,6 +265,15 @@ if(!installer)
     }
 }
 var containers=new ContainerLibrary(stateDir);
+app.MapGet("/t3-code/status",async()=>installer?Results.Conflict():Results.Json(await workloads.T3CodeStatus()));
+app.MapPost("/t3-code/pair",async Task<IResult>()=>{
+    if(installer)return Results.Conflict();
+    try{return Results.Json(await workloads.PairT3Code());}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
+});
+app.MapPost("/t3-code/prepare",(T3CodePrepareRequest request)=>{
+    if(installer || File.Exists("/var/lib/xur/app/maintenance"))return Results.Conflict(new{error="Container preparation is unavailable during setup or an app update."});
+    try{return Results.Json(containers.Prepare(T3CodeWorkload.Prepare(request.Volume)));}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
+});
 app.MapGet("/container-jobs",()=>installer?Results.Conflict():Results.Json(containers.Jobs()));
 app.MapGet("/container-volumes",async()=>installer?Results.Conflict():Results.Json(await ContainerLibrary.Volumes()));
 app.MapPost("/container-jobs",(ContainerPrepareRequest request)=> {

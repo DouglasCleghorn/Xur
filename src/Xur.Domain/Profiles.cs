@@ -8,7 +8,7 @@ public record HubModel(string Repository,string Revision,string License);
 public record Workload(string Id,string Name,Recipe Recipe,string[] Gpus,string Route,StationUser? User=null,StationDevices? Devices=null)
 {
     // Display names and routes do not change the runtime. GPU order defines tensor rank.
-    public string Fingerprint => Recipe.Kind=="Container" ? Canonical.Hash(new{Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Container,Gpus}) : Recipe.Kind=="Workstation" ? Devices?.Controllers is {Length:>0} ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User,Devices=new{Devices.Primary,Usb=(Devices.Usb??[]).Order(StringComparer.Ordinal).ToArray(),Controllers=Devices.Controllers.Order(StringComparer.Ordinal).ToArray()}}) : Devices!=null ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User,Devices=new{Devices.Primary,Usb=(Devices.Usb??[]).Order(StringComparer.Ordinal).ToArray()}}) : User==null ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus}) : Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User}) : Recipe.Files==null && Recipe.Hub==null
+    public string Fingerprint => T3CodeWorkload.Is(Recipe) ? Canonical.Hash(new{Recipe.Engine,Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Container,Gpus}) : Recipe.Kind=="Container" ? Canonical.Hash(new{Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Container,Gpus}) : Recipe.Kind=="Workstation" ? Devices?.Controllers is {Length:>0} ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User,Devices=new{Devices.Primary,Usb=(Devices.Usb??[]).Order(StringComparer.Ordinal).ToArray(),Controllers=Devices.Controllers.Order(StringComparer.Ordinal).ToArray()}}) : Devices!=null ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User,Devices=new{Devices.Primary,Usb=(Devices.Usb??[]).Order(StringComparer.Ordinal).ToArray()}}) : User==null ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus}) : Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User}) : Recipe.Files==null && Recipe.Hub==null
         ? Canonical.Hash(new { Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Vendor,Recipe.GpuCount,Recipe.MemoryMiB,Recipe.Model,Gpus })
         : Canonical.Hash(new {Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Vendor,Recipe.GpuCount,Recipe.MemoryMiB,Files=Recipe.Files?.Select(f=>new{f.Name,f.Asset.Sha256,f.Asset.Bytes}).ToArray(),Hub=Recipe.Hub==null?null:new{Recipe.Hub.Repository,Recipe.Hub.Revision},Gpus});
 }
@@ -52,6 +52,8 @@ public static class ProfilePolicy
         if(!EntityIdentifier(profile.Id) || string.IsNullOrWhiteSpace(profile.Name) || profile.Name.Length>80 || profile.Workloads.Length>32)
             throw new InvalidOperationException("Use a profile name and at most 32 workloads.");
         StationDevicePolicy.Validate(profile.Workloads);
+        if(profile.Workloads.Count(w=>T3CodeWorkload.Is(w.Recipe))>1)
+            throw new InvalidOperationException("Select one T3 Code server per host.");
         if(profile.Workloads.Count(w=>w.Recipe.Kind=="Robotics")>1)
             throw new InvalidOperationException("Select one robotics workload per host.");
         if(profile.Workloads.Any(w=>w.Recipe.Kind=="Robotics") && profile.Workloads.Any(w=>w.Recipe.Kind=="Workstation"))
@@ -91,13 +93,14 @@ public static class ProfilePolicy
         }
         if(r.Kind=="Container")
         {
-            if(!Identifier(r.Id) || string.IsNullOrWhiteSpace(r.Name) || r.Name.Length>80 || r.Engine!="Podman" || !Regex.IsMatch(r.Image??"",@"^sha256:[0-9a-f]{64}$") || r.Container==null || r.Port is <0 or >65535 || r.Vendor is not ("CPU" or "NVIDIA" or "AMD" or "Intel") || r.GpuCount is <0 or >16 || (r.Vendor=="CPU")!=(r.GpuCount==0)
+            if(!Identifier(r.Id) || string.IsNullOrWhiteSpace(r.Name) || r.Name.Length>80 || r.Engine is not ("Podman" or T3CodeWorkload.Engine) || !Regex.IsMatch(r.Image??"",@"^sha256:[0-9a-f]{64}$") || r.Container==null || r.Port is <0 or >65535 || r.Vendor is not ("CPU" or "NVIDIA" or "AMD" or "Intel") || r.GpuCount is <0 or >16 || (r.Vendor=="CPU")!=(r.GpuCount==0)
                 || r.Command.Length>128 || r.Command.Any(a=>a==null||a.Length>4096||a.Contains('\0')) || !Regex.IsMatch(r.HealthPath??"",@"^/[a-zA-Z0-9/_.-]*$") || r.Container.Mounts.Length>16 || r.Container.Environment.Count>64 || r.Model!=null || r.Files!=null || r.Hub!=null)
                 throw new InvalidOperationException("Invalid container configuration.");
             foreach(var mount in r.Container.Mounts)
                 if(!Regex.IsMatch(mount.Volume,@"^xur-volume-[a-f0-9]{32}$") || !Regex.IsMatch(mount.Destination,@"^/[a-zA-Z0-9/_.-]+$") || mount.Destination.Split('/').Any(p=>p=="..") || mount.Destination.StartsWith("/proc") || mount.Destination.StartsWith("/sys") || mount.Destination.StartsWith("/dev"))throw new InvalidOperationException("Invalid persistent volume mount.");
             if(r.Container.Mounts.Select(m=>m.Destination).Distinct().Count()!=r.Container.Mounts.Length)throw new InvalidOperationException("Volume destinations must be unique.");
             foreach(var pair in r.Container.Environment)if(!Regex.IsMatch(pair.Key,@"^[A-Za-z_][A-Za-z0-9_]*$") || pair.Value.Length>8192 || pair.Value.Contains('\0'))throw new InvalidOperationException("Invalid environment variable.");
+            if(T3CodeWorkload.Is(r))T3CodeWorkload.Validate(r);
             return;
         }
         if(r.Kind!="Model" || r.Container!=null)throw new InvalidOperationException("Unknown workload kind.");

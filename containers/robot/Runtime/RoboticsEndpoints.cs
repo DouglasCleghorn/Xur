@@ -19,6 +19,10 @@ public static class RoboticsEndpoints
             catch(InvalidOperationException e){return Conflict(new RobotError(e.Message));}
         }
         app.MapGet("/api/status",()=>Reply(robot.Status()));
+        app.MapGet("/api/hand-calibration",()=>Reply(robot.HandCalibration()));
+        app.MapPost("/api/hand-calibration/start",async Task<IResult>(HttpContext c)=>await Call<HandCalibrationStart>(c,r=>Task.FromResult<IResult>(Reply(robot.StartHandCalibration(r),202))));
+        app.MapPost("/api/hand-calibration/advance",async Task<IResult>(HttpContext c)=>await Call<HandCalibrationAdvance>(c,r=>{robot.HandCalibrationAdvance(r);return Task.FromResult<IResult>(Reply(robot.HandCalibration()));}));
+        app.MapPost("/api/hand-calibration/heartbeat",async Task<IResult>(HttpContext c)=>await Call<HandCalibrationHeartbeat>(c,r=>{robot.HandCalibrationHeartbeat(r);return Task.FromResult<IResult>(Reply(robot.HandCalibration()));}));
         app.MapPost("/api/estop",async Task<IResult>(HttpContext c)=>await Call<RobotResetStopRequest>(c,r=>Task.FromResult<IResult>(Reply(robot.EmergencyStop(),statusCode:202))));
         app.MapPost("/api/reset-estop",async Task<IResult>(HttpContext c)=>await Call<RobotResetStopRequest>(c,r=>Task.FromResult<IResult>(Reply(robot.ResetEmergencyStop(),statusCode:202))));
         app.MapGet("/api/observation",async Task<IResult>(HttpContext c)=>

@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "defaultProvider": "jsdelivr",
+  "libraries": [{
+    "library": "@microsoft/signalr@10.0.0",
+    "files": ["dist/browser/signalr.min.js", "src/third-party-notices.txt"],
+    "destination": ".build/libman/signalr/"
+  }, {
+    "library": "https://raw.githubusercontent.com/dotnet/aspnetcore/v10.0.0/LICENSE.txt",
+    "provider": "filesystem",
+    "destination": ".build/libman/signalr/"
+  }]
+}

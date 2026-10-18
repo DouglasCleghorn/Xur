@@ -14,18 +14,26 @@ to perform robot operations or launch another tools container.
 
 The pages are:
 
-- `/robot/`: head/hand camera snapshots, every motor's available registers,
+- `/robot/`: large snapshots from every detected camera, every motor's available registers,
   calibration assessment, controller start and recent operations.
+- `/robot/emotes`: emote file imports, video previews and original downloads.
 - `/robot/setup`: device selection and automatic bus-role detection, effort
   limits, measured camera/tag metrology, session arming, demonstration recording,
   ACT training, skill evaluation and review, emotes and sorting tasks.
+- `/robot/calibrate`: guided hand calibration with live torque-off/range
+  readings over SignalR and physical operator confirmations.
 - `/robot/tags`: AprilTag corners over the exact final survey frame, duplicate-ID
   ambiguity, optional metric pose candidates from supplied measured settings,
   and copyable/downloadable JSON for all three frames from each camera.
 - `/robot/controller`: the supported Xbox button map and session instructions.
 
-All four pages include the software E-stop and reset controls. The two cameras
-are captured separately; they are not synchronized stereo.
+All six pages include the software E-stop and reset controls. Dashboard cameras
+are captured separately, requesting 1920 × 1080 where the driver supports it;
+they are not synchronized stereo. Head and hand keep their saved roles, and
+additional capture interfaces appear automatically without changing setup.
+The responsive preview grid keeps views large and wraps onto more rows.
+AprilTag, calibration and recording workflows continue to use the selected
+head and hand cameras.
 
 ## Build and nightly publication
 
@@ -41,6 +49,28 @@ without mapping robot hardware. The multistage image builds the .NET native
 executable and installs the pinned LeRobot/XLeRobot, CPU ML, video and AprilTag
 tools. The final image needs neither a .NET runtime/JIT nor an SDK. Python remains
 an implementation dependency of the upstream robotics stack.
+
+Gesture recordings are authored outside the app in the pinned upstream XLeRobot
+MuJoCo simulation. See [the recording script](../../eng/xlerobot-record-emotes.py)
+and [its workflow](../../docs/usage/robotics.md#simulation-recordings). The app has
+no embedded simulator or practice calibration mode.
+
+The Emotes page accepts `.xuremot` ZIP bundles containing a versioned manifest,
+checksummed recording, trajectory, MP4 and license notices. Imports are bounded
+to 16 MiB, preserved byte for byte and deduplicated by SHA-256 under
+`/state/emotes/imports`. Videos are served locally with byte ranges for seeking.
+Imported model-radian recordings remain preview candidates: they cannot add a
+reviewed skill, change calibration or enable motion. See the recording workflow
+for the bundle schema and physical transfer requirements.
+
+Hand-guided setup is an exclusive runtime job. Starting setup cancels an active
+background dashboard read and waits for its cleanup before opening motor buses;
+other dashboard tabs then pause their reads. Phase acknowledgements include
+a session ID and revision, and duplicate/stale commands fail. The controlling
+page renews a 15-second lease; loss of its heartbeat cancels the adapter. SignalR
+uses server-sent events with long polling fallback through the authenticated Unix-socket proxy, with CSRF headers
+on transport writes. The hub exposes no methods that mutate robot state. Browser
+assets and license notices are restored by LibMan and shipped locally.
 
 The restricted build context excludes credentials, evidence and generated output.
 Microsoft images retain their explicit `mcr.microsoft.com` registry; Docker Hub

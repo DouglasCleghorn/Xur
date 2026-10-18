@@ -324,6 +324,9 @@ public class SignedUpdater(UpdatePaths paths, Runtime runtime, DurableFiles file
         if (File.Exists(Path.Combine(stateDirectory, "manager-account.json")) && !features.Contains("manager-account-v1"))
             throw new UserError("This version cannot manage your username and password. Select a version with manager account support.");
         var catalog = Path.Combine(stateDirectory, "catalog-selected");
+        if (!features.Contains("t3-code-v1") && Directory.Exists(catalog) && Directory.EnumerateFiles(catalog, "*.json")
+            .Any(path => JsonValues.Text(DurableFiles.ReadObject(path)["engine"]) == "T3 Code"))
+            throw new UserError("This version cannot manage your T3 Code server. Select a version with T3 Code workload support.");
         if (!features.Contains("container-workloads-v1") && Directory.Exists(catalog) && Directory.EnumerateFiles(catalog, "*.json")
             .Any(path => JsonValues.Text(DurableFiles.ReadObject(path)["kind"]) == "Container"))
             throw new UserError("This version cannot manage your containers. Select a version with container workload support.");

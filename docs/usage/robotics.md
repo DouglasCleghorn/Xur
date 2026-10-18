@@ -24,8 +24,10 @@ The combined application image requires its own deployment checks. Physical
 calibration, wireless controller operation, emotes and object placement still
 need acceptance on the robot; no trained picking policy ships with Xur.
 
-The xur-255 owner confirmed the three-omniwheel base and requires fully automatic
-calibration using camera markers and a physical emergency stop. Assess camera
+The xur-255 owner confirmed the three-omniwheel base and initially requested fully automatic
+calibration using camera markers and a physical emergency stop. On 2026-10-11,
+the owner authorized hand-guided setup for emotes, with an easy realtime app flow
+and simulation while an operator is unavailable. Assess camera
 coverage first; additional per-joint sensors have not been selected. The current
 hand-guided tool is an existing upstream capability, not completion of that
 automatic-calibration requirement. See the
@@ -106,8 +108,8 @@ seeding and final cleanup use zero drive output before the last torque-off write
    Fully automatic marker calibration remains under development. Missing
    measured marker geometry, camera intrinsics, joint coverage, justified travel
    limits or a verified physical motor-power stop retain a blocked state.
-   The installed upstream hand-guided capability is separate and does not meet
-   the selected fully automatic workflow. No assessment result grants motion
+   Alternatively, open **Guided setup** at `/robot/calibrate` for the authorized
+   hand-guided flow described below. No automatic assessment result grants motion
    approval or manufactures missing calibration files.
 6. After approved calibration, establish robot-specific motor load/current
    limits from verified documentation and measured effort, and enter a
@@ -123,10 +125,123 @@ seeding and final cleanup use zero drive output before the last torque-off write
    unsupported arm can settle. Process termination cannot guarantee that motor
    power is removed.
 
-Expected motor IDs must already be programmed. A missing or misidentified motor
-is a setup error, not permission to reassign IDs or search for hard stops.
-Readable decals provide observations; they do not establish hidden mechanical
-limits or approve a picking policy.
+### Guided hand calibration
+
+Open `/robot/calibrate` from the dashboard or setup page for real hand-guided
+calibration. Close separate camera/controller tools first. The CV1
+preview server reserves the same adapter lock even though it cannot move motors;
+it must release that reservation before hardware calibration or recording.
+Save hardware settings with motion disabled. Be beside
+the robot, support both empty arms and keep the motor-power disconnect within
+reach. The page requires all three confirmations. At each reference step, place
+the listed joints midway through their clear travel and the gripper half open.
+Move every listed joint by hand through clear travel, without forcing hard stops
+or crossing an encoder wrap. Live cards show position, measured minimum/maximum,
+span and temperature. A small span does not establish a safe operating range;
+32 counts is only the minimum input-validity check. Review the actual clear
+travel of every joint before **Save measured calibration**.
+
+The private adapter uses the pinned upstream calibration primitives with torque
+off, backs up the previous files/registers under `.build/evidence/hand-calibration/`,
+and withholds approval while offsets are changing. It verifies torque off across
+all seventeen motors, stops for missing/hot telemetry at 45°C, rejects goal and
+torque-enable writes and preserves wheel configuration. Cancellation restores
+the original arm/head calibration registers and verifies cleanup; the old
+approval remains invalid, so inspect before starting again. Failed cleanup calls
+for disconnecting motor power. Saving verifies register readback and a receipt,
+then leaves motion disabled. Load/current limits and supervised motion review
+are still required.
+
+SignalR streams progress through server-sent events (long polling fallback) on
+the authenticated proxy using locally bundled
+assets. Each step uses a session ID and revision; stale/repeated acknowledgements
+fail. The controlling page sends a heartbeat every three seconds. Losing it for
+15 seconds stops setup; a page reload does not resume or take over the session.
+
+### Simulation recordings and emote files
+
+Use the upstream [XLeRobot MuJoCo environment](https://github.com/Vector-Wangel/XLeRobot/tree/b017b5e6354bd9f61f4247a920c72622ca0aade0/simulation/mujoco)
+for authoring gestures outside the app. The generator uses the same pinned
+XLeRobot commit as the robotics tools, with MuJoCo 3.3.0, NumPy 2.2.4,
+Pillow 11.1.0 and imageio-ffmpeg 0.6.0. With Python 3.11 and venv support installed:
+
+```sh
+python3.11 -m venv .build/xlerobot-sim/py311
+.build/xlerobot-sim/py311/bin/python -m pip install mujoco==3.3.0 numpy==2.2.4 pillow==11.1.0 imageio-ffmpeg==0.6.0
+.build/xlerobot-sim/py311/bin/python eng/xlerobot-record-emotes.py --fetch --render --bundle
+```
+
+`--fetch` verifies upstream model, mesh and license blobs against the pinned Git
+revision. Later runs use the verified local cache without network access.
+Use `--arm right` or `--emote wave` to limit the recordings. Rendering requires a
+working headless EGL renderer; omit both `--render` and `--bundle` for numeric
+simulation checks alone. Outputs stay under ignored
+`.build/evidence/xlerobot-emotes/`, in a separate timestamped directory per run.
+To export videos and bundles from an existing completed rendered run:
+
+```sh
+.build/xlerobot-sim/py311/bin/python eng/xlerobot-record-emotes.py --export-run ".build/evidence/xlerobot-emotes/<run>"
+```
+
+The generator provides five gestures for each arm, using one empty arm at a time:
+
+| Gesture | Movement | Duration |
+| --- | --- | --- |
+| Wave | Raised hand, two wrist/shoulder sweeps, return | 3.40 seconds |
+| Welcome | Open gripper, extend and present outward | 3.08 seconds |
+| Celebrate | Raised hand with two small victory pumps | 3.08 seconds |
+| Curious | Raise the hand and examine both faces with a wrist turn | 2.88 seconds |
+| Point | Hold an extended diagonal direction, then return | 2.68 seconds |
+
+Each fast recording saves 100 Hz commands, actual simulated joint feedback and
+velocities in `recording.jsonl` and `trajectory.npz`. Rendered runs also save
+`preview.gif`; export adds a local H.264 MP4 and a portable `<gesture>-<arm>-fast.xuremot`
+ZIP file. The MP4 preserves the 25 Hz rendered poses and real simulation pacing.
+Legacy 10 Hz recordings and their original video timing remain importable. Export verifies video duration, decoded frame count and payload
+checksums. Each bundle contains its versioned manifest, recording files, MP4,
+metadata and license notices. It includes no encoder executable.
+
+The run manifest records upstream provenance, dependency versions and the model
+adaptation: equality constraints hold the base, wheels and head at zero while
+retaining upstream arm geometry, inertias, actuators, limits and contact filters.
+The generator rejects contacts, non-finite state, excessive tracking error/speed,
+inactive-arm drift and failure to return to the initial pose. Target changes are
+limited to one degree per sample; the denser 100 Hz recording supports
+expressive timing without increasing that sample bound. These checks describe the simulated
+model; physical clearances still require robot-specific review.
+
+Open `/robot/emotes`, select one or more `.xuremot` files, then choose
+**Import emotes**. Watch each video using its playback controls and inspect its
+arm, duration and recording details. **Download emote file** preserves the
+original bundle. Imports are limited to 16 MiB per file and stored under the
+robot app's persistent `/state/emotes/imports/` directory. The importer validates
+the documented archive entries, manifest, hashes and recording bounds.
+
+Imported candidates are preview-only and labelled **Simulation recording · robot
+mapping required**. Their six named upstream joint coordinates are radians,
+with `hardwareApproved: false` and a null physical calibration hash. Importing
+or watching a video does not calibrate, arm, approve or move the robot. Measured
+joint-coordinate mapping, robot-specific limits and supervised evaluation are
+still required before physical execution; no conversion from these candidates
+to calibrated motor recordings is implemented. The app has no embedded simulator
+or practice calibration mode.
+
+### Existing upstream motion examples
+
+The pinned upstream [keyboard teleoperation example](https://github.com/Vector-Wangel/XLeRobot/blob/b017b5e6354bd9f61f4247a920c72622ca0aade0/software/examples/4_xlerobot_teleop_keyboard.py)
+contains a procedural rectangular end-effector trajectory. It is Apache-2.0
+example code, not a downloadable social-emote recording. The official
+[VR dataset recording example](https://github.com/Vector-Wangel/XLeRobot/blob/b017b5e6354bd9f61f4247a920c72622ca0aade0/software/examples/8_vr_teleop_with_dataset_recording.py)
+provides demonstration capture. A search of the pinned tree and official docs on
+2026-10-11 found no ready-made gesture pack.
+
+The upstream community directory links the
+[XLeRobot kinesthetic recorder](https://github.com/tianrui-li-0/xlerobot-kinesthetic-recorder),
+which documents manually guided recording, JSON trajectory save/load and camera
+recording during replay. Its inspected repository contains a README and script,
+with no bundled gesture trajectories or visible license; Xur does not copy its
+code or treat its recordings as compatible calibrated emotes. The ten generated
+fast candidates above use Xur's original gesture definitions.
 
 ## Xbox control
 
@@ -218,10 +333,24 @@ using camera evidence. Review binds the skill to the current calibration;
 recalibration invalidates it. Sorting camera selections must match its training
 demonstrations. Re-evaluate after changing objects, lighting or the bin layout.
 
-For an emote, record a single-arm demonstration without objects and use its
-dataset path, episode number and bounded duration. Evaluate it under supervision,
-then save the reviewed emote. **Trigger emote** and the emote API invoke LeRobot
-replay. No untested pose presets are supplied.
+Setup's **Emotes** section offers **Wave**, **Welcome**, **Celebrate**, **Curious**
+and **Point** recording ideas. Choose the left or right arm, then prepare a
+recording to fill in the demonstration name, task and suggested duration. These
+buttons only fill the form. Record the gesture with Xbox control using one empty
+arm, keeping its movement within the robot's accepted clearance and returning to
+its starting pose. You can also record your own gesture.
+
+After recording, choose **Use recording details for an emote** to fill the skill
+review form with its actual dataset name and arm. Select the episode you recorded
+and its bounded duration; recordings added to an existing dataset create another
+episode, so episode zero may refer to an older recording. Arm for a supervised
+evaluation, then disarm and save the reviewed skill. Your recorded emotes appear
+as named cards with **Play** and **Review** controls. Playback requires a current
+calibration review and an armed operator session, and ends disarmed. Changing a
+skill's form details clears the review checkbox. The emote API invokes the same
+LeRobot replay workflow. Gesture ideas contain no motor targets or prerecorded
+motion assets. Imported `.xuremot` candidates on `/robot` have their own
+video library and cannot be played through this physical replay workflow.
 
 ## Task API
 
@@ -303,8 +432,8 @@ Physical acceptance still needs complete confirmation of the expected joint role
 camera coverage/orientation, wireless receiver disconnects, the physical power
 stop and calibration, conservative teleoperation, supervised replay and a
 successful pick-and-place evaluation with the chosen objects/bins. For xur-255,
-the selected calibration approach remains fully automatic using markers;
-the upstream hand-guided path does not satisfy that requirement.
+hand-guided setup is now authorized for emotes. It does not complete the
+separate automatic marker-calibration work.
 
 The [Native AOT robotics application container](../../containers/robot/README.md)
 is served by Xur's authenticated proxy at `/robot`. It includes camera snapshots,
