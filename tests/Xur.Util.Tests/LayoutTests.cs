@@ -30,6 +30,11 @@ static class LayoutTests
         }
         foreach (var name in new[] { "console", "virtual-display", "profile-switcher", "streaming" }) fixture.Write("checkout/.build/" + name + "-runtime/fixture", name);
         fixture.Write("checkout/.build/profile-switcher-runtime/licenses/vendor/COPYING", "vendor notice");
+        fixture.Write("checkout/.build/metrics-runtime/victoria-metrics-prod", "fixture metrics executable");
+        File.SetUnixFileMode(fixture.PathOf("checkout/.build/metrics-runtime/victoria-metrics-prod"), (UnixFileMode)0x1ed);
+        fixture.Write("checkout/.build/metrics-runtime/LICENSE", "metrics license");
+        fixture.Write("checkout/.build/metrics-runtime/licenses/vendor/LICENSE", "metrics dependency notice");
+        fixture.Write("checkout/.build/metrics-runtime/upstream.json", "{\"version\":\"fixture\"}");
         foreach (var name in new[] { "tailscale", "tailscaled" }) fixture.Write("checkout/.build/context/tailscale/" + name, name);
         CopyTree(publish, Path.Combine(checkout, ".build/context/publish/util"));
         await new Runtime().Run(["python3", Path.Combine(checkout, "eng/prepare-rootfs.py")]);
@@ -41,6 +46,13 @@ static class LayoutTests
         {
             Verify.That(File.ReadAllText(Path.Combine(helper, "fixture")) == "profile-switcher", "Profile switcher runtime ships in both agent layouts");
             Verify.That(File.ReadAllText(Path.Combine(helper, "licenses/vendor/COPYING")) == "vendor notice", "Profile switcher dependency notices ship in both layouts");
+        }
+        foreach (var metrics in new[] { Path.Combine(root, "usr/lib/xur/agent/victoriametrics"), Path.Combine(bundle, "agent/victoriametrics") })
+        {
+            Verify.That(File.ReadAllText(Path.Combine(metrics, "victoria-metrics-prod")) == "fixture metrics executable", "VictoriaMetrics ships in both agent layouts");
+            Verify.That((File.GetUnixFileMode(Path.Combine(metrics, "victoria-metrics-prod")) & UnixFileMode.UserExecute) != 0, "VictoriaMetrics retains executable permissions");
+            Verify.That(File.ReadAllText(Path.Combine(metrics, "LICENSE")) == "metrics license" && File.ReadAllText(Path.Combine(metrics, "licenses/vendor/LICENSE")) == "metrics dependency notice", "VictoriaMetrics and dependency notices ship in both layouts");
+            Verify.That(File.ReadAllText(Path.Combine(metrics, "upstream.json")) == "{\"version\":\"fixture\"}", "VictoriaMetrics provenance ships in both layouts");
         }
         Verify.That((File.GetUnixFileMode(Path.Combine(bundle, "host/xurutil")) & (UnixFileMode.GroupWrite | UnixFileMode.OtherWrite)) == 0, "Bundled native utility is protected before installation");
         Verify.That(!Directory.EnumerateFiles(bundle, "*.dbg", SearchOption.AllDirectories).Any(), "Debug symbols are excluded from the shipped bundle");
