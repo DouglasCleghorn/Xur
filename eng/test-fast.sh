@@ -19,6 +19,7 @@ python3 tests/Xur.Integration.Tests/source-manifest.py > .build/fast/source-mani
 python3 tests/Xur.Integration.Tests/cleanup-build.py > .build/fast/cleanup.log
 bash eng/publish.sh > .build/fast/publish.log 2>&1
 "$sdk" run --project tests/Xur.Unit.Tests -c Release > .build/fast/unit.log
+XUR_DOTNET="$sdk" python3 tests/Xur.Integration.Tests/victoriametrics.py > .build/fast/victoriametrics.json
 "$sdk" run --project tests/Xur.Robot.Tests -c Release > .build/fast/robot-unit.log
 "$sdk" run --project tests/Xur.Robot.Backup.Tests -c Release > .build/fast/recording-backups.log
 python3 tests/Xur.Integration.Tests/robot-boundary.py > .build/fast/robot-boundary.log

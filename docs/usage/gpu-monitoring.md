@@ -11,9 +11,13 @@ clocks, performance state, process observations, and utilization/temperature
 history. The shared selector offers 15 minutes, one hour, and 24 hours. Pointer
 inspection shows each sampled value and timestamp. Missing samples break the line.
 
-The agent samples about every 15 seconds and checkpoints 24-hour history every
-minute under `/var/lib/xur/gpu-history.json`. API time ranges filter the history
-sent to the browser. Polling pauses when the browser tab is hidden. Identity uses
+The agent samples about every 15 seconds, even with no browser open, and stores
+full-resolution history in local VictoriaMetrics with 12-month retention. The
+30-minute disk flush interval reduces SSD writes; abrupt power loss can lose recent
+buffered samples. Clean shutdown saves them. Existing JSON history is imported
+and retained for recovery; see [telemetry storage](../development/telemetry.md).
+API time ranges filter the history sent to the browser. Browser polling pauses
+when its tab is hidden; collection continues. Identity uses
 PCI or VMBus/sysfs paths, never a transient GPU index. A changed device list causes
 a page refresh; reading/assignment changes update in place.
 

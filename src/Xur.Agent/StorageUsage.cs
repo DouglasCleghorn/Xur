@@ -38,6 +38,12 @@ public sealed class StorageUsage
             var filesystems=Filesystems(result.Output);
             var nodes=await Storage.Nodes();
             var disks=nodes.Where(n=>S(n,"type")=="disk" && !S(n,"path").StartsWith("/dev/zram")).Select(n=>new StorageDiskUsage(S(n,"path"),S(n,"model"),N(n,"size"),Storage.Flatten(n).Where(c=>c.GetProperty("mountpoints").EnumerateArray().Any(m=>m.ValueKind==JsonValueKind.String)).Select(c=>S(c,"path")).Distinct().ToArray(),Storage.Flatten(n).SelectMany(c=>c.GetProperty("mountpoints").EnumerateArray().Where(m=>m.ValueKind==JsonValueKind.String).Select(m=>m.GetString()!)).Distinct().ToArray())).ToArray();
+            for(var i=0;i<disks.Length;i++)
+            {
+                var node=nodes.First(n=>S(n,"path")==disks[i].Path);
+                var rotational=S(node,"rota").ToLowerInvariant() switch {"true" or "1"=>true,"false" or "0"=>false,_=>(bool?)null};
+                disks[i]=disks[i] with {Endurance=await StorageEnduranceReader.Read(disks[i].Path,rotational)};
+            }
             lock(gate)snapshot=snapshot with {Filesystems=filesystems,Disks=disks};
             var categories=new List<StorageCategory>();
             var caches=ModelCaches("/var/lib/containers/storage/volumes");

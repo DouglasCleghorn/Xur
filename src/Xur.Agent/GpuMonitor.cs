@@ -6,14 +6,34 @@ using System.Xml.Linq;
 using Xur.Domain;
 namespace Xur.Agent;
 
-public sealed class GpuMonitor(string directory="/var/lib/xur")
+public sealed class GpuMonitor(string directory="/var/lib/xur",VictoriaMetrics? metrics=null)
 {
+    readonly VictoriaMetrics store=metrics??VictoriaMetrics.Local();
     readonly object gate=new();
+    string? storageError;
     readonly Dictionary<string,List<GpuReading>> history=new();
     GpuTelemetrySnapshot snapshot=new(null,[]);
     public GpuTelemetrySnapshot Status(int minutes=15)
     {
         lock(gate)return snapshot with {Gpus=snapshot.Gpus.Select(g=>g with {History=g.History.Where(p=>p.At>=DateTimeOffset.UtcNow.AddMinutes(-Math.Clamp(minutes,1,1440))).ToArray()}).ToArray()};
+    }
+    public async Task<GpuTelemetrySnapshot> Read(int minutes=15,CancellationToken stop=default)
+    {
+        var current=Status(minutes);var end=DateTimeOffset.UtcNow;var start=end.AddMinutes(-Math.Clamp(minutes,1,1440));
+        try
+        {
+            var saved=(await store.ReadEntities("gpu",start,end,current.Gpus.Select(g=>g.Device.Pci),stop)).GroupBy(r=>r.Entity).ToDictionary(g=>g.Key,g=>g.Select(VictoriaMetrics.Gpu));
+            return current with{Gpus=current.Gpus.Select(g=>g with{History=saved.GetValueOrDefault(g.Device.Pci,[]).Concat(g.History).DistinctBy(p=>p.At.ToUnixTimeMilliseconds()).OrderBy(p=>p.At).ToArray()}).ToArray(),Error=current.Error??storageError};
+        }
+        catch(Exception e)when(VictoriaMetrics.Unavailable(e)){return current with{Error=current.Error??"Telemetry history storage is unavailable; showing recent memory samples."};}
+    }
+    public async Task Migrate(CancellationToken stop=default)
+    {
+        var path=Path.Combine(directory,"gpu-history.json");var marker=path+".victoriametrics-imported";
+        if(!File.Exists(path)||File.Exists(marker))return;
+        var old=JsonSerializer.Deserialize<Dictionary<string,GpuReading[]>>(await File.ReadAllTextAsync(path,stop))??[];
+        await store.ImportGpu(old.SelectMany(p=>p.Value.Select(r=>VictoriaMetrics.Gpu(p.Key,r))),stop:stop);
+        await File.WriteAllTextAsync(marker,"Imported and verified; original retained for recovery.\n",stop);
     }
     // Fresh bounded samples for an explicit benchmark; normal monitoring remains slow.
     public async Task<GpuTelemetrySnapshot> Sample()
@@ -36,7 +56,7 @@ public sealed class GpuMonitor(string directory="/var/lib/xur")
             var path=Path.Combine(directory,"gpu-history.json");
             if(File.Exists(path))foreach(var pair in JsonSerializer.Deserialize<Dictionary<string,GpuReading[]>>(File.ReadAllText(path)) ?? [])history[pair.Key]=pair.Value.Where(p=>p.At>DateTimeOffset.UtcNow.AddDays(-1)).TakeLast(5760).ToList();
         }catch { /* A partial/unreadable history must not prevent current telemetry. */ }
-        int samples=0;
+        var buffer=new TelemetryBuffer(store,"gpu");bool migrated=false;
         while(!stop.IsCancellationRequested)
         {
             try
@@ -59,11 +79,11 @@ public sealed class GpuMonitor(string directory="/var/lib/xur")
                 }
                 var awaitedTopology=await NvLinkTopology.Observe(devices);
                 lock(gate)snapshot=new(now,result.ToArray(),Topology:awaitedTopology);
-                if(++samples%4==0)
-                {
-                    Directory.CreateDirectory(directory);var path=Path.Combine(directory,"gpu-history.json");
-                    using(var f=new FileStream(path+".tmp",FileMode.Create,FileAccess.Write)){JsonSerializer.Serialize(f,history);f.Flush(true);}File.Move(path+".tmp",path,true);
-                }
+                await buffer.Append(result.Select(g=>VictoriaMetrics.Gpu(g.Device.Pci,g.Reading)),stop);
+                storageError=buffer.Error;
+                if(!migrated)try{await Migrate(stop);migrated=true;}
+                catch(Exception e)when(VictoriaMetrics.Unavailable(e)){storageError="Legacy GPU history import is pending; the original is retained.";}
+                foreach(var key in history.Where(p=>p.Value.Count==0||p.Value[^1].At<now.AddDays(-1)).Select(p=>p.Key).ToArray())history.Remove(key);
             }
             catch {lock(gate)snapshot=snapshot with {Error="GPU readings are temporarily unavailable."};}
             try{await Task.Delay(TimeSpan.FromSeconds(15),stop);}catch(OperationCanceledException){break;}

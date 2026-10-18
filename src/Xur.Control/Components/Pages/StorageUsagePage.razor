@@ -10,15 +10,67 @@ else
     @if(TrimStarted) { <p class="notice" role="status">TRIM started. Its result appears below when it finishes.</p> }
     @if(usage.Error!=null) { <p class="notice error" role="alert">@usage.Error</p> }
     <p class="secondary-text" role="status">@(usage.Scanning?"Calculating storage usage…":usage.CapturedAt is {} captured?"Updated "+captured.ToLocalTime().ToString("HH:mm:ss"):"Waiting for storage usage")</p>
-    <section class="storage-filesystems" aria-label="Filesystems">
-        @foreach(var fs in usage.Filesystems)
-        {
-            <article class="panel"><div class="section-heading"><h2>@fs.Mounts[0]</h2><span class="secondary-text">@fs.Type</span></div>
-                <div class="storage-numbers"><strong>@Size(fs.Used) <small>used of @Size(fs.Bytes)</small></strong><span>@Size(fs.Available) available</span></div>
-                <meter min="0" max="@fs.Bytes" value="@fs.Used" aria-label="@("Used space on "+fs.Source)">@Size(fs.Used)</meter>
-                <details><summary>@fs.Source</summary><p>Mounts</p>@foreach(var mount in fs.Mounts) { <code class="mount-path">@mount</code> }</details>
-            </article>
-        }
+    <section aria-labelledby="storage-devices">
+        <h2 id="storage-devices">Disks &amp; mounts</h2>
+        <div class="storage-table-scroll" role="region" aria-label="Disk and mount details" tabindex="0">
+        <table class="storage-table" aria-describedby="storage-endurance-note">
+            <thead><tr><th scope="col">Disk</th><th scope="col">Filesystem &amp; mounts</th><th scope="col">Space</th><th scope="col">Write endurance remaining</th></tr></thead>
+            <tbody>
+            @foreach(var row in StorageUsageRow.Build(usage))
+            {
+                <tr>
+                    <td>
+                        @foreach(var disk in row.Disks)
+                        {
+                            <div class="storage-device"><strong>@(disk.Model.Length==0?disk.Path:disk.Model)</strong><code class="mount-path">@disk.Path</code><span class="secondary-text">@Size(disk.Bytes) disk</span></div>
+                        }
+                        @if(row.Disks.Length==0) { <span class="secondary-text">Backing disk unavailable</span> }
+                    </td>
+                    <td>
+                        @if(row.Filesystem is {} fs)
+                        {
+                            <strong>@fs.Type</strong><code class="mount-path">@fs.Source</code>
+                            @foreach(var mount in fs.Mounts.Take(2)) { <code class="mount-path">@mount</code> }
+                            @if(fs.Mounts.Length>2)
+                            {
+                                <details><summary>@(fs.Mounts.Length-2) more mounts</summary>@foreach(var mount in fs.Mounts.Skip(2)) { <code class="mount-path">@mount</code> }</details>
+                            }
+                        }
+                        else
+                        {
+                            <span class="secondary-text">@(row.Disks.Any(d=>d.Mounts.Length>0)?"Filesystem usage unavailable":"No mounted filesystem")</span>
+                            @foreach(var mount in row.Disks.SelectMany(d=>d.Mounts).Distinct()) { <code class="mount-path">@mount</code> }
+                        }
+                    </td>
+                    <td>
+                        @if(row.Filesystem is {} space)
+                        {
+                            <div class="storage-space"><strong>@Size(space.Used) used</strong><span class="secondary-text">of @Size(space.Bytes)</span>
+                            <meter min="0" max="@space.Bytes" value="@space.Used" aria-label="@("Used space on "+space.Source)">@Size(space.Used)</meter>
+                            <span>@Size(space.Available) available</span></div>
+                        }
+                        else { <span class="secondary-text">Unavailable</span> }
+                    </td>
+                    <td>
+                        @foreach(var disk in row.Disks.Where(d=>d.Endurance?.RemainingPercent!=null || d.Endurance?.RemainingBytes!=null))
+                        {
+                            <div class="storage-endurance">
+                            @if(row.Disks.Length>1) { <code class="mount-path">@disk.Path</code> }
+                            @if(disk.Endurance?.RemainingPercent is {} remaining)
+                            {
+                                <strong>@remaining.ToString("0.#")% remaining</strong>
+                            }
+                            @if(disk.Endurance?.RemainingBytes is {} bytes) { <span>@Size(bytes) remaining</span> }
+                            </div>
+                        }
+                    </td>
+                </tr>
+            }
+            @if(usage.Disks.Length==0 && usage.Filesystems.Length==0) { <tr><td colspan="4">No disks or mounted filesystems reported.</td></tr> }
+            </tbody>
+        </table>
+        </div>
+        <p id="storage-endurance-note" class="secondary-text storage-note">Endurance reflects the drive’s reported wear. Remaining bytes are shown only when reported by the drive; no byte budget is extrapolated. Shared filesystems appear once with their observed backing disks.</p>
     </section>
     <section class="panel" aria-labelledby="trim-heading"><div class="section-heading"><h2 id="trim-heading">SSD TRIM</h2><a href="/storage">Refresh status</a></div>
     @if(trim==null) { <p>TRIM status unavailable.</p> } else {
@@ -55,12 +107,6 @@ else
         }
         @if(usage.Volumes is not {Length:>0}) { <p>No persistent container volumes.</p> }
     </section>
-    <section aria-labelledby="storage-disks"><div class="section-heading"><h2 id="storage-disks">Disks</h2></div>
-        @foreach(var disk in usage.Disks)
-        {
-            <article class="storage-disk-row"><div><strong>@(disk.Model.Length==0?disk.Path:disk.Model)</strong><span class="secondary-text">@disk.Path</span></div><span>@Size(disk.Bytes)</span><div>@if(disk.Filesystems.Length==0) { <span class="secondary-text">No mounted filesystem</span> } @foreach(var fs in disk.Filesystems) { <code class="mount-path">@fs</code> }</div></article>
-        }
-    </section>
     <script src="/storage-usage.js" defer data-scanning="@usage.Scanning.ToString().ToLowerInvariant()"></script>
 }
 @code {
@@ -68,7 +114,12 @@ else
     [SupplyParameterFromQuery] public bool TrimError {get;set;}
     TrimStatus? trim;StorageUsageSnapshot? usage;ProfileState? profiles;
     string VolumeUsers(string id)=>string.Join(", ",profiles?.Profiles.SelectMany(p=>p.Workloads).Where(w=>w.Recipe.Container?.Mounts.Any(m=>m.Volume==id)==true).Select(w=>w.Name).Distinct()??[]);
-    static string Size(long bytes)=>bytes>=1024L*1024*1024?$"{bytes/(1024d*1024*1024):0.0} GiB":bytes>=1024*1024?$"{bytes/(1024d*1024):0.0} MiB":$"{bytes/1024d:0.0} KiB";
+    static string Size(decimal bytes)
+    {
+        string[] units=["B","KiB","MiB","GiB","TiB","PiB","EiB","ZiB","YiB"];var unit=0;
+        while(bytes>=1024 && unit<units.Length-1){bytes/=1024;unit++;}
+        return $"{bytes:0.#} {units[unit]}";
+    }
     string Percent(long? bytes)=>(100d*(bytes??0)/Math.Max(1,usage!.Categories.Max(c=>c.Bytes??0))).ToString("0.0",System.Globalization.CultureInfo.InvariantCulture);
     protected override async Task OnInitializedAsync()
     {

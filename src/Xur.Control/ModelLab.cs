@@ -3,7 +3,10 @@ using Xur.Domain;
 namespace Xur.Control;
 public sealed class ModelLab
 {
+    const string ArchiveFailure="Permanent result could not be saved; keep Xur running, check free space and retry before starting another benchmark.";
     readonly string directory;
+    readonly VictoriaMetrics metrics;
+    readonly SemaphoreSlim migration=new(1);
     readonly Func<Task<ProfileState>> observe;
     readonly Func<Task<BackendRoute[]>> routes;
     readonly Func<CancellationToken,Task<GpuTelemetrySnapshot>> sample;
@@ -13,9 +16,11 @@ public sealed class ModelLab
     readonly object gate=new();
     readonly SemaphoreSlim chatSlots=new(4);
     readonly JsonSerializerOptions json=new(JsonSerializerDefaults.Web);
-    LabRun? active;CancellationTokenSource? cancellation;
-    public ModelLab(string directory,Func<Task<ProfileState>> observe,Func<Task<BackendRoute[]>> routes,Func<CancellationToken,Task<GpuTelemetrySnapshot>> sample,ModelChatClient chat,ApplicationMaintenance maintenance,CancellationToken shutdown=default)
+    readonly JsonSerializerOptions documentJson=new(JsonSerializerDefaults.Web){DefaultIgnoreCondition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull};
+    LabRun? active;CancellationTokenSource? cancellation;bool archivePending;
+    public ModelLab(string directory,Func<Task<ProfileState>> observe,Func<Task<BackendRoute[]>> routes,Func<CancellationToken,Task<GpuTelemetrySnapshot>> sample,ModelChatClient chat,ApplicationMaintenance maintenance,CancellationToken shutdown=default,VictoriaMetrics? metrics=null)
     {
+        this.metrics=metrics??VictoriaMetrics.Local();
         this.directory=directory;this.observe=observe;this.routes=routes;this.sample=sample;this.chat=chat;this.maintenance=maintenance;this.shutdown=shutdown;
         Directory.CreateDirectory(directory);File.SetUnixFileMode(directory,(UnixFileMode)448);
         foreach(var path in Directory.GetFiles(directory,"*.json"))
@@ -55,39 +60,125 @@ public sealed class ModelLab
         lock(gate)
         {
             if(cancellation!=null)throw new InvalidOperationException("A benchmark is already running. Cancel it or wait for completion.");
+            if(archivePending)
+            {
+                try{ArchiveActive();Save(active!);}
+                catch(Exception e)when(e is IOException or UnauthorizedAccessException){throw new InvalidOperationException("The previous benchmark result could not be saved. Check free space and retry before starting another run.");}
+            }
             if(!maintenance.Enter())throw new InvalidOperationException("An update is in progress. Try again after it completes.");
-            var run=new LabRun(Guid.NewGuid().ToString("N"),"Running",DateTimeOffset.UtcNow,null,request,target,context,null,[],[]);
+            var run=new LabRun(Guid.NewGuid().ToString("N"),"Running",DateTimeOffset.UtcNow,null,request,target,context,null,[],[],TelemetryVersion:1);
             try{Save(run);}catch{maintenance.Exit();throw;}
             active=run;cancellation=CancellationTokenSource.CreateLinkedTokenSource(shutdown);cancellation.CancelAfter(TimeSpan.FromMinutes(15));
             _=Task.Run(()=>Run(run.Id,cancellation));return run;
         }
     }
-    public LabRun? Get(string id)
+    LabRun? ReadDocument(string id)
     {
         if(!Guid.TryParseExact(id,"N",out _))return null;
-        lock(gate){if(active?.Id==id)return active;var path=Path.Combine(directory,id+".json");return File.Exists(path)?JsonSerializer.Deserialize<LabRun>(File.ReadAllText(path),json):null;}
+        var path=Path.Combine(directory,id+".json");return File.Exists(path)?JsonSerializer.Deserialize<LabRun>(File.ReadAllText(path),json):null;
+    }
+    public async Task<LabRun?> Get(string id)
+    {
+        lock(gate){if(active?.Id==id)return active;}
+        if(!Guid.TryParseExact(id,"N",out _))return null;
+        if(File.Exists(BenchmarkResults.PathFor(directory,id)))return BenchmarkResults.Read(directory,id);
+        await migration.WaitAsync(shutdown);
+        LabRun? run;
+        try
+        {
+            run=ReadDocument(id);if(run==null)return null;
+            if(run.TelemetryVersion==0)
+            {
+                try{return await MigrateLegacy(run);}
+                catch(Exception e)when(VictoriaMetrics.Unavailable(e)){return run with{Error=run.Error??"Benchmark migration is pending; the original results are retained."};}
+            }
+        }
+        finally{migration.Release();}
+        var legacy=Path.Combine(directory,id+".json.legacy");
+        if(File.Exists(legacy))
+        {
+            var original=JsonSerializer.Deserialize<LabRun>(await File.ReadAllTextAsync(legacy,shutdown),json);
+            if(original?.Id==id){run=run with{Samples=original.Samples};BenchmarkResults.Write(directory,run);return run;}
+        }
+        if(run.Samples.Length==0){BenchmarkResults.Write(directory,run);return run;}
+        try
+        {
+            var readings=run.Samples.SelectMany(s=>s.Gpus).Select(g=>g.Reading.At).ToArray();
+            if(readings.Length==0){BenchmarkResults.Write(directory,run);return run;}
+            var rows=(await metrics.Read("gpu",readings.Min(),readings.Max(),run.Id,shutdown)).ToDictionary(r=>(r.Entity,r.At.ToUnixTimeMilliseconds()),VictoriaMetrics.Gpu);
+            var complete=run.Samples.All(s=>s.Gpus.All(g=>rows.ContainsKey((g.Device.Pci,g.Reading.At.ToUnixTimeMilliseconds()))));
+            var restored=run with{Samples=run.Samples.Select(s=>s with{
+                Gpus=s.Gpus.Select(g=>g with{Reading=rows.GetValueOrDefault((g.Device.Pci,g.Reading.At.ToUnixTimeMilliseconds()),g.Reading)}).ToArray(),
+                Error=s.Error??(s.Gpus.Any(g=>!rows.ContainsKey((g.Device.Pci,g.Reading.At.ToUnixTimeMilliseconds())))?"Some telemetry samples are unavailable or have expired from retention.":null)
+            }).ToArray()};
+            if(complete)BenchmarkResults.Write(directory,restored);
+            return restored;
+        }
+        catch(Exception e)when(VictoriaMetrics.Unavailable(e)){return run with{Error=run.Error??"Telemetry history or permanent result storage is unavailable."};}
+    }
+    async Task<LabRun> MigrateLegacy(LabRun run)
+    {
+        // Preserve the complete result, even outside VM retention or during a backend outage.
+        BenchmarkResults.Write(directory,run);
+        await metrics.ImportGpu(run.Samples.SelectMany(s=>s.Gpus.Select(g=>VictoriaMetrics.Gpu(g.Device.Pci,g.Reading))),run.Id,shutdown);
+        var path=Path.Combine(directory,run.Id+".json");
+        if(!File.Exists(path+".legacy"))File.Copy(path,path+".legacy");
+        run=run with{TelemetryVersion=1};Save(run);return run;
     }
     public LabSummary[] List()
     {
-        lock(gate)return Directory.GetFiles(directory,"*.json").OrderByDescending(File.GetLastWriteTimeUtc).Take(100).Select(p=>{try{return Get(Path.GetFileNameWithoutExtension(p));}catch(JsonException){return null;}}).OfType<LabRun>().OrderByDescending(r=>r.Started).Select(Summary).ToArray();
+        lock(gate)return Directory.GetFiles(directory).Where(p=>p.EndsWith(".json",StringComparison.Ordinal)||p.EndsWith(".json.gz",StringComparison.Ordinal))
+            .OrderByDescending(File.GetLastWriteTimeUtc).Select(p=>Path.GetFileName(p).Split('.')[0]).Distinct().Take(100).Select(id=>{
+                try{return active?.Id==id?active:ReadDocument(id)??BenchmarkResults.Read(directory,id);}
+                catch(Exception e)when(e is JsonException or IOException or ArgumentException){return null;}
+            }).OfType<LabRun>().OrderByDescending(r=>r.Started).Select(Summary).ToArray();
+    }
+    public async Task Migrate(CancellationToken stop)
+    {
+        // Independently of page views, archive historical results and retry VM imports.
+        while(!stop.IsCancellationRequested)
+        {
+            bool pending=false;
+            foreach(var path in Directory.GetFiles(directory,"*.json"))
+                try
+                {
+                    var id=Path.GetFileNameWithoutExtension(path);if(!Guid.TryParseExact(id,"N",out _))continue;
+                    await migration.WaitAsync(stop);
+                    try{var old=ReadDocument(id);if(old?.TelemetryVersion==0)await MigrateLegacy(old);}
+                    finally{migration.Release();}
+                    if(!File.Exists(BenchmarkResults.PathFor(directory,id)))
+                    {await Get(id);if(!File.Exists(BenchmarkResults.PathFor(directory,id)))pending=true;}
+                }
+                catch(Exception e)when(VictoriaMetrics.Unavailable(e)){pending=true;}
+            if(!pending)return;
+            await Task.Delay(TimeSpan.FromMinutes(1),stop);
+        }
     }
     public void Cancel(string id)
     {
         lock(gate){if(active?.Id!=id||active.State is not ("Running" or "Cancelling")||cancellation==null)throw new InvalidOperationException("This benchmark is no longer running.");Update(r=>r with{State="Cancelling"});cancellation.Cancel();}
     }
+    void ArchiveActive()
+    {
+        var run=active!;
+        if(archivePending){var error=run.Error?.Replace(ArchiveFailure,"").Trim();run=run with{Error=string.IsNullOrEmpty(error)?null:error};}
+        BenchmarkResults.Write(directory,run);active=run;archivePending=false;
+    }
     void Save(LabRun run)
     {
         var path=Path.Combine(directory,run.Id+".json");
-        using(var stream=new FileStream(path+".tmp",FileMode.Create,FileAccess.Write,FileShare.None)){File.SetUnixFileMode(path+".tmp",(UnixFileMode)384);JsonSerializer.Serialize(stream,run,json);stream.Flush(true);}
+        if(run.TelemetryVersion==1)run=run with{PeakVramMiB=Summary(run).PeakVramMiB,Samples=run.Samples.Select(s=>s with{Gpus=s.Gpus.Select(g=>g with{Reading=new(g.Reading.At),History=[]}).ToArray()}).ToArray()};
+        using(var stream=new FileStream(path+".tmp",FileMode.Create,FileAccess.Write,FileShare.None)){File.SetUnixFileMode(path+".tmp",(UnixFileMode)384);JsonSerializer.Serialize(stream,run,documentJson);stream.Flush(true);}
         File.Move(path+".tmp",path,true);
     }
-    void Update(Func<LabRun,LabRun> change){lock(gate){active=change(active!);Save(active);}}
+    void Update(Func<LabRun,LabRun> change,bool persist=true){lock(gate){active=change(active!);if(persist)Save(active);}}
     async Task Run(string id,CancellationTokenSource stop)
     {
         using var sampling=CancellationTokenSource.CreateLinkedTokenSource(stop.Token);Task? sampler=null;
         try
         {
-            var run=Get(id)!;
+            var run=(await Get(id))!;
+            int samples=0;
             async Task Sample()
             {
                 LabSample point;
@@ -96,10 +187,12 @@ public sealed class ModelLab
                     var telemetry=await sample(sampling.Token).WaitAsync(TimeSpan.FromSeconds(10),sampling.Token);
                     var context=Context(await observe().WaitAsync(TimeSpan.FromSeconds(10),sampling.Token));
                     point=new(DateTimeOffset.UtcNow,telemetry.Gpus.Select(g=>g with{History=[]}).ToArray(),telemetry.Error,context.Workloads);
+                    try{await metrics.Write("gpu",point.Gpus.Select(g=>VictoriaMetrics.Gpu(g.Device.Pci,g.Reading)),id,sampling.Token);}
+                    catch(Exception e)when(VictoriaMetrics.Unavailable(e)){point=point with{Error="Could not send this sample to telemetry storage; its reading is retained in the benchmark result."};}
                 }
                 catch(OperationCanceledException)when(sampling.IsCancellationRequested){return;}
                 catch(Exception e)when(e is HttpRequestException or IOException or TimeoutException or JsonException or InvalidOperationException){point=new(DateTimeOffset.UtcNow,[],"Telemetry or workload snapshot unavailable.");}
-                Update(r=>r with{Samples=[..r.Samples,point]});
+                Update(r=>r with{Samples=[..r.Samples,point]},persist:++samples%15==0);
             }
             await Sample();
             sampler=Task.Run(async()=>{while(!sampling.IsCancellationRequested){await Task.Delay(2000,sampling.Token);await Sample();}});
@@ -115,6 +208,7 @@ public sealed class ModelLab
             if(run.Settings.Warmup)await Request(0,true);
             await Parallel.ForEachAsync(Enumerable.Range(1,run.Settings.Requests),new ParallelOptions{MaxDegreeOfParallelism=run.Settings.Concurrency,CancellationToken=stop.Token},async(n,_)=>await Request(n,false));
             await Sample();
+            sampling.Cancel();if(sampler!=null)try{await sampler;}catch(OperationCanceledException){}
             var end=Context(await observe().WaitAsync(TimeSpan.FromSeconds(10),stop.Token));
             Update(r=>r with{State=r.Responses.Any(x=>x.Error!=null)?"Completed with errors":"Completed",Finished=DateTimeOffset.UtcNow,EndContext=end});
         }
@@ -123,7 +217,20 @@ public sealed class ModelLab
         finally
         {
             sampling.Cancel();if(sampler!=null)try{await sampler;}catch(Exception){}
-            lock(gate){cancellation=null;stop.Dispose();}maintenance.Exit();
+            try
+            {
+                lock(gate)
+                {
+                    try{ArchiveActive();}
+                    catch(Exception e)when(e is IOException or UnauthorizedAccessException)
+                    {
+                        archivePending=true;
+                        active=active! with{Error=(active.Error is {} error?error+" ":"")+ArchiveFailure};
+                    }
+                    Save(active!);
+                }
+            }
+            finally{lock(gate){cancellation=null;stop.Dispose();}maintenance.Exit();}
         }
     }
     public async Task<LabResponse> Chat(LabChatRequest request,Func<string,string,Task> delta,CancellationToken cancel)
@@ -138,7 +245,7 @@ public sealed class ModelLab
         var first=good.Where(r=>r.FirstTokenMs!=null).Select(r=>r.FirstTokenMs!.Value).ToArray();
         // Wall throughput includes prefill, streaming and concurrent overlap. Never count chunks as tokens.
         double? throughput=good.Length>0&&good.Length==completed.Length&&good.All(r=>r.OutputTokens!=null)?good.Sum(r=>(long)r.OutputTokens!.Value)/(good.Max(r=>r.Started.AddMilliseconds(r.DurationMs))-good.Min(r=>r.Started)).TotalSeconds:null;
-        var peaks=run.Samples.SelectMany(s=>s.Gpus).GroupBy(g=>g.Device.Pci).ToDictionary(g=>g.Key,g=>g.Select(x=>x.Reading.MemoryUsedMiB).Max());
+        var peaks=run.PeakVramMiB??run.Samples.SelectMany(s=>s.Gpus).GroupBy(g=>g.Device.Pci).ToDictionary(g=>g.Key,g=>g.Select(x=>x.Reading.MemoryUsedMiB).Max());
         return new(run.Id,run.State,run.Started,run.Target.Workload.Recipe.Hub?.Repository??run.Target.Workload.Recipe.Name,completed.Length,run.Settings.Requests,first.Length>0?first.Average():null,throughput,peaks,run.Error);
     }
 }

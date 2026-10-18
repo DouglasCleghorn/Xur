@@ -64,7 +64,11 @@ weights, so displayed location sizes are not unique physical disk consumption.
 
 Dashboard network charts sample each non-loopback interface every five seconds.
 They show receive/send rates and byte counters with 15-minute, one-hour and
-24-hour views. History is in memory and starts afresh on reboot. GPU topology
+24-hour views. History is stored in local VictoriaMetrics and survives clean
+reboots. The 30-minute disk flush interval favors lower SSD writes; abrupt power
+loss can lose recent buffered samples. Storage retains 12 months, while charts
+keep their current ranges. See [telemetry storage](../development/telemetry.md).
+GPU topology
 uses `nvidia-smi topo -m` and NVLink status, resolving indices to PCI identities.
 Unknown or inactive links are never reported as active. Profile selection shows
 NVLink peer hints without silently changing allocations.

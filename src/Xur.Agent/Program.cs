@@ -357,10 +357,13 @@ app.MapPost("/gpu-power",async Task<IResult>(GpuPowerRequest request)=> {
     try{await gpuPower.Set(request);return Results.Ok();}
     catch(Exception e) when(e is InvalidOperationException or IOException or UnauthorizedAccessException){return Results.Conflict(new {error=e is InvalidOperationException?e.Message:"Could not save the GPU power setting."});}
 });
-var gpuMonitor=new GpuMonitor(stateDir);
+var metrics=VictoriaMetrics.Local();
+if(!installer)try{await TelemetryService.Ensure();}
+catch(Exception e){applicationLog.Write("TelemetryStorage",Microsoft.Extensions.Logging.LogLevel.Error,Redaction.Logs(e.Message));}
+var gpuMonitor=new GpuMonitor(stateDir,metrics);
 if(!installer)_=Task.Run(()=>gpuMonitor.Run(app.Lifetime.ApplicationStopping));
 app.MapGet("/gpu-telemetry/sample",async()=>installer?Results.Conflict():Results.Json(await gpuMonitor.Sample()));
-app.MapGet("/gpu-telemetry",(int? minutes)=>installer?Results.Conflict():Results.Json(gpuMonitor.Status(minutes??15)));
+app.MapGet("/gpu-telemetry",async(int? minutes,CancellationToken ct)=>installer?Results.Conflict():Results.Json(await gpuMonitor.Read(minutes??15,ct)));
 new StorageExplorer().Map(app,installer);
 var storageTrim=new StorageTrim(stateDir);
 app.MapGet("/storage/trim",async Task<IResult>()=>{if(installer)return Results.Conflict();try{return Results.Json(await storageTrim.Read());}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});
@@ -372,8 +375,8 @@ var modelLibrary=new ModelLibrary(stateDir);
 if(!installer)modelLibrary.Load();
 app.MapGet("/models",()=>installer?Results.Conflict():Results.Json(modelLibrary.Status()));
 app.MapPost("/models/scan",()=>{if(installer)return Results.Conflict();modelLibrary.Start(true);return Results.Accepted();});
-var networkUsage=new NetworkUsage();if(!installer)_=Task.Run(()=>networkUsage.Run(app.Lifetime.ApplicationStopping));
-app.MapGet("/network-usage",(int? minutes)=>Results.Json(networkUsage.Status(minutes??15)));
+var networkUsage=new NetworkUsage(metrics);if(!installer)_=Task.Run(()=>networkUsage.Run(app.Lifetime.ApplicationStopping));
+app.MapGet("/network-usage",async(int? minutes,CancellationToken ct)=>Results.Json(await networkUsage.Read(minutes??15,ct)));
 var monitor=new SystemMonitor();
 var updates=new OsUpdates();
 if(!installer)_=Task.Run(async()=>{try{await updates.Initialize();}catch(Exception e){applicationLog.Write("UpdateSchedule",Microsoft.Extensions.Logging.LogLevel.Error,Redaction.Logs(e.Message));}});

@@ -119,3 +119,8 @@ The `containers/robot-cluster` Native AOT receiver ships Xur's MIT license and
 this document, plus the .NET license and third-party notices. Recording manifests
 and byte-for-byte backups preserve user data; they do not change dataset or
 model-weight licenses.
+
+- VictoriaMetrics single-node: Apache-2.0, pinned by `eng/toolchain-lock.json`.
+  `eng/prepare-metrics.py` verifies the official binary archive and its upstream
+  license; the app bundle retains `agent/victoriametrics/LICENSE`, vendored
+  dependency notices under `licenses/`, and `upstream.json`. Xur's MIT license does not relicense VictoriaMetrics.

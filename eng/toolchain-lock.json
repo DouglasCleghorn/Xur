@@ -62,5 +62,14 @@
   "liveInstallerBase": {
     "reference": "quay.io/fedora/fedora-bootc:44",
     "resolution": "Resolved once per build; exact image recorded in the installer inspection receipt"
+  },
+  "victoriaMetrics": {
+    "version": "1.154.0",
+    "url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.154.0/victoria-metrics-linux-amd64-v1.154.0.tar.gz",
+    "sha256": "2ba3edae969a4b52a55e78d2721067541b0ee94774190dbd87fea0602aa57b8f",
+    "licenseUrl": "https://raw.githubusercontent.com/VictoriaMetrics/VictoriaMetrics/v1.154.0/LICENSE",
+    "licenseSha256": "778f2412aa6e874bf0e2482e17a119ea53ba508ae6ddd924859a1f32f6e2740f",
+    "sourceUrl": "https://codeload.github.com/VictoriaMetrics/VictoriaMetrics/tar.gz/refs/tags/v1.154.0",
+    "sourceSha256": "58af274d6088698d71ead526b280aafde96f8e26578db58fd91e9bbbfac0d561"
   }
 }

@@ -8,6 +8,7 @@ public static class ModelLabEndpoints
         var lab=new ModelLab(Path.Combine(device.StateDirectory,"benchmarks"),profiles.State,
             async()=>await admin.GetFromJsonAsync<BackendRoute[]>("/routes")??[],
             async ct=>await device.Agent.GetFromJsonAsync<GpuTelemetrySnapshot>("/gpu-telemetry/sample",ct)??new(null,[],"GPU telemetry unavailable."),new(gateway),maintenance,app.Lifetime.ApplicationStopping);
+        if(!device.Installer)_=Task.Run(()=>lab.Migrate(app.Lifetime.ApplicationStopping));
         app.MapModelLab(lab,device.Installer);
     }
     public static void MapModelLab(this WebApplication app,ModelLab lab,bool installer)
@@ -21,8 +22,8 @@ public static class ModelLabEndpoints
         }
         app.MapGet("/api/model-lab/targets",()=>Safe(async()=>Results.Json(await lab.Targets())));
         app.MapGet("/api/benchmarks",()=>Safe(()=>Task.FromResult<IResult>(Results.Json(lab.List()))));
-        app.MapGet("/api/benchmarks/{id}",(string id)=>Safe(()=>Task.FromResult<IResult>(lab.Get(id) is {} run?Results.Json(new{run,summary=ModelLab.Summary(run)}):Results.NotFound())));
-        app.MapGet("/api/benchmarks/{id}/export",(string id)=>Safe(()=>Task.FromResult<IResult>(lab.Get(id) is {} run?Results.File(JsonSerializer.SerializeToUtf8Bytes(new{schema=1,run,summary=ModelLab.Summary(run)},new JsonSerializerOptions(JsonSerializerDefaults.Web){WriteIndented=true}),"application/json","benchmark-"+run.Id+".json"):Results.NotFound())));
+        app.MapGet("/api/benchmarks/{id}",(string id)=>Safe(async()=>await lab.Get(id) is {} run?Results.Json(new{run,summary=ModelLab.Summary(run)}):Results.NotFound()));
+        app.MapGet("/api/benchmarks/{id}/export",(string id)=>Safe(async()=>await lab.Get(id) is {} run?Results.File(JsonSerializer.SerializeToUtf8Bytes(new{schema=1,run,summary=ModelLab.Summary(run)},new JsonSerializerOptions(JsonSerializerDefaults.Web){WriteIndented=true}),"application/json","benchmark-"+run.Id+".json"):Results.NotFound()));
         app.MapPost("/api/benchmarks",(LabRequest request)=>Safe(async()=>Results.Json(await lab.Start(request),statusCode:202)));
         app.MapPost("/api/benchmarks/{id}/cancel",(string id)=>Safe(()=>{lab.Cancel(id);return Task.FromResult<IResult>(Results.Accepted());}));
         app.MapPost("/api/model-lab/chat",async(HttpContext c,LabChatRequest request)=>

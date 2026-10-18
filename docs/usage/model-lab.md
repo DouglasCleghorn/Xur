@@ -13,11 +13,18 @@ Choose a prompt, request count (1–64), concurrency (1–8), output token limit
 individual requests have a three-minute limit and the run has a fifteen-minute
 limit. The warm-up response is retained but excluded from summary metrics.
 
-Results are written atomically to `/var/lib/xur/benchmarks/<id>.json`, with
-owner-only permissions. They survive page navigation, profile changes and
-reboots. On startup, unfinished runs become Interrupted and retain partial data.
-The page lists the latest 100 runs; older files remain on disk. JSON export
-includes the original settings and all recorded context:
+Each finished run, including cancelled and failed runs, saves a permanent
+`/var/lib/xur/benchmarks/<id>.json.gz` result with owner-only permissions. This
+losslessly compressed JSON file contains the full results and sampled telemetry,
+independent of VictoriaMetrics availability or its 12-month retention. It is
+written atomically once and is not automatically deleted. The adjacent `.json`
+file is a metadata/recovery index, not the complete result.
+
+Results survive page navigation, profile changes and reboots. On startup,
+unfinished runs become Interrupted; available partial data is recovered and
+archived, with missing samples reported. The page lists the latest 100 runs;
+older artifacts remain on disk. Export JSON reads the permanent result and
+returns ordinary JSON with the original settings and all recorded context:
 
 - Model recipe, pinned repository revision or model files, the recipe's engine
   image reference, launch arguments, workload fingerprint and instance identity.

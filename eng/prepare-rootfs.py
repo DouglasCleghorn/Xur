@@ -13,6 +13,7 @@ base=context/'rootfs'
 for source,target in [('publish/control','usr/lib/xur/control'),('publish/agent','usr/lib/xur/agent'),('publish/gateway','usr/lib/xur/gateway'),('catalog','usr/share/xur/catalog'),
                       ('tailscale/tailscale','usr/bin/tailscale'),('tailscale/tailscaled','usr/bin/tailscaled')]:
     copy(context/source,base/target)
+copy(repo/'.build/metrics-runtime',base/'usr/lib/xur/agent/victoriametrics')
 copy(repo/'.build/console-runtime',base/'usr/lib/xur/agent/console')
 copy(repo/'.build/virtual-display-runtime',base/'usr/lib/xur/agent/virtual-display')
 copy(repo/'.build/profile-switcher-runtime',base/'usr/lib/xur/agent/profile-switcher')
@@ -32,6 +33,7 @@ bundle=base/'usr/share/xur/app-bundle'
 for name in ('control','agent','gateway'):
     copy(context/'publish'/name,bundle/name)
 copy(context/'catalog',bundle/'catalog')
+copy(repo/'.build/metrics-runtime',bundle/'agent/victoriametrics')
 copy(repo/'.build/console-runtime',bundle/'agent/console')
 copy(repo/'.build/virtual-display-runtime',bundle/'agent/virtual-display')
 copy(repo/'.build/profile-switcher-runtime',bundle/'agent/profile-switcher')

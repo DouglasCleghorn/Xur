@@ -28,5 +28,6 @@ python3 eng/build-console.py
 python3 eng/build-virtual-display.py
 python3 eng/build-profile-switcher.py
 python3 eng/prepare-streaming.py
+python3 eng/prepare-metrics.py
 python3 eng/prepare-rootfs.py
 python3 eng/context-receipt.py create .build/context

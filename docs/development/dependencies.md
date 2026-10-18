@@ -101,3 +101,11 @@ release; they are deliberately manual checks, with no companion update service.
 GitHub's [supported ecosystems reference](https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories)
 describes the supported manifest formats. Download/package checksums and signed
 release identities continue to verify artifacts; they are not version selectors.
+
+VictoriaMetrics is a manually reviewed native dependency in
+`eng/toolchain-lock.json`. For an upgrade, verify the official GitHub release
+archive digest, matching source archive digest and license digest, update the pin, run
+`eng/prepare-metrics.py` and `tests/Xur.Integration.Tests/victoriametrics.py`, and
+review storage-format compatibility before allowing application rollback across
+versions. The runtime and upstream license are included in the app bundle; no
+Docker Hub image or runtime network download is involved.
