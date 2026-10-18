@@ -516,7 +516,8 @@ See [release preparation](development/release-preparation.md).
 
 - 2026-10-18: Regenerated private browser regression captures under
   `.build/fast/` and website checks under `.build/evidence/website/` from
-  `b95b340` plus the control-panel test correction. The Home, Settings and
+  `b95b340` plus the control-panel test correction, then repeated against
+  `a5a682e` plus the fix with SDK 10.0.402. The Home, Settings and
   Storage captures exercise the shared three-disk fixture at desktop/mobile
   widths. CI diagnostics from the same base are retained privately under
   `.build/evidence/main-build/ci/`. Privacy review: fixture-generated content,
