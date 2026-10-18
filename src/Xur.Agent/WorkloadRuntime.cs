@@ -41,6 +41,37 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         await StationSeats.SetIntent(workloads.Where(w=>w.Recipe.Kind=="Workstation").ToArray());
     }
     public Task<RuntimeObservation> Observe()=>ObserveUnlocked();
+    public async Task<T3CodeStatus> T3CodeStatus()
+    {
+        var definition=Definitions().SingleOrDefault(w=>T3CodeWorkload.Is(w.Recipe));
+        if(definition==null)return new(null,"Stopped");
+        var instance=await Inspect(definition);
+        return new(definition.Id,instance?.State=="running"?"Running":"Stopped");
+    }
+    public async Task<T3CodePairing> PairT3Code()
+    {
+        await using var operation=await Stops.Enter();
+        var definition=Definitions().SingleOrDefault(w=>T3CodeWorkload.Is(w.Recipe))
+            ??throw new InvalidOperationException("Load a profile with T3 Code first.");
+        await using var allocation=await Stops.Resources(["workload:"+definition.Id]);
+        var instance=await Inspect(definition);
+        if(instance?.State!="running")throw new InvalidOperationException("Load a profile with T3 Code first.");
+        // Use the inspected immutable identity, never a caller-supplied command or container name.
+        var result=await Processes.Run("podman",["exec",instance.InstanceId,"/opt/t3/t3","auth","pairing","create",
+            "--base-dir",T3CodeWorkload.BaseDirectory,"--ttl","5m","--label","Xur connection","--json"],30);
+        // Do not copy command output into logs/errors: it contains a pairing secret.
+        if(result.ExitCode!=0)throw new InvalidOperationException("T3 Code could not create a pairing link. Check that the server is ready and retry.");
+        try
+        {
+            using var data=JsonDocument.Parse(result.Output);
+            var credential=data.RootElement.GetProperty("credential").GetString();
+            var expires=data.RootElement.GetProperty("expiresAt").GetDateTimeOffset();
+            if(string.IsNullOrWhiteSpace(credential)||credential.Length>4096||expires<=DateTimeOffset.UtcNow)throw new FormatException();
+            return new(credential,expires);
+        }
+        catch(Exception e) when(e is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
+        {throw new InvalidOperationException("T3 Code returned an invalid pairing response. Prepare the supported T3 Code version again.");}
+    }
     public async Task InitializeRoboticsSetup()
     {
         try
@@ -87,7 +118,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     async Task<RuntimeInstance> Start(Workload w,bool restoring)
     {
         await using var operation=await Stops.Enter();
-        await using var allocation=await Stops.Resources(new[]{"workload:"+w.Id}.Concat(w.Gpus.Select(p=>"gpu:"+p)).Concat(w.Recipe.Kind=="Workstation"?new[]{"user:"+StationAccounts.Username(w)}:[]));
+        await using var allocation=await Stops.Resources(new[]{"workload:"+w.Id}.Concat(w.Gpus.Select(p=>"gpu:"+p)).Concat(w.Recipe.Kind=="Workstation"?new[]{"user:"+StationAccounts.Username(w)}:[]).Concat(T3CodeWorkload.Is(w.Recipe)?new[]{"t3-code"}:[]));
         try
         {
             if(restoring)
@@ -102,6 +133,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             if((w.Recipe.Kind=="Robotics" && Definitions().Any(d=>d.Id!=w.Id && d.Recipe.Kind is "Workstation" or "Robotics")) ||
                 (w.Recipe.Kind=="Workstation" && Definitions().Any(d=>d.Id!=w.Id && d.Recipe.Kind=="Robotics")))
                 throw new InvalidOperationException("Robotics and workstations must release their peripherals before starting the other workload.");
+            if(T3CodeWorkload.Is(w.Recipe) && Definitions().Any(d=>d.Id!=w.Id && T3CodeWorkload.Is(d.Recipe)))
+                throw new InvalidOperationException("Stop the previous T3 Code server before starting another.");
             foreach(var pci in w.Gpus)if(observed.Instances.Any(i=>i.Id!=w.Id && i.Gpus.Contains(pci)))throw new InvalidOperationException($"GPU {pci} is still allocated.");
             if(w.Recipe.Kind=="Workstation" && Definitions().Any(d=>d.Id!=w.Id && d.Recipe.Kind=="Workstation" && StationAccounts.Username(d)==StationAccounts.Username(w)))throw new InvalidOperationException("Each running workstation needs a different user.");
             await receipts.WaitAsync();try {
@@ -164,7 +197,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 var image=engineImage?.Image??w.Recipe.Image;
                 var args=new List<string> {"create","--name",Name(w.Id),"--label","io.xur.fingerprint="+w.Fingerprint,"--label","io.xur.id="+w.Id,
                     "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096",w.Recipe.Kind=="Model"&&w.Recipe.Engine is "vLLM" or "vLLM-Omni"?"--shm-size=4g":"--shm-size=1g",w.Recipe.Kind=="Model"?"--restart=no":"--restart=unless-stopped"};
-                if(w.Recipe.Port>0)args.AddRange(["--publish","127.0.0.1::"+w.Recipe.Port]);
+                if(w.Recipe.Port>0)args.AddRange(["--publish",T3CodeWorkload.Is(w.Recipe)?$"{T3CodeWorkload.HostPort}:{w.Recipe.Port}":"127.0.0.1::"+w.Recipe.Port]);
                 if(w.Recipe.Container is {} container)
                 {
                     foreach(var mount in container.Mounts){await ContainerLibrary.VerifyVolume(mount.Volume);args.AddRange(["--volume",mount.Volume+":"+mount.Destination+":"+(mount.ReadOnly?"ro,z":"rw,z")]);}
@@ -238,7 +271,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
 
         {
             var saved=Definitions().SingleOrDefault(w=>w.Id==request.Id);if(saved==null)return;
-            await using var allocation=await Stops.Resources(new[]{"workload:"+request.Id}.Concat(saved.Gpus.Select(p=>"gpu:"+p)).Concat(saved.Recipe.Kind=="Workstation"?new[]{"user:"+StationAccounts.Username(saved)}:Array.Empty<string>()));
+            await using var allocation=await Stops.Resources(new[]{"workload:"+request.Id}.Concat(saved.Gpus.Select(p=>"gpu:"+p)).Concat(saved.Recipe.Kind=="Workstation"?new[]{"user:"+StationAccounts.Username(saved)}:Array.Empty<string>()).Concat(T3CodeWorkload.Is(saved.Recipe)?new[]{"t3-code"}:[]));
             // A concurrent retry may have removed the receipt while this call waited.
             saved=Definitions().SingleOrDefault(w=>w.Id==request.Id);if(saved==null)return;
             var instance=await Inspect(saved);

@@ -1,5 +1,9 @@
 # Container workloads
 
+For a persistent coding environment, use the built-in
+[T3 Code preset](t3-code.md). It provides storage, profile selection and native
+device pairing from Xur, with direct connections to T3 Code on port 3773.
+
 Open **Containers**, choose a registry image or Dockerfile, and prepare it. A
 Dockerfile can include up to 64 extra text files (8 MiB total). Preparation uses
 real Podman pull/build operations and records the resulting immutable image ID.

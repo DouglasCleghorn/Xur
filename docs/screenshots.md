@@ -1,5 +1,14 @@
 # Screenshot and artwork register
 
+- 2026-10-17: T3 Code connection-page validation family from the working tree
+  based on `d217097`. Rendered fixtures are private under
+  `.build/evidence/t3-code/`; transient collaborative-browser snapshots remain
+  in this T3 session, not published or added to source. Purpose: check desktop
+  and 390-pixel phone layouts, pairing controls and the local QR presentation.
+  Privacy review: synthetic workload/volume identities and a nonfunctional
+  `fixture-only` pairing link; no provider credentials or project contents.
+  Refresh after changes to the T3 Code page or navigation.
+
 - 2026-10-12: Reviewed private user screenshot
   `/home/doug/.t3/userdata/attachments/59018970-2da7-4e1c-bed1-1e03ee2d1386-68a41712-9703-4c1b-a455-af3cda22c5f2.png`.
   Shows a failed hand-guided setup and contradictory static “Torque off” badge.

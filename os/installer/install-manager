@@ -83,4 +83,4 @@ chroot "$target" restorecon -RF /var/lib/xur /etc/systemd /etc/xur
 mkdir -p "$target/var/usrlocal/bin"
 ln -s /var/lib/xur/app/current/control/Xur.Control "$target/var/usrlocal/bin/xur"
 ln -s /var/lib/xur/updater/xurutil "$target/var/usrlocal/bin/xurutil"
-chroot "$target" firewall-offline-cmd --add-port=8080/tcp --add-port=8443/tcp
+chroot "$target" firewall-offline-cmd --add-port=8080/tcp --add-port=8443/tcp --add-port=3773/tcp

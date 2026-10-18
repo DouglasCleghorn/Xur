@@ -14,6 +14,7 @@ Xur remains a preview; implemented behavior and hardware validation are separate
 | Wake displays and control TV power | [Display sleep and HDMI-CEC](usage/display-power.md) |
 | Choose models, connect clients and benchmark | [Model catalog](usage/model-catalog.md), [model lab](usage/model-lab.md), [API keys](usage/api-keys.md) |
 | Prepare XLeRobot, train sorting skills and trigger emotes | [Robotics](usage/robotics.md) |
+| Run T3 Code and pair a phone or desktop | [T3 Code](usage/t3-code.md) |
 | Browse, download and manage files | [Files](usage/files.md), [storage and TRIM](usage/storage.md) |
 | Configure networking and time | [Wi-Fi, IP settings and answer YAML](usage/answer-file.md), [timezone and NTP](usage/timezone.md) |
 | Update, roll back or test a contributor build | [OS updates](usage/updates.md), [application updates](usage/application-updates.md) |
