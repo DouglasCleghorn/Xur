@@ -4,7 +4,7 @@ keyboard us
 timezone UTC --utc
 rootpw --lock
 selinux --enforcing
-firewall --enabled --port=8080:tcp --port=8443:tcp
+firewall --enabled --port=8080:tcp --port=8443:tcp --port=3773:tcp
 bootloader --append="bluetooth.disable_ertm=1 console=tty1"
 bootc --source-imgref registry:ghcr.io/ublue-os/bazzite-nvidia-open:stable --target-imgref ghcr.io/ublue-os/bazzite-nvidia-open:stable
 %onerror

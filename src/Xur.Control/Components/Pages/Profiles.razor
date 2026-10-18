@@ -70,7 +70,8 @@ else
             var definition=Definition(w.Id);
             <article class="runtime-row"><div><strong>@WorkloadName(w.Id)</strong><span class="secondary-text">@(definition?.Recipe.Kind=="Workstation"?"Workstation":definition?.Recipe.Engine)</span></div>
                 <span class="state-label @(w.State=="running"?"running":"pending")">@w.State</span>
-                <details class="runtime-details"><summary>Details</summary><p>Process @w.Pid</p>@if(definition is {Recipe.Kind:not "Workstation"}) { @if(definition.Recipe.Kind=="Container" && definition.Recipe.Port>0) { <a href="@("/inference/"+definition.Route+"/")">Open service</a> } else if(definition.Recipe.Kind=="Model") { <code>/inference/@definition.Route/v1/</code> } }</details>
+                <details class="runtime-details"><summary>Details</summary><p>Process @w.Pid</p>@if(definition is {Recipe.Kind:not "Workstation"}) { @if(definition.Recipe.Kind=="Container" && !T3CodeWorkload.Is(definition.Recipe) && definition.Recipe.Port>0) { <a href="@("/inference/"+definition.Route+"/")">Open service</a> } else if(definition.Recipe.Kind=="Model") { <code>/inference/@definition.Route/v1/</code> } }</details>
+                @if(definition!=null && T3CodeWorkload.Is(definition.Recipe)) { <a class="button secondary" href="/t3-code">Connect to T3 Code</a> }
                 <a class="button quiet" href="/api/workloads/@w.Id/logs">Logs</a></article>
         }
         @if(state.Runtime.Instances.Length==0) { <p class="empty-state">Load a profile to start its workloads.</p> }

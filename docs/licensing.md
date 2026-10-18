@@ -89,6 +89,11 @@ third-party notices remain in their component directories.
   in `containers/robot/libman.json`. LibMan restores its browser bundle, the
   matching ASP.NET Core MIT license and package third-party notices into ignored
   build paths; all three ship under `wwwroot/vendor/signalr/`.
+- T3 Code workload: T3 Code 0.1.0 is MIT licensed, copyright T3 Tools Inc.
+  The prepared image retains its verified license at `/opt/t3/LICENSE` and the
+  complete upstream distribution's dependency notices. The Node/Debian base and
+  installed OS packages retain their own licenses. Xur's MIT license applies to
+  the integration code, not a relicensing of those components.
 
 `xurutil` uses Microsoft's MIT-licensed `System.CommandLine` and the .NET Native
 AOT runtime, plus [TeeForge](https://github.com/DouglasCleghorn/TeeForge) 0.1.0

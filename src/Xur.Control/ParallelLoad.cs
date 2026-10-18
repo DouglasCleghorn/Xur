@@ -33,7 +33,7 @@ public sealed partial class ProfileManager
                     return observed.Instances.Any(i=>i.Id==old.Id&&i.InstanceId==old.InstanceId&&i.Pid==old.Pid&&i.BootId==old.BootId);
                 }
                 var ready=initial.Plan.Target.Workloads.Where(Ready).ToArray();
-                await gateway.Publish(ready.Where(w=>w.Recipe.Kind!="Workstation"&&w.Recipe.Port>0).Select(w=>new BackendRoute(w.Route,w.Id,observed.Instances.Single(i=>i.Id==w.Id).Endpoint)).ToArray());
+                await gateway.Publish(ready.Where(w=>w.Recipe.Kind!="Workstation"&&!T3CodeWorkload.Is(w.Recipe)&&w.Recipe.Port>0).Select(w=>new BackendRoute(w.Route,w.Id,observed.Instances.Single(i=>i.Id==w.Id).Endpoint)).ToArray());
             }finally{publication.Release();}
         }
         async Task PrepareStations()

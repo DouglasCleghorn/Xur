@@ -35,6 +35,9 @@ and [multiseat validation](docs/architecture/multiple-workstations.md).
 - **Serve and test models.** Browse downloaded models, scan attached storage, copy
   active LLM endpoint URLs, test chat, and retain benchmark results with workload
   and sampled VRAM context. Model data persists between reboots.
+- **Run T3 Code.** Keep coding projects and sessions in a persistent workload,
+  then connect a phone or desktop with a pairing link or QR code from Xur.
+  See [T3 Code](docs/usage/t3-code.md).
 - **Manage the host.** Monitor GPUs, NVLink, storage and network usage; browse files;
   configure time, HF credentials, API keys, and backups; apply app and OS updates.
 - **Prepare an XLeRobot.** A Robotics workload provides local calibration,
