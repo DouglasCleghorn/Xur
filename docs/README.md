@@ -26,6 +26,11 @@ Xur remains a preview; implemented behavior and hardware validation are separate
 
 ## Implementation and validation status
 
+The proposed [Persisted Compute section](development/persisted-compute.md) has an
+interactive design preview. Its service lifecycle, shared GPU access, Robotics
+coexistence and easy Tailscale HTTPS are not implemented. Scheduling is deferred;
+the design records settled product decisions, engineering work and validation.
+
 - Individual controllers on one Xbox Wireless Adapter can be assigned to separate
   workstations, with multiple controllers per desktop. Source tests cover device
   isolation and stable reconnect identities; physical acceptance remains open.
