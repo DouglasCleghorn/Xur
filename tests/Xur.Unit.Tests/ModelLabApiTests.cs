@@ -15,7 +15,7 @@ static class ModelLabApiTests
         var workload=new Workload("1","API model",recipe,[],"api");var instance=new RuntimeInstance("1",workload.Fingerprint,"first",1,"boot","http://127.0.0.1:19000","running",[]);
         var profile=new Profile("1","Test",1,[workload]);var state=new ProfileState([profile],profile,new("1",[],[instance]),null);
         using var engine=new HttpClient(new Handler()){BaseAddress=new Uri("http://localhost")};
-        var lab=new ModelLab(directory,()=>Task.FromResult(state),()=>Task.FromResult(new[]{new BackendRoute("api","1",instance.Endpoint)}),_=>Task.FromResult(new GpuTelemetrySnapshot(DateTimeOffset.UtcNow,[])),new(engine),new());
+        var lab=new ModelLab(directory,()=>Task.FromResult(state),()=>Task.FromResult(new[]{new BackendRoute("api","1",instance.Endpoint)}),_=>Task.FromResult(new GpuTelemetrySnapshot(DateTimeOffset.UtcNow,[])),new(engine),new(),metrics:new(new HttpClient(new TelemetryTests.Handler()){BaseAddress=new Uri("http://metrics")}));
         var builder=WebApplication.CreateBuilder();builder.Logging.ClearProviders();builder.WebHost.ConfigureKestrel(k=>k.Listen(IPAddress.Loopback,0));
         await using var app=builder.Build();app.MapModelLab(lab,false);await app.StartAsync();using var http=new HttpClient{BaseAddress=new Uri(app.Urls.Single())};
         try
@@ -24,10 +24,21 @@ static class ModelLabApiTests
             var invalid=await http.PostAsJsonAsync("/api/benchmarks",new LabRequest("1","hello",Concurrency:9));check(invalid.StatusCode==HttpStatusCode.Conflict,"Benchmark API returns validation failures without starting a job");
             var response=await http.PostAsJsonAsync("/api/benchmarks",new LabRequest("1","hello",1,1,Warmup:false));var run=(await response.Content.ReadFromJsonAsync<LabRun>())!;
             check(response.StatusCode==HttpStatusCode.Accepted,"Benchmark API acknowledges durable background work");
-            for(var i=0;i<100&&lab.Get(run.Id)?.State=="Running";i++)await Task.Delay(10);
+            for(var i=0;i<100&&(await lab.Get(run.Id))?.State=="Running";i++)await Task.Delay(10);
             var list=await http.GetFromJsonAsync<LabSummary[]>("/api/benchmarks");check(list?.Single().State=="Completed","Benchmark API exposes completed saved history");
             using var export=await http.GetAsync("/api/benchmarks/"+run.Id+"/export");using var content=JsonDocument.Parse(await export.Content.ReadAsStringAsync());
             check(export.Content.Headers.ContentDisposition?.DispositionType=="attachment"&&content.RootElement.GetProperty("run").GetProperty("settings").GetProperty("prompt").GetString()=="hello","JSON export is a downloadable artifact with original benchmark settings");
+            for(var i=0;i<100&&!File.Exists(BenchmarkResults.PathFor(directory,run.Id));i++)await Task.Delay(10);
+            var reopenedBuilder=WebApplication.CreateBuilder();reopenedBuilder.Logging.ClearProviders();reopenedBuilder.WebHost.ConfigureKestrel(k=>k.Listen(IPAddress.Loopback,0));
+            await using(var reopened=reopenedBuilder.Build())
+            using(var offline=new HttpClient(new TelemetryTests.Handler{Offline=true}){BaseAddress=new Uri("http://metrics")})
+            {
+                var saved=new ModelLab(directory,()=>Task.FromResult(state),()=>Task.FromResult(Array.Empty<BackendRoute>()),_=>Task.FromResult(new GpuTelemetrySnapshot(DateTimeOffset.UtcNow,[])),new(engine),new(),metrics:new(offline));
+                reopened.MapModelLab(saved,false);await reopened.StartAsync();using var restoredHttp=new HttpClient{BaseAddress=new Uri(reopened.Urls.Single())};
+                using var savedExport=await restoredHttp.GetAsync("/api/benchmarks/"+run.Id+"/export");using var savedJson=JsonDocument.Parse(await savedExport.Content.ReadAsStringAsync());
+                check(savedExport.StatusCode==HttpStatusCode.OK&&savedJson.RootElement.GetProperty("run").GetProperty("responses").GetArrayLength()==1,"Existing JSON export remains usable after recreation with the telemetry backend offline");
+                await reopened.StopAsync();
+            }
             var reply=await http.PostAsJsonAsync("/api/model-lab/chat",new LabChatRequest("1",[new("user","hello")]));var events=(await reply.Content.ReadAsStringAsync()).Split('\n',StringSplitOptions.RemoveEmptyEntries).Select(x=>JsonDocument.Parse(x)).ToArray();
             try{check(reply.Content.Headers.ContentType?.MediaType=="application/x-ndjson"&&events[0].RootElement.GetProperty("type").GetString()=="delta"&&events[^1].RootElement.GetProperty("type").GetString()=="result","Chat API streams text updates followed by measured results");}finally{foreach(var e in events)e.Dispose();}
             check((await http.GetAsync("/api/benchmarks/not-an-id/export")).StatusCode==HttpStatusCode.NotFound,"Unknown benchmark exports return 404");

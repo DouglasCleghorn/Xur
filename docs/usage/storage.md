@@ -2,7 +2,10 @@
 
 Open Storage from the desktop navigation or More → Storage on phones. It shows
 capacity, used and available space for local mounted filesystems, folder usage,
-and physical disks including unmounted disks. Bind mounts of the same filesystem
+and physical disks including unmounted disks. The unified **Disks & mounts** table
+places each filesystem beside its observed backing disks and their capacities.
+Shared filesystems appear once; disks can appear on more than one filesystem row.
+Scroll the table horizontally on narrow screens to view all columns. Bind mounts of the same filesystem
 are grouped so they are not counted repeatedly. Available space is reported by
 the filesystem and may exclude reserved blocks.
 
@@ -12,10 +15,11 @@ settings/state. These are allocated-block measurements, not download sizes. Shar
 data, snapshots, filesystem metadata and other OS files mean these categories are
 not an exact partition of total filesystem usage. Hardlinked model files are
 counted once within the model category. Directory scans do not follow symlinks or
-cross filesystem boundaries; separate filesystems still appear in capacity cards.
+cross filesystem boundaries; separate filesystems still appear in the table.
 
-Measurements run in the privileged agent as background read-only metadata scans,
-cached for five minutes. Opening the page immediately returns the last snapshot
+Disk metadata and endurance are sampled by the privileged agent every five
+minutes, even with no viewers, and stored in local VictoriaMetrics. Page requests
+reuse this cache; folder and volume size scans remain on demand. Opening the page immediately returns the last snapshot
 while a new scan runs. Refresh usage requests a scan without starting concurrent
 scans. The page polls while scanning and keeps disclosure panels open until the
 operator closes them. Errors are shown as unavailable, never as an invented zero.
@@ -25,6 +29,37 @@ Authenticated API: `GET /api/storage/usage`,
 `POST /api/storage/usage/refresh`. Cookie mutations require CSRF; authenticated
 bearer clients use the same API. Installer mode disables these installed-system
 endpoints.
+
+## Write endurance remaining
+
+The disk table shows the SMART estimate of remaining write endurance when
+reported. Percent remaining is `max(0, 100 - percentage used)`; this is a wear
+indicator, not a prediction of failure or a guarantee of data integrity. Missing
+readings are omitted from the table, not displayed as zero. Available spare blocks and free
+filesystem space are not used as endurance measurements.
+
+Remaining bytes are displayed in humanized binary units only if explicitly
+reported by the drive. Standard SMART wear readings do not provide this value,
+so only the percentage is shown. A disk with no reported endurance has a blank
+endurance cell. Xur does
+not extrapolate bytes from lifetime writes and wear, consult a model/TBW lookup,
+or substitute a lifetime endurance rating for a remaining budget.
+
+The agent reads the host's `smartctl` JSON during its existing five-minute cached
+scan, with a 15-second per-device timeout. No SMART tests or writes are started;
+rotating or unidentified media are skipped. Supported SSD queries include a
+standby check. Unsupported bridges, a missing tool, and failed reads remain
+available in the API without preventing filesystem usage from loading. This is a current
+snapshot in the UI; full-resolution disk capacity, filesystem used/available
+space and reported endurance are retained in VictoriaMetrics. Missing endurance
+values are omitted from history too. The existing RAM buffer handles write
+outages; failures and dropped samples appear in a Storage-page alert.
+
+Smartmontools 7.5 supplies normalized ATA/SCSI/NVMe endurance fields; standard
+NVMe and SCSI fields from older versions are also supported. ATA vendor attribute
+IDs are not interpreted independently. See the upstream
+[NVMe JSON fields](https://github.com/smartmontools/smartmontools/blob/main/src/nvmeprint.cpp)
+and [normalized ATA fields](https://github.com/smartmontools/smartmontools/blob/main/src/ataprint.cpp).
 
 ## SSD TRIM
 

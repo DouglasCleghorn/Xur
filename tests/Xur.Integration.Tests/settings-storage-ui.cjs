@@ -29,6 +29,15 @@ const fs=require('fs'),assert=require('assert/strict');
   await page.goto('https://settings.test/storage');assert.equal(await page.getByRole('button',{name:'Trim SSD',exact:true}).count(),1);
   assert.equal(await page.locator('form[action="/storage/trim"] input[name=id]').inputValue(),'ssd');
   await page.getByText('Read only',{exact:true}).waitFor();assert.equal(mutations,0);
+  const table=page.locator('.storage-table');assert.equal(await table.count(),1);assert.equal(await page.locator('.storage-filesystems').count(),0);
+  assert.equal(await table.locator('tbody tr').count(),3);assert((await table.innerText()).includes('USB archive'));
+  assert(!(await table.innerText()).includes('estimated'));assert((await table.innerText()).includes('80% remaining'));
+  assert((await table.innerText()).includes('100% remaining'));assert(!(await table.innerText()).includes('Remaining bytes not reported'));
+  assert.equal((await table.locator('tbody tr').nth(2).locator('td').nth(3).innerText()).trim(),'');
+  await table.locator('summary').click();assert((await table.innerText()).includes('/etc/ostree/deploy/default/'));
+  assert(await table.locator('meter').first().getAttribute('value')==='128849018880');
+  if(width<720)assert(await page.locator('.storage-table-scroll').evaluate(e=>e.scrollWidth>e.clientWidth),'Narrow screens retain a locally scrollable table');
+
   assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),'Storage overflow at '+width);
   await page.screenshot({path:'.build/fast/control-panel/storage-'+width+'.png',fullPage:true});
  }

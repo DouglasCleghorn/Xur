@@ -23,6 +23,8 @@ if(args is ["--website-render",var websiteOutput]) { await ControlPanelRender.Ru
 if(args is ["--console-overlay-render",var overlayOutput]) { ConsoleKeyboardOverlayTests.Capture(overlayOutput);return; }
 var results = new List<string>();
 void Check(bool value,string name) { if(!value) throw new Exception(name); results.Add(name); }
+if(args is ["--telemetry"]){await TelemetryTests.Run(Check);await ModelLabTests.Run(Check);await ModelLabApiTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="Telemetry",passed=results}));return;}
+if(args is ["--telemetry-server",var telemetrySocket]){using var metricsHttp=Xur.IO.HttpClients.Unix(telemetrySocket,TimeSpan.FromSeconds(30));var store=new VictoriaMetrics(metricsHttp);await TelemetryTests.Run(Check,store);await ModelLabTests.Run(Check,store);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="VictoriaMetrics",passed=results}));return;}
 if(args is ["--manager-account"]){AccountTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ManagerAccount",passed=results}));return;}
 if(args is ["--robotics"]){await RoboticsTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="Robotics",passed=results}));return;}
 if(args is ["--installer-progress",var installerOutput]){InstallationDiagnosticsTests.Run(Check);await ConsoleSetupTests.Run(Check,installerOutput);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="InstallerProgressLayout",passed=results}));return;}
@@ -33,6 +35,7 @@ if(args is ["--model-catalog"]){await ModelCatalogTests.Run(Check);await Checkpo
 if(args is ["--diagnostic-access"]){await DiagnosticAccessTests.Run(Check,validateOpenSsh:true);ApiKeyTests.Run(Check);await InstallerDiagnosticSshTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="DiagnosticAccess",passed=results}));return;}
 if(args is ["--station-controllers"]){StationControllerTests.Run(Check);await StationIdentityTests.Run(Check);await ParallelLoadTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="StationControllers",passed=results}));return;}
 if(args is ["--t3-code"]){await T3CodeTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="T3Code",passed=results}));return;}
+await TelemetryTests.Run(Check);
 await T3CodeTests.Run(Check);
 await DiagnosticAccessTests.Run(Check);
 await RoboticsTests.Run(Check);
@@ -216,6 +219,7 @@ try{
 var filesystemJson="""
 {"filesystems":[{"source":"/dev/vda3[/ostree/var]","target":"/var","fstype":"btrfs","size":1000,"used":400,"avail":500},{"source":"/dev/vda3","target":"/sysroot","fstype":"btrfs","size":1000,"used":400,"avail":500},{"source":"tmpfs","target":"/run","fstype":"tmpfs","size":800,"used":200,"avail":600},{"source":"/dev/vdb1","target":"/mnt/data","fstype":"xfs","size":2000,"used":800,"avail":1200}]}
 """;
+await StorageUsageTests.Run(Check);
 var storageFilesystems=Xur.Agent.StorageUsage.Filesystems(filesystemJson);
 Check(storageFilesystems.Length==2 && storageFilesystems[0].Source=="/dev/vda3" && storageFilesystems[0].Mounts.Length==2 && storageFilesystems.Sum(f=>f.Bytes)==3000,"Storage deduplicates bind-mounted system filesystems and excludes RAM disks");
 Check(storageFilesystems[0].Used==400 && storageFilesystems[0].Available==500,"Available space remains observed rather than pretending reserved blocks are free");

@@ -35,7 +35,7 @@ public sealed class Storage(Func<Task<JsonElement[]>>? nodesObserver=null,Func<s
     public static async Task<JsonElement[]> Nodes()
     {
         var result = await Processes.Run("lsblk", ["--json", "--bytes", "--paths", "--output",
-            "NAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,RO,FSTYPE,MOUNTPOINTS,UUID,PARTUUID,LABEL"]);
+            "NAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,RO,ROTA,FSTYPE,MOUNTPOINTS,UUID,PARTUUID,LABEL"]);
         if (result.ExitCode != 0) throw new IOException("Storage inventory failed");
         using var doc = JsonDocument.Parse(result.Output);
         return doc.RootElement.GetProperty("blockdevices").EnumerateArray().Select(n => n.Clone()).ToArray();

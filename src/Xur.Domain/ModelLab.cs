@@ -7,5 +7,5 @@ public record LabRunningWorkload(string Id,string Name,string Kind,string Engine
 public record LabContext(DateTimeOffset At,string? Profile,string Bundle,LabRunningWorkload[] Workloads,GpuDevice[] Gpus);
 public record LabSample(DateTimeOffset At,GpuTelemetry[] Gpus,string? Error=null,LabRunningWorkload[]? Workloads=null);
 public record LabResponse(int Number,bool Warmup,DateTimeOffset Started,double DurationMs,double? FirstTokenMs,int? InputTokens,int? OutputTokens,string Text,string Reasoning,string? FinishReason,string? Error=null);
-public record LabRun(string Id,string State,DateTimeOffset Started,DateTimeOffset? Finished,LabRequest Settings,LabTarget Target,LabContext Context,LabContext? EndContext,LabSample[] Samples,LabResponse[] Responses,string? Error=null);
+public record LabRun(string Id,string State,DateTimeOffset Started,DateTimeOffset? Finished,LabRequest Settings,LabTarget Target,LabContext Context,LabContext? EndContext,LabSample[] Samples,LabResponse[] Responses,string? Error=null,int TelemetryVersion=0,Dictionary<string,double?>? PeakVramMiB=null);
 public record LabSummary(string Id,string State,DateTimeOffset Started,string Model,int Completed,int Requested,double? MeanFirstTokenMs,double? OutputTokensPerSecond,Dictionary<string,double?> PeakVramMiB,string? Error);

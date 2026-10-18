@@ -19,7 +19,9 @@ static class ControlPanelRender
         agent.MapGet("/system",()=>new SystemSnapshot(12,32L<<30,128L<<30,400L<<30,1000L<<30,1234,[]));
         var gpu=new GpuDevice("0000:01:00.0","NVIDIA","NVIDIA GeForce RTX 3090","nvidia","",24576,[],[]);
         agent.MapGet("/gpu-telemetry",()=>new GpuTelemetrySnapshot(DateTimeOffset.UtcNow,Enumerable.Range(1,4).Select(n=>new GpuTelemetry(gpu with{Pci=$"0000:0{n}:00.0"},"test",new(DateTimeOffset.UtcNow,MemoryUsedMiB:n==4?null:n*4096,MemoryTotalMiB:24576),[],[])).ToArray()));
-        agent.MapGet("/storage-usage",()=>new StorageUsageSnapshot(DateTimeOffset.UtcNow,false,[new("/dev/nvme0n1p2","btrfs",["/"],500L<<30,120L<<30,380L<<30)],[new("/dev/nvme0n1","System SSD",500L<<30,["/dev/nvme0n1p2"],["/"]),new("/dev/sda","USB archive",2L<<40,[],[])],[]));
+        agent.MapGet("/storage-usage",()=>new StorageUsageSnapshot(DateTimeOffset.UtcNow,false,
+            [new("/dev/nvme0n1p2","btrfs",["/","/var","/sysroot","/etc/ostree/deploy/default/"+new string('a',64)],500L<<30,120L<<30,380L<<30),new("/dev/mapper/data","xfs",["/data"],1L<<40,200L<<30,824L<<30)],
+            [new("/dev/nvme0n1","System SSD",500L<<30,["/dev/nvme0n1p2"],["/","/var"],new(80)),new("/dev/nvme1n1","Data SSD",1L<<40,["/dev/dm-0"],["/data"],new(100)),new("/dev/sda","USB archive",2L<<40,[],[],new(UnavailableReason:"Write endurance not reported"))],[]));
         agent.MapGet("/timezone",()=>new TimezoneStatus("America/Denver",["UTC","America/Denver"],true));
         agent.MapGet("/network/settings",()=>new NetworkSettingsStatus([new("eno1","02:00:00:00:00:10","Connected",["192.0.2.10/24"],"uuid",new("manual",["192.0.2.10/24"],"192.0.2.1",["192.0.2.53"]),new("auto"),true)],null));
         WifiStatus? wifi=new(true,true,[new("wlan0","02:00:00:00:00:30","disconnected",null,"/device/1","Example Wi-Fi adapter","example_wifi","1.0"),new("wlan1","02:00:00:00:00:31","disconnected",null,"/device/2","USB Wi-Fi adapter","example_usb","1.0")]);

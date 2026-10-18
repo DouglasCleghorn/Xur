@@ -46,3 +46,26 @@ Original Xur code and documentation are MIT licensed under the root `LICENSE`.
 Preserve third-party copyright and license notices. Do not relabel dependencies,
 OS packages or model weights as MIT. Keep Xur’s license and `docs/licensing.md`
 in shipped bundles, and the font’s OFL notice in the website output.
+
+## Telemetry storage
+
+Use the local VictoriaMetrics instance for numeric time-series history, including
+hardware monitoring, network measurements and sampled benchmark telemetry. Extend
+the shared `VictoriaMetrics` client/codec for new collectors; do not introduce
+JSON history rewrites, bespoke compressed logs, Avro/Parquet histories or a second
+time-series database. Keep full-resolution samples and full precision, use bounded
+labels and RAM buffers, and make backend outages and dropped samples visible.
+Preserve the buffered-write settings unless the task explicitly changes the
+SSD-wear/durability tradeoff. Migrations must verify imported readings and make
+them durable before marking completion; retain the original data for recovery.
+Configuration, operational records, benchmark descriptions/results, application
+logs, and robotics recordings/datasets remain in their appropriate document,
+logging or dataset stores. Benchmarks must also keep a permanent, self-contained,
+losslessly compressed result file with settings, responses, summary, context and
+full sampled telemetry. These completed-run artifacts are an explicit exception
+to the telemetry-only storage rule: they must remain readable independently of
+VictoriaMetrics availability or retention, and must not be routinely rewritten
+or automatically expired. Short-lived windows used only to compute live control
+or diagnostic values can remain in memory; retained/graphable history uses
+VictoriaMetrics. See `docs/development/telemetry.md` for the boundary,
+service lifecycle, schema, retention and validation commands.

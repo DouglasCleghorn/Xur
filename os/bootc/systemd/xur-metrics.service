@@ -1,0 +1,21 @@
+[Unit]
+Description=Xur VictoriaMetrics telemetry storage
+After=local-fs.target
+PartOf=xur-agent.service
+ConditionKernelCommandLine=!xur.installer=1
+
+[Service]
+ExecStart=/var/lib/xur/app/current/agent/victoriametrics/victoria-metrics-prod -httpListenAddr=unix:/run/xur-metrics/metrics.sock -storageDataPath=/var/lib/xur/metrics -retentionPeriod=12 -inmemoryDataFlushInterval=30m -precisionBits=64 -dedup.minScrapeInterval=1ms -memory.allowedBytes=128MiB -search.disableCache -snapshotsMaxAge=1d -loggerLevel=WARN
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+RuntimeDirectory=xur-metrics
+RuntimeDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/xur/metrics
+StandardOutput=null
+StandardError=journal
