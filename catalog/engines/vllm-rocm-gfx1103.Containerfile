@@ -1,7 +1,7 @@
 # Native Radeon 780M stack. Keep the source, AMD wheels and local image tag aligned.
 # https://github.com/ROCm/TheRock/blob/main/RELEASES.md
 # vLLM 0.31.0 ROCm base; its CPU-only Rust frontend matches the source below.
-FROM mirror.gcr.io/vllm/vllm-openai-rocm@sha256:749f6f3f944f12af49966ac523c1f8573e4b229594b541954bd5f879b4496b1f
+FROM mirror.gcr.io/vllm/vllm-openai-rocm@sha256:14f6a575e1fb0a580b0f633c09e06f648709d60405b85f6a7ff3f80d49f39905
 RUN uv pip uninstall --system torch torchvision torchaudio triton && \
     uv pip install --system --index-url https://stable.repo.amd.com/rocm/whl-next/ --extra-index-url https://pypi.org/simple/ --index-strategy unsafe-best-match \
     "torch[device-gfx1103]==2.13.0+rocm10.0.0" "torchvision[device-gfx1103]==0.28.0+rocm10.0.0" "torchaudio==2.11.0.2+rocm10.0.0" "triton==3.8.0+git4cff872c.rocm10.0.0" "rocm[devel]==10.0.0"
