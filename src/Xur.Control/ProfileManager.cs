@@ -71,11 +71,13 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
             if(current.Revision!=revision)throw new InvalidOperationException("This profile changed. Reload before saving.");
             if(selections.Length>32)throw new InvalidOperationException("Use at most 32 workloads.");
             var known=(store.Get<Profile>("active","current")?.Workloads ?? []).Concat(store.List<Profile>("profile").SelectMany(p=>p.Workloads)).ToArray();
+            var observed=await runtime.Observe();
             var definitions=new List<StationDefinition>();var workloads=new List<Workload>();var used=new HashSet<string>();
             foreach(var selection in selections)
             {
                 if(string.IsNullOrEmpty(selection.Recipe))continue;
                 var recipe=catalog?.Recipes.SingleOrDefault(r=>r.Id==selection.Recipe) ?? throw new InvalidOperationException("Select a recipe.");
+                recipe=RecipeGpuSelection.Select(recipe,selection.Gpus,observed.Gpus);
                 var old=current.Workloads.SingleOrDefault(w=>w.Id==selection.Id);
                 if(!string.IsNullOrEmpty(selection.Id) && old==null)throw new InvalidOperationException("Reload the workload selection.");
                 if(old!=null && old.Recipe.Kind!=recipe.Kind)old=null;
@@ -102,7 +104,7 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
                 workloads.Add(candidate with {Id=key,Route=old?.Route ?? "workload-"+key});
             }
             var next=current with {Name=name?.Trim()??current.Name,Revision=current.Revision+1,Workloads=workloads.ToArray()};
-            ProfilePolicy.Validate(next,await runtime.Observe());await ValidateUsers(next);store.Save(next,definitions.ToArray());return next;
+            ProfilePolicy.Validate(next,observed);await ValidateUsers(next);store.Save(next,definitions.ToArray());return next;
         }finally{gate.Release();}
     }
     bool PeripheralHandoff(Profile target,RuntimeObservation observed)

@@ -143,23 +143,54 @@
   if(!rows.querySelector('.station-primary:checked:not(:disabled)'))row.querySelector('.station-primary').checked=true;
   usbChoices(row);
  }
- function gpus(row){
-  const recipe=row.querySelector('[name=recipe]').selectedOptions[0],group=row.querySelector('.gpu-choices');
-  const count=Number(recipe?.dataset.gpus??0);
+ function adjustable(recipe){return recipe?.dataset.engine==='Unsloth'||recipe?.dataset.engine==='llama.cpp';}
+ function gpus(row,count){
+  const recipe=row.querySelector('[name=recipe]').selectedOptions[0],group=row.querySelector('.gpu-choices'),flexible=adjustable(recipe);
+  count=count??Number(recipe?.dataset.gpus??0);
+  if(flexible)recipe.dataset.gpus=String(count);
   while(group.children.length>count)group.lastElementChild.remove();
-  while(group.children.length<count){
-   const label=document.querySelector('#gpu-template').content.firstElementChild.cloneNode(true);
-   label.firstChild.textContent='GPU '+(group.children.length+1);group.append(label);
-  }
-  group.querySelectorAll('select').forEach(select=>{
-   for(const option of select.options)option.hidden=!!option.value&&(recipe.dataset.kind==='Workstation'?option.dataset.display!=='true':option.dataset.compute!=='true'||option.dataset.vendor!==recipe.dataset.vendor||Number(option.dataset.memory)<Number(recipe.dataset.memory));
-   if(select.selectedOptions[0]?.hidden){select.value='';select.dispatchEvent(new Event('change'));}
-   if(!select.value){const assigned=[...rows.querySelectorAll('.gpu-choices select')].filter(s=>s!==select).map(s=>s.value);const available=[...select.options].find(o=>o.value&&!o.hidden&&!assigned.includes(o.value));if(available){select.value=available.value;select.dispatchEvent(new Event('change'));}}
+  while(group.children.length<count)group.append(document.querySelector('#gpu-template').content.firstElementChild.cloneNode(true));
+  const selectors=[...group.querySelectorAll('select')],unsloth=recipe?.dataset.engine==='Unsloth';
+  selectors.forEach((select,index)=>{
+   const label=select.closest('label');label.firstChild.textContent='GPU '+(index+1);
+   const others=[...rows.querySelectorAll('.gpu-choices select')].filter(s=>s!==select).map(s=>s.value);
+   const peerVendor=selectors.find(s=>s!==select&&s.value)?.selectedOptions[0]?.dataset.vendor;
+   for(const option of select.options){
+    const vendor=unsloth?'NVIDIA':peerVendor;
+    option.hidden=!!option.value&&(recipe.dataset.kind==='Workstation'?option.dataset.display!=='true':option.dataset.compute!=='true'||(flexible?vendor&&option.dataset.vendor!==vendor:option.dataset.vendor!==recipe.dataset.vendor||Number(option.dataset.memory)<Number(recipe.dataset.memory)));
+    option.disabled=!!option.value&&others.includes(option.value);
+   }
+   if(!flexible&&select.selectedOptions[0]?.hidden){select.value='';select.dispatchEvent(new Event('change'));}
+   if(!select.value){
+    const available=[...select.options].filter(o=>o.value&&!o.hidden&&!o.disabled);
+    const preferred=available.find(o=>o.dataset.vendor===recipe.dataset.vendor)??available[0];
+    if(preferred){select.value=preferred.value;select.dispatchEvent(new Event('change'));}
+   }
    enhance(select);
+   select.nextElementSibling.querySelector('[role=combobox]').setAttribute('aria-label','GPU '+(index+1));
+   const remove=select.closest('.gpu-choice').querySelector('.remove-gpu');remove.hidden=!flexible;remove.disabled=unsloth&&count<=1;remove.setAttribute('aria-label','Remove GPU '+(index+1));
   });
+  const actions=row.querySelector('.gpu-actions');actions.hidden=!flexible;
+  if(flexible){
+   const vendor=unsloth?'NVIDIA':selectors.find(s=>s.value)?.selectedOptions[0]?.dataset.vendor;
+   const assigned=[...rows.querySelectorAll('.gpu-choices select')].map(s=>s.value);
+   const available=[...document.querySelector('#gpu-template').content.querySelectorAll('option')].some(o=>o.value&&o.dataset.compute==='true'&&(!vendor||o.dataset.vendor===vendor)&&!assigned.includes(o.value));
+   actions.querySelector('.add-gpu').disabled=count>=16||!available;
+   actions.querySelector('.gpu-mode').textContent=count===0?'Runs on CPU.':unsloth?'At least one NVIDIA GPU required.':'Use GPUs from the same vendor.';
+  }
   row.querySelector('.gpu-empty').hidden=!(recipe?.dataset.kind==='Workstation' && count>0 && ![...group.querySelectorAll('option')].some(o=>o.value&&!o.hidden&&!o.disabled));
   renumber();hint(row);
  }
+ function refreshGpus(){for(const row of rows.children)gpus(row);}
+ form.addEventListener('click',event=>{
+  const button=event.target.closest('.add-gpu,.remove-gpu');if(!button||button.disabled)return;
+  const row=button.closest('.workload-editor'),recipe=row.querySelector('[name=recipe]').selectedOptions[0];if(!adjustable(recipe))return;
+  const group=row.querySelector('.gpu-choices');let count=group.children.length;
+  if(button.matches('.add-gpu')){if(count>=16)return;count++;}
+  else{if(recipe.dataset.engine==='Unsloth'&&count<=1)return;button.closest('.gpu-choice').remove();count--;}
+  gpus(row,count);refreshGpus();error(row,'');
+  if(button.matches('.add-gpu'))group.lastElementChild.querySelector('[role=combobox]').focus();else row.querySelector('.add-gpu').focus();
+ });
  function filterRecipes(row){
   const engine=row.querySelector('.catalog-engine').value,select=row.querySelector('[name=recipe]'),station=engine==='Workstation';
   row.querySelector('.recipe-label').textContent=station?'Workstation':engine==='Unsloth'?'Unsloth server':engine==='T3 Code'?'T3 Code server':engine==='Podman'?'Container':engine==='XLeRobot'?'Robot':'Model';
@@ -180,7 +211,7 @@
   select.dispatchEvent(new CustomEvent('choices-changed'));
  }
  function initialize(row){filterRecipes(row);row.querySelectorAll('select').forEach(enhance);gpus(row);}
- rows.querySelectorAll('.workload-editor').forEach(initialize);
+ rows.querySelectorAll('.workload-editor').forEach(initialize);refreshGpus();
  async function modelOptions(row,model){
   const select=row.querySelector('[name=recipe]'),engine=row.querySelector('.catalog-engine').value,version=String(++counter);row.dataset.request=version;
   const group=row.querySelector('.model-options');group.replaceChildren();row.querySelector('.gpu-choices').replaceChildren();error(row,'Loading model options…');
@@ -189,17 +220,18 @@
    const variantLabel=document.createElement('label');variantLabel.append('Model format');const variant=document.createElement('select');variant.dataset.placeholder='Search formats…';
    for(const v of options.variants)variant.add(new Option(v.name+' · '+(v.bytes/1024**3).toFixed(1)+' GiB',v.id));variantLabel.append(variant);
    const deviceLabel=document.createElement('label');deviceLabel.append('Run on');const device=document.createElement('select');device.dataset.placeholder='Search devices…';
-   for(const [value,label] of [['Auto','Automatic'],['CPU','CPU'],['NVIDIA','NVIDIA GPUs'],['AMD','AMD GPUs'],['Intel','Intel GPUs']])device.add(new Option(label,value));deviceLabel.append(device);group.append(variantLabel,deviceLabel);enhance(variant);enhance(device);
+   for(const [value,label] of [['Auto','Automatic'],['CPU','CPU'],['NVIDIA','NVIDIA GPUs'],['AMD','AMD GPUs'],['Intel','Intel GPUs']])device.add(new Option(label,value));deviceLabel.append(device);group.append(variantLabel);enhance(variant);if(engine!=='llama.cpp'){group.append(deviceLabel);enhance(device);}
    let resolveVersion=0;
    async function resolve(){
     const revision=++resolveVersion;row.dataset.resolving='true';error(row,'Preparing model…');
     if(![...select.options].some(o=>o.value==='hub:'+model))select.add(new Option(model,'hub:'+model));select.value='hub:'+model;
     try{
-     const recipe=await api('resolve',{model,revision:options.revision,variant:variant.value,engine,device:device.value});if(revision!==resolveVersion||row.dataset.request!==version)return;
+     const recipe=await api('resolve',{model,revision:options.revision,variant:variant.value,engine,device:engine==='llama.cpp'?'CPU':device.value});if(revision!==resolveVersion||row.dataset.request!==version)return;
      let option=[...select.options].find(o=>o.value===recipe.id);if(!option){option=new Option(recipe.name,recipe.id);select.add(option);}
-     Object.assign(option.dataset,{engine,kind:recipe.kind,gpus:recipe.gpuCount,vendor:recipe.vendor,memory:recipe.memoryMiB});select.value=recipe.id;
+     const count=engine==='llama.cpp'?row.querySelectorAll('.gpu-choices select').length:recipe.gpuCount;
+     Object.assign(option.dataset,{engine,kind:recipe.kind,gpus:count,vendor:recipe.vendor,memory:recipe.memoryMiB});select.value=recipe.id;
      // Restore the displayed selection without triggering another metadata fetch.
-     select.dispatchEvent(new CustomEvent('catalog-resolved'));gpus(row);error(row,'');
+     select.dispatchEvent(new CustomEvent('catalog-resolved'));gpus(row);refreshGpus();error(row,'');
     }catch(e){if(revision===resolveVersion&&row.dataset.request===version)error(row,e.message);}
     finally{if(revision===resolveVersion&&row.dataset.request===version)delete row.dataset.resolving;}
    }
@@ -208,6 +240,7 @@
  }
  form.addEventListener('change',event=>{
   const row=event.target.closest('.workload-editor');if(!row)return;
+  if(event.target.closest('.gpu-choices'))refreshGpus();
   if(event.target.matches('.station-primary')){
    if(event.target.checked)rows.querySelectorAll('.station-primary').forEach(input=>{if(input!==event.target)input.checked=false;});
    for(const row of rows.children)usbChoices(row);
@@ -223,22 +256,27 @@
    row.dataset.request=String(++counter);delete row.dataset.resolving;
    const select=row.querySelector('[name=recipe]');select.value='';
    select.querySelectorAll('[data-remote]').forEach(option=>option.remove());
-   row.querySelector('.model-options').replaceChildren();error(row,'');filterRecipes(row);gpus(row);
+   row.querySelector('.model-options').replaceChildren();error(row,'');filterRecipes(row);gpus(row);refreshGpus();
    if(event.target.value==='Workstation')defaultPrimary(row);
   }
   if(event.target.name==='recipe'){
    if(event.target.value.startsWith('hub:'))modelOptions(row,event.target.value.slice(4));
-   else{row.dataset.request=String(++counter);delete row.dataset.resolving;row.querySelector('.model-options').replaceChildren();error(row,'');gpus(row);}
+   else{row.dataset.request=String(++counter);delete row.dataset.resolving;row.querySelector('.model-options').replaceChildren();error(row,'');gpus(row);refreshGpus();}
   }
  });
  form.addEventListener('submit',event=>{
   if(!finishRename(true)){event.preventDefault();return;}
+  const selected=new Set();
+  for(const row of rows.children)for(const select of row.querySelectorAll('.gpu-choices select')){
+   if(!select.value||select.selectedOptions[0]?.hidden||selected.has(select.value)){event.preventDefault();error(row,'Select a different compatible GPU for each GPU row.');select.nextElementSibling.querySelector('[role=combobox]').focus();return;}
+   selected.add(select.value);
+  }
   if([...rows.children].some(row=>row.dataset.resolving||row.querySelector('[name=recipe]').value.startsWith('hub:'))){event.preventDefault();const row=[...rows.children].find(row=>row.dataset.resolving||row.querySelector('[name=recipe]').value.startsWith('hub:'));error(row,'Choose a model format that can run on this machine before saving.');}
  });
- form.addEventListener('click',event=>{if(event.target.matches('.remove-workload')){event.target.closest('.workload-editor').remove();renumber();}});
+ form.addEventListener('click',event=>{if(event.target.matches('.remove-workload')){event.target.closest('.workload-editor').remove();renumber();refreshGpus();}});
  document.querySelector('#add-workload').addEventListener('click',()=>{
   const row=template.cloneNode(true);row.querySelector('[name=workloadId]').value='';row.querySelector('[name=stationId]').value='';row.querySelector('[name=stationName]').value='';row.querySelectorAll('.station-devices input').forEach(input=>input.checked=false);row.querySelector('[name=recipe]').value='';row.querySelector('.catalog-engine').value='Workstation';row.querySelector('[name=stationUser] option[value=legacy]')?.remove();row.querySelector('[name=stationUser]').value='temporary';
-  row.querySelector('.gpu-choices').replaceChildren();row.querySelector('.model-options').replaceChildren();rows.append(row);initialize(row);defaultPrimary(row);renumber();
+  row.querySelector('.gpu-choices').replaceChildren();row.querySelector('.model-options').replaceChildren();rows.append(row);initialize(row);defaultPrimary(row);renumber();refreshGpus();
   row.querySelector('.catalog-engine').nextElementSibling.querySelector('[role=combobox]').focus();
  });
 })();

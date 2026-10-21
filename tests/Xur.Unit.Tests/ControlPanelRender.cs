@@ -98,6 +98,18 @@ static class ControlPanelRender
                 html=html.Replace("<div id=\"workload-rows\"", "<input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"fixture-only\"><div id=\"workload-rows\"");
                 await File.WriteAllTextAsync(Path.Combine(output,"profile-edit-"+fixture+".html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><script src='/app-fetch.js'></script><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/profile-editor.css'></head><body><main>"+html+"</main></body></html>");
             }
+            if(!documentation)
+            {
+                var llama=RecipeGpuSelectionTests.Llama();
+                File.WriteAllText(root+"/catalog/llama.json",System.Text.Json.JsonSerializer.Serialize(llama));
+                var hardware=RecipeGpuSelectionTests.Hardware();observer.Snapshot=new("fixture",hardware,[]);
+                store.Save(new Profile("1","Training and inference",3,[
+                    new("training","Unsloth Studio",RecipeGpuSelection.Apply(UnslothWorkload.Recipe,"NVIDIA",2),[hardware[1].Pci,hardware[0].Pci],"training"),
+                    new("inference","GGUF fixture",RecipeGpuSelection.Apply(llama,"NVIDIA",2),[hardware[3].Pci,hardware[2].Pci],"inference")]));
+                var html=await renderer.Dispatcher.InvokeAsync(async()=> (await renderer.RenderComponentAsync<ProfileEditor>()).ToHtmlString());
+                html=html.Replace("<div id=\"workload-rows\"", "<input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"fixture-only\"><div id=\"workload-rows\"");
+                await File.WriteAllTextAsync(Path.Combine(output,"profile-edit-gpus.html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><script src='/app-fetch.js'></script><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/profile-editor.css'></head><body><main>"+html+"</main></body></html>");
+            }
             var availableWifi=wifi!;
             foreach(var (name,status,pending) in new (string,WifiStatus?,bool)[]{("off",availableWifi with{Enabled=false},false),("blocked",availableWifi with{HardwareEnabled=false},false),("missing",availableWifi with{Adapters=[]},false),("unavailable",availableWifi with{Adapters=[availableWifi.Adapters[0] with{State="20 (unavailable)",Reason="42 (The supplicant is not available)"}]},false),("error",null,false),("pending",availableWifi,true)})
             {

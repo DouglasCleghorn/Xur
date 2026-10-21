@@ -19,8 +19,8 @@ public static class UnslothWorkload
         Container:new(Mounts,new(){{"HF_HOME","/workspace/.cache/huggingface"},{"UNSLOTH_SKIP_NOTEBOOK_SYNC","1"}}));
     public static void Validate(Recipe recipe)
     {
-        if(Canonical.Hash(recipe)!=Canonical.Hash(Recipe))
-            throw new InvalidOperationException("Select the built-in Unsloth preset with its persistent storage and NVIDIA GPU.");
+        if(recipe.GpuCount is <1 or >16 || Canonical.Hash(recipe with{GpuCount=1})!=Canonical.Hash(Recipe))
+            throw new InvalidOperationException("Select the built-in Unsloth preset with its persistent storage and one to 16 NVIDIA GPUs.");
     }
 }
 
