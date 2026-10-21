@@ -46,8 +46,12 @@ References: [Podman build](https://docs.podman.io/en/latest/markdown/podman-buil
 
 ## Unsloth Studio
 
-In the profile editor choose **Unsloth · Model training**, select an NVIDIA GPU,
-then save and load the profile. No container preparation is required. Xur pulls
+In the profile editor choose **Unsloth · Model training**. Use **Add GPU** to add
+GPU selectors and **Remove** beside a selector to remove it. Select one to 16
+NVIDIA GPUs, then save and load the profile. Each GPU can belong to only one
+workload in that profile. Xur exposes all selected GPUs to Unsloth in the saved
+order; the training program still controls how it uses multiple GPUs.
+No container preparation is required. Xur pulls
 `mirror.gcr.io/unsloth/unsloth:latest` before every new start and runs the resolved
 immutable image ID. A mirror failure fails the start explicitly, without falling
 back to Docker Hub or an older image. Unchanged running workloads keep their
@@ -80,7 +84,7 @@ checkpoint for training; GGUF files are primarily for inference. Models fetched
 directly by another engine into its private Hugging Face cache are not in these
 shared directories; Unsloth maintains its own persistent download cache.
 
-Only one Unsloth server runs per host. Changing its GPU or profile identity waits
+Only one Unsloth server runs per host. Changing its GPUs or profile identity waits
 for the previous server to stop before reusing storage and its local backend port.
 Unloading removes Unsloth's Serve handler while preserving Xur's HTTPS listener
 and other services. Unload,

@@ -161,5 +161,5 @@ public sealed class RecipeCatalog
         return recipes;
     }
     public void Verify(Recipe recipe)
-    {if(!Read().Any(r=>r.Id==recipe.Id && EngineImages.Equivalent(r.Image,recipe.Image) && (Canonical.Hash(r with{Image=recipe.Image})==Canonical.Hash(recipe) || Canonical.Hash(ModelLaunchSettings.RepairSaved(r) with{Image=recipe.Image})==Canonical.Hash(recipe))))throw new InvalidOperationException("Select a recipe from the installed catalog.");}
+    {if(!Read().Any(r=>r.Id==recipe.Id && (RecipeGpuSelection.Matches(r,recipe) || EngineImages.Equivalent(r.Image,recipe.Image) && (Canonical.Hash(r with{Image=recipe.Image})==Canonical.Hash(recipe) || Canonical.Hash(ModelLaunchSettings.RepairSaved(r) with{Image=recipe.Image})==Canonical.Hash(recipe)))))throw new InvalidOperationException("Select a recipe from the installed catalog.");}
 }

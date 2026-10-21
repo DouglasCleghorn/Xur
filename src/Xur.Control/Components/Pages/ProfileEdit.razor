@@ -48,7 +48,7 @@ else if(state!=null && profile!=null)
                     <label><span class="recipe-label">Workload</span><select name="recipe" class="searchable" data-placeholder="Search workloads…">
                         <option value="">Select workload</option>
                         @foreach(var r in Catalog.Recipes.OrderBy(r=>r.Name))
-                        { <option value="@r.Id" data-engine="@r.Engine" data-kind="@r.Kind" data-gpus="@r.GpuCount" data-vendor="@r.Vendor" data-memory="@r.MemoryMiB" selected="@(r.Id==w?.Recipe.Id)">@r.Name</option> }
+                        { var selected=w is not null && r.Id==w.Recipe.Id?w.Recipe:r; <option value="@r.Id" data-engine="@r.Engine" data-kind="@r.Kind" data-gpus="@selected.GpuCount" data-vendor="@selected.Vendor" data-memory="@selected.MemoryMiB" selected="@(r.Id==w?.Recipe.Id)">@r.Name</option> }
                     </select></label>
                 </div>
                 <div class="station-identity-choice" hidden="@(w?.Recipe.Kind is not (null or "Workstation"))">
@@ -60,19 +60,20 @@ else if(state!=null && profile!=null)
                 </div>
                 <div class="model-options"></div><p class="catalog-error" role="alert" hidden></p>
                 <p class="container-library-link" hidden="@(w?.Recipe.Kind!="Container")"><a href="/containers">Prepare a container</a></p>
-                <p class="unsloth-link" hidden="@(w?.Recipe.Engine!=UnslothWorkload.Engine)"><a href="/unsloth">Unsloth Studio</a> · Latest version, persistent training data and access to downloaded models. Select an NVIDIA GPU.</p>
+                <p class="unsloth-link" hidden="@(w?.Recipe.Engine!=UnslothWorkload.Engine)"><a href="/unsloth">Unsloth Studio</a> · Latest version, persistent training data and access to downloaded models. Use Add GPU to assign one or more NVIDIA GPUs.</p>
                 <p class="t3-code-link" hidden="@(w?.Recipe.Engine!=T3CodeWorkload.Engine)"><a href="/t3-code">Prepare T3 Code or connect a device</a> · Projects and sessions persist between profile changes.</p>
                 <div class="gpu-choices">
                 @for(var g=0;g<(w?.Recipe.GpuCount ?? 0);g++)
                 {
                     var gpuIndex=g;
-                    <label>GPU @(g+1)<select name="gpus-@row" class="searchable" data-placeholder="Search GPUs…">
+                    <div class="gpu-choice"><label>GPU @(g+1)<select name="gpus-@row" class="searchable" data-placeholder="Search GPUs…">
                         <option value="">Select GPU</option>
                         @foreach(var gpu in state.Runtime.Gpus)
                         { <option value="@gpu.Pci" data-compute="@(gpu.Problems.Length==0 ? "true" : "false")" data-display="@(gpu.Cards is {Length:>0} ? "true" : "false")" data-vendor="@gpu.Vendor" data-memory="@gpu.MemoryMiB" selected="@(w!.Gpus.ElementAtOrDefault(gpuIndex)==gpu.Pci)">@gpu.DisplayName · @(gpu.Displays is {Length:>0}?string.Join(", ",gpu.Displays):"No display detected.") · @gpu.Pci</option> }
-                    </select></label>
+                    </select></label><button type="button" class="quiet remove-gpu" aria-label="Remove GPU @(g+1)" hidden>Remove</button></div>
                 }
                 </div>
+                <div class="gpu-actions" hidden><button type="button" class="secondary add-gpu">Add GPU</button><span class="gpu-mode secondary-text"></span></div>
                 <p class="gpu-empty" hidden>No display adapters are available. <a href="/diagnostics">Open Diagnostics</a></p>
                 <label class="station-new-name" hidden="@(!newStation)">Workstation name<input name="stationName" maxlength="80" value="@(w?.Recipe.Kind=="Workstation"?w.Name:"")" placeholder="My desktop" /></label>
                 <div class="station-user-choice" hidden="@(!newStation)"><label>User<select name="stationUser" class="searchable" data-placeholder="Search users…">
@@ -118,11 +119,11 @@ else if(state!=null && profile!=null)
             </section>
         }
         </div>
-        <template id="gpu-template"><label>GPU<select class="searchable" data-placeholder="Search GPUs…">
+        <template id="gpu-template"><div class="gpu-choice"><label>GPU<select class="searchable" data-placeholder="Search GPUs…">
             <option value="">Select GPU</option>
             @foreach(var gpu in state.Runtime.Gpus)
             { <option value="@gpu.Pci" data-compute="@(gpu.Problems.Length==0 ? "true" : "false")" data-display="@(gpu.Cards is {Length:>0} ? "true" : "false")" data-vendor="@gpu.Vendor" data-memory="@gpu.MemoryMiB">@gpu.DisplayName · @(gpu.Displays is {Length:>0}?string.Join(", ",gpu.Displays):"No display detected.") · @gpu.Pci</option> }
-        </select></label></template>
+        </select></label><button type="button" class="quiet remove-gpu" hidden>Remove</button></div></template>
         <button type="button" class="secondary" id="add-workload">Add workload</button>
         <div class="actions action-bar"><button>Save profile</button><a class="button quiet" href="/profiles">Cancel</a></div>
     </form>

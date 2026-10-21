@@ -11,9 +11,16 @@ GGUF choices include the published quantizations. Q4_K_M is preferred when
 available. Xur imports numeric sampling defaults from Unsloth’s default YAML,
 matching family, and matching model YAML, and records the exact settings commit.
 It uses a 4096-token context and one concurrent slot initially. These resource
-defaults are Xur’s starting settings, not measured per-model optimums. GPU count
-is estimated from checkpoint size, observed capacity and a memory allowance.
-The editor selects unoccupied compatible GPUs and permits an explicit override.
+defaults are Xur’s starting settings, not measured per-model optimums. For
+llama.cpp, use **Add GPU** and **Remove** beside each GPU selector. A newly
+selected model starts in CPU mode; adding GPUs selects the matching CUDA, ROCm
+or Vulkan engine. Select up to 16 GPUs from the same vendor. Removing every GPU
+returns to CPU mode. Existing profiles retain their saved GPU count and order.
+Changed multi-GPU allocations use llama.cpp's layer split with equal tensor
+proportions. Xur checks the estimated per-GPU memory before saving.
+For vLLM and vLLM-Omni, GPU count is estimated from checkpoint size, observed
+capacity and a memory allowance. The editor selects unoccupied compatible GPUs
+and permits choosing different devices. Each GPU belongs to one workload per profile.
 Actual peak memory can exceed the estimate; startup failures remain visible.
 
 Selecting a model resolves its repository commit, file hashes and engine channel.
@@ -24,7 +31,7 @@ profile or a running model. GGUF sampling provenance does not restart a model
 when the actual runtime arguments and files are unchanged.
 
 llama.cpp has current upstream CPU, CUDA, ROCm and Vulkan image channels. vLLM and
-vLLM-Omni support NVIDIA CUDA, AMD ROCm and Intel XPU. Choose **AMD GPUs** or
+vLLM-Omni support NVIDIA CUDA, AMD ROCm and Intel XPU. For these two engines, choose **AMD GPUs** or
 **Intel GPUs** under **Run on**, or use **Automatic** to select an available
 GPU vendor. GPU engines require healthy devices with observed dedicated memory;
 Intel capacity comes from the i915/xe kernel memory-region query. Integrated
