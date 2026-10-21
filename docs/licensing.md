@@ -94,6 +94,10 @@ third-party notices remain in their component directories.
   complete upstream distribution's dependency notices. The Node/Debian base and
   installed OS packages retain their own licenses. Xur's MIT license applies to
   the integration code, not a relicensing of those components.
+  Optional Codex, Claude Code and OpenCode installation downloads the pinned npm
+  packages into the user's T3 volume and retains their package notices. These
+  tools and their subscription services remain subject to their respective
+  upstream licenses and terms; they are not included under Xur's MIT license.
 
 `xurutil` uses Microsoft's MIT-licensed `System.CommandLine` and the .NET Native
 AOT runtime, plus [TeeForge](https://github.com/DouglasCleghorn/TeeForge) 0.1.0

@@ -89,6 +89,16 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         catch(Exception e) when(e is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
         {throw new InvalidOperationException("T3 Code returned an invalid pairing response. Prepare the supported T3 Code version again.");}
     }
+    public async Task<T> WithT3Code<T>(Func<string,Task<T>> action)
+    {
+        await using var operation=await Stops.Enter();
+        var definition=Definitions().SingleOrDefault(w=>T3CodeWorkload.Is(w.Recipe))
+            ??throw new InvalidOperationException("Load a profile with T3 Code first.");
+        await using var allocation=await Stops.Resources(["workload:"+definition.Id]);
+        var instance=await Inspect(definition);
+        if(instance?.State!="running")throw new InvalidOperationException("Load a profile with T3 Code first.");
+        return await action(instance.InstanceId);
+    }
     public async Task InitializeRoboticsSetup()
     {
         try

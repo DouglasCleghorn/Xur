@@ -20,6 +20,17 @@
   These are benchmark illustrations, not application UI or release screenshots.
   Regenerate if the benchmark data or report changes.
 
+- 2026-10-21: T3 Code account/model setup validation family from the working tree
+  based on `edfb6f1`. Private captures are
+  `.build/evidence/t3-ui/setup-{desktop,mobile}.png`, with related transient
+  collaborative-browser snapshots in this T3 session. Purpose: review the real
+  Razor page at 1280 and 390 CSS pixels, subscription sign-in controls and local
+  model selection. Privacy review: synthetic account states, model IDs, storage
+  IDs and nonfunctional fixture sign-in codes only; no real provider credentials,
+  project contents or personal data. Browser metadata may show loopback addresses.
+  Not published or shipped. Regenerate after T3 setup or navigation changes;
+  the 2026-10-17 family below predates the account and model sections.
+
 - 2026-10-17: T3 Code connection-page validation family from the working tree
   based on `d217097`. Rendered fixtures are private under
   `.build/evidence/t3-code/`; transient collaborative-browser snapshots remain

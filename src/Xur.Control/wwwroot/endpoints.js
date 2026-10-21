@@ -22,6 +22,7 @@
      const card=el('article',null,'panel endpoint-card');card.append(el('h3',w.name),el('p',(w.recipe.hub?.repository||w.recipe.name)+' · '+w.recipe.engine,'secondary-text'),el('p','GPUs: '+w.gpus.map(pci=>gpus.find(g=>g.pci===pci)?.shortId||pci).join(', '),'secondary-text'));
      const base=location.origin+'/inference/'+encodeURIComponent(w.route)+'/v1';
      address(card,'Base URL',base);address(card,'Chat completions',base+'/chat/completions');address(card,'Model list',base+'/models',true);
+     const coding=el('a','Use in T3 Code','button secondary');coding.href='/t3-code?workload='+encodeURIComponent(w.id)+'#t3-models';card.append(coding);
      list.append(card);
     }
     previous=signature;

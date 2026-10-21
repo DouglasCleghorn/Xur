@@ -408,6 +408,7 @@ async Task StartHost()
     app.MapConsoleSetup(appliance);
     var gatewayData=LocalClient.Create(Path.Combine(appliance.RunDirectory,"gateway.sock"));gatewayData.Timeout=Timeout.InfiniteTimeSpan;
     app.MapModelLab(appliance,profileManager,gatewayData,gatewayClient,maintenance);
+    if(!appliance.Installer)T3Models.Map(app,appliance,profileManager,gatewayData,gatewayClient,apiKeys);
     app.Map("/inference/{**path}",async(HttpContext c,string? path)=> {
         if(appliance.Installer){c.Response.StatusCode=409;return;}
         await StreamProxy.Forward(c,gatewayData,"http://localhost/"+(path??"")+c.Request.QueryString);
