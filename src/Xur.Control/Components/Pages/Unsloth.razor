@@ -1,0 +1,25 @@
+@page "/unsloth"
+@inject Appliance Device
+<PageTitle>Unsloth · Xur</PageTitle>
+<div class="page-heading"><h1>Unsloth Studio</h1><a class="button secondary" href="/profiles">Profiles</a></div>
+@if(Device.Installer) { <p>Unsloth is available after installation.</p> }
+else
+{
+    <section class="panel" id="unsloth-page">
+        <AntiforgeryToken />
+        <p>Add <strong>Unsloth · Model training</strong> to a profile, select an NVIDIA GPU, then load the profile. The latest image is downloaded before each start. A running server stays on its current version until unloaded and loaded again.</p>
+        <p id="unsloth-status" role="status">Checking server…</p>
+        <div id="unsloth-running" hidden>
+            <div class="actions"><a id="unsloth-open" class="button" hidden target="_blank" rel="noopener noreferrer">Open Unsloth Studio</a><button id="unsloth-password" type="button" class="secondary">Show first-login password</button></div>
+            <p>Sign in as <strong>unsloth</strong> and change the generated password on first login. Later, use your saved password.</p>
+            <p id="unsloth-credential" hidden>First-login password: <code id="unsloth-secret"></code></p>
+            <p>Connect through Tailscale Serve using HTTPS on port 8444. Studio has its own login.</p>
+        </div>
+        <p><a href="/tailscale">Tailscale connection and HTTPS settings</a></p>
+        <p id="unsloth-error" role="alert" hidden></p>
+        <h2>Persistent storage</h2>
+        <p>Save training files and downloaded models under <code>/workspace</code>. Studio settings, accounts and outputs also persist. All Unsloth profiles share this storage; unloading or deleting a profile keeps it.</p>
+        <p>Xur’s downloaded models are available read-only at <code>/models</code> and complete model snapshots at <code>/model-sets</code>. Save fine-tuned models to <code>/workspace</code> to keep the original downloads intact.</p>
+    </section>
+    <script src="/unsloth.js" defer></script>
+}

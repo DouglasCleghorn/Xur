@@ -65,7 +65,7 @@ the same workload identities. These actions remain available on phones; secondar
 navigation is under More.
 
 The bundled smoke recipe is SmolLM2 135M CPU chat, using the actual llama.cpp
-server. The workload picker also includes Gaming workstation and live upstream
+server. The workload picker also includes [Unsloth Studio](container-workloads.md#unsloth-studio) for model training with persistent storage, Gaming workstation and live upstream
 model search, described in [Model catalog](model-catalog.md). Its first start
 downloads the current llama.cpp engine image and a pinned 145 MB GGUF,
 verified against its SHA-256. Later starts check the latest engine channel.

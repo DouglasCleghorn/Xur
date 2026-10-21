@@ -77,7 +77,7 @@
   function open(filter=''){
    const version=++request;clearTimeout(timer);render(filter);if(select.name!=='recipe')return;
    const row=select.closest('.workload-editor'),engine=row.querySelector('.catalog-engine').value;
-   if(engine==='Workstation'||engine==='Podman'||engine==='T3 Code'||engine==='XLeRobot')return;
+   if(engine==='Workstation'||engine==='Podman'||engine==='T3 Code'||engine==='Unsloth'||engine==='XLeRobot')return;
    timer=setTimeout(async()=>{
     try{
      const models=await api('search?engine='+encodeURIComponent(engine)+'&q='+encodeURIComponent(filter));
@@ -162,19 +162,20 @@
  }
  function filterRecipes(row){
   const engine=row.querySelector('.catalog-engine').value,select=row.querySelector('[name=recipe]'),station=engine==='Workstation';
-  row.querySelector('.recipe-label').textContent=station?'Workstation':engine==='T3 Code'?'T3 Code server':engine==='Podman'?'Container':engine==='XLeRobot'?'Robot':'Model';
+  row.querySelector('.recipe-label').textContent=station?'Workstation':engine==='Unsloth'?'Unsloth server':engine==='T3 Code'?'T3 Code server':engine==='Podman'?'Container':engine==='XLeRobot'?'Robot':'Model';
   row.querySelector('.container-library-link').hidden=engine!=='Podman';
   row.querySelector('.t3-code-link').hidden=engine!=='T3 Code';
+  row.querySelector('.unsloth-link').hidden=engine!=='Unsloth';
   row.querySelector('.recipe-choice').hidden=station;row.querySelector('.station-devices').hidden=!station;
   const primary=row.querySelector('.station-primary');primary.disabled=!station;if(!station)primary.checked=false;usbChoices(row);
   row.querySelector('.station-user-choice').hidden=!station||!!row.querySelector('[name=stationId]').value;row.querySelector('.station-new-name').hidden=!station||!!row.querySelector('[name=stationId]').value;row.querySelector('.station-identity-choice').hidden=!station;
-  select.dataset.placeholder=station?'Search workstations…':engine==='T3 Code'?'Search T3 Code servers…':engine==='Podman'?'Search containers…':engine==='XLeRobot'?'Search robots…':'Search models…';
+  select.dataset.placeholder=station?'Search workstations…':engine==='Unsloth'?'Search Unsloth…':engine==='T3 Code'?'Search T3 Code servers…':engine==='Podman'?'Search containers…':engine==='XLeRobot'?'Search robots…':'Search models…';
   for(const option of select.options){
    option.hidden=!!option.value&&(station?option.dataset.kind!=='Workstation':option.dataset.engine!==engine||option.dataset.kind==='Workstation');
-   if(!option.value)option.textContent=station?'Select workstation':engine==='T3 Code'?'Select T3 Code server':engine==='Podman'?'Select container':engine==='XLeRobot'?'Select robot':'Select model';
+   if(!option.value)option.textContent=station?'Select workstation':engine==='Unsloth'?'Select Unsloth':engine==='T3 Code'?'Select T3 Code server':engine==='Podman'?'Select container':engine==='XLeRobot'?'Select robot':'Select model';
   }
   if(select.selectedOptions[0]?.hidden)select.value='';
-  if(engine==='T3 Code' && !select.value)select.value=[...select.options].find(o=>o.value&&!o.hidden)?.value??'';
+  if((engine==='T3 Code'||engine==='Unsloth') && !select.value)select.value=[...select.options].find(o=>o.value&&!o.hidden)?.value??'';
   if(station)select.value=[...select.options].find(o=>o.value==='gaming-workstation'&&!o.hidden)?.value??'';
   select.dispatchEvent(new CustomEvent('choices-changed'));
  }
