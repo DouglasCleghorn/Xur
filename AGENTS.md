@@ -1,5 +1,15 @@
 # Repository rules
 
+## Upstream updates
+
+Do not add fixed version pins for third-party software unless the user explicitly
+requests one. Use the upstream-supported latest or stable channel and resolve
+release assets and checksums at installation time. Software updates must not
+require a new Xur release. Preserve native update mechanisms, and keep installed
+runtimes and update selections in persistent, user-writable storage so updates
+survive restarts and container replacement. Keep required browser assets local
+as described below.
+
 ## Container registries
 
 Always pull Docker Hub images through Google's `mirror.gcr.io` cache. Use fully

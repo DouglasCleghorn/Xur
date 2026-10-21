@@ -14,7 +14,7 @@ public static class T3CodeWorkload
     // No browser or terminal QR is needed; Xur issues fresh links on request.
     public static string[] Command=>["/opt/t3/t3","start","--host","0.0.0.0","--port","3773","--base-dir",BaseDirectory,"--no-browser",Home+"/projects"];
     public static ContainerPrepareRequest Prepare(string? volume=null)=>new(
-        Dockerfile:Dockerfile,Name:Engine,Port:3773,Command:Command,Engine:Engine,
+        Dockerfile:Dockerfile,Files:[new("t3-launcher",Launcher)],Name:Engine,Port:3773,Command:Command,Engine:Engine,
         Environment:new(){{"HOME",Home}},Volumes:[new("T3 Code home, projects and credentials",Home,volume)]);
 
     public static void Validate(Recipe recipe)
@@ -26,18 +26,37 @@ public static class T3CodeWorkload
             throw new InvalidOperationException("Use the T3 Code preset with its persistent home volume.");
     }
 
-    // The upstream release includes the web assets and dependency license notices.
-    // Keep the complete distribution: node-pty loads files beside the executable.
+    // Keep the launcher path stable for saved recipes. The upstream installer and
+    // updater own the runtime and symlink inside the persistent, writable home.
+    public const string Launcher="""
+        #!/bin/sh
+        set -eu
+        export T3CODE_HOME="${T3CODE_HOME:-$HOME/.t3}"
+        export T3CODE_INSTALL_BIN_DIR="${T3CODE_INSTALL_BIN_DIR:-$HOME/.local/bin}"
+        t3_command="$T3CODE_INSTALL_BIN_DIR/t3"
+        if [ ! -x "$t3_command" ]; then
+            printf '%s\n' 'Installing the latest stable T3 Code into persistent storage…'
+            installer="$(mktemp)"
+            trap 'rm -f "$installer"' EXIT
+            trap 'exit 130' INT
+            trap 'exit 143' TERM
+            curl --fail --location --retry 3 --connect-timeout 15 --max-time 120 \
+                https://t3.codes/install.sh -o "$installer"
+            sh "$installer"
+            test -x "$t3_command" || { printf '%s\n' 'T3 Code installation did not create an executable.' >&2; exit 1; }
+            rm -f "$installer"
+            trap - EXIT INT TERM
+        fi
+        exec "$t3_command" "$@"
+        """;
+
     public const string Dockerfile="""
-        FROM mirror.gcr.io/library/node:24-bookworm
+        FROM mirror.gcr.io/library/node:lts
         RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client ca-certificates curl python3 ripgrep \
             && rm -rf /var/lib/apt/lists/*
-        RUN curl --fail --location --retry 3 https://github.com/pingdotgg/t3code/releases/download/v0.1.0/t3-0.1.0-linux-x64.tar.gz -o /tmp/t3.tar.gz \
-            && echo 'f7703ff1bb8f6243580058b3ccf2c02abb62eba4b991e26bbb1da22f4b56d9b1  /tmp/t3.tar.gz' | sha256sum --check --strict \
-            && mkdir -p /opt/t3 && tar -xzf /tmp/t3.tar.gz --strip-components=1 -C /opt/t3 \
-            && rm /tmp/t3.tar.gz && ln -s /opt/t3/t3 /usr/local/bin/t3
-        RUN curl --fail --location --retry 3 https://raw.githubusercontent.com/pingdotgg/t3code/v0.1.0/LICENSE -o /opt/t3/LICENSE \
-            && echo '935d8f2af0c703f9c39517ee57cc4930b19d02d533be930b63f0e82f93614b43  /opt/t3/LICENSE' | sha256sum --check --strict
+        COPY t3-launcher /opt/t3/t3
+        RUN chmod 755 /opt/t3/t3 && ln -s /opt/t3/t3 /usr/local/bin/t3 \
+            && curl --fail --location --retry 3 https://raw.githubusercontent.com/pingdotgg/t3code/main/LICENSE -o /opt/t3/LICENSE
         RUN mkdir -p /home/node/projects /home/node/.t3 /home/node/.local/bin \
             && chown -R node:node /home/node
         ENV HOME=/home/node

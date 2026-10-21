@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Diagnostics;
 using Xur.Control;
 using Xur.Domain;
 
@@ -32,7 +33,86 @@ static class T3CodeTests
         check(!ApiKeys.Allows("automation","POST","/api/t3-code/pair"),"Automation keys cannot mint T3 Code device credentials");
         check(T3CodeEndpoints.Origin(new HostString("[fd00::1]:8443"))=="http://[fd00::1]:3773","T3 Code links use its direct port and preserve IPv6 hosts");
         check(T3CodeEndpoints.Origin(new HostString("coding.test:8443"))=="http://coding.test:3773","T3 Code links target the server hostname rather than the browsing device");
+        await PersistentUpdates(check);
         await Endpoints(check);
+    }
+    static async Task PersistentUpdates(Action<bool,string> check)
+    {
+        var root=Path.GetFullPath(".build/evidence/t3-updates-test-"+Guid.NewGuid().ToString("N")[..12]);
+        Directory.CreateDirectory(root+"/bin");Directory.CreateDirectory(root+"/home/projects");
+        await File.WriteAllTextAsync(root+"/home/projects/keep.txt","saved project");
+        var preset=T3CodeWorkload.Prepare();
+        await File.WriteAllTextAsync(root+"/launcher",preset.Files!.Single(f=>f.Name=="t3-launcher").Content);
+        await File.WriteAllTextAsync(root+"/bin/curl","""
+            #!/bin/sh
+            set -eu
+            test ! -f "$XUR_TEST_ROOT/offline" || exit 22
+            printf '%s\n' "$*" >> "$XUR_TEST_ROOT/downloads"
+            while [ "$#" -gt 0 ]; do
+                if [ "$1" = -o ]; then cp "$XUR_TEST_ROOT/installer" "$2"; exit 0; fi
+                shift
+            done
+            exit 1
+            """);
+        File.SetUnixFileMode(root+"/bin/curl",UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
+        await File.WriteAllTextAsync(root+"/installer","""
+            #!/bin/sh
+            set -eu
+            test ! -f "$XUR_TEST_ROOT/install-fails" || exit 23
+            mkdir -p "$T3CODE_HOME/runtime/versions/initial" "$T3CODE_INSTALL_BIN_DIR"
+            cp "$XUR_TEST_ROOT/runtime" "$T3CODE_HOME/runtime/versions/initial/t3"
+            chmod 755 "$T3CODE_HOME/runtime/versions/initial/t3"
+            ln -sfn "$T3CODE_HOME/runtime/versions/initial/t3" "$T3CODE_INSTALL_BIN_DIR/t3"
+            """);
+        await File.WriteAllTextAsync(root+"/runtime","""
+            #!/bin/sh
+            set -eu
+            if [ "${1:-}" = update ]; then
+                mkdir -p "$T3CODE_HOME/runtime/versions/updated"
+                cp "$XUR_TEST_ROOT/runtime" "$T3CODE_HOME/runtime/versions/updated/t3"
+                chmod 755 "$T3CODE_HOME/runtime/versions/updated/t3"
+                ln -sfn "$T3CODE_HOME/runtime/versions/updated/t3" "$T3CODE_INSTALL_BIN_DIR/t3"
+                exit 0
+            fi
+            readlink "$T3CODE_INSTALL_BIN_DIR/t3"
+            printf '<%s>\n' "$@"
+            """);
+        async Task<(int ExitCode,string Output)> Run(string executable,params string[] arguments)
+        {
+            var start=new ProcessStartInfo(executable){RedirectStandardOutput=true,RedirectStandardError=true};
+            foreach(var argument in arguments)start.ArgumentList.Add(argument);
+            start.Environment["PATH"]=root+"/bin:"+Environment.GetEnvironmentVariable("PATH");
+            start.Environment["T3CODE_HOME"]=root+"/home/.t3";
+            start.Environment["T3CODE_INSTALL_BIN_DIR"]=root+"/home/.local/bin";
+            start.Environment["XUR_TEST_ROOT"]=root;
+            using var process=Process.Start(start)!;
+            var stdout=process.StandardOutput.ReadToEndAsync();var stderr=process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            return(process.ExitCode,await stdout+await stderr);
+        }
+        try
+        {
+            await File.WriteAllTextAsync(root+"/offline","");
+            var unavailable=await Run("sh",root+"/launcher","start");
+            check(unavailable.ExitCode!=0 && !File.Exists(root+"/home/.local/bin/t3"),"A failed first T3 download stops startup without publishing an installation");
+            File.Delete(root+"/offline");await File.WriteAllTextAsync(root+"/install-fails","");
+            var failed=await Run("sh",root+"/launcher","start");
+            check(failed.ExitCode!=0 && !File.Exists(root+"/home/.local/bin/t3"),"A failed native installer stops T3 startup and remains retryable");
+            File.Delete(root+"/install-fails");
+            var first=await Run("sh",root+"/launcher","start","--base-dir",root+"/home/.t3","project with spaces");
+            check(first.ExitCode==0 && first.Output.Contains("/versions/initial/t3") && first.Output.Contains("<project with spaces>"),"First T3 startup installs into its persistent home and preserves command arguments");
+            var updated=await Run(root+"/home/.local/bin/t3","update");
+            check(updated.ExitCode==0,"The native T3 command can select an updated runtime in persistent storage");
+            var downloads=await File.ReadAllTextAsync(root+"/downloads");
+            await File.WriteAllTextAsync(root+"/offline","");
+            // A replacement image contributes only its launcher; it must honor the saved selection.
+            await File.WriteAllTextAsync(root+"/replacement-launcher",T3CodeWorkload.Launcher);
+            var restarted=await Run("sh",root+"/replacement-launcher","start");
+            var pairing=await Run("sh",root+"/replacement-launcher","auth","pairing","create");
+            check(restarted.ExitCode==0 && restarted.Output.Contains("/versions/updated/t3") && pairing.ExitCode==0 && pairing.Output.Contains("/versions/updated/t3"),"Restart and pairing use the updated T3 runtime after container replacement, even offline");
+            check(await File.ReadAllTextAsync(root+"/downloads")==downloads && await File.ReadAllTextAsync(root+"/home/projects/keep.txt")=="saved project","T3 restarts leave installed updates and project data intact without downloading again");
+        }
+        finally{Directory.Delete(root,true);}
     }
     static async Task Endpoints(Action<bool,string> check)
     {
