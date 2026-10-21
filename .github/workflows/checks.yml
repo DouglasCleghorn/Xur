@@ -24,6 +24,7 @@ jobs:
           python3 eng/check-web-assets.py
           python3 tests/Xur.Integration.Tests/web-assets.py
           dotnet run --project tests/Xur.Unit.Tests -c Release
+          python3 -B tests/Xur.Integration.Tests/t3-setup.py
           dotnet run --project tests/Xur.Robot.Tests -c Release
           dotnet run --project tests/Xur.Robot.Backup.Tests -c Release
           python3 tests/Xur.Integration.Tests/robot-boundary.py

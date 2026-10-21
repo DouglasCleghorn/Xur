@@ -270,6 +270,12 @@ app.MapPost("/unsloth/password",async Task<IResult>()=>{
     try{return Results.Json(await workloads.UnslothPassword());}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
 });
 var containers=new ContainerLibrary(stateDir);
+using var t3Setup=new T3Setup(workloads);
+app.MapPost("/t3-code/setup",async Task<IResult>(T3SetupRequest request)=>{
+    if(installer)return Results.Conflict();
+    try{return Results.Json(await t3Setup.Execute(request));}
+    catch(Exception e)when(e is InvalidOperationException or IOException or TimeoutException){return Results.Conflict(new{error=e is InvalidOperationException?e.Message:"T3 setup is unavailable. Check the workload and retry."});}
+});
 app.MapGet("/t3-code/status",async()=>installer?Results.Conflict():Results.Json(await workloads.T3CodeStatus()));
 app.MapPost("/t3-code/pair",async Task<IResult>()=>{
     if(installer)return Results.Conflict();

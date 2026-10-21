@@ -27,6 +27,48 @@ else
             </div>
             <p id="t3-error" role="alert" hidden></p><p id="t3-message" role="status"></p>
         </section>
+        <section class="panel" id="t3-providers" aria-labelledby="t3-providers-heading">
+            <div class="section-heading"><h2 id="t3-providers-heading">Coding accounts and harnesses</h2><button id="t3-setup-refresh" type="button" class="secondary">Refresh setup</button></div>
+            <p id="t3-setup-stopped">Load a profile containing T3 Code to set up accounts and local models.</p>
+            <div class="t3-provider-grid">
+                <article class="t3-provider" data-provider="codex">
+                    <h3>Codex · ChatGPT subscription</h3>
+                    <p>Use your ChatGPT plan through T3's own sign-in screen. Pair this device above first, then connect your account on this server.</p>
+                    <a class="button secondary t3-provider-link" data-instance="codex" target="_blank" rel="noopener noreferrer">Sign in with ChatGPT in T3</a>
+                    <details><summary>Use the Codex CLI or a local model</summary>
+                        <p>Install Codex here for local models or device-code sign-in. Device-code login may need to be enabled in your ChatGPT security settings.</p>
+                        <p class="t3-provider-status" role="status">Waiting for T3…</p>
+                        <div class="actions"><button type="button" data-action="install" class="secondary">Install Codex</button><button type="button" data-action="login">Sign in with device code</button></div>
+                        <div class="t3-auth" hidden></div>
+                        <a class="t3-provider-link" data-instance="xur_codex_subscription" target="_blank" rel="noopener noreferrer">Open CLI subscription in T3</a>
+                    </details>
+                </article>
+                <article class="t3-provider" data-provider="claude">
+                    <h3>Claude · Claude subscription</h3>
+                    <p>Install Claude Code, then sign in with your Claude account. Open its sign-in page on this device and paste the one-time code here if prompted.</p>
+                    <p class="t3-provider-status" role="status">Waiting for T3…</p>
+                    <div class="actions"><button type="button" data-action="install" class="secondary">Install Claude Code</button><button type="button" data-action="login">Sign in with Claude</button></div>
+                    <div class="t3-auth" hidden></div>
+                    <a class="t3-provider-link" data-instance="xur_claude_subscription" target="_blank" rel="noopener noreferrer">Open Claude in T3</a>
+                </article>
+                <article class="t3-provider" data-provider="opencode">
+                    <h3>OpenCode · local models</h3>
+                    <p>Install OpenCode in this environment, then connect one of your Xur models below.</p>
+                    <p class="t3-provider-status" role="status">Waiting for T3…</p>
+                    <button type="button" data-action="install" class="secondary">Install OpenCode</button>
+                    <div class="t3-auth" hidden></div>
+                </article>
+            </div>
+            <p class="secondary-text">Provider sign-ins and installed harnesses stay in T3's persistent home. Use the same T3 workload and storage in each profile to retain your accounts and projects.</p>
+            <p id="t3-setup-error" role="alert" hidden></p>
+        </section>
+        <section class="panel" id="t3-models" aria-labelledby="t3-models-heading">
+            <div class="section-heading"><h2 id="t3-models-heading">Use Xur models in T3</h2><button id="t3-models-refresh" class="secondary" type="button">Refresh models</button></div>
+            <p>Choose the exact model and harness. Xur checks streaming and a tool-call round trip from the T3 environment before enabling the connection.</p>
+            <p class="secondary-text">Codex needs a Responses API endpoint. OpenCode uses Chat Completions. Open this page using Xur's LAN or Tailscale HTTPS address so T3 can reach it.</p>
+            <p id="t3-models-status" role="status">Loading models…</p><div id="t3-model-list"></div>
+            <p>Model connections remain saved when a profile is unloaded. Review and load a compatible profile in <a href="/profiles">Profiles</a> to use them again.</p>
+        </section>
         <section class="panel" aria-labelledby="t3-prepare-heading">
             <h2 id="t3-prepare-heading">Prepare T3 Code</h2>
             @if(prepared.Length>0) { <p>T3 Code is prepared. Select it in the profile editor, then load the profile.</p> }
@@ -36,9 +78,10 @@ else
                 <option value="">Create new T3 Code storage</option>
             </select></label>
             <div class="actions"><button type="button" id="t3-prepare">Prepare T3 Code</button><a class="button secondary" href="/containers">Preparation progress</a></div>
-            <p class="secondary-text">After connecting, configure your provider in T3 Code. Keep repositories in <code>/home/node/projects</code> and install any extra tools under <code>/home/node/.local</code> to retain them across container replacement.</p>
+            <p class="secondary-text">Keep repositories in <code>/home/node/projects</code>. The setup buttons install harnesses under <code>/home/node/.local</code>, which survives container replacement when you reuse this storage.</p>
         </section>
         <script src="/t3-code.js"></script>
+        <script src="/t3-setup.js"></script>
     </div>
 }
 @code {
