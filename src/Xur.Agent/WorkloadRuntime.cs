@@ -41,6 +41,23 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         await StationSeats.SetIntent(workloads.Where(w=>w.Recipe.Kind=="Workstation").ToArray());
     }
     public Task<RuntimeObservation> Observe()=>ObserveUnlocked();
+    public async Task<UnslothStatus> UnslothStatus()
+    {
+        var definition=Definitions().SingleOrDefault(w=>UnslothWorkload.Is(w.Recipe));
+        return new(definition!=null && (await Inspect(definition))?.State=="running");
+    }
+    public async Task<UnslothPassword> UnslothPassword()
+    {
+        await using var operation=await Stops.Enter();
+        await using var allocation=await Stops.Resources(["unsloth"]);
+        var definition=Definitions().SingleOrDefault(w=>UnslothWorkload.Is(w.Recipe));
+        var instance=definition==null?null:await Inspect(definition);
+        if(instance?.State!="running")throw new InvalidOperationException("Load a profile with Unsloth first.");
+        var result=await Processes.Run("podman",["exec",instance.InstanceId,"cat",UnslothWorkload.StudioHome+"/auth/.bootstrap_password"],10);
+        if(result.ExitCode!=0 || string.IsNullOrWhiteSpace(result.Output) || result.Output.Length>4096)
+            throw new InvalidOperationException("The first-login password is unavailable. Wait for Studio to finish starting, or sign in with the password you already set.");
+        return new(result.Output.TrimEnd('\r','\n'));
+    }
     public async Task<T3CodeStatus> T3CodeStatus()
     {
         var definition=Definitions().SingleOrDefault(w=>T3CodeWorkload.Is(w.Recipe));
@@ -118,7 +135,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     async Task<RuntimeInstance> Start(Workload w,bool restoring)
     {
         await using var operation=await Stops.Enter();
-        await using var allocation=await Stops.Resources(new[]{"workload:"+w.Id}.Concat(w.Gpus.Select(p=>"gpu:"+p)).Concat(w.Recipe.Kind=="Workstation"?new[]{"user:"+StationAccounts.Username(w)}:[]).Concat(T3CodeWorkload.Is(w.Recipe)?new[]{"t3-code"}:[]));
+        await using var allocation=await Stops.Resources(new[]{"workload:"+w.Id}.Concat(w.Gpus.Select(p=>"gpu:"+p)).Concat(w.Recipe.Kind=="Workstation"?new[]{"user:"+StationAccounts.Username(w)}:[]).Concat(T3CodeWorkload.Is(w.Recipe)?new[]{"t3-code"}:[]).Concat(UnslothWorkload.Is(w.Recipe)?new[]{"unsloth"}:[]));
         try
         {
             if(restoring)
@@ -135,6 +152,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 throw new InvalidOperationException("Robotics and workstations must release their peripherals before starting the other workload.");
             if(T3CodeWorkload.Is(w.Recipe) && Definitions().Any(d=>d.Id!=w.Id && T3CodeWorkload.Is(d.Recipe)))
                 throw new InvalidOperationException("Stop the previous T3 Code server before starting another.");
+            if(UnslothWorkload.Is(w.Recipe) && Definitions().Any(d=>d.Id!=w.Id && UnslothWorkload.Is(d.Recipe)))
+                throw new InvalidOperationException("Stop the previous Unsloth server before starting another.");
             foreach(var pci in w.Gpus)if(observed.Instances.Any(i=>i.Id!=w.Id && i.Gpus.Contains(pci)))throw new InvalidOperationException($"GPU {pci} is still allocated.");
             if(w.Recipe.Kind=="Workstation" && Definitions().Any(d=>d.Id!=w.Id && d.Recipe.Kind=="Workstation" && StationAccounts.Username(d)==StationAccounts.Username(w)))throw new InvalidOperationException("Each running workstation needs a different user.");
             await receipts.WaitAsync();try {
@@ -183,27 +202,35 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 {await File.WriteAllTextAsync(updateLog,warning);Console.Error.WriteLine(w.Id+": "+warning);}
                 else if(engineImage!=null)File.Delete(updateLog);
             }
+            if(UnslothWorkload.Is(w.Recipe))
+            {
+                var unsloth=new UnslothRuntime();
+                engineImage=await unsloth.Refresh(instance);
+                if(engineImage?.Recreate==true)instance=null;
+                if(instance==null)await unsloth.EnsureStorage();
+            }
             if(instance==null)
             {
                 var selected=observed.Gpus.Where(g=>w.Gpus.Contains(g.Pci)).ToArray();await GpuInventory.VerifyReleased(selected);
                 string? model,modelFiles;
                 await using(var cache=await Stops.Resources((w.Recipe.Model is {} asset?new[]{asset.Sha256}:[]).Concat((w.Recipe.Files??[]).Select(f=>f.Asset.Sha256)).Select(hash=>"model:"+hash)))
                 {model=await DownloadModel(w.Recipe.Model);modelFiles=await DownloadFiles(w.Recipe.Files);}
-                if(w.Recipe.Kind=="Container")
+                if(w.Recipe.Kind=="Container" && !UnslothWorkload.Is(w.Recipe))
                 {
                     var exists=await Processes.Run("podman",["image","exists",w.Recipe.Image],15);
                     if(exists.ExitCode!=0)throw Failure("Prepared container image is unavailable",exists);
                 }
                 var image=engineImage?.Image??w.Recipe.Image;
                 var args=new List<string> {"create","--name",Name(w.Id),"--label","io.xur.fingerprint="+w.Fingerprint,"--label","io.xur.id="+w.Id,
-                    "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096",w.Recipe.Kind=="Model"&&w.Recipe.Engine is "vLLM" or "vLLM-Omni"?"--shm-size=4g":"--shm-size=1g",w.Recipe.Kind=="Model"?"--restart=no":"--restart=unless-stopped"};
-                if(w.Recipe.Port>0)args.AddRange(["--publish",T3CodeWorkload.Is(w.Recipe)?$"{T3CodeWorkload.HostPort}:{w.Recipe.Port}":"127.0.0.1::"+w.Recipe.Port]);
+                    "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096",(UnslothWorkload.Is(w.Recipe)||w.Recipe.Kind=="Model"&&w.Recipe.Engine is "vLLM" or "vLLM-Omni")?"--shm-size=4g":"--shm-size=1g",w.Recipe.Kind=="Model"?"--restart=no":"--restart=unless-stopped"};
+                if(w.Recipe.Port>0)args.AddRange(["--publish",T3CodeWorkload.Is(w.Recipe)?$"{T3CodeWorkload.HostPort}:{w.Recipe.Port}":UnslothWorkload.Is(w.Recipe)?UnslothWorkload.Publish:"127.0.0.1::"+w.Recipe.Port]);
                 if(w.Recipe.Container is {} container)
                 {
                     foreach(var mount in container.Mounts){await ContainerLibrary.VerifyVolume(mount.Volume);args.AddRange(["--volume",mount.Volume+":"+mount.Destination+":"+(mount.ReadOnly?"ro,z":"rw,z")]);}
                     foreach(var pair in container.Environment.OrderBy(p=>p.Key,StringComparer.Ordinal))args.AddRange(["--env",pair.Key+"="+pair.Value]);
                 }
                 else args.AddRange(["--volume","xur-cache-"+w.Id+":/root/.cache:Z"]);
+                if(UnslothWorkload.Is(w.Recipe))args.AddRange(UnslothRuntime.ModelArguments(Path.GetDirectoryName(directory)!));
                 args.AddRange(TimezoneSettings.ContainerArguments());
                 if(w.Recipe.Kind=="Model" && w.Recipe.Hub!=null)args.AddRange(new HuggingFaceCredentials(Path.GetDirectoryName(directory)!).ContainerArguments());
                 args.AddRange(ModelGpuArguments.For(w,observed.Gpus));
@@ -271,7 +298,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
 
         {
             var saved=Definitions().SingleOrDefault(w=>w.Id==request.Id);if(saved==null)return;
-            await using var allocation=await Stops.Resources(new[]{"workload:"+request.Id}.Concat(saved.Gpus.Select(p=>"gpu:"+p)).Concat(saved.Recipe.Kind=="Workstation"?new[]{"user:"+StationAccounts.Username(saved)}:Array.Empty<string>()).Concat(T3CodeWorkload.Is(saved.Recipe)?new[]{"t3-code"}:[]));
+            await using var allocation=await Stops.Resources(new[]{"workload:"+request.Id}.Concat(saved.Gpus.Select(p=>"gpu:"+p)).Concat(saved.Recipe.Kind=="Workstation"?new[]{"user:"+StationAccounts.Username(saved)}:Array.Empty<string>()).Concat(T3CodeWorkload.Is(saved.Recipe)?new[]{"t3-code"}:[]).Concat(UnslothWorkload.Is(saved.Recipe)?new[]{"unsloth"}:[]));
             // A concurrent retry may have removed the receipt while this call waited.
             saved=Definitions().SingleOrDefault(w=>w.Id==request.Id);if(saved==null)return;
             var instance=await Inspect(saved);

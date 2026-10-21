@@ -264,6 +264,11 @@ if(!installer)
             "Robotics container setup requires inspection; gamepads remain reserved. "+Redaction.Logs(error.Message));
     }
 }
+app.MapGet("/unsloth/status",async()=>installer?Results.Conflict():Results.Json(await workloads.UnslothStatus()));
+app.MapPost("/unsloth/password",async Task<IResult>()=>{
+    if(installer)return Results.Conflict();
+    try{return Results.Json(await workloads.UnslothPassword());}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
+});
 var containers=new ContainerLibrary(stateDir);
 app.MapGet("/t3-code/status",async()=>installer?Results.Conflict():Results.Json(await workloads.T3CodeStatus()));
 app.MapPost("/t3-code/pair",async Task<IResult>()=>{

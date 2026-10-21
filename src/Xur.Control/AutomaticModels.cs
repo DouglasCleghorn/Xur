@@ -85,7 +85,7 @@ public sealed partial class ProfileManager
     {await gateway.Publish(routes);modelRoutes=Canonical.Hash(routes);publishAfter=default;}
     static bool SameInstance(RuntimeInstance first,RuntimeInstance second)=>first.Id==second.Id && first.Fingerprint==second.Fingerprint && first.InstanceId==second.InstanceId && first.Pid==second.Pid && first.BootId==second.BootId && first.Endpoint==second.Endpoint;
     static BackendRoute[] Routes(Profile profile,RuntimeObservation observed,RuntimeInstance[]? healthy=null)=>profile.Workloads
-        .Where(w=>w.Recipe.Kind!="Workstation"&&!T3CodeWorkload.Is(w.Recipe)&&w.Recipe.Port>0)
+        .Where(w=>w.Recipe.Kind!="Workstation"&&!T3CodeWorkload.Is(w.Recipe)&&!UnslothWorkload.Is(w.Recipe)&&w.Recipe.Port>0)
         .Select(w=>(Workload:w,Instance:observed.Instances.SingleOrDefault(i=>i.Id==w.Id&&i.Fingerprint==w.Fingerprint&&i.State=="running")))
         .Where(x=>x.Instance!=null && (x.Workload.Recipe.Kind!="Model" || healthy==null || healthy.Any(i=>SameInstance(i,x.Instance))))
         .Select(x=>new BackendRoute(x.Workload.Route,x.Workload.Id,x.Instance!.Endpoint)).ToArray();

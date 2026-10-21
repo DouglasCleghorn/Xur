@@ -6,6 +6,7 @@
 @if(Device.Installer) { <p>Containers are available after installation.</p> }
 else
 {
+    <p><a class="button secondary" href="/unsloth">Unsloth · Train models</a></p>
     <p><a class="button secondary" href="/t3-code">T3 Code · Prepare and connect</a></p>
     <section aria-labelledby="prepared-containers"><h2 id="prepared-containers">Ready to use</h2>
     @foreach(var recipe in Catalog.Recipes.Where(r=>r.Kind=="Container"))

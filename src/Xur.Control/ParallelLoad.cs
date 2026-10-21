@@ -33,7 +33,7 @@ public sealed partial class ProfileManager
                     return observed.Instances.Any(i=>i.Id==old.Id&&i.InstanceId==old.InstanceId&&i.Pid==old.Pid&&i.BootId==old.BootId);
                 }
                 var ready=initial.Plan.Target.Workloads.Where(Ready).ToArray();
-                await gateway.Publish(ready.Where(w=>w.Recipe.Kind!="Workstation"&&!T3CodeWorkload.Is(w.Recipe)&&w.Recipe.Port>0).Select(w=>new BackendRoute(w.Route,w.Id,observed.Instances.Single(i=>i.Id==w.Id).Endpoint)).ToArray());
+                await gateway.Publish(ready.Where(w=>w.Recipe.Kind!="Workstation"&&!T3CodeWorkload.Is(w.Recipe)&&!UnslothWorkload.Is(w.Recipe)&&w.Recipe.Port>0).Select(w=>new BackendRoute(w.Route,w.Id,observed.Instances.Single(i=>i.Id==w.Id).Endpoint)).ToArray());
             }finally{publication.Release();}
         }
         async Task PrepareStations()
@@ -57,8 +57,10 @@ public sealed partial class ProfileManager
         {
             var target=initial.Plan.Target.Workloads.Single(w=>w.Id==action.s.WorkloadId);
             // Handoffs on a GPU/user or physical seat must finish before its next owner starts.
+            // Unsloth also shares host-wide storage and a port across GPU allocations;
+            // stopped/pending observations may lack an endpoint, so wait for all stops.
             var dependencies=initial.Source.Instances.Where(old=>stops.ContainsKey(old.Id)&&
-                (old.Id==target.Id||old.Gpus.Intersect(target.Gpus).Any()||target.Recipe.Kind=="Workstation"&&old.Endpoint.Length==0)).Select(old=>old.Id).ToArray();
+                (action.s.Kind=="Start"&&UnslothWorkload.Is(target.Recipe)||old.Id==target.Id||old.Gpus.Intersect(target.Gpus).Any()||target.Recipe.Kind=="Workstation"&&old.Endpoint.Length==0)).Select(old=>old.Id).ToArray();
             await Task.WhenAll(dependencies.Select(id=>stops[id]));
             if(target.Recipe.Kind=="Workstation"&&action.s.Kind=="Start")try{await preparation;}catch(Exception e){await RecordLoadResult(action.i,SafeLoadError(e));return;}
             await slots.WaitAsync();try

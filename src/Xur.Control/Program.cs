@@ -114,6 +114,8 @@ async Task StartHost()
     });
     var app = builder.Build();
     T3CodeEndpoints.MapEndpoints(app,appliance);
+    var unslothServe=new UnslothServe();
+    UnslothEndpoints.MapEndpoints(app,appliance,unslothServe);
     app.UseBrowserErrors(Path.Combine(identityDirectory,"response-spool"));
     app.Use(async(ctx,next)=>{
         var path=ctx.Request.Path;
@@ -589,6 +591,15 @@ async Task StartHost()
                 LocalConsole.Refresh();
             }catch{ /* Retry on the next tick, including during link changes. */ }
             finally{networkRefreshGate.Release();}
+        }
+    });
+    // Repair the separate workload proxy after tailscaled/control restarts and
+    // remove its handler after unload. Keep agent requests off the enrollment loop.
+    if(!appliance.Installer)_ = Task.Run(async()=>{
+        while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
+        {
+            try{await UnslothEndpoints.Refresh(appliance,unslothServe);}catch{}
+            await Task.Delay(5000);
         }
     });
     // Network enrollment must not wait behind journal or update requests.

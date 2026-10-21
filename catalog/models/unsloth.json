@@ -1,0 +1,32 @@
+{
+  "id": "unsloth",
+  "name": "Unsloth Studio",
+  "image": "mirror.gcr.io/unsloth/unsloth:latest",
+  "command": [],
+  "port": 8000,
+  "healthPath": "/",
+  "vendor": "NVIDIA",
+  "gpuCount": 1,
+  "memoryMiB": 0,
+  "description": "Fine-tune models with persistent training data and access to downloaded models.",
+  "kind": "Container",
+  "engine": "Unsloth",
+  "container": {
+    "mounts": [
+      {
+        "volume": "xur-volume-756e736c6f7468000000000000000001",
+        "destination": "/workspace",
+        "readOnly": false
+      },
+      {
+        "volume": "xur-volume-756e736c6f7468000000000000000002",
+        "destination": "/opt/unsloth-studio",
+        "readOnly": false
+      }
+    ],
+    "environment": {
+      "HF_HOME": "/workspace/.cache/huggingface",
+      "UNSLOTH_SKIP_NOTEBOOK_SYNC": "1"
+    }
+  }
+}

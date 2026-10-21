@@ -8,7 +8,7 @@ public record HubModel(string Repository,string Revision,string License);
 public record Workload(string Id,string Name,Recipe Recipe,string[] Gpus,string Route,StationUser? User=null,StationDevices? Devices=null)
 {
     // Display names and routes do not change the runtime. GPU order defines tensor rank.
-    public string Fingerprint => T3CodeWorkload.Is(Recipe) ? Canonical.Hash(new{Recipe.Engine,Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Container,Gpus}) : Recipe.Kind=="Container" ? Canonical.Hash(new{Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Container,Gpus}) : Recipe.Kind=="Workstation" ? Devices?.Controllers is {Length:>0} ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User,Devices=new{Devices.Primary,Usb=(Devices.Usb??[]).Order(StringComparer.Ordinal).ToArray(),Controllers=Devices.Controllers.Order(StringComparer.Ordinal).ToArray()}}) : Devices!=null ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User,Devices=new{Devices.Primary,Usb=(Devices.Usb??[]).Order(StringComparer.Ordinal).ToArray()}}) : User==null ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus}) : Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User}) : Recipe.Files==null && Recipe.Hub==null
+    public string Fingerprint => (T3CodeWorkload.Is(Recipe) || UnslothWorkload.Is(Recipe)) ? Canonical.Hash(new{Recipe.Engine,Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Container,Gpus}) : Recipe.Kind=="Container" ? Canonical.Hash(new{Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Container,Gpus}) : Recipe.Kind=="Workstation" ? Devices?.Controllers is {Length:>0} ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User,Devices=new{Devices.Primary,Usb=(Devices.Usb??[]).Order(StringComparer.Ordinal).ToArray(),Controllers=Devices.Controllers.Order(StringComparer.Ordinal).ToArray()}}) : Devices!=null ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User,Devices=new{Devices.Primary,Usb=(Devices.Usb??[]).Order(StringComparer.Ordinal).ToArray()}}) : User==null ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus}) : Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User}) : Recipe.Files==null && Recipe.Hub==null
         ? Canonical.Hash(new { Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Vendor,Recipe.GpuCount,Recipe.MemoryMiB,Recipe.Model,Gpus })
         : Canonical.Hash(new {Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Vendor,Recipe.GpuCount,Recipe.MemoryMiB,Files=Recipe.Files?.Select(f=>new{f.Name,f.Asset.Sha256,f.Asset.Bytes}).ToArray(),Hub=Recipe.Hub==null?null:new{Recipe.Hub.Repository,Recipe.Hub.Revision},Gpus});
 }
@@ -52,6 +52,8 @@ public static class ProfilePolicy
         if(!EntityIdentifier(profile.Id) || string.IsNullOrWhiteSpace(profile.Name) || profile.Name.Length>80 || profile.Workloads.Length>32)
             throw new InvalidOperationException("Use a profile name and at most 32 workloads.");
         StationDevicePolicy.Validate(profile.Workloads);
+        if(profile.Workloads.Count(w=>UnslothWorkload.Is(w.Recipe))>1)
+            throw new InvalidOperationException("Select one Unsloth server per host.");
         if(profile.Workloads.Count(w=>T3CodeWorkload.Is(w.Recipe))>1)
             throw new InvalidOperationException("Select one T3 Code server per host.");
         if(profile.Workloads.Count(w=>w.Recipe.Kind=="Robotics")>1)
@@ -79,6 +81,7 @@ public static class ProfilePolicy
     }
     public static void ValidateRecipe(Recipe r)
     {
+        if(UnslothWorkload.Is(r)){UnslothWorkload.Validate(r);return;}
         if(r.Kind=="Robotics")
         {
             if(r.Id!="xlerobot" || r.Image!="host:xlerobot" || r.Engine!="XLeRobot" || r.Vendor!="CPU" || r.GpuCount!=0 || r.MemoryMiB!=0 || r.Port!=0 || r.HealthPath!="" || r.Command.Length!=0 || r.Model!=null || r.Files!=null || r.Hub!=null || r.Container!=null)
