@@ -13,6 +13,8 @@ public static class T3CodeWorkload
     public static bool Is(Recipe recipe)=>recipe.Kind=="Container" && recipe.Engine==Engine;
     // No browser or terminal QR is needed; Xur issues fresh links on request.
     public static string[] Command=>["/opt/t3/t3","start","--host","0.0.0.0","--port","3773","--base-dir",BaseDirectory,"--no-browser",Home+"/projects"];
+    // Zero GPUs means no exclusive allocation; the runtime grants shared access
+    // to every host GPU without changing existing recipes or stored profiles.
     public static ContainerPrepareRequest Prepare(string? volume=null)=>new(
         Dockerfile:Dockerfile,Name:Engine,Port:3773,Command:Command,Engine:Engine,
         Environment:new(){{"HOME",Home}},Volumes:[new("T3 Code home, projects and credentials",Home,volume)]);

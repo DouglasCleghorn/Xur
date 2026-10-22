@@ -61,7 +61,7 @@ else if(state!=null && profile!=null)
                 <div class="model-options"></div><p class="catalog-error" role="alert" hidden></p>
                 <p class="container-library-link" hidden="@(w?.Recipe.Kind!="Container")"><a href="/containers">Prepare a container</a></p>
                 <p class="unsloth-link" hidden="@(w?.Recipe.Engine!=UnslothWorkload.Engine)"><a href="/unsloth">Unsloth Studio</a> · Latest version, persistent training data and access to downloaded models. Use Add GPU to assign one or more NVIDIA GPUs.</p>
-                <p class="t3-code-link" hidden="@(w?.Recipe.Engine!=T3CodeWorkload.Engine)"><a href="/t3-code">Prepare T3 Code or connect a device</a> · Projects and sessions persist between profile changes.</p>
+                <p class="t3-code-link" hidden="@(w?.Recipe.Engine!=T3CodeWorkload.Engine)"><a href="/t3-code">Prepare T3 Code or connect a device</a> · Shared access to all host GPUs. Projects and sessions persist between profile changes.</p>
                 <div class="gpu-choices">
                 @for(var g=0;g<(w?.Recipe.GpuCount ?? 0);g++)
                 {
