@@ -32,12 +32,14 @@ public static class T3CodeWorkload
         FROM mirror.gcr.io/library/node:24-bookworm
         RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client ca-certificates curl python3 ripgrep \
             && rm -rf /var/lib/apt/lists/*
-        RUN curl --fail --location --retry 3 https://github.com/pingdotgg/t3code/releases/download/v0.1.0/t3-0.1.0-linux-x64.tar.gz -o /tmp/t3.tar.gz \
-            && echo 'f7703ff1bb8f6243580058b3ccf2c02abb62eba4b991e26bbb1da22f4b56d9b1  /tmp/t3.tar.gz' | sha256sum --check --strict \
-            && mkdir -p /opt/t3 && tar -xzf /tmp/t3.tar.gz --strip-components=1 -C /opt/t3 \
-            && rm /tmp/t3.tar.gz && ln -s /opt/t3/t3 /usr/local/bin/t3
-        RUN curl --fail --location --retry 3 https://raw.githubusercontent.com/pingdotgg/t3code/v0.1.0/LICENSE -o /opt/t3/LICENSE \
-            && echo '935d8f2af0c703f9c39517ee57cc4930b19d02d533be930b63f0e82f93614b43  /opt/t3/LICENSE' | sha256sum --check --strict
+        ARG XUR_T3_PREPARATION
+        RUN test -n "$XUR_T3_PREPARATION" \
+            && curl --fail --location --retry 3 https://t3.codes/install.sh -o /tmp/t3-install.sh \
+            && T3CODE_CHANNEL=stable T3CODE_HOME=/opt/t3 T3CODE_INSTALL_BIN_DIR=/opt/t3 sh /tmp/t3-install.sh \
+            && rm /tmp/t3-install.sh && ln -s /opt/t3/t3 /usr/local/bin/t3 \
+            && version="$(cat "$(dirname "$(readlink -f /opt/t3/t3)")/.install-complete")" \
+            && curl --fail --location --retry 3 "https://raw.githubusercontent.com/pingdotgg/t3code/v${version}/LICENSE" -o /opt/t3/LICENSE \
+            && /opt/t3/t3 --version
         RUN mkdir -p /home/node/projects /home/node/.t3 /home/node/.local/bin \
             && chown -R node:node /home/node
         ENV HOME=/home/node
