@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Xur.Agent;
 using Xur.Control;
 using Xur.Domain;
 
@@ -32,8 +33,37 @@ static class T3CodeTests
         check(!ApiKeys.Allows("automation","POST","/api/t3-code/pair"),"Automation keys cannot mint T3 Code device credentials");
         check(T3CodeEndpoints.Origin(new HostString("[fd00::1]:8443"))=="http://[fd00::1]:3773","T3 Code links use its direct port and preserve IPv6 hosts");
         check(T3CodeEndpoints.Origin(new HostString("coding.test:8443"))=="http://coding.test:3773","T3 Code links target the server hostname rather than the browsing device");
+        await Preparation(check);
         await Endpoints(check);
         await T3ModelTests.Run(check);
+    }
+    static async Task Preparation(Action<bool,string> check)
+    {
+        var root=Path.GetFullPath(".build/evidence/t3-prepare-"+Guid.NewGuid().ToString("N")[..12]);Directory.CreateDirectory(root);
+        var previousPath=Environment.GetEnvironmentVariable("PATH");var previousArgs=Environment.GetEnvironmentVariable("XUR_T3_PREPARE_ARGS");
+        var capture=Path.Combine(root,"arguments");
+        await File.WriteAllTextAsync(Path.Combine(root,"podman"),"#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$XUR_T3_PREPARE_ARGS\"\nprintf '%s\\n' 'Fixture installer download failed.' >&2\nexit 1\n");
+        File.SetUnixFileMode(Path.Combine(root,"podman"),UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
+        try
+        {
+            Environment.SetEnvironmentVariable("PATH",root+":"+previousPath);Environment.SetEnvironmentVariable("XUR_T3_PREPARE_ARGS",capture);
+            var library=new ContainerLibrary(Path.Combine(root,"state"));var refreshes=new HashSet<string>();
+            foreach(var request in new[]{T3CodeWorkload.Prepare(),T3CodeWorkload.Prepare(),new ContainerPrepareRequest(Dockerfile:"FROM mirror.gcr.io/library/node:24-bookworm")})
+            {
+                var job=library.Prepare(request);
+                using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                while(library.Busy)await Task.Delay(10,timeout.Token);
+                var completed=library.Jobs().Single(j=>j.Id==job.Id);var arguments=await File.ReadAllLinesAsync(capture);
+                if(request.Engine==T3CodeWorkload.Engine)
+                {
+                    var index=Array.IndexOf(arguments,"--build-arg");
+                    check(index>=0 && arguments[index+1]=="XUR_T3_PREPARATION="+job.Id && refreshes.Add(arguments[index+1]),"Every T3 preparation passes a fresh installer cache key to the builder");
+                }
+                else check(!arguments.Contains("--build-arg"),"Custom container builds retain their existing cache behavior");
+                check(completed.Stage=="Failed" && completed.RecipeId==null && completed.Log.Contains("Fixture installer download failed."),"Installer build failures remain visible without selecting an older release");
+            }
+        }
+        finally{Environment.SetEnvironmentVariable("PATH",previousPath);Environment.SetEnvironmentVariable("XUR_T3_PREPARE_ARGS",previousArgs);Directory.Delete(root,true);}
     }
     static async Task Endpoints(Action<bool,string> check)
     {

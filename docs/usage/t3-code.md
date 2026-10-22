@@ -4,7 +4,7 @@ T3 Code runs as a persistent CPU container. Xur prepares, starts and stops the
 workload; phones and desktops connect **directly to T3 Code on TCP port 3773**.
 Xur does not proxy its HTTP or WebSocket connections.
 
-1. Open **T3 Code → Prepare T3 Code**. Preparation downloads the pinned upstream
+1. Open **T3 Code → Prepare T3 Code**. Preparation downloads the latest stable upstream
    release and builds the image. **Containers** shows progress and errors.
 2. Edit a profile, add a workload, select **T3 Code**, and save and load the profile.
 3. Return to **T3 Code → Create pairing link**. Use **Pair this device**, scan the
@@ -24,7 +24,7 @@ must be able to reach that address over the LAN or tailnet. Tailscale encrypts
 traffic between tailnet devices; direct LAN HTTP does not provide TLS. The hosted
 T3 web client requires HTTPS, so use the locally served web app or desktop client
 for this direct HTTP connection. See the upstream
-[remote access guide](https://github.com/pingdotgg/t3code/blob/v0.1.0/docs/user/remote-access.md)
+[remote access guide](https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md)
 for T3's other connection options. Xur does not configure those services.
 
 One T3 Code workload can run on the host at a time. If another service already
@@ -130,10 +130,18 @@ assets and QR generation are served locally.
 
 ## Version and validation
 
-The preset uses the checksum-verified T3 Code **0.1.0** Linux x64 distribution,
-including its local web assets and dependency notices. Its MIT notice is retained
-separately from Xur's license. The Node base comes from Google's Docker Hub cache;
-there is no fallback to Docker Hub on a cache miss.
+Each preparation runs [T3 Code's official installer](https://t3.codes/install.sh)
+on its **stable** channel to download the latest prebuilt Linux distribution.
+The installer verifies the archive against the release's `SHA256SUMS` and retains
+its local web assets and dependency notices. Xur also downloads the MIT notice
+from the installed release's tag and keeps it at `/opt/t3/LICENSE`, separately
+from Xur's license. The preparation log reports the installed version.
+
+Each preparation refreshes the installer layer even when previous container
+builds are cached. The Node and OS-package layers can still be reused. The Node
+base comes from Google's Docker Hub cache; there is no fallback to Docker Hub
+on a cache miss. Preparation failures remain visible in **Preparation progress**;
+there is no fallback to an older T3 release.
 
 The optional install buttons pin `@openai/codex` 0.163.0,
 `@anthropic-ai/claude-code` 2.1.306 and `@opencode/cli` 2.1.2 under the persistent
@@ -149,7 +157,7 @@ replace an active container; select the new recipe and apply the profile change.
 Automated tests cover recipe validation, single-server selection, persistent
 storage reuse, direct IPv4/hostname and IPv6 links, pairing responses and rollback
 compatibility. The 2026-10-17 source checks passed 2,053 unit assertions and 139
-updater assertions. The pinned upstream executable also completed native pairing
+updater assertions. The then-pinned 0.1.0 executable also completed native pairing
 over a direct LAN port in the collaborative browser at phone size; no agent task
 was started. Building and booting this container on a Xur host remains a separate
 integration check.
