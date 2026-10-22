@@ -24,5 +24,5 @@ public static class UnslothWorkload
     }
 }
 
-public record UnslothStatus(bool Running);
+public record UnslothStatus(bool Running,bool Ready=false,string? Message=null);
 public record UnslothPassword(string Password);

@@ -44,7 +44,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     public async Task<UnslothStatus> UnslothStatus()
     {
         var definition=Definitions().SingleOrDefault(w=>UnslothWorkload.Is(w.Recipe));
-        return new(definition!=null && (await Inspect(definition))?.State=="running");
+        using var client=new HttpClient(new SocketsHttpHandler{UseProxy=false,AllowAutoRedirect=false});
+        return await UnslothRuntime.Status(definition!=null && (await Inspect(definition))?.State=="running",client);
     }
     public async Task<UnslothPassword> UnslothPassword()
     {

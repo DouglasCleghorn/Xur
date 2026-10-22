@@ -2,10 +2,10 @@ using System.Text.Json;
 using Xur.Domain;
 namespace Xur.Control;
 
-public record UnslothConnection(bool Running,string? Url,string Message);
+public record UnslothConnection(bool Running,string? Url,string Message,bool Ready=false,bool NeedsPassword=false);
 
 // Own only Unsloth's port. Never reset Serve or replace another service's handler.
-public sealed class UnslothServe(Func<string,string[],int,Task<ProcessResult>>? execute=null)
+public sealed class UnslothServe(Func<string,string[],int,Task<ProcessResult>>? execute=null,string proxy="unix:/run/xur/unsloth.sock")
 {
     readonly Func<string,string[],int,Task<ProcessResult>> run=execute??((exe,args,seconds)=>Processes.Run(exe,args,seconds));
     readonly SemaphoreSlim gate=new(1,1);
@@ -39,7 +39,14 @@ public sealed class UnslothServe(Func<string,string[],int,Task<ProcessResult>>? 
             if(hasPort&&!owned)return current=current with{Message="Tailscale HTTPS port "+port+" is already used by another service. Free that port to connect Unsloth."};
             if(!Configured(root,host))
             {
-                var configured=await run("tailscale",["serve","--bg","--https="+port,UnslothWorkload.Backend],15);
+                // Close the legacy bypass before attempting a new handler. If
+                // configuration fails, leave this owned port closed for retry.
+                if(owned && !Owned(root,port,legacy:false))
+                {
+                    var closed=await run("tailscale",["serve","--https="+port,"off"],15);
+                    if(closed.ExitCode!=0)return Unavailable(running);
+                }
+                var configured=await run("tailscale",["serve","--bg","--https="+port,proxy],15);
                 if(configured.ExitCode!=0)return Unavailable(running);
                 using var verify=await Status();
                 if(!Configured(verify.RootElement,host))return Unavailable(running);
@@ -56,13 +63,13 @@ public sealed class UnslothServe(Func<string,string[],int,Task<ProcessResult>>? 
         if(result.ExitCode!=0)throw new IOException("Tailscale Serve status is unavailable.");
         return JsonDocument.Parse(result.Output);
     }
-    static bool Configured(JsonElement root,string host)=>Owned(root,UnslothWorkload.HttpsPort.ToString()) &&
+    bool Configured(JsonElement root,string host)=>Owned(root,UnslothWorkload.HttpsPort.ToString(),legacy:false) &&
         root.TryGetProperty("Web",out var web)&&web.TryGetProperty(host,out _);
-    static bool Owned(JsonElement root,string port)
+    bool Owned(JsonElement root,string port,bool legacy=true)
     {
         if(!root.TryGetProperty("TCP",out var tcp)||!tcp.TryGetProperty(port,out var listener)||!listener.TryGetProperty("HTTPS",out var https)||https.ValueKind!=JsonValueKind.True||!root.TryGetProperty("Web",out var web))return false;
         var sites=web.EnumerateObject().Where(s=>s.Name.EndsWith(":"+port,StringComparison.Ordinal)).ToArray();
         return sites.Length>0&&sites.All(s=>s.Value.TryGetProperty("Handlers",out var handlers)&&handlers.EnumerateObject().Count()==1&&
-            handlers.TryGetProperty("/",out var handler)&&handler.TryGetProperty("Proxy",out var proxy)&&proxy.GetString()==UnslothWorkload.Backend);
+            handlers.TryGetProperty("/",out var handler)&&handler.TryGetProperty("Proxy",out var target)&&(target.GetString()==proxy || legacy && target.GetString()==UnslothWorkload.Backend));
     }
 }
