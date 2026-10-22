@@ -57,19 +57,31 @@ immutable image ID. A mirror failure fails the start explicitly, without falling
 back to Docker Hub or an older image. Unchanged running workloads keep their
 image; unload and load to update.
 
-Choose **Open Unsloth Studio** in Running workloads. Studio connects through
-Tailscale Serve at `https://<tailscale-name>:8444/` and uses its own login. Xur
-configures this separate HTTPS listener automatically while Unsloth runs,
-verifies its proxy, and repairs it after Tailscale restarts. The HTTP backend
-binds only to `127.0.0.1:8000`; no LAN HTTP port is exposed. The link uses the
-server's Tailscale DNS name even when you open Xur using a LAN address.
-Connect Tailscale and enable tailnet HTTPS first. If port 8444 belongs to another
-service, Xur reports the conflict without replacing that service. On Xur's
-Unsloth page, choose **Show first-login password**, sign in as `unsloth`, then
-change the password. Xur only reveals the bootstrap password to an authenticated
-browser session; API keys and redacted workload logs cannot reveal it. The
-upstream first-login timeout still applies. Subsequent logins use your saved
-password. Jupyter and SSH ports are not published.
+Choose **Open Unsloth Studio** in Running workloads. Sign in to Xur using its
+Tailscale DNS name; that browser session also opens Studio at
+`https://<tailscale-name>:8444/`. Xur configures this separate Tailscale Serve
+listener, verifies its proxy, and repairs it after Tailscale restarts. Connect
+Tailscale and enable tailnet HTTPS first. A conflicting service on port 8444 is
+reported without replacing it. Existing Xur-owned direct routes are migrated to
+the authenticated proxy. The backend binds only to `127.0.0.1:8000`; Jupyter and
+SSH ports are not published.
+
+All Xur managers share the Studio owner account, including its chats, training
+jobs and files. Xur completes first-login password setup automatically and stores
+a private generated password on the server. This completes the upstream setup
+requirement that otherwise shuts Studio down after one hour. Existing accounts
+with a changed password need **Connect Studio to Xur** once: enter the current
+password, and Xur replaces it with a generated one while preserving account data.
+Credentials are included in Xur's private recovery backup. Keep that backup and
+the Studio volume together when restoring.
+
+Every Studio page, API request and WebSocket requires a Xur browser session;
+API keys, setup tokens and Tailscale identity headers alone cannot open it.
+Signing out disconnects active Studio requests and sockets; server-side training
+continues. The browser receives no Studio password or real Studio tokens. Xur
+checks Studio's HTTP health and login before enabling the link. A running
+container with an unavailable Studio backend is reported as unavailable with
+log/restart guidance, rather than advertised as ready.
 
 All Unsloth profiles share two Xur-owned persistent volumes, listed in Storage:
 

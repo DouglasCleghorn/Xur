@@ -107,16 +107,21 @@ async Task StartHost()
     File.SetUnixFileMode(appliance.RunDirectory,UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     var socket = Path.Combine(appliance.RunDirectory,"control.sock"); File.Delete(socket);
     var serveSocket = Path.Combine(appliance.RunDirectory,"serve.sock"); File.Delete(serveSocket);
+    var unslothSocket=Path.Combine(appliance.RunDirectory,"unsloth.sock");File.Delete(unslothSocket);
     builder.WebHost.ConfigureKestrel(k => {
         if(!appliance.Installer){k.ListenAnyIP(appliance.Port);k.ListenAnyIP(appliance.Port+363,o=>o.UseHttps(LocalTls.Load(identityDirectory)));}
         k.ListenUnixSocket(socket,l=>l.Use(next=>connection=>{connection.Features.Set(new EndpointIdentity("local"));return next(connection);}));
         if(!appliance.Installer)k.ListenUnixSocket(serveSocket,l=>l.Use(next=>connection=>{connection.Features.Set(new EndpointIdentity("serve"));return next(connection);}));
+        if(!appliance.Installer)k.ListenUnixSocket(unslothSocket,l=>l.Use(next=>connection=>{connection.Features.Set(new EndpointIdentity("unsloth"));return next(connection);}));
     });
     var app = builder.Build();
     T3CodeEndpoints.MapEndpoints(app,appliance);
-    var unslothServe=new UnslothServe();
-    UnslothEndpoints.MapEndpoints(app,appliance,unslothServe);
-    app.UseBrowserErrors(Path.Combine(identityDirectory,"response-spool"));
+    var unslothServe=new UnslothServe(proxy:"unix:"+unslothSocket);
+    using var studioLoginClient=UnslothSession.CreateClient();
+    using var studioProxyClient=UnslothProxy.CreateClient();
+    var studioSession=new UnslothSession(Path.Combine(identityDirectory,"secrets","unsloth.json"),()=>UnslothEndpoints.BootstrapPassword(appliance),studioLoginClient);
+    var studioProxy=new UnslothProxy(studioSession,auth.AuthorizedBrowser,()=>appliance.TailUrl,studioProxyClient);
+    UnslothEndpoints.MapEndpoints(app,appliance,unslothServe,studioSession,auth.AuthorizedBrowser);
     app.Use(async(ctx,next)=>{
         var path=ctx.Request.Path;
         if(appliance.Installer&&!path.StartsWithSegments("/local") || path.StartsWithSegments("/install") || path.StartsWithSegments("/api/install") || path=="/api/installer")
@@ -137,6 +142,12 @@ async Task StartHost()
         }
         await next();
     });
+    app.UseWebSockets();
+    app.Use(async(ctx,next)=>{
+        if(ctx.Features.Get<EndpointIdentity>()?.Kind=="unsloth"){await studioProxy.Handle(ctx);return;}
+        await next();
+    });
+    app.UseBrowserErrors(Path.Combine(identityDirectory,"response-spool"));
     app.UseBrowserOrigin();
     app.UseApiKeys(apiKeys,()=>auth.AccountConfigured);
     app.Use(async (ctx,next) => {
@@ -346,7 +357,7 @@ async Task StartHost()
         return result.Session is { } session ? Results.Json(new {accessToken=session,tokenType="Bearer",expiresIn=28800,setupRequired=false})
             : Results.Json(new {error=result.Status==429?"Wait 30 seconds before retrying":"Invalid username or password"},statusCode:result.Status);
     });
-    app.MapPost("/auth/logout",(HttpContext ctx)=> { ctx.Response.Cookies.Delete("xur.session",new CookieOptions {Path="/"});return Results.Redirect("/login"); });
+    app.MapPost("/auth/logout",(HttpContext ctx)=> { studioProxy.Revoke(ctx.Request.Cookies["xur.session"]);ctx.Response.Cookies.Delete("xur.session",new CookieOptions {Path="/"});return Results.Redirect("/login"); });
     app.MapGet("/api/diagnostics/display",async()=> {
         System.Text.Json.Nodes.JsonObject report;
         try {
@@ -450,7 +461,7 @@ async Task StartHost()
     if(!appliance.Installer && !File.Exists(ApplicationMaintenance.Marker))await profileManager.Resume(automatic:true);
     if(!appliance.Installer)_=Task.Run(()=>profileManager.WatchModels(app.Lifetime.ApplicationStopping));
     File.SetUnixFileMode(socket,UnixFileMode.UserRead|UnixFileMode.UserWrite);
-    if(!appliance.Installer)File.SetUnixFileMode(serveSocket,UnixFileMode.UserRead|UnixFileMode.UserWrite);
+    if(!appliance.Installer){File.SetUnixFileMode(serveSocket,UnixFileMode.UserRead|UnixFileMode.UserWrite);File.SetUnixFileMode(unslothSocket,UnixFileMode.UserRead|UnixFileMode.UserWrite);}
     await LocalConsole.Start(appliance,auth);
     app.Lifetime.ApplicationStopping.Register(LocalConsole.Stop);
     if(appliance.Installer){await consoleMenu.Open("setup");ShowConsoleMenu();}
@@ -599,7 +610,7 @@ async Task StartHost()
     if(!appliance.Installer)_ = Task.Run(async()=>{
         while(!app.Lifetime.ApplicationStopping.IsCancellationRequested)
         {
-            try{await UnslothEndpoints.Refresh(appliance,unslothServe);}catch{}
+            try{await UnslothEndpoints.Refresh(appliance,unslothServe,studioSession);}catch{}
             await Task.Delay(5000);
         }
     });

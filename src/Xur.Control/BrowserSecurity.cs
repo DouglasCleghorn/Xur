@@ -13,7 +13,7 @@ public static class BrowserSecurity
 
     public static bool ServeOrigin(HttpContext context)
     {
-        if(context.Features.Get<EndpointIdentity>()?.Kind!="serve")return true;
+        if(context.Features.Get<EndpointIdentity>()?.Kind is not ("serve" or "unsloth"))return true;
         context.Request.Scheme="https";
         // Serve replaces Host with localhost for Unix backends. It overwrites
         // X-Forwarded-Host with the browser's original Host. Trust this only on
