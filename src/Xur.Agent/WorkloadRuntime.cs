@@ -2,8 +2,27 @@ using System.Text.Json;
 using Xur.Domain;
 namespace Xur.Agent;
 
-public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,DisplayConsoles? consoles=null):IWorkloadRuntime
+public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,DisplayConsoles? consoles=null,DataStorage? dataStorage=null):IWorkloadRuntime
 {
+    readonly DataStorage storage=dataStorage??new DataStorage(Path.GetDirectoryName(directory)!);
+    Task? storageMove;
+    public bool StorageMoveBusy=>storageMove is {IsCompleted:false};
+    public async Task MoveStorage(DataStorageRequest request)
+    {
+        if(StorageMoveBusy)throw new InvalidOperationException("A storage move is already running.");
+        if(!await gate.WaitAsync(0))throw new InvalidOperationException("Wait for the current workload change before moving storage.");
+        try
+        {
+            if(Definitions().Length>0)throw new InvalidOperationException("Unload all profiles before moving storage.");
+            if(File.Exists("/var/lib/xur/app/maintenance"))throw new InvalidOperationException("Wait for the application update before moving storage.");
+            storageMove=Task.Run(async()=>{
+                try{await storage.Move(request);}
+                catch(Exception error){Console.Error.WriteLine("Storage move: "+Redaction.Logs(error.Message));}
+                finally{gate.Release();}
+            });
+        }
+        catch{gate.Release();throw;}
+    }
     readonly RoboticsWebContainer robotWeb=new(Environment.GetEnvironmentVariable("XUR_RUN")??"/run/xur",stateDirectory:Path.Combine(Path.GetDirectoryName(directory)!,"robotics"));
     readonly SemaphoreSlim gate=new(1,1);
     ParallelStopGate? stopGate;
@@ -157,6 +176,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                     throw new InvalidOperationException("The workstation is no longer selected for boot restoration.");
             }
             catalog.Verify(w.Recipe);
+            if(w.Recipe.Kind=="Model" || UnslothWorkload.Is(w.Recipe))await storage.Require("models");
+            if(UnslothWorkload.Is(w.Recipe))await storage.Require("unsloth");
             Directory.CreateDirectory(directory);
             var observed=await ObserveUnlocked();ProfilePolicy.Validate(new("runtime","Runtime",1,[w]),observed);
             if((w.Recipe.Kind=="Robotics" && Definitions().Any(d=>d.Id!=w.Id && d.Recipe.Kind is "Workstation" or "Robotics")) ||
@@ -221,13 +242,13 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 var unsloth=new UnslothRuntime();
                 engineImage=await unsloth.Refresh(instance);
                 if(engineImage?.Recreate==true)instance=null;
-                if(instance==null)await unsloth.EnsureStorage();
+                if(instance==null && !storage.Selected("unsloth"))await unsloth.EnsureStorage();
             }
             if(instance==null)
             {
                 var selected=observed.Gpus.Where(g=>w.Gpus.Contains(g.Pci)).ToArray();await GpuInventory.VerifyReleased(selected);
                 string? model,modelFiles;
-                await using(var cache=await Stops.Resources((w.Recipe.Model is {} asset?new[]{asset.Sha256}:[]).Concat((w.Recipe.Files??[]).Select(f=>f.Asset.Sha256)).Select(hash=>"model:"+hash)))
+                await using(var cache=await Stops.Resources(new[]{"model-downloads"}.Concat((w.Recipe.Model is {} asset?new[]{asset.Sha256}:[]).Concat((w.Recipe.Files??[]).Select(f=>f.Asset.Sha256)).Select(hash=>"model:"+hash))))
                 {model=await DownloadModel(w.Recipe.Model);modelFiles=await DownloadFiles(w.Recipe.Files);}
                 if(w.Recipe.Kind=="Container" && !UnslothWorkload.Is(w.Recipe))
                 {
@@ -236,15 +257,21 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 }
                 var image=engineImage?.Image??w.Recipe.Image;
                 var args=new List<string> {"create","--name",Name(w.Id),"--label","io.xur.fingerprint="+w.Fingerprint,"--label","io.xur.id="+w.Id,
-                    "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096",(UnslothWorkload.Is(w.Recipe)||w.Recipe.Kind=="Model"&&w.Recipe.Engine is "vLLM" or "vLLM-Omni")?"--shm-size=4g":"--shm-size=1g",w.Recipe.Kind=="Model"?"--restart=no":"--restart=unless-stopped"};
+                    "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096",(UnslothWorkload.Is(w.Recipe)||w.Recipe.Kind=="Model"&&w.Recipe.Engine is "vLLM" or "vLLM-Omni")?"--shm-size=4g":"--shm-size=1g",w.Recipe.Kind=="Model"||UnslothWorkload.Is(w.Recipe)?"--restart=no":"--restart=unless-stopped"};
                 if(w.Recipe.Port>0)args.AddRange(["--publish",T3CodeWorkload.Is(w.Recipe)?$"{T3CodeWorkload.HostPort}:{w.Recipe.Port}":UnslothWorkload.Is(w.Recipe)?UnslothWorkload.Publish:"127.0.0.1::"+w.Recipe.Port]);
                 if(w.Recipe.Container is {} container)
                 {
-                    foreach(var mount in container.Mounts){await ContainerLibrary.VerifyVolume(mount.Volume);args.AddRange(["--volume",mount.Volume+":"+mount.Destination+":"+(mount.ReadOnly?"ro,z":"rw,z")]);}
+                    foreach(var mount in container.Mounts)
+                    {
+                        var source=mount.Volume;
+                        if(UnslothWorkload.Is(w.Recipe)&&storage.Selected("unsloth"))source=storage.PathFor("unsloth",mount.Destination=="/workspace"?"workspace":"studio");
+                        else await ContainerLibrary.VerifyVolume(mount.Volume);
+                        args.AddRange(["--volume",source+":"+mount.Destination+":"+(mount.ReadOnly?"ro,z":"rw,z")]);
+                    }
                     foreach(var pair in container.Environment.OrderBy(p=>p.Key,StringComparer.Ordinal))args.AddRange(["--env",pair.Key+"="+pair.Value]);
                 }
                 else args.AddRange(["--volume","xur-cache-"+w.Id+":/root/.cache:Z"]);
-                if(UnslothWorkload.Is(w.Recipe))args.AddRange(UnslothRuntime.ModelArguments(Path.GetDirectoryName(directory)!));
+                if(UnslothWorkload.Is(w.Recipe))args.AddRange(UnslothRuntime.ModelArguments(Path.GetDirectoryName(directory)!,part=>storage.PathFor("models",part)));
                 args.AddRange(TimezoneSettings.ContainerArguments());
                 if(w.Recipe.Kind=="Model" && w.Recipe.Hub!=null)args.AddRange(new HuggingFaceCredentials(Path.GetDirectoryName(directory)!).ContainerArguments());
                 args.AddRange(T3CodeWorkload.Is(w.Recipe)?await T3CodeGpuAccess.Arguments(observed.Gpus):ModelGpuArguments.For(w,observed.Gpus));
@@ -347,10 +374,11 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     async Task<string?> DownloadModel(ModelAsset? model)
     {
         if(model==null)return null;
-        var models=Path.Combine(Path.GetDirectoryName(directory)!,"models");Directory.CreateDirectory(models);
+        var models=storage.PathFor("models","models");Directory.CreateDirectory(models);
         var path=Path.Combine(models,model.Sha256+".gguf");
         if(File.Exists(path) && new FileInfo(path).Length==model.Bytes)
         {await using var existing=File.OpenRead(path);if(Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(existing))==model.Sha256)return path;}
+        DataStorage.CheckCapacity(models,model.Bytes);
         using var timeout=new CancellationTokenSource(TimeSpan.FromHours(6));
         using var http=new HttpClient {Timeout=TimeSpan.FromHours(6)};
         using var request=new HuggingFaceCredentials(Path.GetDirectoryName(directory)!).Request(model.Url);
@@ -368,7 +396,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     async Task<string?> DownloadFiles(ModelFile[]? files)
     {
         if(files==null)return null;
-        var root=Path.Combine(Path.GetDirectoryName(directory)!,"model-sets",Canonical.Hash(files));Directory.CreateDirectory(root);
+        var root=Path.Combine(storage.PathFor("models","model-sets"),Canonical.Hash(files));Directory.CreateDirectory(root);
         foreach(var file in files)
         {
             var target=Path.Combine(root,file.Name);var source=await DownloadModel(file.Asset);

@@ -4,7 +4,7 @@ namespace Xur.Agent;
 
 // A cached metadata scan. Never mount devices, traverse remote filesystems, or
 // block the HTTP host while a large model or home directory is being measured.
-public sealed class StorageUsage(VictoriaMetrics? metrics=null,Func<Task<(StorageFilesystem[] Filesystems,StorageDiskUsage[] Disks)>>? diskObserver=null)
+public sealed class StorageUsage(VictoriaMetrics? metrics=null,Func<Task<(StorageFilesystem[] Filesystems,StorageDiskUsage[] Disks)>>? diskObserver=null,DataStorage? storage=null)
 {
     readonly object gate=new();
     readonly SemaphoreSlim diskScan=new(1);
@@ -94,7 +94,8 @@ public sealed class StorageUsage(VictoriaMetrics? metrics=null,Func<Task<(Storag
             await RefreshDisks(refresh);
             var categories=new List<StorageCategory>();
             var caches=ModelCaches("/var/lib/containers/storage/volumes");
-            categories.Add(await Measure("Models",["/var/lib/xur/models","/var/lib/xur/model-sets",..caches]));
+            categories.Add(await Measure("Models",[storage?.PathFor("models","models")??"/var/lib/xur/models",storage?.PathFor("models","model-sets")??"/var/lib/xur/model-sets",..caches]));
+            if(storage?.Selected("unsloth")==true)categories.Add(await Measure("Unsloth data",[storage.PathFor("unsloth","workspace"),storage.PathFor("unsloth","studio")]));
             categories.Add(await Measure("Workstation streaming",["/var/lib/xur-streaming","/var/lib/xur-streaming-runtime"]));
             categories.Add(await Measure("Containers & engines",["/var/lib/containers/storage"],caches));
             categories.Add(await Measure("User files",["/var/home"]));

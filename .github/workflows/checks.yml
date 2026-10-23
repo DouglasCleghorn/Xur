@@ -13,9 +13,10 @@ jobs:
         with:
           global-json-file: global.json
       - name: Native AOT prerequisites
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang zlib1g-dev btrfs-progs
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y clang zlib1g-dev btrfs-progs
       - run: |
           mkdir -p .build/checks
           python3 -m pip install --target .build/checks -r eng/requirements.txt

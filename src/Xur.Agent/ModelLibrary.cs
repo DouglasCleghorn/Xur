@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Xur.Domain;
 namespace Xur.Agent;
-public sealed class ModelLibrary(string directory="/var/lib/xur")
+public sealed class ModelLibrary(string directory="/var/lib/xur",DataStorage? storage=null)
 {
     readonly object gate=new();ModelScanStatus snapshot=new(null,false,[],[],[]);
     public ModelScanStatus Status(){lock(gate)return snapshot;}
@@ -13,7 +13,8 @@ public sealed class ModelLibrary(string directory="/var/lib/xur")
             try
             {
                 if(!allStorage)foreach(var entry in Status().Models)if(Directory.Exists(entry.Path)||File.Exists(entry.Path))models[entry.Path]=entry;
-                var caches=new[]{directory+"/models",directory+"/model-sets"};
+                if(storage!=null)await storage.Require("models");
+                var caches=new[]{storage?.PathFor("models","models")??directory+"/models",storage?.PathFor("models","model-sets")??directory+"/model-sets"};
                 foreach(var root in caches)if(Directory.Exists(root))roots.Add(root);
                 const string volumes="/var/lib/containers/storage/volumes";
                 if(Directory.Exists(volumes))roots.AddRange(Directory.GetDirectories(volumes,"xur-cache-*").Select(p=>p+"/_data"));

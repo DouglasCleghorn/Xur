@@ -25,7 +25,7 @@ public sealed partial class ProfileManager
         {
             if(worker is {IsCompleted:false} || store.Get<Journal>("journal","current") is {Stage:not ("Complete" or "Cancelled")})return;
             var profile=store.Get<Profile>("active","current");if(profile==null)return;
-            var models=profile.Workloads.Where(w=>w.Recipe.Kind=="Model").ToArray();if(models.Length==0)return;
+            var models=profile.Workloads.Where(w=>w.Recipe.Kind=="Model"||UnslothWorkload.Is(w.Recipe)).ToArray();if(models.Length==0)return;
             var observed=await runtime.Observe();var now=time??DateTimeOffset.UtcNow;
             var recover=models.Where(w=>
             {

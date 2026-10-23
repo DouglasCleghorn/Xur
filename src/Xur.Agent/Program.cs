@@ -254,7 +254,8 @@ app.MapPost("/approve", async (Approval approval) => {
     finally { gate.Release(); }
 });
 app.MapGet("/display-consoles",()=>Results.Json(new{error=displayConsoles.Error}));
-var workloads=new WorkloadRuntime(Path.Combine(stateDir,"workloads"),new RecipeCatalog(Environment.GetEnvironmentVariable("XUR_CATALOG") ?? "/usr/share/xur/catalog",Path.Combine(stateDir,"catalog-selected")),displayConsoles);
+var dataStorage=new DataStorage(stateDir);
+var workloads=new WorkloadRuntime(Path.Combine(stateDir,"workloads"),new RecipeCatalog(Environment.GetEnvironmentVariable("XUR_CATALOG") ?? "/usr/share/xur/catalog",Path.Combine(stateDir,"catalog-selected")),displayConsoles,dataStorage);
 if(!installer)
 {
     try{await workloads.InitializeRoboticsSetup();}
@@ -264,6 +265,16 @@ if(!installer)
             "Robotics container setup requires inspection; gamepads remain reserved. "+Redaction.Logs(error.Message));
     }
 }
+app.MapGet("/storage/locations",async Task<IResult>()=>{
+    if(installer)return Results.Conflict();
+    try{return Results.Json((await dataStorage.Status()) with{Busy=workloads.StorageMoveBusy});}
+    catch(Exception e)when(e is InvalidOperationException or IOException){return Results.Conflict(new{error=e.Message});}
+});
+app.MapPost("/storage/locations",async Task<IResult>(DataStorageRequest request)=>{
+    if(installer)return Results.Conflict();
+    try{await workloads.MoveStorage(request);return Results.Accepted();}
+    catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
+});
 app.MapGet("/unsloth/status",async()=>installer?Results.Conflict():Results.Json(await workloads.UnslothStatus()));
 app.MapPost("/unsloth/password",async Task<IResult>()=>{
     if(installer)return Results.Conflict();
@@ -351,7 +362,7 @@ app.MapPost("/workloads/stop",async(RuntimeStop request)=> {
     }
 });
 var appUpdates=new ApplicationUpdates();
-app.MapGet("/application-health",()=>Results.Json(new {id=ApplicationIdentity.Id,busy=containers.Busy}));
+app.MapGet("/application-health",()=>Results.Json(new {id=ApplicationIdentity.Id,busy=containers.Busy||workloads.StorageMoveBusy}));
 app.MapGet("/application-updates",async Task<IResult>()=> {
     if(installer)return Results.Conflict();
     try{return Results.Content(await appUpdates.Status(),"application/json");}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
@@ -379,11 +390,11 @@ new StorageExplorer().Map(app,installer);
 var storageTrim=new StorageTrim(stateDir);
 app.MapGet("/storage/trim",async Task<IResult>()=>{if(installer)return Results.Conflict();try{return Results.Json(await storageTrim.Read());}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});
 app.MapPost("/storage/trim",async Task<IResult>(TrimRequest request)=>{if(installer)return Results.Conflict();try{return Results.Json(await storageTrim.Start(request.Id),statusCode:202);}catch(InvalidOperationException e){return Results.BadRequest(new{error=e.Message});}});
-var storageUsage=new StorageUsage(metrics);
+var storageUsage=new StorageUsage(metrics,storage:dataStorage);
 if(!installer)_=Task.Run(()=>storageUsage.Run(app.Lifetime.ApplicationStopping));
 app.MapGet("/storage-usage",()=>installer?Results.Conflict():Results.Json(storageUsage.Status()));
 app.MapPost("/storage-usage/refresh",()=>installer?Results.Conflict():Results.Json(storageUsage.Status(true)));
-var modelLibrary=new ModelLibrary(stateDir);
+var modelLibrary=new ModelLibrary(stateDir,dataStorage);
 if(!installer)modelLibrary.Load();
 app.MapGet("/models",()=>installer?Results.Conflict():Results.Json(modelLibrary.Status()));
 app.MapPost("/models/scan",()=>{if(installer)return Results.Conflict();modelLibrary.Start(true);return Results.Accepted();});

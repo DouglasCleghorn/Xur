@@ -55,6 +55,13 @@ static class AutomaticModelsTests
             var unload=await manager.PreviewUnload();await manager.Apply(new(unload.Id,unload.Digest));await manager.Wait();calls=runtime.StartCalls;
             await manager.RestoreModels(now.AddMinutes(5));await manager.Wait();
             check(runtime.StartCalls==calls&&runtime.Instances.Count==0&&gateway.Routes.Length==0,"An intentional profile unload stays unloaded across automatic recovery checks");
+            var unsloth=new Workload("studio","Studio",UnslothWorkload.Recipe,[],"studio");
+            store.Put("active","current",new Profile("studio-profile","Studio",1,[unsloth]));
+            await manager.RestoreModels(now.AddMinutes(6));await manager.Wait();
+            check(runtime.Instances.ContainsKey("studio")&&gateway.Routes.Length==0,"Loaded Unsloth is restored through the guarded runtime without publishing a model endpoint");
+            store.Put("active","current",new Profile("empty","Empty",1,[]));
+            calls=runtime.StartCalls;runtime.Instances.Clear();await manager.RestoreModels(now.AddMinutes(7));await manager.Wait();
+            check(runtime.StartCalls==calls,"Unsloth is not restored after its loaded profile no longer selects it");
             using var stopping=new CancellationTokenSource();var watch=manager.WatchModels(stopping.Token);stopping.Cancel();await watch.WaitAsync(TimeSpan.FromSeconds(2));
             check(watch.IsCompletedSuccessfully,"The automatic model watcher stops promptly when the control service shuts down");
         }

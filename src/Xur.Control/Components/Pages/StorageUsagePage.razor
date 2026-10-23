@@ -11,6 +11,45 @@ else
     @if(usage.Error!=null) { <p class="notice error" role="alert">@usage.Error</p> }
     @if(usage.TelemetryError!=null) { <p class="notice error" role="alert">@usage.TelemetryError</p> }
     <p class="secondary-text" role="status">@(usage.Scanning?"Calculating storage usage…":usage.CapturedAt is {} captured?"Updated "+captured.ToLocalTime().ToString("HH:mm:ss"):"Waiting for storage usage")</p>
+    <section class="panel" id="data-storage" aria-labelledby="data-storage-heading">
+        <h2 id="data-storage-heading">Workload storage</h2>
+        <p>Choose where large model files, Unsloth downloads, datasets and training outputs live. Xur configuration stays on the system disk.</p>
+        <p class="secondary-text">Moving unloads the current profile, copies and verifies the data, then reloads the profile while this page is open. Originals are retained. Keep space for downloads and temporary files; no cache or training output is automatically deleted.</p>
+        @if(locations==null) { <p role="alert">Storage locations are unavailable.</p> }
+        else
+        {
+            @foreach(var id in new[]{"default","models","unsloth"})
+            {
+                var group=locations.Groups.FirstOrDefault(g=>g.Id==id);
+                var selected=group?.Selection??locations.DefaultSelection;
+                <form method="post" class="storage-location-form" data-group="@id">
+                    <AntiforgeryToken />
+                    <label for="@("storage-"+id)">@(group?.Name??"Default data drive")</label>
+                    <select id="@("storage-"+id)" name="destination" disabled="@locations.Busy">
+                        @if(id!="default") { <option value="inherit" selected="@(selected=="inherit")">Use default data drive</option> }
+                        <option value="system" selected="@(selected=="system")">System disk</option>
+                        @foreach(var drive in locations.Drives)
+                        { <option value="@drive.Uuid" selected="@(selected==drive.Uuid)">@drive.Source · @Size(drive.Available) free · @drive.Path</option> }
+                        @if(selected is not ("system" or "inherit") && !locations.Drives.Any(d=>d.Uuid==selected))
+                        { <option value="@selected" selected>Unavailable drive · @selected</option> }
+                    </select>
+                    <button type="submit" disabled="@locations.Busy">Unload profile and move</button>
+                    @if(group!=null)
+                    {
+                        @if(group.Error!=null) { <p role="alert">@group.Error</p> }
+                        else if(group.Available is {} free) { <p>@Size(free) available</p> }
+                        <details><summary>Current folders</summary>@foreach(var path in group.Paths) { <code class="mount-path">@path</code> }</details>
+                    }
+                </form>
+            }
+            <p role="status" id="storage-move-status">@(locations.Job?.Message??"Select an existing ext4 or XFS data drive. Drives are identified by UUID; an unavailable drive blocks startup instead of filling the system disk.")</p>
+            @if(locations.Job is {} job)
+            {
+                <details><summary>@job.Stage · Retained originals</summary>@foreach(var path in job.RetainedPaths) { <code class="mount-path">@path</code> }</details>
+            }
+            <script src="/storage-locations.js" defer></script>
+        }
+    </section>
     <section aria-labelledby="storage-devices">
         <h2 id="storage-devices">Disks &amp; mounts</h2>
         <div class="storage-table-scroll" role="region" aria-label="Disk and mount details" tabindex="0">
@@ -113,7 +152,7 @@ else
 @code {
     [SupplyParameterFromQuery] public bool TrimStarted {get;set;}
     [SupplyParameterFromQuery] public bool TrimError {get;set;}
-    TrimStatus? trim;StorageUsageSnapshot? usage;ProfileState? profiles;
+    TrimStatus? trim;StorageUsageSnapshot? usage;ProfileState? profiles;DataStorageStatus? locations;
     string VolumeUsers(string id)=>string.Join(", ",profiles?.Profiles.SelectMany(p=>p.Workloads).Where(w=>w.Recipe.Container?.Mounts.Any(m=>m.Volume==id)==true).Select(w=>w.Name).Distinct()??[]);
     static string Size(decimal bytes)
     {
@@ -128,6 +167,7 @@ else
         async Task Usage(){try{usage=await Device.Agent.GetFromJsonAsync<StorageUsageSnapshot>("/storage-usage");}catch{}}
         async Task ProfilesRead(){try{profiles=await Profiles.State();}catch{}}
         async Task TrimRead(){try{trim=await Device.Agent.GetFromJsonAsync<TrimStatus>("/storage/trim");}catch{}}
-        await Task.WhenAll(Usage(),ProfilesRead(),TrimRead());
+        async Task Locations(){try{locations=await Device.Agent.GetFromJsonAsync<DataStorageStatus>("/storage/locations");}catch{}}
+        await Task.WhenAll(Usage(),ProfilesRead(),TrimRead(),Locations());
     }
 }

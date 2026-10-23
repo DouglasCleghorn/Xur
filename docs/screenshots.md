@@ -1,5 +1,14 @@
 # Screenshot and artwork register
 
+- 2026-10-23: Storage location/migration controls validated on desktop and at
+  390 pixels, on the working tree based on `6c0c68d`.
+  Rendered fixtures and the local API test server live under
+  `.build/evidence/storage-ui/`; shared-browser snapshots are transient.
+  Purpose: default/override selection, unload–move–reload ordering and responsive
+  controls. Privacy review: synthetic drives, profile IDs and data only; no live
+  host screenshots or credentials. This refreshes the Storage validation family
+  below; regenerate after storage controls change. Not a release screenshot.
+
 - 2026-10-18: Private unified Storage table validation family from the working
   tree based on `0bfe51e`. Rendered fixtures live under
   `.build/evidence/storage-ui/`; T3 collaborative-browser snapshots remain
