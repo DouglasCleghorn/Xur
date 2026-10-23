@@ -41,6 +41,7 @@ node tests/Xur.Integration.Tests/station-identity-ui.cjs > .build/fast/station-i
 node tests/Xur.Integration.Tests/workstations-ui.cjs > .build/fast/workstations-ui.json
 node tests/Xur.Integration.Tests/station-add-user.cjs > .build/fast/station-add-user.log
 node tests/Xur.Integration.Tests/settings-storage-ui.cjs > .build/fast/settings-storage-ui.json
+node tests/Xur.Integration.Tests/storage-move-refresh.cjs > .build/fast/storage-move-refresh.json
 node tests/Xur.Integration.Tests/files-ui.cjs > .build/fast/files-ui.json
 node tests/Xur.Integration.Tests/api-keys-ui.cjs > .build/fast/api-keys-ui.json
 node tests/Xur.Integration.Tests/model-lab-ui.cjs > .build/fast/model-lab-ui.json
