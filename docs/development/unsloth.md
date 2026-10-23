@@ -15,6 +15,13 @@ WebSocket handshakes are accepted. HTTP streams and WebSockets are cancelled
 when their browser session signs out; running training jobs are independent.
 This uses Xur's existing signed-cookie lifetime and validation semantics.
 
+Studio's model and dataset pickers call `https://huggingface.co` and
+`https://datasets-server.huggingface.co` directly from the browser. The gateway's
+`connect-src` policy permits those two HTTPS origins alongside its own origin.
+This is optional online API access; scripts, styles and fonts remain local.
+Model downloads performed inside the container are independent of this browser
+policy. Custom Hub mirrors require an explicit policy update.
+
 `UnslothSession` logs into the `unsloth` owner account and completes the required
 first password change. Credentials live at `/var/lib/xur/secrets/unsloth.json`
 with owner-only directory/file permissions, covered by Xur's private recovery

@@ -97,6 +97,10 @@ static class UnslothSsoTests
         check(page.Response.StatusCode==200&&html.IndexOf("/_xur/session.js",StringComparison.Ordinal)<html.IndexOf("app.js",StringComparison.Ordinal),"HTML initializes the managed browser session before the Studio module");
         check(studio.LastAuthorization=="Bearer upstream-fixture-token"&&!studio.ForwardedCookie&&!studio.ForwardedIdentity,"Proxy injects its own credential and strips browser cookies and identity headers");
         check(!html.Contains(studio.Password)&&!html.Contains("upstream-fixture-token")&&!page.Response.Headers.ContainsKey("Set-Cookie")&&page.Response.Headers.CacheControl=="no-store","Studio passwords, tokens and cookies never enter the browser response");
+        var policy=page.Response.Headers.ContentSecurityPolicy.ToString().Split(';',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries)
+            .Select(d=>d.Split(' ',StringSplitOptions.RemoveEmptyEntries)).ToDictionary(d=>d[0],d=>d.Skip(1).ToArray());
+        check(policy["connect-src"].ToHashSet().SetEquals(["'self'","https://huggingface.co","https://datasets-server.huggingface.co"]),"Studio permits Hugging Face model and dataset APIs without allowing arbitrary remote connections");
+        check(policy["script-src"].SequenceEqual(["'self'","'wasm-unsafe-eval'"])&&policy["font-src"].SequenceEqual(["'self'","data:"]),"Hub API access does not enable remote scripts or fonts");
         var script=Context("/_xur/session.js",credential:cookie);await proxy.Handle(script);
         check(Text(script).Contains(UnslothProxy.BrowserToken)&&Text(script).Contains("/_xur/session")&&!Text(script).Contains(studio.Password),"Browser session script contains only opaque UI markers and a sign-out check");
         var claims=JsonSerializer.Deserialize<JsonElement>(Convert.FromBase64String(UnslothProxy.BrowserToken.Split('.')[1].PadRight((UnslothProxy.BrowserToken.Split('.')[1].Length+3)/4*4,'=')));
