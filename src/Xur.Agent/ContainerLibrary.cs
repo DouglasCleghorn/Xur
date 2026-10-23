@@ -53,9 +53,7 @@ public sealed class ContainerLibrary
                 await File.WriteAllTextAsync(Path.Combine(context,"Dockerfile"),request.Dockerfile);
                 foreach(var file in request.Files??[]){var buildPath=Path.Combine(context,file.Name);Directory.CreateDirectory(Path.GetDirectoryName(buildPath)!);await File.WriteAllTextAsync(buildPath,file.Content);}
                 reference="localhost/xur-custom:"+job.Id;
-                // Refresh the upstream installer on every T3 preparation, keeping the base layers cached.
-                string[] refresh=request.Engine==T3CodeWorkload.Engine?["--build-arg","XUR_T3_PREPARATION="+job.Id]:[];
-                result=await Processes.Run("podman",["build","--pull=missing",..refresh,"--tag",reference,"--file",Path.Combine(context,"Dockerfile"),context],3600);
+                result=await Processes.Run("podman",["build","--pull=missing","--tag",reference,"--file",Path.Combine(context,"Dockerfile"),context],3600);
             }
             else {reference=request.Image!;Stage("Pulling","Pulling container image…");result=await Processes.Run("podman",["pull",reference],1800);}
             var log=Redaction.Logs(result.Output);if(log.Length>32768)log=log[^32768..];

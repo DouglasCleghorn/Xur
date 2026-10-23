@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Diagnostics;
 using Xur.Agent;
 using Xur.Control;
 using Xur.Domain;
@@ -33,6 +34,7 @@ static class T3CodeTests
         check(!ApiKeys.Allows("automation","POST","/api/t3-code/pair"),"Automation keys cannot mint T3 Code device credentials");
         check(T3CodeEndpoints.Origin(new HostString("[fd00::1]:8443"))=="http://[fd00::1]:3773","T3 Code links use its direct port and preserve IPv6 hosts");
         check(T3CodeEndpoints.Origin(new HostString("coding.test:8443"))=="http://coding.test:3773","T3 Code links target the server hostname rather than the browsing device");
+        await PersistentUpdates(check);
         await Preparation(check);
         await T3CodeGpuTests.Run(check);
         await Endpoints(check);
@@ -43,13 +45,23 @@ static class T3CodeTests
         var root=Path.GetFullPath(".build/evidence/t3-prepare-"+Guid.NewGuid().ToString("N")[..12]);Directory.CreateDirectory(root);
         var previousPath=Environment.GetEnvironmentVariable("PATH");var previousArgs=Environment.GetEnvironmentVariable("XUR_T3_PREPARE_ARGS");
         var capture=Path.Combine(root,"arguments");
-        await File.WriteAllTextAsync(Path.Combine(root,"podman"),"#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$XUR_T3_PREPARE_ARGS\"\nprintf '%s\\n' 'Fixture installer download failed.' >&2\nexit 1\n");
+        await File.WriteAllTextAsync(Path.Combine(root,"podman"),"""
+            #!/bin/sh
+            printf '%s\n' "$@" > "$XUR_T3_PREPARE_ARGS"
+            for argument do context="$argument"; done
+            if [ -f "$context/t3-launcher" ]; then
+                cp "$context/t3-launcher" "$XUR_T3_PREPARE_ARGS.launcher"
+                cp "$context/Dockerfile" "$XUR_T3_PREPARE_ARGS.dockerfile"
+            fi
+            printf '%s\n' 'Fixture container build failed.' >&2
+            exit 1
+            """);
         File.SetUnixFileMode(Path.Combine(root,"podman"),UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
         try
         {
             Environment.SetEnvironmentVariable("PATH",root+":"+previousPath);Environment.SetEnvironmentVariable("XUR_T3_PREPARE_ARGS",capture);
-            var library=new ContainerLibrary(Path.Combine(root,"state"));var refreshes=new HashSet<string>();
-            foreach(var request in new[]{T3CodeWorkload.Prepare(),T3CodeWorkload.Prepare(),new ContainerPrepareRequest(Dockerfile:"FROM mirror.gcr.io/library/node:24-bookworm")})
+            var library=new ContainerLibrary(Path.Combine(root,"state"));
+            foreach(var request in new[]{T3CodeWorkload.Prepare(),new ContainerPrepareRequest(Dockerfile:"FROM mirror.gcr.io/library/node:lts")})
             {
                 var job=library.Prepare(request);
                 using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -57,14 +69,93 @@ static class T3CodeTests
                 var completed=library.Jobs().Single(j=>j.Id==job.Id);var arguments=await File.ReadAllLinesAsync(capture);
                 if(request.Engine==T3CodeWorkload.Engine)
                 {
-                    var index=Array.IndexOf(arguments,"--build-arg");
-                    check(index>=0 && arguments[index+1]=="XUR_T3_PREPARATION="+job.Id && refreshes.Add(arguments[index+1]),"Every T3 preparation passes a fresh installer cache key to the builder");
+                    check(await File.ReadAllTextAsync(capture+".launcher")==T3CodeWorkload.Launcher &&
+                        (await File.ReadAllTextAsync(capture+".dockerfile")).Contains("COPY t3-launcher /opt/t3/t3"),
+                        "T3 preparation supplies the persistent runtime launcher in the build context");
                 }
                 else check(!arguments.Contains("--build-arg"),"Custom container builds retain their existing cache behavior");
-                check(completed.Stage=="Failed" && completed.RecipeId==null && completed.Log.Contains("Fixture installer download failed."),"Installer build failures remain visible without selecting an older release");
+                check(completed.Stage=="Failed" && completed.RecipeId==null && completed.Log.Contains("Fixture container build failed."),"Container build failures remain visible without selecting a recipe");
             }
         }
         finally{Environment.SetEnvironmentVariable("PATH",previousPath);Environment.SetEnvironmentVariable("XUR_T3_PREPARE_ARGS",previousArgs);Directory.Delete(root,true);}
+    }
+    static async Task PersistentUpdates(Action<bool,string> check)
+    {
+        var root=Path.GetFullPath(".build/evidence/t3-updates-test-"+Guid.NewGuid().ToString("N")[..12]);
+        Directory.CreateDirectory(root+"/bin");Directory.CreateDirectory(root+"/home/projects");
+        await File.WriteAllTextAsync(root+"/home/projects/keep.txt","saved project");
+        var preset=T3CodeWorkload.Prepare();
+        await File.WriteAllTextAsync(root+"/launcher",preset.Files!.Single(f=>f.Name=="t3-launcher").Content);
+        await File.WriteAllTextAsync(root+"/bin/curl","""
+            #!/bin/sh
+            set -eu
+            test ! -f "$XUR_TEST_ROOT/offline" || exit 22
+            printf '%s\n' "$*" >> "$XUR_TEST_ROOT/downloads"
+            while [ "$#" -gt 0 ]; do
+                if [ "$1" = -o ]; then cp "$XUR_TEST_ROOT/installer" "$2"; exit 0; fi
+                shift
+            done
+            exit 1
+            """);
+        File.SetUnixFileMode(root+"/bin/curl",UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
+        await File.WriteAllTextAsync(root+"/installer","""
+            #!/bin/sh
+            set -eu
+            test ! -f "$XUR_TEST_ROOT/install-fails" || exit 23
+            mkdir -p "$T3CODE_HOME/runtime/versions/initial" "$T3CODE_INSTALL_BIN_DIR"
+            cp "$XUR_TEST_ROOT/runtime" "$T3CODE_HOME/runtime/versions/initial/t3"
+            chmod 755 "$T3CODE_HOME/runtime/versions/initial/t3"
+            ln -sfn "$T3CODE_HOME/runtime/versions/initial/t3" "$T3CODE_INSTALL_BIN_DIR/t3"
+            """);
+        await File.WriteAllTextAsync(root+"/runtime","""
+            #!/bin/sh
+            set -eu
+            if [ "${1:-}" = update ]; then
+                mkdir -p "$T3CODE_HOME/runtime/versions/updated"
+                cp "$XUR_TEST_ROOT/runtime" "$T3CODE_HOME/runtime/versions/updated/t3"
+                chmod 755 "$T3CODE_HOME/runtime/versions/updated/t3"
+                ln -sfn "$T3CODE_HOME/runtime/versions/updated/t3" "$T3CODE_INSTALL_BIN_DIR/t3"
+                exit 0
+            fi
+            readlink "$T3CODE_INSTALL_BIN_DIR/t3"
+            printf '<%s>\n' "$@"
+            """);
+        async Task<(int ExitCode,string Output)> Run(string executable,params string[] arguments)
+        {
+            var start=new ProcessStartInfo(executable){RedirectStandardOutput=true,RedirectStandardError=true};
+            foreach(var argument in arguments)start.ArgumentList.Add(argument);
+            start.Environment["PATH"]=root+"/bin:"+Environment.GetEnvironmentVariable("PATH");
+            start.Environment["T3CODE_HOME"]=root+"/home/.t3";
+            start.Environment["T3CODE_INSTALL_BIN_DIR"]=root+"/home/.local/bin";
+            start.Environment["XUR_TEST_ROOT"]=root;
+            using var process=Process.Start(start)!;
+            var stdout=process.StandardOutput.ReadToEndAsync();var stderr=process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            return(process.ExitCode,await stdout+await stderr);
+        }
+        try
+        {
+            await File.WriteAllTextAsync(root+"/offline","");
+            var unavailable=await Run("sh",root+"/launcher","start");
+            check(unavailable.ExitCode!=0 && !File.Exists(root+"/home/.local/bin/t3"),"A failed first T3 download stops startup without publishing an installation");
+            File.Delete(root+"/offline");await File.WriteAllTextAsync(root+"/install-fails","");
+            var failed=await Run("sh",root+"/launcher","start");
+            check(failed.ExitCode!=0 && !File.Exists(root+"/home/.local/bin/t3"),"A failed native installer stops T3 startup and remains retryable");
+            File.Delete(root+"/install-fails");
+            var first=await Run("sh",root+"/launcher","start","--base-dir",root+"/home/.t3","project with spaces");
+            check(first.ExitCode==0 && first.Output.Contains("/versions/initial/t3") && first.Output.Contains("<project with spaces>"),"First T3 startup installs into its persistent home and preserves command arguments");
+            var updated=await Run(root+"/home/.local/bin/t3","update");
+            check(updated.ExitCode==0,"The native T3 command can select an updated runtime in persistent storage");
+            var downloads=await File.ReadAllTextAsync(root+"/downloads");
+            await File.WriteAllTextAsync(root+"/offline","");
+            // A replacement image contributes only its launcher; it must honor the saved selection.
+            await File.WriteAllTextAsync(root+"/replacement-launcher",T3CodeWorkload.Launcher);
+            var restarted=await Run("sh",root+"/replacement-launcher","start");
+            var pairing=await Run("sh",root+"/replacement-launcher","auth","pairing","create");
+            check(restarted.ExitCode==0 && restarted.Output.Contains("/versions/updated/t3") && pairing.ExitCode==0 && pairing.Output.Contains("/versions/updated/t3"),"Restart and pairing use the updated T3 runtime after container replacement, even offline");
+            check(await File.ReadAllTextAsync(root+"/downloads")==downloads && await File.ReadAllTextAsync(root+"/home/projects/keep.txt")=="saved project","T3 restarts leave installed updates and project data intact without downloading again");
+        }
+        finally{Directory.Delete(root,true);}
     }
     static async Task Endpoints(Action<bool,string> check)
     {

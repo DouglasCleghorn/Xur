@@ -90,9 +90,9 @@ third-party notices remain in their component directories.
   matching ASP.NET Core MIT license and package third-party notices into ignored
   build paths; all three ship under `wwwroot/vendor/signalr/`.
 - T3 Code workload: T3 Code is MIT licensed, copyright T3 Tools Inc.
-  The official installer selects the latest stable prebuilt release. The prepared
-  image retains that release's license at `/opt/t3/LICENSE` and the
-  complete upstream distribution's dependency notices. The Node/Debian base and
+  The prepared image retains the upstream license at `/opt/t3/LICENSE`. The
+  native installer keeps the complete distribution, including dependency notices,
+  in the persistent home volume. The Node/Debian base and
   installed OS packages retain their own licenses. Xur's MIT license applies to
   the integration code, not a relicensing of those components.
   Optional Codex, Claude Code and OpenCode installation downloads the pinned npm

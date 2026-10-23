@@ -5,9 +5,13 @@ Xur prepares, starts and stops the workload; phones and desktops connect
 **directly to T3 Code on TCP port 3773**.
 Xur does not proxy its HTTP or WebSocket connections.
 
-1. Open **T3 Code → Prepare T3 Code**. Preparation downloads the latest stable upstream
-   release and builds the image. **Containers** shows progress and errors.
+1. Open **T3 Code → Prepare T3 Code**. Preparation builds the image.
+   **Containers** shows progress and errors.
 2. Edit a profile, add a workload, select **T3 Code**, and save and load the profile.
+   On first start, T3's native installer downloads the latest stable version into
+   the persistent home volume. This needs internet access; workload logs show
+   installation progress and any download errors. Later starts use the saved
+   installation without downloading it again.
 3. Return to **T3 Code → Create pairing link**. Use **Pair this device**, scan the
    QR code on a phone, or paste the link into **Add environment** in the T3 Code
    desktop app. Each link is single-use and expires after five minutes.
@@ -134,7 +138,8 @@ its device mappings and supplementary groups.
 ## Persistent storage
 
 The named volume mounted at `/home/node` retains projects, T3's database and
-pairings under `/home/node/.t3`, and provider credentials. Keep repositories in
+pairings under `/home/node/.t3`, the installed T3 runtime and updater selection,
+and provider credentials. Keep repositories in
 `/home/node/projects`. Tools installed under `/home/node/.local` also persist;
 changes elsewhere in the container can be lost when replacing it.
 
@@ -151,20 +156,29 @@ Additional development tools can be configured inside the environment. Harness
 installation and provider sign-in need network access; the web app
 assets and QR generation are served locally.
 
-## Version and validation
+## Updates
 
-Each preparation runs [T3 Code's official installer](https://t3.codes/install.sh)
-on its **stable** channel to download the latest prebuilt Linux distribution.
-The installer verifies the archive against the release's `SHA256SUMS` and retains
-its local web assets and dependency notices. Xur also downloads the MIT notice
-from the installed release's tag and keeps it at `/opt/t3/LICENSE`, separately
-from Xur's license. The preparation log reports the installed version.
+Run `t3 update` in T3 Code's terminal to install the latest stable update using
+T3's native updater. Once it finishes, unload and reload the profile in Xur to
+restart the server on the updated version. Unloading interrupts workloads in
+that profile, so finish active work first. No new Xur release or container
+rebuild is needed.
 
-Each preparation refreshes the installer layer even when previous container
-builds are cached. The Node and OS-package layers can still be reused. The Node
-base comes from Google's Docker Hub cache; there is no fallback to Docker Hub
-on a cache miss. Preparation failures remain visible in **Preparation progress**;
-there is no fallback to an older T3 release.
+T3's installer and updater keep the runtime under `/home/node/.t3/runtime` and
+select it with `/home/node/.local/bin/t3`. Both are in the persistent volume and
+writable by the workload user. Restarts and replacement containers honor that
+selection; they do not reinstall or overwrite an updated runtime. The native
+installer checks the downloaded archive against upstream release checksums and
+keeps its local web assets and dependency notices.
+
+For a workload prepared before persistent updates were supported, prepare a new
+container with **Reuse T3 Code storage**, select it in the profile, and load it.
+Its first start installs the latest T3 runtime alongside the existing data.
+Subsequent updates use `t3 update`.
+
+The Node base follows its LTS channel through Google's Docker Hub cache; there
+is no fallback to Docker Hub on a cache miss. T3's MIT notice is retained
+separately from Xur's license.
 
 The optional install buttons pin `@openai/codex` 0.163.0,
 `@anthropic-ai/claude-code` 2.1.306 and `@opencode/cli` 2.1.2 under the persistent
@@ -177,13 +191,13 @@ Xur marks this workload as requiring `t3-code-v1` support, preventing rollback t
 an application version that cannot read its recipe. Preparing an image does not
 replace an active container; select the new recipe and apply the profile change.
 
+## Validation
+
 Automated tests cover recipe validation, single-server selection, persistent
-storage reuse, direct IPv4/hostname and IPv6 links, pairing responses and rollback
-compatibility. The 2026-10-17 source checks passed 2,053 unit assertions and 139
-updater assertions. The then-pinned 0.1.0 executable also completed native pairing
-over a direct LAN port in the collaborative browser at phone size; no agent task
-was started. Building and booting this container on a Xur host remains a separate
-integration check.
+storage reuse, initial installation, updater selection across replacement
+launchers, offline restart, direct IPv4/hostname and IPv6 links, pairing responses
+and rollback compatibility. Building and booting this container on a Xur host
+remains a separate integration check.
 
 The account/model setup checks use synthetic CLI sign-ins and streamed model
 responses, including cancellation, credential isolation, repair, failed probes,

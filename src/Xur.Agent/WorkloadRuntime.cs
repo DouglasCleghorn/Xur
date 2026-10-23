@@ -88,7 +88,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             return new(credential,expires);
         }
         catch(Exception e) when(e is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
-        {throw new InvalidOperationException("T3 Code returned an invalid pairing response. Prepare the supported T3 Code version again.");}
+        {throw new InvalidOperationException("T3 Code returned an invalid pairing response. Check the server logs and update T3 Code before retrying.");}
     }
     public async Task<T> WithT3Code<T>(Func<string,Task<T>> action)
     {
