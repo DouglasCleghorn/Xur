@@ -3,7 +3,7 @@
  const forms=[...panel.querySelectorAll('form')],status=panel.querySelector('#storage-move-status');
  const token=panel.querySelector('[name=__RequestVerificationToken]')?.value;
  const sleep=()=>new Promise(resolve=>setTimeout(resolve,2000));
- const disable=value=>forms.forEach(form=>form.querySelectorAll('select,button').forEach(input=>input.disabled=value));
+ const disable=value=>{panel.dataset.moving=String(value);forms.forEach(form=>form.querySelectorAll('select,button').forEach(input=>input.disabled=value));};
  async function api(path,body){
   const response=await (window.xurFetch??window.fetch)('/api/'+path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json',RequestVerificationToken:token},body:JSON.stringify(body)});
   const value=await response.json().catch(()=>({}));if(!response.ok)throw Error(value.error||'Storage request failed. Refresh to check its status.');return value;
@@ -36,6 +36,7 @@
  // A copy continues on the appliance when the browser closes. A reopened page
  // reports it without assuming permission to reload a different profile.
  if(forms.some(form=>form.querySelector('button').disabled)){
+  disable(true);
   (async()=>{try{for(;;){const value=await api('storage/locations');status.textContent=value.job?.message||'Preparing storage move…';if(!value.busy){location.reload();return;}await sleep();}}catch(error){status.textContent=error.message;}})();
  }
 })();
