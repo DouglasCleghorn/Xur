@@ -11,9 +11,13 @@ public sealed class UnslothRuntime(Func<string,string[],int,Task<ProcessResult>>
         if(instance?.State=="running")return null;
         var pulled=await run("podman",["pull","--quiet","--policy=always",UnslothWorkload.Image],1800);
         if(pulled.ExitCode!=0)throw new InvalidOperationException("Could not pull Unsloth latest from mirror.gcr.io. Check the mirror and retry; no alternate registry is used. "+Redaction.Logs(pulled.Output));
-        var image=pulled.Output.Trim();
-        if(Regex.IsMatch(image,@"^[a-f0-9]{64}$"))image="sha256:"+image;
-        if(!Regex.IsMatch(image,@"^sha256:[a-f0-9]{64}$"))throw new InvalidOperationException("Unsloth pull returned an invalid image identity.");
+        // Pull output combines progress/warnings with stdout. Resolve the local
+        // image separately, then launch the immutable ID rather than the tag.
+        var identity=await run("podman",["image","inspect","--format","{{.Id}}",UnslothWorkload.Image],15);
+        var ids=identity.Output.Split('\n').Select(s=>s.Trim()).Where(s=>Regex.IsMatch(s,@"^(sha256:)?[a-f0-9]{64}$"))
+            .Select(s=>s.StartsWith("sha256:")?s:"sha256:"+s).Distinct().ToArray();
+        if(identity.ExitCode!=0 || ids.Length!=1)throw new InvalidOperationException("Could not resolve the downloaded Unsloth image identity.");
+        var image=ids[0];
         if(instance==null)return new(image,false);
         var inspected=await run("podman",["container","inspect",instance.InstanceId],15);
         if(inspected.ExitCode!=0)throw new InvalidOperationException("Could not inspect the stopped Unsloth container.");
@@ -47,5 +51,17 @@ public sealed class UnslothRuntime(Func<string,string[],int,Task<ProcessResult>>
             args.AddRange(["--volume",path+":"+target+":ro,z"]);
         }
         return args.ToArray();
+    }
+    public static async Task<UnslothStatus> Status(bool running,HttpClient client)
+    {
+        if(!running)return new(false,false,"Load a profile with Unsloth to connect.");
+        try
+        {
+            using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var response=await client.GetAsync(UnslothWorkload.Backend+"/api/health",timeout.Token);
+            if(response.IsSuccessStatusCode)return new(true,true,"Studio is responding.");
+        }
+        catch(Exception e) when(e is HttpRequestException or OperationCanceledException){}
+        return new(true,false,"The container is running, but Studio is not responding. Check its logs; unload and load the profile to restart it.");
     }
 }

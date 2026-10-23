@@ -44,7 +44,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     public async Task<UnslothStatus> UnslothStatus()
     {
         var definition=Definitions().SingleOrDefault(w=>UnslothWorkload.Is(w.Recipe));
-        return new(definition!=null && (await Inspect(definition))?.State=="running");
+        using var client=new HttpClient(new SocketsHttpHandler{UseProxy=false,AllowAutoRedirect=false});
+        return await UnslothRuntime.Status(definition!=null && (await Inspect(definition))?.State=="running",client);
     }
     public async Task<UnslothPassword> UnslothPassword()
     {
@@ -88,6 +89,16 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         }
         catch(Exception e) when(e is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
         {throw new InvalidOperationException("T3 Code returned an invalid pairing response. Check the server logs and update T3 Code before retrying.");}
+    }
+    public async Task<T> WithT3Code<T>(Func<string,Task<T>> action)
+    {
+        await using var operation=await Stops.Enter();
+        var definition=Definitions().SingleOrDefault(w=>T3CodeWorkload.Is(w.Recipe))
+            ??throw new InvalidOperationException("Load a profile with T3 Code first.");
+        await using var allocation=await Stops.Resources(["workload:"+definition.Id]);
+        var instance=await Inspect(definition);
+        if(instance?.State!="running")throw new InvalidOperationException("Load a profile with T3 Code first.");
+        return await action(instance.InstanceId);
     }
     public async Task InitializeRoboticsSetup()
     {

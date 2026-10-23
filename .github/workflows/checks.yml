@@ -24,6 +24,7 @@ jobs:
           python3 eng/check-web-assets.py
           python3 tests/Xur.Integration.Tests/web-assets.py
           dotnet run --project tests/Xur.Unit.Tests -c Release
+          python3 -B tests/Xur.Integration.Tests/t3-setup.py
           dotnet run --project tests/Xur.Robot.Tests -c Release
           dotnet run --project tests/Xur.Robot.Backup.Tests -c Release
           python3 tests/Xur.Integration.Tests/robot-boundary.py
@@ -53,6 +54,13 @@ jobs:
           python3 tests/Xur.Integration.Tests/ci-build.py
           python3 tests/Xur.Integration.Tests/source-manifest.py
           python3 website/build.py
+      - name: Profile editor mouse and touch checks
+        run: |
+          python3 eng/prepare-npm.py browser
+          .build/browser/node_modules/.bin/playwright install --with-deps chromium
+          dotnet run --project tests/Xur.Unit.Tests -c Release --no-build -- --control-panel-render .build/evidence/profile-picker-fixtures
+          XUR_UI_FIXTURES=.build/evidence/profile-picker-fixtures node tests/Xur.Integration.Tests/station-identity-ui.cjs
+          XUR_UI_FIXTURES=.build/evidence/profile-picker-fixtures XUR_BROWSER_TOUCH=1 node tests/Xur.Integration.Tests/station-identity-ui.cjs
   installer-usb:
     runs-on: ubuntu-latest
     steps:

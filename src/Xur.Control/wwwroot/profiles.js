@@ -144,7 +144,7 @@
   usbChoices(row);
  }
  function adjustable(recipe){return recipe?.dataset.engine==='Unsloth'||recipe?.dataset.engine==='llama.cpp';}
- function gpus(row,count){
+ function gpus(row,count,assignDefaults=true){
   const recipe=row.querySelector('[name=recipe]').selectedOptions[0],group=row.querySelector('.gpu-choices'),flexible=adjustable(recipe);
   count=count??Number(recipe?.dataset.gpus??0);
   if(flexible)recipe.dataset.gpus=String(count);
@@ -161,10 +161,12 @@
     option.disabled=!!option.value&&others.includes(option.value);
    }
    if(!flexible&&select.selectedOptions[0]?.hidden){select.value='';select.dispatchEvent(new Event('change'));}
-   if(!select.value){
+   // Availability refreshes must preserve an explicitly cleared selection.
+   // Newly added GPU rows still receive an available default.
+   if(!select.value&&(assignDefaults||select.dataset.cleared!=='true')){
     const available=[...select.options].filter(o=>o.value&&!o.hidden&&!o.disabled);
     const preferred=available.find(o=>o.dataset.vendor===recipe.dataset.vendor)??available[0];
-    if(preferred){select.value=preferred.value;select.dispatchEvent(new Event('change'));}
+    if(preferred){delete select.dataset.cleared;select.value=preferred.value;select.dispatchEvent(new Event('change'));}
    }
    enhance(select);
    select.nextElementSibling.querySelector('[role=combobox]').setAttribute('aria-label','GPU '+(index+1));
@@ -181,14 +183,14 @@
   row.querySelector('.gpu-empty').hidden=!(recipe?.dataset.kind==='Workstation' && count>0 && ![...group.querySelectorAll('option')].some(o=>o.value&&!o.hidden&&!o.disabled));
   renumber();hint(row);
  }
- function refreshGpus(){for(const row of rows.children)gpus(row);}
+ function refreshGpus(){for(const row of rows.children)gpus(row,undefined,false);}
  form.addEventListener('click',event=>{
   const button=event.target.closest('.add-gpu,.remove-gpu');if(!button||button.disabled)return;
   const row=button.closest('.workload-editor'),recipe=row.querySelector('[name=recipe]').selectedOptions[0];if(!adjustable(recipe))return;
   const group=row.querySelector('.gpu-choices');let count=group.children.length;
   if(button.matches('.add-gpu')){if(count>=16)return;count++;}
   else{if(recipe.dataset.engine==='Unsloth'&&count<=1)return;button.closest('.gpu-choice').remove();count--;}
-  gpus(row,count);refreshGpus();error(row,'');
+  gpus(row,count,false);refreshGpus();error(row,'');
   if(button.matches('.add-gpu'))group.lastElementChild.querySelector('[role=combobox]').focus();else row.querySelector('.add-gpu').focus();
  });
  function filterRecipes(row){
@@ -240,7 +242,7 @@
  }
  form.addEventListener('change',event=>{
   const row=event.target.closest('.workload-editor');if(!row)return;
-  if(event.target.closest('.gpu-choices'))refreshGpus();
+  if(event.target.matches('.gpu-choices select')){event.target.dataset.cleared=String(!event.target.value);refreshGpus();}
   if(event.target.matches('.station-primary')){
    if(event.target.checked)rows.querySelectorAll('.station-primary').forEach(input=>{if(input!==event.target)input.checked=false;});
    for(const row of rows.children)usbChoices(row);

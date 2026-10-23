@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Diagnostics;
+using Xur.Agent;
 using Xur.Control;
 using Xur.Domain;
 
@@ -34,7 +35,48 @@ static class T3CodeTests
         check(T3CodeEndpoints.Origin(new HostString("[fd00::1]:8443"))=="http://[fd00::1]:3773","T3 Code links use its direct port and preserve IPv6 hosts");
         check(T3CodeEndpoints.Origin(new HostString("coding.test:8443"))=="http://coding.test:3773","T3 Code links target the server hostname rather than the browsing device");
         await PersistentUpdates(check);
+        await Preparation(check);
         await Endpoints(check);
+        await T3ModelTests.Run(check);
+    }
+    static async Task Preparation(Action<bool,string> check)
+    {
+        var root=Path.GetFullPath(".build/evidence/t3-prepare-"+Guid.NewGuid().ToString("N")[..12]);Directory.CreateDirectory(root);
+        var previousPath=Environment.GetEnvironmentVariable("PATH");var previousArgs=Environment.GetEnvironmentVariable("XUR_T3_PREPARE_ARGS");
+        var capture=Path.Combine(root,"arguments");
+        await File.WriteAllTextAsync(Path.Combine(root,"podman"),"""
+            #!/bin/sh
+            printf '%s\n' "$@" > "$XUR_T3_PREPARE_ARGS"
+            for argument do context="$argument"; done
+            if [ -f "$context/t3-launcher" ]; then
+                cp "$context/t3-launcher" "$XUR_T3_PREPARE_ARGS.launcher"
+                cp "$context/Dockerfile" "$XUR_T3_PREPARE_ARGS.dockerfile"
+            fi
+            printf '%s\n' 'Fixture container build failed.' >&2
+            exit 1
+            """);
+        File.SetUnixFileMode(Path.Combine(root,"podman"),UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
+        try
+        {
+            Environment.SetEnvironmentVariable("PATH",root+":"+previousPath);Environment.SetEnvironmentVariable("XUR_T3_PREPARE_ARGS",capture);
+            var library=new ContainerLibrary(Path.Combine(root,"state"));
+            foreach(var request in new[]{T3CodeWorkload.Prepare(),new ContainerPrepareRequest(Dockerfile:"FROM mirror.gcr.io/library/node:lts")})
+            {
+                var job=library.Prepare(request);
+                using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                while(library.Busy)await Task.Delay(10,timeout.Token);
+                var completed=library.Jobs().Single(j=>j.Id==job.Id);var arguments=await File.ReadAllLinesAsync(capture);
+                if(request.Engine==T3CodeWorkload.Engine)
+                {
+                    check(await File.ReadAllTextAsync(capture+".launcher")==T3CodeWorkload.Launcher &&
+                        (await File.ReadAllTextAsync(capture+".dockerfile")).Contains("COPY t3-launcher /opt/t3/t3"),
+                        "T3 preparation supplies the persistent runtime launcher in the build context");
+                }
+                else check(!arguments.Contains("--build-arg"),"Custom container builds retain their existing cache behavior");
+                check(completed.Stage=="Failed" && completed.RecipeId==null && completed.Log.Contains("Fixture container build failed."),"Container build failures remain visible without selecting a recipe");
+            }
+        }
+        finally{Environment.SetEnvironmentVariable("PATH",previousPath);Environment.SetEnvironmentVariable("XUR_T3_PREPARE_ARGS",previousArgs);Directory.Delete(root,true);}
     }
     static async Task PersistentUpdates(Action<bool,string> check)
     {
