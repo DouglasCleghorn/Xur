@@ -47,7 +47,9 @@ public sealed class UnslothProxy(UnslothSession session,Func<string?,bool> autho
         context.Response.Headers.CacheControl="no-store";
         context.Response.Headers.XContentTypeOptions="nosniff";
         context.Response.Headers["Referrer-Policy"]="no-referrer";
-        context.Response.Headers.ContentSecurityPolicy="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'";
+        // Studio's model/dataset pickers call these public APIs from the browser.
+        // Keep scripts, styles and fonts local; allow only the required Hub API origins.
+        context.Response.Headers.ContentSecurityPolicy="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' https://huggingface.co https://datasets-server.huggingface.co; frame-ancestors 'none'; form-action 'self'; base-uri 'none'";
         var manager=Manager();
         if(manager==null || context.Request.Scheme!="https" || context.Request.Host.Host!=manager.Host || context.Request.Host.Port!=UnslothWorkload.HttpsPort)
         {context.Response.StatusCode=400;return;}
