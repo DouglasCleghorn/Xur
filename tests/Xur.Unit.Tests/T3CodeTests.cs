@@ -36,6 +36,7 @@ static class T3CodeTests
         check(T3CodeEndpoints.Origin(new HostString("coding.test:8443"))=="http://coding.test:3773","T3 Code links target the server hostname rather than the browsing device");
         await PersistentUpdates(check);
         await Preparation(check);
+        await T3CodeGpuTests.Run(check);
         await Endpoints(check);
         await T3ModelTests.Run(check);
     }

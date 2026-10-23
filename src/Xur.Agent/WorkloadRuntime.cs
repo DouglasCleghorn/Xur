@@ -139,7 +139,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         string endpoint="";
         if(ports.ValueKind==JsonValueKind.Object && ports.TryGetProperty(w.Recipe.Port+"/tcp",out var bindings) && bindings.ValueKind==JsonValueKind.Array && bindings.GetArrayLength()>0)
             endpoint="http://127.0.0.1:"+bindings[0].GetProperty("HostPort").GetString()+"/";
-        return new(w.Id,w.Fingerprint,c.GetProperty("Id").GetString()!,c.GetProperty("State").GetProperty("Pid").GetInt32(),File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim(),endpoint,
+        var fingerprint=T3CodeWorkload.Is(w.Recipe)?T3CodeGpuAccess.Fingerprint(w,labels):w.Fingerprint;
+        return new(w.Id,fingerprint,c.GetProperty("Id").GetString()!,c.GetProperty("State").GetProperty("Pid").GetInt32(),File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim(),endpoint,
             c.GetProperty("State").GetProperty("Status").GetString()!,w.Gpus);
     }
     public Task<RuntimeInstance> Start(Workload w)=>Start(w,false);
@@ -178,6 +179,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             }
             }finally{receipts.Release();}
             var instance=await Inspect(w);
+            if(T3CodeWorkload.Is(w.Recipe) && instance!=null && instance.Fingerprint!=w.Fingerprint)
+                throw new InvalidOperationException("Load the profile again to recreate T3 Code with shared GPU access. Its persistent storage will be retained.");
             if(w.Recipe.Kind=="Workstation")
             {
                 RuntimeInstance started;
@@ -244,7 +247,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 if(UnslothWorkload.Is(w.Recipe))args.AddRange(UnslothRuntime.ModelArguments(Path.GetDirectoryName(directory)!));
                 args.AddRange(TimezoneSettings.ContainerArguments());
                 if(w.Recipe.Kind=="Model" && w.Recipe.Hub!=null)args.AddRange(new HuggingFaceCredentials(Path.GetDirectoryName(directory)!).ContainerArguments());
-                args.AddRange(ModelGpuArguments.For(w,observed.Gpus));
+                args.AddRange(T3CodeWorkload.Is(w.Recipe)?await T3CodeGpuAccess.Arguments(observed.Gpus):ModelGpuArguments.For(w,observed.Gpus));
                 if(model!=null)args.AddRange(["--volume",model+":/model.gguf:ro,z"]);
                 if(modelFiles!=null)args.AddRange(["--volume",modelFiles+":/models:ro,z"]);
                 if(w.Recipe.Engine is "vLLM" or "vLLM-Omni")args.AddRange(["--entrypoint","vllm"]);
