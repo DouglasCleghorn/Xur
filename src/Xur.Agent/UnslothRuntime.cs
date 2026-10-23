@@ -40,14 +40,14 @@ public sealed class UnslothRuntime(Func<string,string[],int,Task<ProcessResult>>
             if(created.ExitCode!=0)throw new InvalidOperationException("Could not create Unsloth persistent storage.");
         }
     }
-    public static string[] ModelArguments(string state)
+    public static string[] ModelArguments(string state,Func<string,string>? resolve=null)
     {
         // Xur's content-addressed downloads must remain immutable. Training writes
         // belong in the writable workspace/Studio volumes, not the source cache.
         var args=new List<string>();
         foreach(var (folder,target) in new[]{("models","/models"),("model-sets","/model-sets")})
         {
-            var path=Path.Combine(state,folder);Directory.CreateDirectory(path);
+            var path=resolve?.Invoke(folder)??Path.Combine(state,folder);Directory.CreateDirectory(path);
             args.AddRange(["--volume",path+":"+target+":ro,z"]);
         }
         return args.ToArray();

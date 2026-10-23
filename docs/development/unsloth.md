@@ -57,3 +57,48 @@ CSRF/authentication, URL normalization, WebSocket and streaming/logout checks.
 The full unit suite includes these checks. Also run the real control-service
 `tests/Xur.Integration.Tests/browser-sessions.py` regression with
 `XUR_CONTROL_BINARY` pointing to the built control executable.
+
+## Data locations and migration
+
+Storage → Workload storage selects the default data drive and overrides for the
+Xur model library and Unsloth. Existing ext4/XFS filesystems larger than 20 GiB
+are supported; Xur never formats them. `DataStorage` resolves UUIDs at startup
+and mounts them under `/var/mnt/xur/<UUID>`, validating the exact mount identity
+and writable filesystem before exposing any data. This is an on-demand mount,
+not a dependency that prevents the manager from booting when a drive is absent.
+Missing drives block affected workload starts, with no system-disk fallback.
+Unsloth uses `--restart=no` and the loaded-profile recovery loop, ensuring that
+boot recovery passes through these checks before Podman starts it.
+
+The default remains legacy system storage until a move is requested. A drive
+change allocates a fresh generation under `xur/<installation>/<move>/<group>`.
+The browser unloads the profile first; the agent holds the exclusive workload
+mutation gate throughout migration and rejects existing workload receipts.
+Application updates observe the move's busy state. Copies preserve metadata and
+links; model blobs and snapshots are copied together to preserve hard links.
+Entry names, permissions, relative symlink targets, file lengths and every file's
+SHA-256 are verified, followed by a filesystem flush before the atomic location
+configuration commit. Special files require manual inspection. Capacity checks
+reserve the greater of 10 GiB or 10% above the apparent source size. Xur-managed
+model downloads use the same headroom check and serialize their download phase.
+Studio retains its own download preflight and native Xet transport selection.
+
+`/var/lib/xur/storage-locations.json` is the commit point. Move records live in
+`storage-move.json` and `storage-moves/<id>.json`; all are included in private
+configuration recovery backups. Originals and partial copies are retained,
+never automatically deleted. A failed copy cannot commit just one of the groups
+in a default-drive change. Retrying makes a fresh destination; a process restart
+reports an interrupted copy. The browser can close without cancelling the copy;
+return to Storage to inspect it, then reload the profile through Profiles.
+
+Only the model blob/snapshot library and the two Unsloth data directories move.
+Xur credentials, profiles, logs, application files and container images stay on
+the system disk. Other engines' private cache volumes are not migrated by this
+setting. Container paths `/workspace`, `/opt/unsloth-studio`, `/models` and
+`/model-sets` remain stable. Preserve the selected Studio data and Xur's private
+recovery backup together, including its managed login credentials.
+
+Run `dotnet run --project tests/Xur.Unit.Tests -- --data-storage` for real-file
+copy/hash/link checks and injected mount identity, missing drive, read-only,
+capacity, concurrent move, interruption and partial-copy failures. No disk is
+mounted or formatted by the tests.

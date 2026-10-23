@@ -81,11 +81,12 @@ public sealed class ContainerLibrary
         catch(Exception e){Stage("Failed",e is InvalidOperationException or IOException?Redaction.Logs(e.Message):"Container preparation failed.");}
         finally{Directory.Delete(context,true);}
     }
-    public static async Task VerifyVolume(string id)
+    public static async Task VerifyVolume(string id,Func<string,string[],int,Task<ProcessResult>>? execute=null,string? expectedPath=null)
     {
         if(!Regex.IsMatch(id,@"^xur-volume-[a-f0-9]{32}$"))throw new InvalidOperationException("Invalid volume identity.");
-        var result=await Processes.Run("podman",["volume","inspect",id],10);if(result.ExitCode!=0)throw new InvalidOperationException("A persistent volume is missing.");
+        var result=await (execute??((exe,args,seconds)=>Processes.Run(exe,args,seconds)))("podman",["volume","inspect",id],10);if(result.ExitCode!=0)throw new InvalidOperationException("A persistent volume is missing.");
         using var doc=JsonDocument.Parse(result.Output);if(doc.RootElement[0].GetProperty("Labels").GetProperty("io.xur.volume").GetString()!=id)throw new InvalidOperationException("Volume ownership changed.");
+        if(expectedPath!=null&&doc.RootElement[0].GetProperty("Mountpoint").GetString()!=expectedPath)throw new InvalidOperationException("Volume location changed. Inspect it before moving storage.");
     }
     public static async Task<ContainerVolume[]> Volumes()
     {

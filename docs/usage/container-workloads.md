@@ -83,11 +83,22 @@ checks Studio's HTTP health and login before enabling the link. A running
 container with an unavailable Studio backend is reported as unavailable with
 log/restart guidance, rather than advertised as ready.
 
-All Unsloth profiles share two Xur-owned persistent volumes, listed in Storage:
+All Unsloth profiles share two persistent data directories, initially stored in
+Xur-owned volumes:
 
 - `/workspace`: training files, notebooks, downloaded models and the Hugging Face
   cache (`HF_HOME=/workspace/.cache/huggingface`). Save exported models here.
 - `/opt/unsloth-studio`: Studio accounts, settings, chats and training outputs.
+
+Use **Storage → Workload storage** to select an existing ext4 or XFS data drive
+as the default, or override the drive separately for Unsloth and Xur's model
+library. **Unload profile and move** stops the loaded profile, copies and verifies
+the data, then reloads that profile while the page remains open. The move
+continues if the browser closes; check Storage and reload the profile afterward.
+Original files remain in place. Keep sufficient room for model downloads and
+temporary files; Xur never automatically deletes caches or training outputs.
+A missing selected drive blocks startup instead of filling the system disk.
+These choices do not move container images or other engines' private caches.
 
 The existing Xur model library is mounted read-only at `/models` (files named by
 SHA-256) and `/model-sets` (complete snapshots grouped by their manifest hash).

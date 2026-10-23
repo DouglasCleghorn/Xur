@@ -29,6 +29,7 @@ static class ControlPanelRender
         agent.MapGet("/ntp",()=>new NtpStatus(true,true,true,["time.cloudflare.com"],""));
         DiagnosticSshStatus diagnosticSsh=new();
         agent.MapGet("/diagnostics/ssh",()=>diagnosticSsh);
+        agent.MapGet("/storage/locations",()=>new DataStorageStatus("system",[new("data","/data","/dev/nvme1n1p1","ext4",2L<<40,1L<<40,1L<<40,true,true,false,"a111-b222")],[new("models","Xur model library","inherit",["/var/lib/xur/models","/var/lib/xur/model-sets"],100L<<30,null),new("unsloth","Unsloth workspace and Studio","inherit",["/var/lib/containers/storage/volumes/example/_data"],100L<<30,null)],false,null));
         agent.MapGet("/storage/trim",()=>new TrimStatus(false,"ActiveState=active","Result=success",[new("ssd","/etc","/dev/nvme0n1p2[/ostree/deploy/default/deploy/"+new string('a',64)+".0/etc]","btrfs",1000,400,500,true,true,false),new("readonly","/boot","/dev/nvme1n1p1","ext4",1000,400,500,true,false,true)],[]));
         agent.MapGet("/updates",()=>new OsUpdateStatus(null,new("new","digest","image",false),null,null,false,true,false,null,""));
         agent.MapGet("/application-updates",()=>new ApplicationUpdateStatus("http://192.0.2.10:8088",new("current","1"),null,null,null,false,true,"local","-----BEGIN PUBLIC KEY-----\nfixture\n-----END PUBLIC KEY-----","http://192.0.2.10:8088"));
