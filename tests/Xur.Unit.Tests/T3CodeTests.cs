@@ -34,6 +34,7 @@ static class T3CodeTests
         check(T3CodeEndpoints.Origin(new HostString("[fd00::1]:8443"))=="http://[fd00::1]:3773","T3 Code links use its direct port and preserve IPv6 hosts");
         check(T3CodeEndpoints.Origin(new HostString("coding.test:8443"))=="http://coding.test:3773","T3 Code links target the server hostname rather than the browsing device");
         await Preparation(check);
+        await T3CodeGpuTests.Run(check);
         await Endpoints(check);
         await T3ModelTests.Run(check);
     }

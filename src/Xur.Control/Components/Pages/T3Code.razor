@@ -72,7 +72,7 @@ else
         <section class="panel" aria-labelledby="t3-prepare-heading">
             <h2 id="t3-prepare-heading">Prepare T3 Code</h2>
             @if(prepared.Length>0) { <p>T3 Code is prepared. Select it in the profile editor, then load the profile.</p> }
-            <p>Preparation uses T3 Code’s official installer to download the latest stable release and build its container. It runs on the CPU; no GPU is needed. Stopping or unloading it preserves its data.</p>
+            <p>Preparation uses T3 Code’s official installer to download the latest stable release and build its container. Coding agents have shared access to all host GPUs. It also works without a GPU. Stopping or unloading it preserves its data.</p>
             <label>Storage<select id="t3-volume">
                 @foreach(var volume in volumes) { <option value="@volume">Reuse T3 Code storage · @volume[^8..]</option> }
                 <option value="">Create new T3 Code storage</option>

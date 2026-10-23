@@ -1,7 +1,8 @@
 # T3 Code
 
-T3 Code runs as a persistent CPU container. Xur prepares, starts and stops the
-workload; phones and desktops connect **directly to T3 Code on TCP port 3773**.
+T3 Code runs as a persistent container with shared access to all host GPUs.
+Xur prepares, starts and stops the workload; phones and desktops connect
+**directly to T3 Code on TCP port 3773**.
 Xur does not proxy its HTTP or WebSocket connections.
 
 1. Open **T3 Code → Prepare T3 Code**. Preparation downloads the latest stable upstream
@@ -107,6 +108,28 @@ certificate without disabling certificate validation; no private server key is
 copied. Xur stores only credential hashes and key IDs. The usable model key and
 provider configs stay in T3's private persistent home, so back up and protect that
 volume like the projects and account credentials it contains.
+
+## GPU access
+
+Coding agents and project commands inside T3 can use all host GPUs, including
+GPUs assigned to model or workstation workloads. No GPU selection is needed in
+the profile editor, and T3 also runs on hosts without GPUs. Access does not
+reserve GPU memory: GPU work in T3 shares capacity with other workloads. Stop
+that work before a profile change that needs the GPU to be released; Xur's
+existing device-release checks still apply to allocated workloads.
+
+NVIDIA GPUs use the host's CDI configuration (`nvidia.com/gpu=all`), including
+driver libraries. AMD and Intel GPUs receive their DRM devices; AMD also receives
+`/dev/kfd`. The container keeps its unprivileged `node` user and adds the numeric
+host device groups needed for access. GPU containers disable SELinux label
+isolation, and AMD/Intel access also permits the compute runtime's system calls.
+Device access does not install CUDA, ROCm, Level Zero or project-specific libraries;
+install the tools needed by your project inside the coding environment.
+
+Load the profile again after upgrading Xur to replace a T3 container created
+without GPU access. Projects, sessions and sign-ins stay in its existing volume.
+After changing host GPUs or device permissions, unload and reload T3 to refresh
+its device mappings and supplementary groups.
 
 ## Persistent storage
 
