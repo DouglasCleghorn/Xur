@@ -51,6 +51,19 @@ connection name uses the host name rather than a generated container identity.
 Renaming the host also refreshes this container setting without replacing T3's
 persisted environment ID. The setup retry buttons use the same installer commands.
 
+Codex account setup defaults to `codex login --device-auth`. The collapsed
+Advanced sign-in option runs native `codex login`; the user signs in on OpenAI's
+site and pastes the final localhost callback URL into Xur. The helper checks its
+loopback address, port, callback path and OAuth state against that pending CLI
+attempt before forwarding it inside the same container. It does not execute the
+URL or follow arbitrary redirects. A local `/success` redirect is completed
+without copying its credential-bearing query. Callback URLs are submitted in an
+authenticated, antiforgery-protected POST, never in Xur navigation URLs or logs.
+Cancellation, expiry and container replacement invalidate the setup session.
+Claude uses `claude auth login --claudeai`, with its official sign-in link and
+one-time code form. Both flows retain native credentials in the persistent home;
+neither proxies the T3 connection nor changes its port.
+
 Persisted runtime receipts share the host runtime's allocation authority but are
 excluded from observations used for profile planning. Old profile stop commands
 cannot stop a persisted receipt. T3 is removed from profile selection and from

@@ -6,6 +6,7 @@ their native stores in the persistent home. No provider token is returned to Xur
 import codecs
 import fcntl
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -152,13 +153,73 @@ def auth_interaction(provider, output):
     return dict(url=url, deviceCode=code.group() if code else None, needsCode=provider == "claude" and bool(url))
 
 
-def authenticate(provider):
+def callback_target(callback, authorization):
+    """Validate against the CLI's pending OAuth attempt before making any request."""
+    try:
+        if not isinstance(callback, str) or not 0 < len(callback) <= 8192 or any(ord(c) <= 32 or ord(c) >= 127 for c in callback):
+            raise ValueError()
+        auth = urllib.parse.urlsplit(authorization)
+        if auth.scheme != "https" or auth.hostname != "auth.openai.com" or auth.username or auth.password or auth.port not in (None, 443):
+            raise ValueError()
+        params = urllib.parse.parse_qs(auth.query, keep_blank_values=True, max_num_fields=32)
+        if len(params.get("redirect_uri", [])) != 1 or len(params.get("state", [])) != 1 or not params["state"][0]:
+            raise ValueError()
+        expected = urllib.parse.urlsplit(params["redirect_uri"][0])
+        actual = urllib.parse.urlsplit(callback)
+        for url in (expected, actual):
+            if url.scheme != "http" or url.hostname not in ("localhost", "127.0.0.1") or not url.port or url.username or url.password or url.fragment or url.path != "/auth/callback":
+                raise ValueError()
+        if expected.query or (actual.hostname, actual.port) != (expected.hostname, expected.port):
+            raise ValueError()
+        values = urllib.parse.parse_qs(actual.query, keep_blank_values=True, max_num_fields=32)
+        if any(len(value) != 1 for value in values.values()) or not values.get("code", [""])[0] or "error" in values:
+            raise ValueError()
+        if values.get("state") != params["state"]:
+            raise ValueError()
+        return actual.port, "/auth/callback?" + actual.query
+    except (ValueError, TypeError):
+        raise SetupError("Paste the complete localhost URL from this sign-in attempt.") from None
+
+
+def relay_callback(port, target):
+    # Never execute the pasted text, resolve its hostname, use a proxy, or follow
+    # arbitrary redirects. The only network destination is this container's CLI.
+    def get(path):
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        try:
+            connection.request("GET", path, headers={"Connection": "close"})
+            response = connection.getresponse()
+            return response.status, response.getheader("Location")
+        finally:
+            connection.close()
+    try:
+        status, location = get(target)
+        if not 200 <= status < 400:
+            raise SetupError("Codex could not complete this browser sign-in. Start again.")
+        if location:
+            success = urllib.parse.urlsplit(location)
+            if (success.scheme == "http" and success.hostname in ("localhost", "127.0.0.1") and success.port == port
+                    and success.path == "/success" and not success.username and not success.password and not success.fragment):
+                # Older Codex releases exit only after /success. Its query may
+                # contain credentials; discard it and never return it to Xur.
+                status, _ = get("/success")
+                if not 200 <= status < 300:
+                    raise SetupError("Codex could not finish sign-in. Check its account status.")
+            # Newer CLI versions exit after redirecting to a hosted success page.
+            # Leave that redirect unfollowed; the CLI's exit/status verifies login.
+    except (OSError, ValueError, http.client.HTTPException):
+        raise SetupError("Could not reach the waiting Codex login. Check account status or start again.") from None
+
+
+def authenticate(provider, browser=False):
     if provider not in ("codex", "claude"):
         raise SetupError("Subscription sign-in is available for Codex and Claude.")
     exe = binary(provider)
     if not Path(exe).is_file():
         raise SetupError("Install this harness first.")
-    args = [exe, "login", "--device-auth"] if provider == "codex" else [exe, "auth", "login", "--claudeai"]
+    if browser and provider != "codex":
+        raise SetupError("Browser callback sign-in is available for Codex only.")
+    args = [exe, "login"] + ([] if browser else ["--device-auth"]) if provider == "codex" else [exe, "auth", "login", "--claudeai"]
     master, slave = pty.openpty()
     attributes = termios.tcgetattr(slave)
     attributes[3] &= ~termios.ECHO
@@ -166,7 +227,7 @@ def authenticate(provider):
     process = subprocess.Popen(args, stdin=slave, stdout=slave, stderr=slave, start_new_session=True, env=subscription_environment())
     os.close(slave)
     decoder = codecs.getincrementaldecoder("utf-8")("replace")
-    output, last, pending = "", None, b""
+    output, last, pending, callback_sent = "", None, b"", False
     deadline = time.monotonic() + 900
     try:
         while process.poll() is None and time.monotonic() < deadline:
@@ -176,7 +237,7 @@ def authenticate(provider):
                 if not chunk:
                     raise SetupError("Sign-in interrupted. Start a new sign-in.")
                 pending += chunk
-                if len(pending) > 4096:
+                if len(pending) > 16384:
                     raise SetupError("Invalid sign-in response.")
                 while b"\n" in pending:
                     line, pending = pending.split(b"\n", 1)
@@ -185,6 +246,22 @@ def authenticate(provider):
                         emit("Cancelled", "Sign-in cancelled.")
                         return
                     code = response.get("code", "")
+                    if browser:
+                        if callback_sent:
+                            raise SetupError("This callback was already submitted. Check account status or start again.")
+                        try:
+                            if last is None:
+                                raise SetupError("Wait for Codex's browser sign-in link.")
+                            port, target = callback_target(code, last["url"])
+                        except SetupError as error:
+                            emit("Waiting", str(error), **(last or {}))
+                            continue
+                        callback_sent = True
+                        relay_callback(port, target)
+                        # A callback can be submitted only once. Keep its query
+                        # out of subsequent events, errors and provider settings.
+                        pending = b""
+                        break
                     if provider != "claude" or not re.fullmatch(r"[A-Za-z0-9_#.-]{1,2048}", code):
                         raise SetupError("Paste the one-time code from Claude's sign-in page.")
                     os.write(master, code.encode() + b"\n")
@@ -195,6 +272,8 @@ def authenticate(provider):
                     break
                 output = (output + decoder.decode(chunk))[-32768:]
                 interaction = auth_interaction(provider, output)
+                if browser:
+                    interaction.update(deviceCode=None, needsCallback=bool(interaction["url"]))
                 if interaction != last and interaction["url"]:
                     emit("Waiting", "Finish signing in on the provider's site.", **interaction)
                     last = interaction
@@ -354,8 +433,8 @@ def main():
         emit(state, message)
     elif action == "install":
         install(provider)
-    elif action == "login":
-        authenticate(provider)
+    elif action in ("login", "login-browser"):
+        authenticate(provider, browser=action == "login-browser")
     elif action == "connection-status":
         configured = connection_status(payload["model"], provider)
         emit("Configured" if configured else "Missing", "Connection saved." if configured else "Reconnect this model to repair its configuration.")
