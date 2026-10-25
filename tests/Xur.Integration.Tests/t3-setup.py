@@ -11,9 +11,11 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.parse
 from unittest.mock import patch
 
 SOURCE = Path("src/Xur.Agent/t3-setup.py").resolve()
+sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location("t3_setup", SOURCE)
 helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
@@ -162,6 +164,121 @@ while not (Path.home()/'authorized').exists(): time.sleep(.02)
         config = json.loads(self.settings.read_text())["providerInstances"]["xur_codex_subscription"]["config"]
         self.assertEqual(config["homePath"], str(self.home / ".codex"))
         self.assertEqual(config["setupMode"], "existing")
+
+    def test_browser_callback_rejects_other_destinations_and_attempts(self):
+        callback = "http://localhost:1455/auth/callback?code=fixture-code&state=fixture-state"
+        authorization = "https://auth.openai.com/oauth/authorize?" + urllib.parse.urlencode(dict(redirect_uri="http://localhost:1455/auth/callback", state="fixture-state"))
+        self.assertEqual(helper.callback_target(callback, authorization), (1455, "/auth/callback?code=fixture-code&state=fixture-state"))
+        invalid = [
+            callback.replace("localhost", "remote.test"), callback.replace("localhost", "localhost.evil.test"),
+            callback.replace("localhost", "user@localhost"), callback.replace("localhost", "127.0.0.1"),
+            callback.replace("1455", "8080"), callback.replace("http:", "https:"),
+            callback.replace("/auth/callback", "/cancel"), callback + "#fragment", callback + "\n",
+            callback.replace("fixture-state", "another-attempt"), callback + "&state=fixture-state",
+            callback + "&code=other-code", callback.replace("code=fixture-code", "code="),
+            callback + "&error=access_denied", "curl " + callback, callback + "&x=" + "x" * 8192,
+        ]
+        for value in invalid:
+            with self.subTest(value=value[:100]), self.assertRaises(helper.SetupError):
+                helper.callback_target(value, authorization)
+        for url in (authorization.replace("auth.openai.com", "evil.test"), authorization + "&state=other", authorization.replace("localhost", "remote.test")):
+            with self.assertRaises(helper.SetupError):
+                helper.callback_target(callback, url)
+
+    def fake_browser_codex(self):
+        binary = self.bin / "codex"
+        binary.write_text('''#!/usr/bin/env python3
+from http.server import HTTPServer,BaseHTTPRequestHandler
+from pathlib import Path
+from urllib.parse import urlencode,urlsplit,parse_qs
+import json,sys
+home=Path.home()
+if sys.argv[1:]==['login','status']:
+ print('Logged in using ChatGPT' if (home/'authorized').exists() else 'Signed out',file=sys.stderr)
+ sys.exit(0 if (home/'authorized').exists() else 1)
+assert sys.argv[1:]==['login']
+class Handler(BaseHTTPRequestHandler):
+ def log_message(self,*args): pass
+ def do_GET(self):
+  path=urlsplit(self.path)
+  with (home/'requests').open('a') as out: out.write(path.path+'\\n')
+  if path.path=='/auth/callback' and parse_qs(path.query)=={'code':['fixture-code'],'state':['fixture-state']}:
+   (home/'authorized').touch()
+   self.send_response(302)
+   self.send_header('Location','http://localhost:'+str(self.server.server_port)+'/success?token=NEVER-EXPOSE')
+  elif self.path=='/success':
+   self.server.finished=True
+   self.send_response(200)
+  else: self.send_response(400)
+  self.send_header('Content-Length','0');self.end_headers()
+server=HTTPServer(('127.0.0.1',0),Handler);server.finished=False
+callback='http://localhost:'+str(server.server_port)+'/auth/callback'
+(home/'callback').write_text(callback+'?code=fixture-code&state=fixture-state')
+print('https://auth.openai.com/oauth/authorize?'+urlencode({'redirect_uri':callback,'state':'fixture-state'}),flush=True)
+while not server.finished: server.handle_request()
+''')
+        binary.chmod(0o700)
+
+    def test_browser_login_relays_callback_and_preserves_native_account(self):
+        self.fake_browser_codex()
+        with self.start() as process:
+            process.stdin.write('{"action":"login-browser","provider":"codex"}\n');process.stdin.flush()
+            state = self.read(process)
+            self.assertTrue(state["needsCallback"])
+            self.assertFalse(state["needsCode"])
+            self.assertIsNone(state["deviceCode"])
+            callback = (self.home / "callback").read_text()
+            # A wrong attempt remains retryable and never reaches the listener.
+            process.stdin.write(json.dumps(dict(code=callback.replace("fixture-state", "wrong-state"))) + "\n");process.stdin.flush()
+            rejected = self.read(process)
+            self.assertEqual(rejected["state"], "Waiting")
+            self.assertTrue(rejected["needsCallback"])
+            self.assertFalse((self.home / "requests").exists())
+            process.stdin.write(json.dumps(dict(code=callback)) + "\n");process.stdin.flush()
+            completed = self.read(process)
+            self.assertEqual(completed["state"], "Succeeded")
+            self.assertNotIn("fixture-code", json.dumps(completed))
+            process.wait(timeout=5)
+            self.assertEqual(process.stderr.read(), "")
+        self.assertEqual((self.home / "requests").read_text().splitlines(), ["/auth/callback", "/success"])
+        entry = json.loads(self.settings.read_text())["providerInstances"]["xur_codex_subscription"]
+        self.assertEqual(entry["config"]["homePath"], str(self.home / ".codex"))
+        self.assertNotIn("fixture-code", self.settings.read_text())
+        self.assertNotIn("NEVER-EXPOSE", self.settings.read_text())
+
+    def test_browser_login_cancel_and_disconnect_stop_listener(self):
+        for cancel in (True, False):
+            self.fake_browser_codex()
+            with self.start() as process:
+                process.stdin.write('{"action":"login-browser","provider":"codex"}\n');process.stdin.flush();self.read(process)
+                port = urllib.parse.urlsplit((self.home / "callback").read_text()).port
+                if cancel:
+                    process.stdin.write('{"action":"cancel"}\n');process.stdin.flush()
+                else:
+                    process.stdin.close()
+                self.assertEqual(self.read(process)["state"], "Cancelled" if cancel else "Failed")
+                process.wait(timeout=5)
+            import socket
+            with socket.socket() as sock:
+                self.assertNotEqual(sock.connect_ex(("127.0.0.1", port)), 0)
+            self.assertFalse(self.settings.exists())
+
+    def test_relay_does_not_follow_remote_or_wrong_port_redirects(self):
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        from threading import Thread
+        for destination in ("https://remote.test/steal?token=NEVER-EXPOSE", "http://127.0.0.1:1/success?token=NEVER-EXPOSE", "http://127.0.0.1:{port}/cancel"):
+            class Handler(BaseHTTPRequestHandler):
+                def log_message(self, *_): pass
+                def do_GET(self):
+                    self.send_response(302)
+                    self.send_header("Location", destination.format(port=self.server.server_port))
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+            with HTTPServer(("127.0.0.1", 0), Handler) as server:
+                thread = Thread(target=server.handle_request);thread.start()
+                helper.relay_callback(server.server_port, "/auth/callback?code=fixture&state=fixture")
+                thread.join(timeout=5)
+                self.assertFalse(thread.is_alive())
 
     def test_install_stops_if_controller_disconnects(self):
         binary = self.bin / "curl"

@@ -47,19 +47,18 @@ else
             <div class="t3-provider-grid">
                 <article class="t3-provider" data-provider="codex">
                     <h3>Codex · ChatGPT subscription</h3>
-                    <p>Use your ChatGPT plan through T3's own sign-in screen. Pair this device above first, then connect your account on this server.</p>
-                    <a class="button secondary t3-provider-link" data-instance="codex" target="_blank" rel="noopener noreferrer">Sign in with ChatGPT in T3</a>
-                    <details><summary>Use the Codex CLI or a local model</summary>
-                        <p>Use Codex for local models or device-code sign-in. Device-code login may need to be enabled in your ChatGPT security settings.</p>
-                        <p class="t3-provider-status" role="status">Waiting for T3…</p>
-                        <div class="actions"><button type="button" data-action="install" class="secondary">Retry setup</button><button type="button" data-action="login">Sign in with device code</button></div>
-                        <div class="t3-auth" hidden></div>
-                        <a class="t3-provider-link" data-instance="xur_codex_subscription" target="_blank" rel="noopener noreferrer">Open CLI subscription in T3</a>
+                    <p class="t3-provider-status" role="status">Waiting for T3…</p>
+                    <div class="actions"><button type="button" data-action="install" class="secondary">Retry setup</button><button type="button" data-action="login">Sign in with device code</button></div>
+                    <details><summary>Advanced sign-in</summary>
+                        <p>If device-code sign-in is unavailable, sign in through your browser and copy the final localhost URL back here.</p>
+                        <button type="button" data-action="login-browser" class="secondary">Sign in with browser</button>
                     </details>
+                    <div class="t3-auth" hidden></div>
+                    <a class="t3-provider-link" data-instance="xur_codex_subscription" target="_blank" rel="noopener noreferrer">Open Codex in T3</a>
                 </article>
                 <article class="t3-provider" data-provider="claude">
                     <h3>Claude · Claude subscription</h3>
-                    <p>Sign in with your Claude account. Open its sign-in page on this device and paste the one-time code here if prompted.</p>
+                    <p>Sign in on Claude’s website, then paste its one-time code here.</p>
                     <p class="t3-provider-status" role="status">Waiting for T3…</p>
                     <div class="actions"><button type="button" data-action="install" class="secondary">Retry setup</button><button type="button" data-action="login">Sign in with Claude</button></div>
                     <div class="t3-auth" hidden></div>

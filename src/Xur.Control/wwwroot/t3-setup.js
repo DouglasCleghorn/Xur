@@ -17,16 +17,17 @@
  function auth(card,data){
   const area=card.querySelector('.t3-auth'),provider=card.dataset.provider;
   // Preserve a code being typed while polling an unchanged interaction.
-  const signature=JSON.stringify([data.flowId,data.state,data.url,data.deviceCode,data.needsCode]);
+  const signature=JSON.stringify([data.flowId,data.state,data.url,data.deviceCode,data.needsCode,data.needsCallback]);
   if(area.dataset.signature===signature)return;area.dataset.signature=signature;area.replaceChildren();area.hidden=!active(data.state)&&data.state!=='Succeeded';
   if(data.url){
    const url=new URL(data.url),allowed=provider==='codex'?['auth.openai.com']:['claude.ai','platform.claude.com','console.anthropic.com'];
    if(url.protocol!=='https:'||!allowed.includes(url.hostname)||url.username||url.password)throw Error('The provider returned an unexpected sign-in address.');
    const link=el('a','Open '+(provider==='codex'?'ChatGPT':'Claude')+' sign-in','button secondary');link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';area.append(link);
   }
-  if(data.deviceCode)area.append(el('p','Enter this code on the provider’s site:'),el('code',data.deviceCode));
-  if(data.needsCode){
-   const form=el('form'),label=el('label','One-time sign-in code'),input=el('input');input.name='code';input.autocomplete='off';input.spellcheck=false;input.maxLength=2048;input.required=true;label.append(input);
+  if(data.deviceCode)area.append(el('p','Enter this code on the provider’s site:'),el('code',data.deviceCode),el('p','If prompted, enable device-code login in ChatGPT security settings.'));
+  if(data.needsCallback)area.append(el('p','After signing in, the localhost page may fail to load. Copy its full address from your browser and paste it below.'));
+  if(data.needsCode||data.needsCallback){
+   const form=el('form'),label=el('label',data.needsCallback?'Localhost callback URL':'One-time Claude sign-in code'),input=el('input');input.name='code';input.autocomplete='off';input.spellcheck=false;input.maxLength=data.needsCallback?8192:2048;input.required=true;label.append(input);
    const submit=el('button','Complete sign-in');submit.type='submit';form.append(label,submit);
    form.onsubmit=async e=>{e.preventDefault();const code=input.value.trim();input.value='';submit.disabled=true;await action(card,'respond',{flowId:data.flowId,code});};area.append(form);
   }
@@ -40,7 +41,7 @@
  function render(card,data){
   card.querySelector('.t3-provider-status').textContent=data.state+' · '+data.message;
   if(data.flowId&&active(data.state))flows.set(card.dataset.provider,data.flowId);else flows.delete(card.dataset.provider);
-  card.querySelectorAll('[data-action]').forEach(b=>b.disabled=!running||active(data.state)||busy.has(card.dataset.provider)||(b.dataset.action==='login'&&data.state==='Missing'));
+  card.querySelectorAll('[data-action]').forEach(b=>b.disabled=!running||active(data.state)||busy.has(card.dataset.provider)||(['login','login-browser'].includes(b.dataset.action)&&data.state==='Missing'));
   card.querySelectorAll('[data-action="install"]').forEach(b=>b.hidden=data.state!=='Missing'&&data.state!=='Failed');
   auth(card,data);
  }

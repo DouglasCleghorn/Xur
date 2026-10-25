@@ -30,7 +30,8 @@ public sealed class T3Setup(WorkloadRuntime workloads):IDisposable
     public async Task<T3SetupState> Execute(T3SetupRequest request)
     {
         if(request.Provider is not ("codex" or "claude" or "opencode"))throw new InvalidOperationException("Choose Codex, Claude or OpenCode.");
-        if(request.Action is not ("status" or "install" or "login" or "respond" or "cancel" or "connect" or "connection-status"))throw new InvalidOperationException("Unsupported setup action.");
+        if(request.Action is not ("status" or "install" or "login" or "login-browser" or "respond" or "cancel" or "connect" or "connection-status"))throw new InvalidOperationException("Unsupported setup action.");
+        if(request.Action=="login-browser" && request.Provider!="codex")throw new InvalidOperationException("Browser callback sign-in is available for Codex only.");
         if(request.Action=="login" && request.Provider=="opencode")throw new InvalidOperationException("Connect an Xur model to OpenCode.");
         if(request.Action is "connect" or "connection-status" && (request.Model==null || request.Provider=="claude"))throw new InvalidOperationException("Choose a local model and compatible harness.");
         await gate.WaitAsync();
@@ -45,15 +46,18 @@ public sealed class T3Setup(WorkloadRuntime workloads):IDisposable
                 if(request.Action=="respond")
                 {
                     var waiting=flow.State;
-                    if(!Active(flow)||!waiting.NeedsCode||request.Code==null||!Regex.IsMatch(request.Code,@"\A[A-Za-z0-9_#.-]{1,2048}\z"))throw new InvalidOperationException("Paste the current one-time Claude sign-in code.");
-                    var verifying=waiting with{State="Verifying",Message="Checking sign-in…",NeedsCode=false,Url=null,DeviceCode=null};
+                    var valid=waiting.NeedsCallback && flow.Action=="login-browser"
+                        ? request.Code is {Length:>0 and <=8192} && !request.Code.Any(char.IsControl)
+                        : waiting.NeedsCode && request.Code!=null && Regex.IsMatch(request.Code,@"\A[A-Za-z0-9_#.-]{1,2048}\z");
+                    if(!Active(flow)||!valid)throw new InvalidOperationException(waiting.NeedsCallback?"Paste the full localhost callback URL from this sign-in.":"Paste the current one-time Claude sign-in code.");
+                    var verifying=waiting with{State="Verifying",Message="Checking sign-in…",NeedsCode=false,NeedsCallback=false,Url=null,DeviceCode=null};
                     if(!ReferenceEquals(Interlocked.CompareExchange(ref flow.State,verifying,waiting),waiting))throw new InvalidOperationException("Sign-in state changed. Refresh setup before responding.");
                     await flow.Process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new{code=request.Code},json));
                     await flow.Process.StandardInput.FlushAsync();
                 }
                 else if(request.Action=="cancel")
                 {
-                    if(flow.Action!="login")throw new InvalidOperationException("Wait for this setup operation to complete.");
+                    if(flow.Action is not ("login" or "login-browser"))throw new InvalidOperationException("Wait for this setup operation to complete.");
                     Close(flow);
                 }
                 else if(request.Action!="status")throw new InvalidOperationException("Invalid setup session action.");
@@ -124,7 +128,7 @@ public sealed class T3Setup(WorkloadRuntime workloads):IDisposable
         finally
         {
             if(flow.Cancelled)flow.State=new("Cancelled","Sign-in cancelled.",flow.Id,Provider:flow.Provider);
-            if(flow.State.State is not ("Waiting" or "Verifying"))flow.State=flow.State with{Url=null,DeviceCode=null,NeedsCode=false};
+            if(flow.State.State is not ("Waiting" or "Verifying"))flow.State=flow.State with{Url=null,DeviceCode=null,NeedsCode=false,NeedsCallback=false};
             flow.Done.TrySetResult(flow.State);
         }
     }

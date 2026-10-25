@@ -67,12 +67,14 @@ class Handler(BaseHTTPRequestHandler):
             if action == "install":
                 state["accounts"][provider] = "Signed out"
                 return self.send(dict(state="Succeeded", message="Harness installed.", provider=provider))
-            if action == "login":
+            if action in ("login", "login-browser"):
                 flow = dict(state="Waiting", message="Complete sign-in.", flowId="fixture-" + provider, provider=provider, url="https://claude.ai/oauth/authorize?state=fixture-only" if provider == "claude" else "https://auth.openai.com/codex/device", needsCode=provider == "claude", deviceCode="ABCD-EFGHJ" if provider == "codex" else None)
+                if action == "login-browser":
+                    flow.update(url="https://auth.openai.com/oauth/authorize?state=fixture-only", needsCallback=True, deviceCode=None)
                 state["flows"][provider] = flow
                 return self.send(flow)
             if action == "respond":
-                if data.get("code") != "fixture-code":
+                if data.get("code") != ("http://localhost:1455/auth/callback?state=fixture-only&code=fixture-code" if provider == "codex" else "fixture-code"):
                     return self.send(dict(error="Invalid fixture code"), 409)
                 state["accounts"][provider] = "Signed in";state["flows"].pop(provider, None)
                 return self.send(dict(state="Succeeded", message="Subscription login saved.", provider=provider))
