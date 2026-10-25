@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../catalog/engines/Containerfile" LogicalName="Xur.EngineImages" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="t3-launcher.sh" LogicalName="Xur.T3Launcher" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../Xur.IO/Xur.IO.csproj" /></ItemGroup>
 </Project>

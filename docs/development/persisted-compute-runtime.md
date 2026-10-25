@@ -27,6 +27,30 @@ setting through `POST /api/t3-code/enabled`. The runtime reports actual state an
 errors separately from intent. The page has no profile lifecycle controls or
 link to a separate workload manager. Direct T3 connections still use port 3773.
 
+Every container start launches independent background update jobs for T3 Code,
+Codex, Claude Code and OpenCode. An installed T3 server starts immediately;
+only a missing T3 executable requires its initial install before launch. The
+other CLIs install in parallel and become available as their installers finish.
+A background T3 update takes effect on the next start. Pairing and other CLI
+calls do not run updates. An agent restart that adopts a healthy container does
+not count as a container start.
+
+The first installation uses the official scripts at `t3.codes/install.sh`,
+`chatgpt.com/codex/install.sh`, `claude.ai/install.sh` and
+`opencode.ai/v2/install`. Subsequent starts use `t3 update --yes`, the Codex
+installer, `claude update` and `opencode upgrade`. No release versions are pinned.
+Installed binaries, update selections and account state stay in the writable
+home volume. Update failures are logged without stopping an installed server.
+An unavailable first T3 installation fails startup and can be retried.
+
+The agent supplies the current launcher when creating T3 containers, including
+containers from previously saved images. A bootstrap label identifies the
+launcher; a container with an older bootstrap is replaced once while retaining
+its recipe and volume. T3 receives the Xur machine's hostname, so its advertised
+connection name uses the host name rather than a generated container identity.
+Renaming the host also refreshes this container setting without replacing T3's
+persisted environment ID. The setup retry buttons use the same installer commands.
+
 Persisted runtime receipts share the host runtime's allocation authority but are
 excluded from observations used for profile planning. Old profile stop commands
 cannot stop a persisted receipt. T3 is removed from profile selection and from
