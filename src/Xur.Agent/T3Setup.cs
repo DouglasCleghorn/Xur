@@ -24,7 +24,7 @@ public sealed class T3Setup(WorkloadRuntime workloads):IDisposable
     static string ReadScript()
     {
         using var stream=typeof(T3Setup).Assembly.GetManifestResourceStream("Xur.T3Setup")!;
-        using var reader=new StreamReader(stream);return reader.ReadToEnd();
+        using var reader=new StreamReader(stream);return reader.ReadToEnd().Replace("\"__XUR_T3_LAUNCHER__\"",JsonSerializer.Serialize(T3CodeWorkload.Launcher),StringComparison.Ordinal);
     }
     static bool Active(Flow flow)=>!flow.Done.Task.IsCompleted;
     public async Task<T3SetupState> Execute(T3SetupRequest request)

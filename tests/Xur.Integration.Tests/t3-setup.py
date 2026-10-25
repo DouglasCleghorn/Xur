@@ -103,7 +103,8 @@ sys.exit(0 if value=='fixture-code#state' else 1)
         env = dict(os.environ)
         env["HOME"] = str(self.home)
         env["PATH"] = str(self.bin) + os.pathsep + env["PATH"]
-        return subprocess.Popen([sys.executable, "-u", str(SOURCE)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        script = SOURCE.read_text().replace('"__XUR_T3_LAUNCHER__"', json.dumps(Path("src/Xur.Domain/t3-launcher.sh").read_text()))
+        return subprocess.Popen([sys.executable, "-u", "-c", script], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
 
     def read(self, process):
         self.assertTrue(select.select([process.stdout], [], [], 10)[0], "helper response timed out")
@@ -163,7 +164,7 @@ while not (Path.home()/'authorized').exists(): time.sleep(.02)
         self.assertEqual(config["setupMode"], "existing")
 
     def test_install_stops_if_controller_disconnects(self):
-        binary = self.bin / "npm"
+        binary = self.bin / "curl"
         binary.write_text('''#!/usr/bin/env python3
 from pathlib import Path
 import os,time

@@ -41,6 +41,7 @@
   card.querySelector('.t3-provider-status').textContent=data.state+' · '+data.message;
   if(data.flowId&&active(data.state))flows.set(card.dataset.provider,data.flowId);else flows.delete(card.dataset.provider);
   card.querySelectorAll('[data-action]').forEach(b=>b.disabled=!running||active(data.state)||busy.has(card.dataset.provider)||(b.dataset.action==='login'&&data.state==='Missing'));
+  card.querySelectorAll('[data-action="install"]').forEach(b=>b.hidden=data.state!=='Missing'&&data.state!=='Failed');
   auth(card,data);
  }
  async function action(card,operation,extra={}){

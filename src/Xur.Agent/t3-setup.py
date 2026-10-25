@@ -23,7 +23,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-PACKAGES = {"codex": "@openai/codex@0.163.0", "claude": "@anthropic-ai/claude-code@2.1.306", "opencode": "@opencode/cli@2.1.2"}
+PROVIDERS = {"codex", "claude", "opencode"}
+LAUNCHER = "__XUR_T3_LAUNCHER__"
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)")
 
 
@@ -41,7 +42,7 @@ def paths():
 
 
 def binary(provider):
-    if provider not in PACKAGES:
+    if provider not in PROVIDERS:
         raise SetupError("Choose Codex, Claude or OpenCode.")
     return str(paths()[1] / provider)
 
@@ -94,7 +95,7 @@ def subscription_environment():
 def account(provider):
     exe = binary(provider)
     if not Path(exe).is_file():
-        return "Missing", "Install the harness in T3's persistent storage."
+        return "Missing", "Automatic setup has not finished. Retry setup if it remains unavailable."
     if provider == "opencode":
         return "Installed", "OpenCode is installed. Connect an Xur model below."
     args = [exe, "login", "status"] if provider == "codex" else [exe, "auth", "status"]
@@ -125,8 +126,8 @@ def stop_process(process):
 
 def install(provider):
     binary(provider)
-    emit("Installing", "Installing the pinned harness in T3's persistent home…")
-    process = subprocess.Popen(["npm", "install", "--global", "--prefix", str(paths()[0] / ".local"), "--no-audit", "--no-fund", PACKAGES[provider]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    emit("Installing", "Installing the latest harness in T3's persistent home…")
+    process = subprocess.Popen(["sh", "-c", LAUNCHER, "t3-launcher", "xur-install-harness", provider], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     try:
         deadline = time.monotonic() + 600
         while process.poll() is None and time.monotonic() < deadline:

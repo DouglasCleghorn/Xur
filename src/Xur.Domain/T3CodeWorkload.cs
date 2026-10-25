@@ -29,33 +29,17 @@ public static class T3CodeWorkload
             throw new InvalidOperationException("Use the T3 Code preset with its persistent home volume.");
     }
 
-    // Keep the launcher path stable for saved recipes. The upstream installer and
-    // updater own the runtime and symlink inside the persistent, writable home.
-    public const string Launcher="""
-        #!/bin/sh
-        set -eu
-        export T3CODE_HOME="${T3CODE_HOME:-$HOME/.t3}"
-        export T3CODE_INSTALL_BIN_DIR="${T3CODE_INSTALL_BIN_DIR:-$HOME/.local/bin}"
-        t3_command="$T3CODE_INSTALL_BIN_DIR/t3"
-        if [ ! -x "$t3_command" ]; then
-            printf '%s\n' 'Installing the latest stable T3 Code into persistent storage…'
-            installer="$(mktemp)"
-            trap 'rm -f "$installer"' EXIT
-            trap 'exit 130' INT
-            trap 'exit 143' TERM
-            curl --fail --location --retry 3 --connect-timeout 15 --max-time 120 \
-                https://t3.codes/install.sh -o "$installer"
-            sh "$installer"
-            test -x "$t3_command" || { printf '%s\n' 'T3 Code installation did not create an executable.' >&2; exit 1; }
-            rm -f "$installer"
-            trap - EXIT INT TERM
-        fi
-        exec "$t3_command" "$@"
-        """;
+    // Both saved images and newly prepared images use this current bootstrap.
+    public static string Launcher {get;}=ReadLauncher();
+    static string ReadLauncher()
+    {
+        using var stream=typeof(T3CodeWorkload).Assembly.GetManifestResourceStream("Xur.T3Launcher")!;
+        using var reader=new StreamReader(stream);return reader.ReadToEnd();
+    }
 
     public const string Dockerfile="""
         FROM mirror.gcr.io/library/node:lts
-        RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client ca-certificates curl python3 ripgrep \
+        RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client ca-certificates curl python3 ripgrep bash \
             && rm -rf /var/lib/apt/lists/*
         COPY t3-launcher /opt/t3/t3
         RUN chmod 755 /opt/t3/t3 && ln -s /opt/t3/t3 /usr/local/bin/t3 \
