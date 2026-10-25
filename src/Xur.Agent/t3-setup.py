@@ -143,7 +143,7 @@ def install(provider):
 
 def auth_interaction(provider, output):
     clean = ANSI.sub("", output).replace("\r", "")
-    allowed = {"auth.openai.com"} if provider == "codex" else {"claude.ai", "platform.claude.com", "console.anthropic.com"}
+    allowed = {"auth.openai.com"} if provider == "codex" else {"claude.com", "claude.ai", "platform.claude.com", "console.anthropic.com"}
     url = None
     for candidate in re.findall(r'https://[^\s<>"\x1b]+', clean):
         parsed = urllib.parse.urlsplit(candidate)

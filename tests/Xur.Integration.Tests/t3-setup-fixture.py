@@ -68,7 +68,7 @@ class Handler(BaseHTTPRequestHandler):
                 state["accounts"][provider] = "Signed out"
                 return self.send(dict(state="Succeeded", message="Harness installed.", provider=provider))
             if action in ("login", "login-browser"):
-                flow = dict(state="Waiting", message="Complete sign-in.", flowId="fixture-" + provider, provider=provider, url="https://claude.ai/oauth/authorize?state=fixture-only" if provider == "claude" else "https://auth.openai.com/codex/device", needsCode=provider == "claude", deviceCode="ABCD-EFGHJ" if provider == "codex" else None)
+                flow = dict(state="Waiting", message="Complete sign-in.", flowId="fixture-" + provider, provider=provider, url="https://claude.com/oauth/authorize?state=fixture-only" if provider == "claude" else "https://auth.openai.com/codex/device", needsCode=provider == "claude", deviceCode="ABCD-EFGHJ" if provider == "codex" else None)
                 if action == "login-browser":
                     flow.update(url="https://auth.openai.com/oauth/authorize?state=fixture-only", needsCallback=True, deviceCode=None)
                 state["flows"][provider] = flow
