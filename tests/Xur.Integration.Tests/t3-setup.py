@@ -82,6 +82,15 @@ class SetupTests(unittest.TestCase):
 
     def test_official_auth_links_only(self):
         self.assertIsNone(helper.auth_interaction("claude", "https://claude.ai.evil.test/code")['url'])
+        self.assertIsNone(helper.auth_interaction("claude", "https://claude.com.evil.test/code")['url'])
+        self.assertIsNone(helper.auth_interaction("claude", "https://user@claude.com/code")['url'])
+        self.assertIsNone(helper.auth_interaction("claude", "https://claude.com:8443/code")['url'])
+        for host in ("claude.com", "claude.ai", "platform.claude.com", "console.anthropic.com"):
+            url = "https://" + host + "/oauth/authorize?state=fixture-only"
+            # Native Claude prints OSC 8 hyperlinks, including the new domain.
+            value = helper.auth_interaction("claude", "\x1b]8;;" + url + "\x07" + url + "\x1b]8;;\x07")
+            self.assertEqual(value['url'], url)
+            self.assertTrue(value['needsCode'])
         self.assertIsNone(helper.auth_interaction("codex", "https://user:secret@auth.openai.com/device")['url'])
         value = helper.auth_interaction("codex", "\x1b[32mhttps://auth.openai.com/codex/device\x1b[0m\nABCD-EFGHJ\n")
         self.assertEqual(value['deviceCode'], 'ABCD-EFGHJ')
@@ -95,7 +104,7 @@ if sys.argv[1:]==['auth','status']:
  print(json.dumps({'authMethod':'claude.ai','accessToken':'NEVER-EXPOSE'}));sys.exit(0)
 assert sys.argv[1:]==['auth','login','--claudeai']
 print('private diagnostic NEVER-EXPOSE',flush=True)
-print('https://claude.ai/oauth/authorize?state=fixture-only',flush=True)
+print('https://claude.com/oauth/authorize?state=fixture-only',flush=True)
 value=input('Paste code here if prompted: ')
 sys.exit(0 if value=='fixture-code#state' else 1)
 ''')

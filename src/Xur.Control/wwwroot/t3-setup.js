@@ -20,7 +20,7 @@
   const signature=JSON.stringify([data.flowId,data.state,data.url,data.deviceCode,data.needsCode,data.needsCallback]);
   if(area.dataset.signature===signature)return;area.dataset.signature=signature;area.replaceChildren();area.hidden=!active(data.state)&&data.state!=='Succeeded';
   if(data.url){
-   const url=new URL(data.url),allowed=provider==='codex'?['auth.openai.com']:['claude.ai','platform.claude.com','console.anthropic.com'];
+   const url=new URL(data.url),allowed=provider==='codex'?['auth.openai.com']:['claude.com','claude.ai','platform.claude.com','console.anthropic.com'];
    if(url.protocol!=='https:'||!allowed.includes(url.hostname)||url.username||url.password)throw Error('The provider returned an unexpected sign-in address.');
    const link=el('a','Open '+(provider==='codex'?'ChatGPT':'Claude')+' sign-in','button secondary');link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';area.append(link);
   }
