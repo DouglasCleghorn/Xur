@@ -54,7 +54,7 @@
   try{
    const status=await api('status');running=status.state==='Running';document.getElementById('t3-setup-stopped').hidden=running;
    page.querySelectorAll('.t3-provider-link').forEach(a=>{a.setAttribute('aria-disabled',String(!running));a.tabIndex=running?0:-1;if(running)a.href=providerUrl(a.dataset.instance);else a.removeAttribute('href');});
-   if(!running){flows.clear();cards.forEach(c=>render(c,{state:'Stopped',message:'Load T3 Code to continue.'}));return;}
+   if(!running){flows.clear();cards.forEach(c=>render(c,{state:'Stopped',message:'Enable T3 Code to continue.'}));return;}
    await Promise.all(cards.map(c=>action(c,'status',flows.has(c.dataset.provider)?{flowId:flows.get(c.dataset.provider)}:{})));
   }catch(e){running=false;cards.forEach(c=>render(c,{state:'Unavailable',message:'Check the T3 workload and retry.'}));fail(e);}
  }

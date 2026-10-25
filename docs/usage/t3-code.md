@@ -1,14 +1,14 @@
 # T3 Code
 
-T3 Code runs as a persistent container with shared access to all host GPUs.
-Xur prepares, starts and stops the workload; phones and desktops connect
+T3 Code runs through Persisted Compute with shared access to all host GPUs.
+It starts automatically after installation and reboot, independently of profiles.
+Phones and desktops connect
 **directly to T3 Code on TCP port 3773**.
 Xur does not proxy its HTTP or WebSocket connections.
 
-1. Open **T3 Code → Prepare T3 Code**. Preparation builds the image.
-   **Containers** shows progress and errors.
-2. Edit a profile, add a workload, select **T3 Code**, and save and load the profile.
-   On first start, T3's native installer downloads the latest stable version into
+1. Open **T3 Code** and select **Install**. Stay on the page while it installs;
+   connection and account controls appear when it finishes.
+2. Auto-run is enabled by default. On first start, T3's native installer downloads the latest stable version into
    the persistent home volume. This needs internet access; workload logs show
    installation progress and any download errors. Later starts use the saved
    installation without downloading it again.
@@ -20,6 +20,11 @@ Xur does not proxy its HTTP or WebSocket connections.
    in T3**.
 
 After pairing, **Open T3 Code** reconnects the browser using T3's saved session.
+Turn **Auto-run** off to stop T3 Code and keep it off, including after reboot.
+Turn it back on to start the same installation. Projects, accounts, pairings and
+installed updates remain saved. If startup repeatedly fails, the page shows the
+error and a **Retry** button after five attempts.
+
 Create another link for each additional device. Xur sign-in is required to mint
 links; Xur API keys cannot mint them. T3 handles authentication and permissions
 on its own port. Treat pairing links as credentials.
@@ -71,7 +76,7 @@ For provider-specific prerequisites, see
 ## Models from Xur profiles
 
 1. Install **OpenCode** or **Codex** in **Coding accounts and harnesses**.
-2. Load a profile containing both T3 Code and the desired language-model workload.
+2. Enable T3 Code and load a profile containing the desired language-model workload.
    Saved but unloaded models remain listed with a link to review profiles.
 3. Open Xur at its HTTPS LAN or Tailscale address, reachable from the container.
    Choose the exact **Served model** ID, harness, and serving context limit.
@@ -130,10 +135,9 @@ isolation, and AMD/Intel access also permits the compute runtime's system calls.
 Device access does not install CUDA, ROCm, Level Zero or project-specific libraries;
 install the tools needed by your project inside the coding environment.
 
-Load the profile again after upgrading Xur to replace a T3 container created
-without GPU access. Projects, sessions and sign-ins stay in its existing volume.
-After changing host GPUs or device permissions, unload and reload T3 to refresh
-its device mappings and supplementary groups.
+Persisted Compute replaces a legacy T3 container that lacks shared GPU access
+using its existing volume. After changing host GPUs or device permissions,
+disable and re-enable T3 to refresh its device mappings and supplementary groups.
 
 ## Persistent storage
 
@@ -143,10 +147,11 @@ and provider credentials. Keep repositories in
 `/home/node/projects`. Tools installed under `/home/node/.local` also persist;
 changes elsewhere in the container can be lost when replacing it.
 
-Use the same prepared workload in multiple profiles to keep its instance when
-switching. Unload, stop and profile deletion retain the volume. To prepare a
-replacement image with the same data, select **Reuse T3 Code storage**. Creating
-new storage starts a separate environment with no previous projects or sessions.
+Switching, unloading or deleting profiles does not stop T3 Code. Existing T3
+profile references are retired while their original revisions remain available.
+Migration adopts the existing runtime identity and volume; it does not create a
+second server. If several independent T3 volumes exist and none is active, Xur
+reports the ambiguity instead of choosing one or creating empty storage.
 Volumes are visible on **Storage**. Back up project and credential data separately
 from Xur's configuration export.
 
@@ -159,10 +164,9 @@ assets and QR generation are served locally.
 ## Updates
 
 Run `t3 update` in T3 Code's terminal to install the latest stable update using
-T3's native updater. Once it finishes, unload and reload the profile in Xur to
-restart the server on the updated version. Unloading interrupts workloads in
-that profile, so finish active work first. No new Xur release or container
-rebuild is needed.
+T3's native updater. Once it finishes, turn **Auto-run** off and back on to
+restart T3 on the updated version. Finish active coding work first. No new Xur
+release or container rebuild is needed.
 
 T3's installer and updater keep the runtime under `/home/node/.t3/runtime` and
 select it with `/home/node/.local/bin/t3`. Both are in the persistent volume and
@@ -170,11 +174,6 @@ writable by the workload user. Restarts and replacement containers honor that
 selection; they do not reinstall or overwrite an updated runtime. The native
 installer checks the downloaded archive against upstream release checksums and
 keeps its local web assets and dependency notices.
-
-For a workload prepared before persistent updates were supported, prepare a new
-container with **Reuse T3 Code storage**, select it in the profile, and load it.
-Its first start installs the latest T3 runtime alongside the existing data.
-Subsequent updates use `t3 update`.
 
 The Node base follows its LTS channel through Google's Docker Hub cache; there
 is no fallback to Docker Hub on a cache miss. T3's MIT notice is retained
@@ -187,9 +186,8 @@ retain their upstream notices and terms, and are not bundled or relicensed as
 Xur code. Installing again selects these pinned versions. T3's managed Codex
 installation is independent of these buttons.
 
-Xur marks this workload as requiring `t3-code-v1` support, preventing rollback to
-an application version that cannot read its recipe. Preparing an image does not
-replace an active container; select the new recipe and apply the profile change.
+Saved run intent requires `persisted-compute-v1` support. Xur rejects rollback
+to a release that cannot preserve it. See the [runtime implementation notes](../development/persisted-compute-runtime.md) for migration and recovery details.
 
 ## Validation
 

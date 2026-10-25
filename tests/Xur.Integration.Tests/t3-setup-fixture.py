@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
-state = {"running": True, "modelReady": True, "failConnect": False, "calls": [], "accounts": {}, "flows": {}}
+state = {"installed": True, "enabled": True, "installStage": None, "running": True, "modelReady": True, "failConnect": False, "calls": [], "accounts": {}, "flows": {}}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -27,12 +27,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(state)
         if path == "/api/updates":
             return self.send(dict(automatic=False))
+        if path == "/api/container-jobs":
+            return self.send([dict(id="fixture-install", stage=state["installStage"])] if state["installStage"] else [])
         if path == "/api/t3-code/status":
-            return self.send(dict(state="Running" if state["running"] else "Stopped", workloadId="t3"))
+            return self.send(dict(state="Running" if state["running"] else "Starting" if state["enabled"] else "Disabled", workloadId="t3", installed=state["installed"], enabled=state["enabled"]))
         if path == "/api/t3-code/models":
             return self.send(dict(models=[dict(workloadId="12", name="DeepSeek 1017 <test>", engine="vLLM", state="Ready" if state["modelReady"] else "Profile not loaded", profiles=["Coding"], modelIds=["deepseek-1017"] if state["modelReady"] else [], contextLimits={"deepseek-1017": 32768})], connections=[]))
         if path == "/t3-code" or path == "/":
-            file = ROOT / ".build/evidence/t3-ui/t3-code.html"
+            file = ROOT / ".build/evidence/t3-ui" / ("t3-code.html" if state["installed"] else "t3-install.html")
         elif path == "/endpoints":
             file = ROOT / ".build/evidence/t3-ui/endpoints.html"
         else:
@@ -47,13 +49,19 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
         if path == "/fixture":
-            for key in ("running", "modelReady", "failConnect"):
+            for key in ("running", "modelReady", "failConnect", "installed", "installStage", "enabled"):
                 if key in data:
                     state[key] = data[key]
             return self.send(state)
         if self.headers.get("RequestVerificationToken") != "fixture-only":
             return self.send(dict(error="Missing antiforgery header"), 400)
         state["calls"].append(dict(path=path, action=data.get("action"), provider=data.get("provider"), codeSubmitted=bool(data.get("code"))))
+        if path == "/api/t3-code/enabled":
+            state["enabled"] = state["running"] = data["enabled"]
+            return self.send(dict(enabled=state["enabled"]))
+        if path == "/api/t3-code/prepare":
+            state["installStage"] = "Building"
+            return self.send(dict(id="fixture-install", stage="Building"))
         if path == "/api/t3-code/setup":
             provider, action = data["provider"], data["action"]
             if action == "install":

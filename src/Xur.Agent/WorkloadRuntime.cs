@@ -5,6 +5,10 @@ namespace Xur.Agent;
 public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,DisplayConsoles? consoles=null,DataStorage? dataStorage=null):IWorkloadRuntime
 {
     readonly DataStorage storage=dataStorage??new DataStorage(Path.GetDirectoryName(directory)!);
+    public Func<string,bool> PersistedOwner {get;set;} = _=>false;
+    public bool IndependentT3 {get;set;}
+    bool Persisted(Workload w)=>PersistedOwner(w.Id)||(IndependentT3&&T3CodeWorkload.Is(w.Recipe));
+    public Workload[] SavedWorkloads()=>Definitions();
     Task? storageMove;
     public bool StorageMoveBusy=>storageMove is {IsCompleted:false};
     public async Task MoveStorage(DataStorageRequest request)
@@ -39,10 +43,10 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             try {all.Add(JsonSerializer.Deserialize<Workload>(File.ReadAllText(path))!);}catch(FileNotFoundException) { /* A completed stop removed its receipt during observation. */ }
         return all.ToArray();
     }
-    async Task<RuntimeObservation> ObserveUnlocked()
+    async Task<RuntimeObservation> ObserveUnlocked(bool profilesOnly=false)
     {
         var gpus=await GpuInventory.Observe();var instances=new List<RuntimeInstance>();
-        foreach(var w in Definitions().OrderBy(w=>w.Id,StringComparer.Ordinal))
+        foreach(var w in Definitions().Where(w=>!profilesOnly||!Persisted(w)).OrderBy(w=>w.Id,StringComparer.Ordinal))
             instances.Add(await Inspect(w) ?? new(w.Id,w.Fingerprint,"pending:"+w.Fingerprint,0,File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim(),"","pending",w.Gpus));
         var all=instances.ToArray();return new(Canonical.Hash(new {gpus,instances=all}),gpus,all);
     }
@@ -56,10 +60,12 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     }
     public async Task Prepare(Workload[] workloads)
     {
+        if(workloads.Any(Persisted))throw new InvalidOperationException("Persisted Compute services are managed independently of profiles.");
         ProfilePolicy.Validate(new("runtime","Runtime",1,workloads),await ObserveUnlocked());
         await StationSeats.SetIntent(workloads.Where(w=>w.Recipe.Kind=="Workstation").ToArray());
     }
-    public Task<RuntimeObservation> Observe()=>ObserveUnlocked();
+    public Task<RuntimeObservation> Observe()=>ObserveUnlocked(profilesOnly:true);
+    public Task<RuntimeObservation> ObserveAll()=>ObserveUnlocked();
     public async Task<UnslothStatus> UnslothStatus()
     {
         var definition=Definitions().SingleOrDefault(w=>UnslothWorkload.Is(w.Recipe));
@@ -89,10 +95,10 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     {
         await using var operation=await Stops.Enter();
         var definition=Definitions().SingleOrDefault(w=>T3CodeWorkload.Is(w.Recipe))
-            ??throw new InvalidOperationException("Load a profile with T3 Code first.");
+            ??throw new InvalidOperationException("Enable T3 Code first.");
         await using var allocation=await Stops.Resources(["workload:"+definition.Id]);
         var instance=await Inspect(definition);
-        if(instance?.State!="running")throw new InvalidOperationException("Load a profile with T3 Code first.");
+        if(instance?.State!="running")throw new InvalidOperationException("Enable T3 Code first.");
         // Use the inspected immutable identity, never a caller-supplied command or container name.
         var result=await Processes.Run("podman",["exec",instance.InstanceId,"/opt/t3/t3","auth","pairing","create",
             "--base-dir",T3CodeWorkload.BaseDirectory,"--ttl","5m","--label","Xur connection","--json"],30);
@@ -113,10 +119,10 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     {
         await using var operation=await Stops.Enter();
         var definition=Definitions().SingleOrDefault(w=>T3CodeWorkload.Is(w.Recipe))
-            ??throw new InvalidOperationException("Load a profile with T3 Code first.");
+            ??throw new InvalidOperationException("Enable T3 Code first.");
         await using var allocation=await Stops.Resources(["workload:"+definition.Id]);
         var instance=await Inspect(definition);
-        if(instance?.State!="running")throw new InvalidOperationException("Load a profile with T3 Code first.");
+        if(instance?.State!="running")throw new InvalidOperationException("Enable T3 Code first.");
         return await action(instance.InstanceId);
     }
     public async Task InitializeRoboticsSetup()
@@ -162,8 +168,13 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         return new(w.Id,fingerprint,c.GetProperty("Id").GetString()!,c.GetProperty("State").GetProperty("Pid").GetInt32(),File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim(),endpoint,
             c.GetProperty("State").GetProperty("Status").GetString()!,w.Gpus);
     }
-    public Task<RuntimeInstance> Start(Workload w)=>Start(w,false);
-    async Task<RuntimeInstance> Start(Workload w,bool restoring)
+    public Task<RuntimeInstance> Start(Workload w)
+    {
+        if(Persisted(w))throw new InvalidOperationException("Enable this service through Persisted Compute.");
+        return Start(w,false);
+    }
+    public Task<RuntimeInstance> StartPersisted(Workload w,CancellationToken cancellationToken)=>Start(w,false,cancellationToken);
+    async Task<RuntimeInstance> Start(Workload w,bool restoring,CancellationToken cancellationToken=default)
     {
         await using var operation=await Stops.Enter();
         await using var allocation=await Stops.Resources(new[]{"workload:"+w.Id}.Concat(w.Gpus.Select(p=>"gpu:"+p)).Concat(w.Recipe.Kind=="Workstation"?new[]{"user:"+StationAccounts.Username(w)}:[]).Concat(T3CodeWorkload.Is(w.Recipe)?new[]{"t3-code"}:[]).Concat(UnslothWorkload.Is(w.Recipe)?new[]{"unsloth"}:[]));
@@ -175,6 +186,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 if(!File.Exists(active) || await File.ReadAllTextAsync(active)!=w.Fingerprint)
                     throw new InvalidOperationException("The workstation is no longer selected for boot restoration.");
             }
+            cancellationToken.ThrowIfCancellationRequested();
             catalog.Verify(w.Recipe);
             if(w.Recipe.Kind=="Model" || UnslothWorkload.Is(w.Recipe))await storage.Require("models");
             if(UnslothWorkload.Is(w.Recipe))await storage.Require("unsloth");
@@ -201,7 +213,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             }finally{receipts.Release();}
             var instance=await Inspect(w);
             if(T3CodeWorkload.Is(w.Recipe) && instance!=null && instance.Fingerprint!=w.Fingerprint)
-                throw new InvalidOperationException("Load the profile again to recreate T3 Code with shared GPU access. Its persistent storage will be retained.");
+                throw new InvalidOperationException("Disable and re-enable T3 Code to recreate it with shared GPU access. Its persistent storage will be retained.");
             if(w.Recipe.Kind=="Workstation")
             {
                 RuntimeInstance started;
@@ -257,7 +269,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 }
                 var image=engineImage?.Image??w.Recipe.Image;
                 var args=new List<string> {"create","--name",Name(w.Id),"--label","io.xur.fingerprint="+w.Fingerprint,"--label","io.xur.id="+w.Id,
-                    "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096",(UnslothWorkload.Is(w.Recipe)||w.Recipe.Kind=="Model"&&w.Recipe.Engine is "vLLM" or "vLLM-Omni")?"--shm-size=4g":"--shm-size=1g",w.Recipe.Kind=="Model"||UnslothWorkload.Is(w.Recipe)?"--restart=no":"--restart=unless-stopped"};
+                    "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096",(UnslothWorkload.Is(w.Recipe)||w.Recipe.Kind=="Model"&&w.Recipe.Engine is "vLLM" or "vLLM-Omni")?"--shm-size=4g":"--shm-size=1g",w.Recipe.Kind=="Model"||UnslothWorkload.Is(w.Recipe)||Persisted(w)?"--restart=no":"--restart=unless-stopped"};
                 if(w.Recipe.Port>0)args.AddRange(["--publish",T3CodeWorkload.Is(w.Recipe)?$"{T3CodeWorkload.HostPort}:{w.Recipe.Port}":UnslothWorkload.Is(w.Recipe)?UnslothWorkload.Publish:"127.0.0.1::"+w.Recipe.Port]);
                 if(w.Recipe.Container is {} container)
                 {
@@ -284,7 +296,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 instance=await Inspect(w) ?? throw new IOException();
             }
             var startupSince=DateTimeOffset.UtcNow.AddSeconds(-1).ToString("O");
-            if(w.Recipe.Kind=="Model")
+            if(w.Recipe.Kind=="Model"||Persisted(w))
             {
                 await new EngineRestartPolicy().Set(Name(w.Id),instance.InstanceId,"no");
             }
@@ -302,6 +314,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             using var health=new HttpClient(new SocketsHttpHandler {AllowAutoRedirect=false}) {Timeout=TimeSpan.FromSeconds(3)};
             for(int n=0;n<600;n++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 instance=await Inspect(w) ?? throw new IOException();
                 if(instance.State!="running")
                 {
@@ -320,7 +333,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                         File.Delete(Path.Combine(directory,w.Id+".error.log"));
                         return instance;
                     }}catch(HttpRequestException){}catch(TaskCanceledException){}
-                await Task.Delay(1000);
+                await Task.Delay(1000,cancellationToken);
             }
             throw new InvalidOperationException("Engine health check timed out. It remains available for inspection; resume to retry the check.");
         }
@@ -332,13 +345,17 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         }
     }
     static InvalidOperationException Failure(string stage,ProcessResult result)=>new(stage+": "+Redaction.Logs(result.Output.Length>8192 ? result.Output[^8192..] : result.Output).Trim());
-    public async Task Stop(RuntimeStop request)
+    public Task Stop(RuntimeStop request)=>Stop(request,false);
+    public Task StopPersisted(RuntimeStop request)=>Stop(request,true);
+    async Task Stop(RuntimeStop request,bool persistent)
     {
         if(!ProfilePolicy.EntityIdentifier(request.Id))throw new InvalidOperationException("Invalid workload ID");
         await using var operation=await Stops.Enter();
 
         {
             var saved=Definitions().SingleOrDefault(w=>w.Id==request.Id);if(saved==null)return;
+            // Old profile journals must never override a migrated service's intent.
+            if(!persistent&&Persisted(saved))return;
             await using var allocation=await Stops.Resources(new[]{"workload:"+request.Id}.Concat(saved.Gpus.Select(p=>"gpu:"+p)).Concat(saved.Recipe.Kind=="Workstation"?new[]{"user:"+StationAccounts.Username(saved)}:Array.Empty<string>()).Concat(T3CodeWorkload.Is(saved.Recipe)?new[]{"t3-code"}:[]).Concat(UnslothWorkload.Is(saved.Recipe)?new[]{"unsloth"}:[]));
             // A concurrent retry may have removed the receipt while this call waited.
             saved=Definitions().SingleOrDefault(w=>w.Id==request.Id);if(saved==null)return;

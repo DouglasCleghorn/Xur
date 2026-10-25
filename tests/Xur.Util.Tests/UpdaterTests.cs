@@ -371,6 +371,11 @@ static class UpdaterTests
         await Verify.Reject(async () => await updater.Compatible(entry), "T3 Code recipes reject rollback to a version that cannot read them", "T3 Code");
         fixture.Write("app/releases/" + identity + "/host/application-features.json", "[\"station-users-v1\",\"manager-account-v1\",\"container-workloads-v1\",\"t3-code-v1\"]");
         await updater.Compatible(entry);
+        fixture.Write("persisted-compute.json", "[]");
+        await Verify.Reject(async () => await updater.Compatible(entry), "Persisted Compute intent prevents incompatible rollback", "Persisted Compute");
+        fixture.Write("app/releases/" + identity + "/host/application-features.json", "[\"station-users-v1\",\"manager-account-v1\",\"container-workloads-v1\",\"t3-code-v1\",\"persisted-compute-v1\"]");
+        await updater.Compatible(entry);
+        File.Delete(fixture.PathOf("persisted-compute.json"));
         File.Delete(fixture.PathOf("catalog-selected/t3.json"));
         fixture.Write("station-seats.json", "[]");
         await Verify.Reject(async () => await updater.Compatible(entry), "Seat rollback guarded", "multiseat");

@@ -3,16 +3,30 @@
 @inject RecipeCatalog Catalog
 <PageTitle>T3 Code · Xur</PageTitle>
 <HeadContent><link rel="stylesheet" href="/t3-code.css" /></HeadContent>
-<div class="page-heading"><h1>T3 Code</h1><a class="button secondary" href="/profiles">Profiles</a></div>
+<div class="page-heading"><h1>T3 Code</h1></div>
 @if(Device.Installer) { <p>T3 Code is available after installation.</p> }
 else
 {
     <div id="t3-code-page">
         <AntiforgeryToken />
-        <p>Run coding agents on this server and connect from your phone or desktop. Projects, sessions and provider sign-ins stay in persistent storage.</p>
+        @if(!installed)
+        {
+            <section class="panel" aria-labelledby="t3-install-heading">
+                <h2 id="t3-install-heading">Install T3 Code?</h2>
+                <button type="button" id="t3-install">Install</button>
+                <p id="t3-install-error" role="alert" hidden></p>
+            </section>
+            <script src="/t3-install.js"></script>
+        }
+        else
+        {
+        <section class="panel" aria-label="T3 Code service">
+            <label><input type="checkbox" id="t3-enabled" disabled /> Auto-run</label>
+            <button type="button" id="t3-retry" class="secondary" hidden>Retry</button>
+        </section>
         <section class="panel" aria-labelledby="t3-connect-heading">
             <div class="section-heading"><h2 id="t3-connect-heading">Connect</h2><span id="t3-status" role="status">Checking server…</span></div>
-            <p id="t3-stopped">Prepare T3 Code below, then add the <strong>T3 Code</strong> workload to a profile and load it.</p>
+            <p id="t3-stopped">T3 Code is not running.</p>
             <div id="t3-running" hidden>
                 <div class="actions"><a id="t3-open" class="button" target="_blank" rel="noopener noreferrer">Open T3 Code</a><button type="button" id="t3-pair" class="secondary">Create pairing link</button></div>
                 <p>For a new device, create a pairing link. Open it on this device, scan the QR code on your phone, or paste the link into <strong>Add environment</strong> in T3 Code on your desktop.</p>
@@ -29,7 +43,7 @@ else
         </section>
         <section class="panel" id="t3-providers" aria-labelledby="t3-providers-heading">
             <div class="section-heading"><h2 id="t3-providers-heading">Coding accounts and harnesses</h2><button id="t3-setup-refresh" type="button" class="secondary">Refresh setup</button></div>
-            <p id="t3-setup-stopped">Load a profile containing T3 Code to set up accounts and local models.</p>
+            <p id="t3-setup-stopped">Enable T3 Code to set up accounts and local models.</p>
             <div class="t3-provider-grid">
                 <article class="t3-provider" data-provider="codex">
                     <h3>Codex · ChatGPT subscription</h3>
@@ -59,7 +73,7 @@ else
                     <div class="t3-auth" hidden></div>
                 </article>
             </div>
-            <p class="secondary-text">Provider sign-ins and installed harnesses stay in T3's persistent home. Use the same T3 workload and storage in each profile to retain your accounts and projects.</p>
+            <p class="secondary-text">Your accounts and projects stay saved when T3 Code is disabled.</p>
             <p id="t3-setup-error" role="alert" hidden></p>
         </section>
         <section class="panel" id="t3-models" aria-labelledby="t3-models-heading">
@@ -69,28 +83,15 @@ else
             <p id="t3-models-status" role="status">Loading models…</p><div id="t3-model-list"></div>
             <p>Model connections remain saved when a profile is unloaded. Review and load a compatible profile in <a href="/profiles">Profiles</a> to use them again.</p>
         </section>
-        <section class="panel" aria-labelledby="t3-prepare-heading">
-            <h2 id="t3-prepare-heading">Prepare T3 Code</h2>
-            @if(prepared.Length>0) { <p>T3 Code is prepared. Select it in the profile editor, then load the profile.</p> }
-            <p>Preparation builds the container. On first start, it installs the latest stable T3 Code into persistent storage. Coding agents have shared access to all host GPUs. It also works without a GPU. Stopping or unloading it preserves its data and installed updates.</p>
-            <label>Storage<select id="t3-volume">
-                @foreach(var volume in volumes) { <option value="@volume">Reuse T3 Code storage · @volume[^8..]</option> }
-                <option value="">Create new T3 Code storage</option>
-            </select></label>
-            <div class="actions"><button type="button" id="t3-prepare">Prepare T3 Code</button><a class="button secondary" href="/containers">Preparation progress</a></div>
-            <p class="secondary-text">Keep repositories in <code>/home/node/projects</code>. The setup buttons install harnesses under <code>/home/node/.local</code>, which survives container replacement when you reuse this storage.</p>
-            <p>To update, run <code>t3 update</code> in T3 Code’s terminal. When it finishes, unload and reload the profile in Xur to use the update. Updates persist when you reuse this storage; no Xur release or container rebuild is needed.</p>
-        </section>
         <script src="/t3-code.js"></script>
         <script src="/t3-setup.js"></script>
+        }
     </div>
 }
 @code {
-    Recipe[] prepared=[];string[] volumes=[];
+    bool installed;
     protected override void OnInitialized()
     {
-        if(Device.Installer)return;
-        prepared=Catalog.Recipes.Where(T3CodeWorkload.Is).ToArray();
-        volumes=prepared.SelectMany(r=>r.Container!.Mounts).Select(m=>m.Volume).Distinct().ToArray();
+        installed=!Device.Installer && Catalog.Recipes.Any(T3CodeWorkload.Is);
     }
 }
