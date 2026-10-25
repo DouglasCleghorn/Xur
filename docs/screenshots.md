@@ -38,6 +38,17 @@
   These captures are test evidence, not publication assets. Refresh after profile
   editor UI changes. CI may regenerate this same family from synthetic fixtures.
 
+- 2026-10-24: T3 Code install-first validation family from the working tree
+  based on `70baaad`. Transient collaborative-browser snapshots remain in this
+  T3 session; rendered fixtures are under `.build/evidence/t3-ui/`.
+  Purpose: check the minimal install prompt at desktop and 390-pixel phone
+  widths, installation retry/reload, and revealing connection/account controls
+  after installation. Refreshed for the independent Auto-run control, its saved
+  disabled state after page reload, and re-enable at phone width. Privacy review:
+  synthetic install jobs and accounts only;
+  no real credentials, project data or host details. Not published or shipped.
+  Supersedes the initial/preparation views in the older T3 families below.
+
 - 2026-10-21: T3 Code account/model setup validation family from the working tree
   based on `edfb6f1`. Private captures are
   `.build/evidence/t3-ui/setup-{desktop,mobile}.png`, with related transient

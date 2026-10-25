@@ -1,6 +1,6 @@
 # Persisted Compute design
 
-Status: product decisions settled; interactive design preview, **not implemented**.
+Status: product decisions settled. The [initial shared lifecycle and T3 integration](persisted-compute-runtime.md) are implemented. The broader service UI, resource overrides, Robotics migration and HTTPS service provisioning below remain planned.
 Updated on 2026-10-11 against source `d025ad9`. Engineering proposals and future
 acceptance requirements below are not claims of working runtime behavior.
 

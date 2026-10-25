@@ -255,7 +255,10 @@ app.MapPost("/approve", async (Approval approval) => {
 });
 app.MapGet("/display-consoles",()=>Results.Json(new{error=displayConsoles.Error}));
 var dataStorage=new DataStorage(stateDir);
-var workloads=new WorkloadRuntime(Path.Combine(stateDir,"workloads"),new RecipeCatalog(Environment.GetEnvironmentVariable("XUR_CATALOG") ?? "/usr/share/xur/catalog",Path.Combine(stateDir,"catalog-selected")),displayConsoles,dataStorage);
+var recipeCatalog=new RecipeCatalog(Environment.GetEnvironmentVariable("XUR_CATALOG") ?? "/usr/share/xur/catalog",Path.Combine(stateDir,"catalog-selected"));
+var workloads=new WorkloadRuntime(Path.Combine(stateDir,"workloads"),recipeCatalog,displayConsoles,dataStorage){IndependentT3=true};
+var persisted=new PersistedCompute(stateDir,new PersistedRuntime(workloads),workloads.StartPersisted);
+workloads.PersistedOwner=persisted.Owns;
 if(!installer)
 {
     try{await workloads.InitializeRoboticsSetup();}
@@ -281,20 +284,69 @@ app.MapPost("/unsloth/password",async Task<IResult>()=>{
     try{return Results.Json(await workloads.UnslothPassword());}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
 });
 var containers=new ContainerLibrary(stateDir);
+var t3Service=new T3PersistedService(persisted,recipeCatalog,workloads,containers);
+if(!installer)
+{
+    t3Service.Discover();
+    _=Task.Run(async()=>{
+        var token=app.Lifetime.ApplicationStopping;
+        try
+        {
+            while(!token.IsCancellationRequested)
+            {
+                if(!File.Exists(Path.Combine(stateDir,"app","maintenance")))
+                {
+                    t3Service.Discover();
+                    try{await persisted.Reconcile(token);}
+                    catch(Exception e) when(e is not OperationCanceledException){applicationLog.Write("PersistedCompute",Microsoft.Extensions.Logging.LogLevel.Error,Redaction.Logs(e.Message));}
+                }
+                await Task.Delay(2000,token);
+            }
+        }
+        catch(OperationCanceledException) when(token.IsCancellationRequested){}
+    });
+}
+app.MapGet("/persisted-compute",()=>installer?Results.Conflict():Results.Json(persisted.Services()));
+app.MapPost("/persisted-compute/{id}/enabled",(string id,PersistedServiceEnabled request)=>{
+    if(installer)return Results.Conflict();
+    try{return Results.Json(persisted.SetEnabled(id,request.Enabled));}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
+});
+app.MapPost("/persisted-compute/{id}",(string id,PersistedServiceSelection request)=>{
+    if(installer)return Results.Conflict();
+    try
+    {
+        var recipe=recipeCatalog.Recipes.SingleOrDefault(r=>r.Id==request.RecipeId)??throw new InvalidOperationException("Select a prepared container.");
+        if(T3CodeWorkload.Is(recipe)&&id!=T3PersistedService.Id)throw new InvalidOperationException("T3 Code uses its existing service identity.");
+        var existing=workloads.SavedWorkloads().SingleOrDefault(w=>w.Recipe.Id==recipe.Id);
+        if(existing!=null&&!T3CodeWorkload.Is(recipe))throw new InvalidOperationException("Conversion of active profile containers is not available yet.");
+        return Results.Json(persisted.Register(id,existing??new("persisted-"+id,recipe.Name,recipe,[],id)));
+    }
+    catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
+});
+app.MapPost("/t3-code/enabled",(T3CodeEnabled request)=>{
+    if(installer)return Results.Conflict();
+    try{return Results.Json(t3Service.Enable(request.Enabled));}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
+});
 using var t3Setup=new T3Setup(workloads);
 app.MapPost("/t3-code/setup",async Task<IResult>(T3SetupRequest request)=>{
     if(installer)return Results.Conflict();
     try{return Results.Json(await t3Setup.Execute(request));}
     catch(Exception e)when(e is InvalidOperationException or IOException or TimeoutException){return Results.Conflict(new{error=e is InvalidOperationException?e.Message:"T3 setup is unavailable. Check the workload and retry."});}
 });
-app.MapGet("/t3-code/status",async()=>installer?Results.Conflict():Results.Json(await workloads.T3CodeStatus()));
+app.MapGet("/t3-code/status",async()=>installer?Results.Conflict():Results.Json(await t3Service.Status()));
 app.MapPost("/t3-code/pair",async Task<IResult>()=>{
     if(installer)return Results.Conflict();
     try{return Results.Json(await workloads.PairT3Code());}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
 });
 app.MapPost("/t3-code/prepare",(T3CodePrepareRequest request)=>{
     if(installer || File.Exists("/var/lib/xur/app/maintenance"))return Results.Conflict(new{error="Container preparation is unavailable during setup or an app update."});
-    try{return Results.Json(containers.Prepare(T3CodeWorkload.Prepare(request.Volume)));}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
+    try
+    {
+        // A stale install tab must not create a second home after installation.
+        if(request.Volume==null&&recipeCatalog.Recipes.Any(T3CodeWorkload.Is))return Results.Json(new{stage="Ready"});
+        return Results.Json(containers.Prepare(T3CodeWorkload.Prepare(request.Volume)));
+    }
+    catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}
 });
 app.MapGet("/container-jobs",()=>installer?Results.Conflict():Results.Json(containers.Jobs()));
 app.MapGet("/container-volumes",async()=>installer?Results.Conflict():Results.Json(await ContainerLibrary.Volumes()));
@@ -534,3 +586,6 @@ if(installer)
 else await installedDiagnosticSsh.Set(new(false));
 diagnosticCertificate?.Dispose();
 record PlanRequest(string Path);
+
+record PersistedServiceSelection(string RecipeId);
+record PersistedServiceEnabled(bool Enabled);

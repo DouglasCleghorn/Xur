@@ -28,7 +28,7 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
         var available=await users();
         if(selected.Any(u=>!available.Any(a=>a.Username==u.Username&&a.Uid==u.Uid)))throw new InvalidOperationException("A workstation user changed or is unavailable. Select the user again.");
     }
-    Profile StationNames(Profile profile)=>profile with {Workloads=profile.Workloads.Select(w=>w.Recipe.Kind=="Workstation" && store.Get<StationDefinition>("station",w.Id) is {} station?w with{Name=station.Name}:w).ToArray()};
+    Profile StationNames(Profile profile)=>profile with {Workloads=profile.Workloads.Where(w=>!T3CodeWorkload.Is(w.Recipe)).Select(w=>w.Recipe.Kind=="Workstation" && store.Get<StationDefinition>("station",w.Id) is {} station?w with{Name=station.Name}:w).ToArray()};
     public async Task<StationDefinition[]> Stations()
     {await gate.WaitAsync();try{return store.List<StationDefinition>("station");}finally{gate.Release();}}
     public bool UpdateBusy => worker is {IsCompleted:false};
@@ -77,6 +77,7 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
             {
                 if(string.IsNullOrEmpty(selection.Recipe))continue;
                 var recipe=catalog?.Recipes.SingleOrDefault(r=>r.Id==selection.Recipe) ?? throw new InvalidOperationException("Select a recipe.");
+                if(T3CodeWorkload.Is(recipe))throw new InvalidOperationException("Manage T3 Code on its own page. It runs independently of profiles.");
                 recipe=RecipeGpuSelection.Select(recipe,selection.Gpus,observed.Gpus);
                 var old=current.Workloads.SingleOrDefault(w=>w.Id==selection.Id);
                 if(!string.IsNullOrEmpty(selection.Id) && old==null)throw new InvalidOperationException("Reload the workload selection.");

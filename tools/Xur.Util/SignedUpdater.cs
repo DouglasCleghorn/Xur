@@ -323,6 +323,8 @@ public class SignedUpdater(UpdatePaths paths, Runtime runtime, DurableFiles file
         }
         if (File.Exists(Path.Combine(stateDirectory, "manager-account.json")) && !features.Contains("manager-account-v1"))
             throw new UserError("This version cannot manage your username and password. Select a version with manager account support.");
+        if (File.Exists(Path.Combine(stateDirectory, "persisted-compute.json")) && !features.Contains("persisted-compute-v1"))
+            throw new UserError("This version cannot preserve Persisted Compute run settings. Select a version with Persisted Compute support.");
         var catalog = Path.Combine(stateDirectory, "catalog-selected");
         if (!features.Contains("t3-code-v1") && Directory.Exists(catalog) && Directory.EnumerateFiles(catalog, "*.json")
             .Any(path => JsonValues.Text(DurableFiles.ReadObject(path)["engine"]) == "T3 Code"))

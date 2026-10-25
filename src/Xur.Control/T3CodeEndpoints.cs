@@ -10,6 +10,12 @@ public static class T3CodeEndpoints
     {
         app.MapGet("/api/t3-code/status",async Task<IResult>()=>
             appliance.Installer?Results.Conflict():Results.Json(await appliance.Agent.GetFromJsonAsync<T3CodeStatus>("/t3-code/status")??new(null,"Stopped")));
+        app.MapPost("/api/t3-code/enabled",async Task<IResult>(T3CodeEnabled request)=>
+        {
+            if(appliance.Installer)return Results.Conflict();
+            using var response=await appliance.Agent.PostAsJsonAsync("/t3-code/enabled",request);
+            return Results.Content(await response.Content.ReadAsStringAsync(),"application/json",statusCode:(int)response.StatusCode);
+        });
         app.MapPost("/api/t3-code/prepare",async Task<IResult>(T3CodePrepareRequest request)=>
         {
             if(appliance.Installer)return Results.Conflict();

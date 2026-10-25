@@ -24,7 +24,7 @@ static class T3CodeTests
         var workload=new Workload("t3","T3 Code",recipe,[],"coding");
         var observed=new RuntimeObservation("g",[],[new(workload.Id,workload.Fingerprint,"instance",1,"boot","http://127.0.0.1:3773/","running",[])]);
         var renamed=workload with{Name="Coding",Route="t3-code"};
-        check(ProfilePolicy.Steps(new("p","Coding",1,[renamed]),observed).Any(s=>s.Kind=="Keep"),"T3 Code survives profile and route changes with the same persistent storage");
+        check(ProfilePolicy.Steps(new("p","Coding",1,[renamed]),observed).Any(s=>s.Kind=="Keep"),"Legacy T3 recipe identities stay stable across name and route changes");
         var reuse=T3CodeWorkload.Prepare(recipe.Container!.Mounts[0].Volume);
         check(reuse.Volumes![0].Volume==recipe.Container.Mounts[0].Volume,"Preparing a replacement T3 Code image can reuse its home volume");
         foreach(var invalid in new[]{recipe with{Port=8080},recipe with{Command=[]},recipe with{Engine="Unknown"},recipe with{Container=recipe.Container with{Mounts=[]}},recipe with{Container=recipe.Container with{Mounts=[recipe.Container.Mounts[0] with{ReadOnly=true}]}}})
@@ -34,6 +34,7 @@ static class T3CodeTests
         check(!ApiKeys.Allows("automation","POST","/api/t3-code/pair"),"Automation keys cannot mint T3 Code device credentials");
         check(T3CodeEndpoints.Origin(new HostString("[fd00::1]:8443"))=="http://[fd00::1]:3773","T3 Code links use its direct port and preserve IPv6 hosts");
         check(T3CodeEndpoints.Origin(new HostString("coding.test:8443"))=="http://coding.test:3773","T3 Code links target the server hostname rather than the browsing device");
+        await PersistedComputeTests.Run(check);
         await PersistentUpdates(check);
         await Preparation(check);
         await T3CodeGpuTests.Run(check);
@@ -164,9 +165,10 @@ static class T3CodeTests
         Environment.SetEnvironmentVariable("XUR_RUN",root);Environment.SetEnvironmentVariable("XUR_MODE","Installed");
         var builder=WebApplication.CreateBuilder();builder.Logging.ClearProviders();builder.WebHost.ConfigureKestrel(k=>k.ListenUnixSocket(root+"/agent.sock"));
         await using var agent=builder.Build();var available=true;string? requestedVolume=null;
-        var expires=DateTimeOffset.UtcNow.AddMinutes(5);
-        agent.MapGet("/t3-code/status",()=>new T3CodeStatus("t3","Running"));
-        agent.MapPost("/t3-code/pair",IResult()=>available?Results.Json(new T3CodePairing("test/credential+only",expires)):Results.Conflict(new{error="Load a profile with T3 Code first."}));
+        var expires=DateTimeOffset.UtcNow.AddMinutes(5);bool enabled=true;
+        agent.MapGet("/t3-code/status",()=>new T3CodeStatus("t3","Running",true,enabled));
+        agent.MapPost("/t3-code/enabled",(T3CodeEnabled request)=>{enabled=request.Enabled;return Results.Ok(new{enabled});});
+        agent.MapPost("/t3-code/pair",IResult()=>available?Results.Json(new T3CodePairing("test/credential+only",expires)):Results.Conflict(new{error="Enable T3 Code first."}));
         agent.MapPost("/t3-code/prepare",(T3CodePrepareRequest request)=>{requestedVolume=request.Volume;return Results.Json(new{stage="Preparing"});});
         var frontBuilder=WebApplication.CreateBuilder();frontBuilder.Logging.ClearProviders();frontBuilder.WebHost.ConfigureKestrel(k=>k.Listen(IPAddress.Loopback,0));
         await using var front=frontBuilder.Build();var appliance=new Appliance();T3CodeEndpoints.MapEndpoints(front,appliance);
@@ -175,11 +177,15 @@ static class T3CodeTests
             await agent.StartAsync();await front.StartAsync();using var client=new HttpClient{BaseAddress=new Uri(front.Urls.Single())};client.DefaultRequestHeaders.Host="coding.test:8443";
             var status=await client.GetFromJsonAsync<T3CodeStatus>("/api/t3-code/status");
             check(status is {State:"Running",WorkloadId:"t3"},"Connection status reports the selected running T3 workload");
+            using var disabled=await client.PostAsJsonAsync("/api/t3-code/enabled",new T3CodeEnabled(false));
+            check(disabled.IsSuccessStatusCode&&!enabled,"T3 disable requests reach the persistent lifecycle instead of profile operations");
+            using var reenabled=await client.PostAsJsonAsync("/api/t3-code/enabled",new T3CodeEnabled(true));
+            check(reenabled.IsSuccessStatusCode&&enabled,"T3 re-enable requests preserve the independent service identity");
             using var response=await client.PostAsJsonAsync("/api/t3-code/pair",new{});var pairing=await response.Content.ReadFromJsonAsync<JsonElement>();
             check(pairing.GetProperty("url").GetString()=="http://coding.test:3773/pair#token=test%2Fcredential%2Bonly" && pairing.GetProperty("expiresAt").GetDateTimeOffset()==expires,"Pairing uses the native T3 fragment and its expiry on the direct server port");
             check(response.Headers.CacheControl?.NoStore==true && pairing.GetProperty("qr").GetString()!.Contains("<svg"),"Pairing returns a local QR code with caching disabled");
             available=false;using var stopped=await client.PostAsJsonAsync("/api/t3-code/pair",new{});
-            check(stopped.StatusCode==HttpStatusCode.Conflict && (await stopped.Content.ReadAsStringAsync()).Contains("Load a profile"),"Pairing preserves actionable errors from a stopped workload");
+            check(stopped.StatusCode==HttpStatusCode.Conflict && (await stopped.Content.ReadAsStringAsync()).Contains("Enable T3 Code"),"Pairing preserves actionable errors from a stopped workload");
             var volume="xur-volume-"+new string('b',32);using var preparation=await client.PostAsJsonAsync("/api/t3-code/prepare",new T3CodePrepareRequest(volume));
             check(preparation.IsSuccessStatusCode && requestedVolume==volume,"Preparation forwards the selected persistent storage to the agent");
         }

@@ -3,7 +3,7 @@ namespace Xur.Control;
 
 public sealed partial class ProfileManager
 {
-    Profile RepairRecipes(Profile profile)=>profile with {Workloads=profile.Workloads.Select(w=>
+    Profile RepairRecipes(Profile profile)=>profile with {Workloads=profile.Workloads.Where(w=>!T3CodeWorkload.Is(w.Recipe)).Select(w=>
     {
         var repaired=ModelLaunchSettings.RepairSaved(w.Recipe);
         if(repaired!=w.Recipe){catalog?.Verify(w.Recipe);catalog?.Verify(repaired);}
