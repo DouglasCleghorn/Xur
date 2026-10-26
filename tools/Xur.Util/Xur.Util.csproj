@@ -10,7 +10,7 @@
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../../src/Xur.IO/Xur.IO.csproj" /></ItemGroup>
   <ItemGroup>
-    <PackageReference Include="System.CommandLine" Version="2.0.13" />
+    <PackageReference Include="System.CommandLine" Version="2.0.14" />
     <EmbeddedResource Include="../../os/bootc/logging/journald.conf.d/60-xur-log-compression.conf" LogicalName="Xur.Util.JournalConfiguration" />
     <EmbeddedResource Include="../../os/bootc/logging/system/systemd-journald.service.d/60-xur-log-compression.conf" LogicalName="Xur.Util.JournalService" />
   </ItemGroup>
