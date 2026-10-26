@@ -38,6 +38,7 @@ static class T3CodeTests
         await PersistentUpdates(check);
         await Preparation(check);
         await T3CodeGpuTests.Run(check);
+        await T3StorageTests.Run(check);
         await Endpoints(check);
         await T3ModelTests.Run(check);
     }
@@ -113,6 +114,9 @@ static class T3CodeTests
         var expires=DateTimeOffset.UtcNow.AddMinutes(5);bool enabled=true;
         agent.MapGet("/t3-code/status",()=>new T3CodeStatus("t3","Running",true,enabled));
         agent.MapPost("/t3-code/enabled",(T3CodeEnabled request)=>{enabled=request.Enabled;return Results.Ok(new{enabled});});
+        T3StorageConfig storage=new();
+        agent.MapGet("/t3-code/storage",()=>storage);
+        agent.MapPost("/t3-code/storage",(T3StorageConfig request)=>storage=request);
         agent.MapPost("/t3-code/pair",IResult()=>available?Results.Json(new T3CodePairing("test/credential+only",expires)):Results.Conflict(new{error="Enable T3 Code first."}));
         agent.MapPost("/t3-code/prepare",(T3CodePrepareRequest request)=>{requestedVolume=request.Volume;return Results.Json(new{stage="Preparing"});});
         var frontBuilder=WebApplication.CreateBuilder();frontBuilder.Logging.ClearProviders();frontBuilder.WebHost.ConfigureKestrel(k=>k.Listen(IPAddress.Loopback,0));
@@ -122,6 +126,11 @@ static class T3CodeTests
             await agent.StartAsync();await front.StartAsync();using var client=new HttpClient{BaseAddress=new Uri(front.Urls.Single())};client.DefaultRequestHeaders.Host="coding.test:8443";
             var status=await client.GetFromJsonAsync<T3CodeStatus>("/api/t3-code/status");
             check(status is {State:"Running",WorkloadId:"t3"},"Connection status reports the selected running T3 workload");
+            var storageDefaults=await client.GetFromJsonAsync<T3StorageConfig>("/api/t3-code/storage");
+            check(storageDefaults is {AllDrives:true,Models:true},"Storage endpoint returns broad defaults for existing installations");
+            using var storageChanged=await client.PostAsJsonAsync("/api/t3-code/storage",new T3StorageConfig(false,true,["/data/projects"]));
+            check(storageChanged.IsSuccessStatusCode&&storage is {AllDrives:false,Models:true}&&storage.Folders!.Single()=="/data/projects","Storage endpoint forwards the explicit folder selection");
+            check(!ApiKeys.Allows("automation","POST","/api/t3-code/storage"),"An automation key cannot broaden T3's server file access");
             using var disabled=await client.PostAsJsonAsync("/api/t3-code/enabled",new T3CodeEnabled(false));
             check(disabled.IsSuccessStatusCode&&!enabled,"T3 disable requests reach the persistent lifecycle instead of profile operations");
             using var reenabled=await client.PostAsJsonAsync("/api/t3-code/enabled",new T3CodeEnabled(true));

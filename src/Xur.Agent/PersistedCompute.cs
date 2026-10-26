@@ -74,6 +74,10 @@ public sealed class PersistedCompute
             return next;
         }
     }
+    public PersistedService Retry(string id)
+    {
+        lock(sync)return SetEnabled(id,services.Single(s=>s.Id==id).Enabled);
+    }
     void Result(PersistedService expected,string? error)
     {
         lock(sync)

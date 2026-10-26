@@ -31,6 +31,8 @@ Existing notices include:
   website alongside the font.
 - GitHub mark in the website header: GitHub Octicons, MIT; notice shipped in
   `website/assets/github-mark-LICENSE.txt`.
+- GitHub CLI in T3's persistent home: upstream MIT license from the verified
+  official release archive, retained at `~/.local/share/gh/LICENSE`.
 - USB updater: TeeForge and System.CommandLine retain their MIT licenses.
   LibArchive.Net uses [BSD-2-Clause](https://github.com/jas88/libarchive.net/blob/31e5dd26941e1d65a35818562c23ee42064498d0/LICENSE.md);
   its bundled native libarchive and dependencies retain their upstream notices.
@@ -129,3 +131,13 @@ model-weight licenses.
   `eng/prepare-metrics.py` verifies the official binary archive and its upstream
   license; the app bundle retains `agent/victoriametrics/LICENSE`, vendored
   dependency notices under `licenses/`, and `upstream.json`. Xur's MIT license does not relicense VictoriaMetrics.
+
+T3's additional agent tools retain their upstream licenses. uv/uvx use the
+[MIT or Apache-2.0 licenses](https://github.com/astral-sh/uv); micromamba uses
+[BSD-3-Clause](https://github.com/mamba-org/mamba/blob/main/LICENSE).
+Their notices are saved under `~/.local/share/uv/LICENSE-*` and
+`~/.local/share/mamba/LICENSE`.
+The conda-forge utility environment retains package metadata and upstream notices
+in the persistent `~/.local/share/mamba/pkgs` cache (each package's `info/licenses`
+and `info/about.json`). These include ripgrep, fd, jq, Git LFS, rsync, zip/unzip,
+SQLite and their dependencies; they are not relicensed as Xur code.

@@ -32,6 +32,28 @@
  }
  toggle.addEventListener('change',()=>setEnabled(toggle.checked));
  retry.addEventListener('click',()=>setEnabled(enabled));
+ const storageAll=find('storage-all'),storageModels=find('storage-models'),storageFolders=find('storage-folders'),storageSave=find('storage-save'),storageError=find('storage-error'),storageMessage=find('storage-message');
+ let storageLoaded=false,storageLoading=false;
+ function storageFields(){find('storage-folders-label').hidden=storageAll.checked;}
+ function renderStorage(data){storageAll.checked=data.allDrives;storageModels.checked=data.models;storageFolders.value=(data.folders??[]).join('\n');storageFields();}
+ storageAll.addEventListener('change',storageFields);
+ async function loadStorage(){
+  if(storageLoading)return;storageLoading=true;
+  try{renderStorage(await api('storage'));for(const input of [storageAll,storageModels,storageFolders,storageSave])input.disabled=false;storageError.hidden=true;storageLoaded=true;}
+  catch(e){storageError.textContent=e.message;storageError.hidden=false;}
+  finally{storageLoading=false;}
+ }
+ find('storage-form').addEventListener('submit',async event=>{
+  event.preventDefault();storageError.hidden=true;storageMessage.textContent='';
+  for(const input of [storageAll,storageModels,storageFolders,storageSave])input.disabled=true;
+  try{
+   const data=await api('storage',{allDrives:storageAll.checked,models:storageModels.checked,folders:storageFolders.value.split('\n').map(s=>s.trim()).filter(Boolean)});
+   renderStorage(data);clearPair();storageMessage.textContent='Storage access saved.';await status();
+  }catch(e){storageError.textContent=e.message;storageError.hidden=false;}
+  finally{for(const input of [storageAll,storageModels,storageFolders,storageSave])input.disabled=false;}
+ });
+ find('storage').addEventListener('toggle',()=>{if(find('storage').open&&!storageLoaded)loadStorage();});
+ loadStorage();
  pair.addEventListener('click',async()=>{
   pairing=true;pair.disabled=true;error.hidden=true;message.textContent='';clearPair();
   try{

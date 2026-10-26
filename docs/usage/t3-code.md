@@ -10,8 +10,8 @@ Xur does not proxy its HTTP or WebSocket connections.
    connection and account controls appear when it finishes.
 2. Auto-run is enabled by default. On first start, T3's native installer downloads the latest stable version into
    the persistent home volume. This needs internet access; workload logs show
-   installation progress and any download errors. Later starts use the saved
-   installation without downloading it again.
+   installation progress and any download errors. Later starts launch the saved
+   installation immediately while checking for updates in the background.
 3. Return to **T3 Code → Create pairing link**. Use **Pair this device**, scan the
    QR code on a phone, or paste the link into **Add environment** in the T3 Code
    desktop app. Each link is single-use and expires after five minutes.
@@ -47,16 +47,15 @@ Sign in to the account on the persistent T3 server, even when using Xur from a
 phone or another computer. An eligible ChatGPT or Claude subscription uses the
 provider's normal account flow; an API key is not required.
 
-- **ChatGPT:** after pairing, choose **Sign in with ChatGPT in T3**. This opens
-  T3's managed Codex provider settings, including its install and sign-in flow.
-  For CLI authentication, expand **Use the Codex CLI or a local model**, select
-  **Install Codex**, then **Sign in with device code**. Open the supplied OpenAI
-  page and enter its short code. Device login may need enabling in ChatGPT's
-  security settings. Use **Open CLI subscription in T3** for this separate entry.
-- **Claude:** select **Install Claude Code**, then **Sign in with Claude**.
-  Follow the official Claude link on your current device and paste its one-time
-  code into Xur to complete the server login. Use **Open Claude in T3**, refresh
-  provider status, and select **Claude subscription**.
+- **ChatGPT:** choose **Sign in with device code**, open the supplied OpenAI
+  page and enter its short code. If device sign-in is unavailable, expand
+  **Advanced sign-in** to use a browser login and paste the final localhost URL
+  back into Xur. Use **Open Codex in T3** for the configured subscription entry.
+- **Claude:** choose **Sign in with Claude**, follow the official link, and paste
+  its one-time code into Xur. Then use **Open Claude in T3**.
+
+Harnesses install automatically. **Retry setup** retries a missing installation.
+After sign-in, the button becomes a quieter **Sign in again** action.
 
 Xur shows installation, waiting, verification and signed-in states. A page
 refresh can recover a sign-in while the agent and container are still running.
@@ -65,8 +64,8 @@ passwords and subscription tokens never pass through the Xur page. The one-time
 Claude code is sent over Xur's authenticated, CSRF-protected connection, held
 only for the active flow, and not logged. Native credentials remain under
 `/home/node/.codex`, `/home/node/.claude`, or T3's own managed-provider storage.
-The CLI status shown under Codex's expandable section describes the CLI account;
-T3 displays its managed account status separately.
+The status on Xur's Codex card describes this CLI account; any separately
+managed account in T3 has its own status.
 
 Use the native provider controls or CLI in T3 to sign out or change accounts.
 For provider-specific prerequisites, see
@@ -75,7 +74,7 @@ For provider-specific prerequisites, see
 
 ## Models from Xur profiles
 
-1. Install **OpenCode** or **Codex** in **Coding accounts and harnesses**.
+1. Wait for **OpenCode** or **Codex** setup in **Coding accounts and harnesses**.
 2. Enable T3 Code and load a profile containing the desired language-model workload.
    Saved but unloaded models remain listed with a link to review profiles.
 3. Open Xur at its HTTPS LAN or Tailscale address, reachable from the container.
@@ -155,11 +154,49 @@ reports the ambiguity instead of choosing one or creating empty storage.
 Volumes are visible on **Storage**. Back up project and credential data separately
 from Xur's configuration export.
 
-The image runs as the unprivileged `node` user and has no host directory or
-container-engine socket mounts. It includes Node.js, Git, SSH, Python and ripgrep.
-Additional development tools can be configured inside the environment. Harness
-installation and provider sign-in need network access; the web app
-assets and QR generation are served locally.
+### Server drives and model files
+
+After installation, expand **Storage access** on the T3 page. By default T3 can
+read and edit all server folders and mounted drives under `/host`. For example,
+`/var/mnt/xur/projects` on Xur is `/host/var/mnt/xur/projects` in T3. This includes
+system files; these are real files, not copies. New mounts propagate into the
+running container. Disconnected drives must be mounted on Xur before use.
+
+Turn off **All drives and folders** to share only the full server paths you enter,
+one per line. Leave the list empty to remove those host mounts. The separate
+model-library option mounts both selected model stores at `/models` and
+`/model-sets`, following Xur's configured storage location. Turn off both options
+and leave the folder list empty to use only T3's own persistent home. Removing
+the model shortcuts does not hide model files accessible through `/host`.
+
+Saving applies the settings by replacing an enabled container, preserving its
+home, accounts, projects and auto-run setting. Disabled T3 stays disabled.
+Missing selected folders or model storage report an error rather than silently
+creating an empty replacement. Choose real directories instead of symlink paths.
+
+T3 keeps the `node` user identity. Shared storage grants file-permission access
+without changing ownership or SELinux labels on server directories. Read-only
+filesystems remain read-only. Existing repositories owned by another user may
+require Git's explicit `safe.directory` approval for that repository.
+
+### Agent tools
+
+Node/npm, Git, SSH, curl, Python and ripgrep are included in the base image.
+GitHub CLI, uv/uvx, fd, jq, Git LFS, rsync, zip/unzip and SQLite install in the
+persistent home on startup. The tools become available as their independent
+background installers finish. The tool bundle also keeps ripgrep current.
+Use `gh auth login` to connect your GitHub account. Git LFS initializes its
+filters in the persistent home using `git lfs install --skip-repo`, without
+forcing replacement of custom filter settings.
+
+uv uses its official installer and `uv self update`. The other utility binaries
+and their shared libraries live in `~/.local/share/xur-tools`, managed by
+micromamba from conda-forge; its cache and package notices live under
+`~/.local/share/mamba`. Versions follow the current channel, without fixed pins.
+Each startup refreshes the tools without waiting before starting an installed
+T3 server. Manual updates can use `uv self update` and
+`micromamba update --all --yes --prefix ~/.local/share/xur-tools --override-channels --channel conda-forge`.
+Project-specific SDKs and browser downloads can be installed separately.
 
 ## Updates
 
@@ -179,12 +216,10 @@ The Node base follows its LTS channel through Google's Docker Hub cache; there
 is no fallback to Docker Hub on a cache miss. T3's MIT notice is retained
 separately from Xur's license.
 
-The optional install buttons pin `@openai/codex` 0.163.0,
-`@anthropic-ai/claude-code` 2.1.306 and `@opencode/cli` 2.1.2 under the persistent
-`/home/node/.local` prefix. They are downloaded from npm only when requested,
-retain their upstream notices and terms, and are not bundled or relicensed as
-Xur code. Installing again selects these pinned versions. T3's managed Codex
-installation is independent of these buttons.
+Codex, Claude Code and OpenCode install and update in parallel on startup using
+their upstream installers and native update commands. Their executables and
+credentials stay in the persistent home. The setup buttons retry these same
+installers, with no fixed versions. Upstream licenses and account terms apply.
 
 Saved run intent requires `persisted-compute-v1` support. Xur rejects rollback
 to a release that cannot preserve it. See the [runtime implementation notes](../development/persisted-compute-runtime.md) for migration and recovery details.
@@ -200,7 +235,6 @@ remains a separate integration check.
 The account/model setup checks use synthetic CLI sign-ins and streamed model
 responses, including cancellation, credential isolation, repair, failed probes,
 profile unloads and route reassignment. Desktop/phone browser checks use the real
-Razor page with fake accounts. The pinned OpenCode CLI also parses the generated
-configuration. Real subscription authorization and inference from a deployed T3
+Razor page with fake accounts. OpenCode configuration parsing is also covered. Real subscription authorization and inference from a deployed T3
 container still require validation on the target host; these tests do not consume
 subscription usage or run a real model.

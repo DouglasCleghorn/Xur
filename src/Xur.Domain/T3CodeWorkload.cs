@@ -4,6 +4,7 @@ public record T3CodePrepareRequest(string? Volume=null);
 public record T3CodeStatus(string? WorkloadId,string State,bool Installed=false,bool Enabled=false,string? Error=null);
 public record T3CodeEnabled(bool Enabled);
 public record T3CodePairing(string Credential,DateTimeOffset ExpiresAt);
+public record T3StorageConfig(bool AllDrives=true,bool Models=true,string[]? Folders=null);
 
 public static class T3CodeWorkload
 {
@@ -47,7 +48,7 @@ public static class T3CodeWorkload
         RUN mkdir -p /home/node/projects /home/node/.t3 /home/node/.local/bin \
             && chown -R node:node /home/node
         ENV HOME=/home/node
-        ENV PATH=/home/node/.local/bin:$PATH
+        ENV PATH=/home/node/.local/bin:/home/node/.opencode/bin:/home/node/.local/share/xur-tools/bin:$PATH
         USER node
         WORKDIR /home/node/projects
         """;

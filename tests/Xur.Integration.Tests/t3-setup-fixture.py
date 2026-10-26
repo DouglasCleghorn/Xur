@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
-state = {"installed": True, "enabled": True, "installStage": None, "running": True, "modelReady": True, "failConnect": False, "calls": [], "accounts": {}, "flows": {}}
+state = {"installed": True, "enabled": True, "installStage": None, "running": True, "modelReady": True, "failConnect": False, "calls": [], "accounts": {}, "flows": {}, "storage": dict(allDrives=True, models=True, folders=[])}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -29,6 +29,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(dict(automatic=False))
         if path == "/api/container-jobs":
             return self.send([dict(id="fixture-install", stage=state["installStage"])] if state["installStage"] else [])
+        if path == "/api/t3-code/storage":
+            return self.send(state["storage"])
         if path == "/api/t3-code/status":
             return self.send(dict(state="Running" if state["running"] else "Starting" if state["enabled"] else "Disabled", workloadId="t3", installed=state["installed"], enabled=state["enabled"]))
         if path == "/api/t3-code/models":
@@ -48,6 +50,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlsplit(self.path).path
         data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+        if path == "/api/t3-code/storage":
+            if any(not p.startswith("/") or ".." in p.split("/") for p in data.get("folders", [])):
+                return self.send(dict(error="Use absolute folder paths."), 409)
+            state["storage"] = data
+            return self.send(data)
         if path == "/fixture":
             for key in ("running", "modelReady", "failConnect", "installed", "installStage", "enabled"):
                 if key in data:

@@ -64,6 +64,8 @@ static class PersistedComputeTests
             runtime.Instances.Clear();runtime.Fail=true;await compute.Reconcile();
             compute.SetEnabled("t3-code",false);clock.Now+=TimeSpan.FromHours(1);var before=runtime.Starts;await compute.Reconcile();
             check(runtime.Starts==before&&!compute.Services().Single().Enabled,"Off cancels scheduled recovery");
+            compute.Retry("t3-code");await compute.Reconcile();
+            check(!compute.Services().Single().Enabled&&runtime.Starts==before,"Refreshing persisted settings preserves disabled intent");
 
             var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var cancelled=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
