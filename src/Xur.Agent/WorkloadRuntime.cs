@@ -5,6 +5,13 @@ namespace Xur.Agent;
 public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,DisplayConsoles? consoles=null,DataStorage? dataStorage=null):IWorkloadRuntime
 {
     readonly DataStorage storage=dataStorage??new DataStorage(Path.GetDirectoryName(directory)!);
+    T3Storage? t3Storage;
+    public T3Storage T3Storage=>LazyInitializer.EnsureInitialized(ref t3Storage,()=>new(Path.GetDirectoryName(directory)!,storage));
+    public async Task<T3StorageConfig> SetT3Storage(T3StorageConfig config)
+    {
+        await using var allocation=await Stops.Resources(["t3-code"]);
+        return T3Storage.Save(config);
+    }
     public Func<string,bool> PersistedOwner {get;set;} = _=>false;
     public bool IndependentT3 {get;set;}
     bool Persisted(Workload w)=>PersistedOwner(w.Id)||(IndependentT3&&T3CodeWorkload.Is(w.Recipe));
@@ -164,7 +171,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         string endpoint="";
         if(ports.ValueKind==JsonValueKind.Object && ports.TryGetProperty(w.Recipe.Port+"/tcp",out var bindings) && bindings.ValueKind==JsonValueKind.Array && bindings.GetArrayLength()>0)
             endpoint="http://127.0.0.1:"+bindings[0].GetProperty("HostPort").GetString()+"/";
-        var fingerprint=T3CodeWorkload.Is(w.Recipe)?T3CodeRuntime.Fingerprint(w,labels):w.Fingerprint;
+        var fingerprint=T3CodeWorkload.Is(w.Recipe)?T3Storage.Fingerprint(w,labels):w.Fingerprint;
         return new(w.Id,fingerprint,c.GetProperty("Id").GetString()!,c.GetProperty("State").GetProperty("Pid").GetInt32(),File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim(),endpoint,
             c.GetProperty("State").GetProperty("Status").GetString()!,w.Gpus);
     }
@@ -290,7 +297,11 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 if(model!=null)args.AddRange(["--volume",model+":/model.gguf:ro,z"]);
                 if(modelFiles!=null)args.AddRange(["--volume",modelFiles+":/models:ro,z"]);
                 if(w.Recipe.Engine is "vLLM" or "vLLM-Omni")args.AddRange(["--entrypoint","vllm"]);
-                if(T3CodeWorkload.Is(w.Recipe))args.AddRange(T3CodeRuntime.ContainerArguments());
+                if(T3CodeWorkload.Is(w.Recipe))
+                {
+                    args.AddRange(T3CodeRuntime.ContainerArguments());
+                    args.AddRange(await T3Storage.Arguments());
+                }
                 args.Add(image);args.AddRange(T3CodeWorkload.Is(w.Recipe)?T3CodeRuntime.Command(w.Recipe):engineImage?.Command(w.Recipe.Command)??w.Recipe.Command);
                 var created=await Processes.Run("podman",args,60);
                 if(created.ExitCode!=0)throw Failure("Container creation failed",created);

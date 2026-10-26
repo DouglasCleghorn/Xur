@@ -23,6 +23,20 @@ else
         <section class="panel" aria-label="T3 Code service">
             <label><input type="checkbox" id="t3-enabled" disabled /> Auto-run</label>
             <button type="button" id="t3-retry" class="secondary" hidden>Retry</button>
+            <details id="t3-storage">
+                <summary>Storage access</summary>
+                <form id="t3-storage-form">
+                    <label><input type="checkbox" id="t3-storage-all" disabled /> All drives and folders</label>
+                    <p class="secondary-text">Read and edit server files at <code>/host</code>.</p>
+                    <label id="t3-storage-folders-label" hidden>Folders to share (one full server path per line)<textarea id="t3-storage-folders" rows="4" spellcheck="false" disabled></textarea></label>
+                    <label><input type="checkbox" id="t3-storage-models" disabled /> Mount model library at <code>/models</code> and <code>/model-sets</code></label>
+                    <p class="secondary-text">The library is also accessible through /host when all folders are shared.</p>
+                    <button id="t3-storage-save" type="submit" class="secondary" disabled>Save storage access</button>
+                    <p class="secondary-text">Saving restarts T3 if enabled.</p>
+                    <p id="t3-storage-message" role="status"></p>
+                    <p id="t3-storage-error" role="alert" hidden></p>
+                </form>
+            </details>
         </section>
         <section class="panel" aria-labelledby="t3-connect-heading">
             <div class="section-heading"><h2 id="t3-connect-heading">Connect</h2><span id="t3-status" role="status">Checking server…</span></div>

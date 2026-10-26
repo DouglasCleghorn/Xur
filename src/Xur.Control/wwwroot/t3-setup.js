@@ -40,6 +40,12 @@
  }
  function render(card,data){
   card.querySelector('.t3-provider-status').textContent=data.state+' · '+data.message;
+  const login=card.querySelector('[data-action="login"]');
+  if(login){
+   const signedIn=data.state==='Signed in'||(data.state==='Succeeded'&&['login','login-browser'].includes(card.dataset.setupAction));
+   login.classList.toggle('quiet',signedIn);
+   login.textContent=signedIn?'Sign in again':card.dataset.provider==='codex'?'Sign in with device code':'Sign in with Claude';
+  }
   if(data.flowId&&active(data.state))flows.set(card.dataset.provider,data.flowId);else flows.delete(card.dataset.provider);
   card.querySelectorAll('[data-action]').forEach(b=>b.disabled=!running||active(data.state)||busy.has(card.dataset.provider)||(['login','login-browser'].includes(b.dataset.action)&&data.state==='Missing'));
   card.querySelectorAll('[data-action="install"]').forEach(b=>b.hidden=data.state!=='Missing'&&data.state!=='Failed');
@@ -47,6 +53,7 @@
  }
  async function action(card,operation,extra={}){
   const provider=card.dataset.provider;if(busy.has(provider)||!running)return;busy.add(provider);error.hidden=true;
+  if(['install','login','login-browser'].includes(operation))card.dataset.setupAction=operation;
   if(operation!=='status')card.querySelectorAll('button').forEach(b=>b.disabled=true);
   try{const data=await api('setup',{action:operation,provider,...extra});busy.delete(provider);render(card,data);}
   catch(e){busy.delete(provider);fail(e);card.querySelectorAll('button').forEach(b=>b.disabled=!running);}

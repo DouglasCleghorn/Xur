@@ -334,6 +334,22 @@ app.MapPost("/t3-code/setup",async Task<IResult>(T3SetupRequest request)=>{
     catch(Exception e)when(e is InvalidOperationException or IOException or TimeoutException){return Results.Conflict(new{error=e is InvalidOperationException?e.Message:"T3 setup is unavailable. Check the workload and retry."});}
 });
 app.MapGet("/t3-code/status",async()=>installer?Results.Conflict():Results.Json(await t3Service.Status()));
+app.MapGet("/t3-code/storage",()=>installer?Results.Conflict():Results.Json(workloads.T3Storage.Read()));
+app.MapPost("/t3-code/storage",async Task<IResult>(T3StorageConfig request)=>{
+    if(installer||File.Exists("/var/lib/xur/app/maintenance"))return Results.Conflict();
+    try
+    {
+        var service=persisted.Services().SingleOrDefault(s=>s.Id==T3PersistedService.Id);
+        if(service==null)return Results.Conflict(new{error="Install T3 Code first."});
+        var config=await workloads.SetT3Storage(request);
+        // Clear retry state; reconciliation compares the storage label and
+        // replaces the container while retaining its home and enabled state.
+        persisted.Retry(T3PersistedService.Id);
+        return Results.Json(config);
+    }
+    catch(Exception e)when(e is InvalidOperationException or IOException or UnauthorizedAccessException)
+    {return Results.Conflict(new{error=Redaction.Logs(e.Message)});}
+});
 app.MapPost("/t3-code/pair",async Task<IResult>()=>{
     if(installer)return Results.Conflict();
     try{return Results.Json(await workloads.PairT3Code());}catch(InvalidOperationException e){return Results.Conflict(new{error=e.Message});}

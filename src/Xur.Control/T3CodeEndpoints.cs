@@ -16,6 +16,14 @@ public static class T3CodeEndpoints
             using var response=await appliance.Agent.PostAsJsonAsync("/t3-code/enabled",request);
             return Results.Content(await response.Content.ReadAsStringAsync(),"application/json",statusCode:(int)response.StatusCode);
         });
+        app.MapGet("/api/t3-code/storage",async Task<IResult>()=>
+            appliance.Installer?Results.Conflict():Results.Json(await appliance.Agent.GetFromJsonAsync<T3StorageConfig>("/t3-code/storage")));
+        app.MapPost("/api/t3-code/storage",async Task<IResult>(T3StorageConfig request)=>
+        {
+            if(appliance.Installer)return Results.Conflict();
+            using var response=await appliance.Agent.PostAsJsonAsync("/t3-code/storage",request);
+            return Results.Content(await response.Content.ReadAsStringAsync(),"application/json",statusCode:(int)response.StatusCode);
+        });
         app.MapPost("/api/t3-code/prepare",async Task<IResult>(T3CodePrepareRequest request)=>
         {
             if(appliance.Installer)return Results.Conflict();
