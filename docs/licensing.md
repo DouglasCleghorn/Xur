@@ -141,3 +141,11 @@ The conda-forge utility environment retains package metadata and upstream notice
 in the persistent `~/.local/share/mamba/pkgs` cache (each package's `info/licenses`
 and `info/about.json`). These include ripgrep, fd, jq, Git LFS, rsync, zip/unzip,
 SQLite and their dependencies; they are not relicensed as Xur code.
+
+## audio.cpp
+
+The optional audio.cpp workloads download upstream GHCR images at runtime.
+[audio.cpp](https://github.com/0xShug0/audio.cpp) is copyright 2026 ShugoAI LLC,
+licensed under [Apache-2.0](https://github.com/0xShug0/audio.cpp/blob/main/LICENSE).
+Upstream dependencies and downloaded audio model packages retain their separate
+notices and license terms; Xur does not relicense them as MIT.

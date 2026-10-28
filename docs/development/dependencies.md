@@ -18,7 +18,7 @@ source/package pins and matching local tags require the manual review below.
 | NuGet packages | Project files and `packages.lock.json` in all configured project directories | `nuget` |
 | .NET SDK | `global.json`; workflows read that file directly | `dotnet-sdk` |
 | GitHub Actions | `.github/workflows/*.yml` | `github-actions` |
-| llama.cpp variants, vLLM and Omni | `catalog/engines/Containerfile`, embedded by `EngineImages`; rolling channels refresh on start, with a pinned Omni ROCm release | `docker` |
+| llama.cpp and audio.cpp variants, vLLM and Omni | `catalog/engines/Containerfile`, embedded by `EngineImages`; rolling channels refresh on start, with a pinned Omni ROCm release | `docker` |
 | Intel Omni layer | `catalog/engines/omni-xpu.Containerfile`, embedded by the agent; builds on the mirrored, matching vLLM XPU release | `docker` for the base; manual source/package pins |
 | Native gfx1103 vLLM layer | `catalog/engines/vllm-rocm-gfx1103.Containerfile`, embedded by the agent; AMD TheRock device wheels and source-built vLLM | `docker` for the base; manual source/package pins |
 | Robotics application and tools | `containers/robot/Containerfile`, which combines the Native AOT app with `tools/Xur.Robotics/Containerfile`; `tools/Xur.Robotics/Discovery.Containerfile` remains an isolated toolkit recipe | `docker` for the bases; manual source/package pins |

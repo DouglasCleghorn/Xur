@@ -1,0 +1,24 @@
+{
+  "id": "audio-amd",
+  "name": "audio.cpp · AMD",
+  "image": "@engine/audio-vulkan",
+  "command": [
+    "server",
+    "--ui",
+    "--ui-management",
+    "--host",
+    "0.0.0.0",
+    "--port",
+    "8080",
+    "--backend",
+    "vulkan"
+  ],
+  "port": 8080,
+  "healthPath": "/health",
+  "vendor": "AMD",
+  "gpuCount": 1,
+  "memoryMiB": 0,
+  "description": "Audio model manager for speech, transcription and music. Download complete model packages in the audio.cpp WebUI; model licenses and backend support vary.",
+  "kind": "Model",
+  "engine": "audio.cpp"
+}

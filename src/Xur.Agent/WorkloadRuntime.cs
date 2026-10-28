@@ -291,6 +291,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 }
                 else args.AddRange(["--volume","xur-cache-"+w.Id+":/root/.cache:Z"]);
                 if(UnslothWorkload.Is(w.Recipe))args.AddRange(UnslothRuntime.ModelArguments(Path.GetDirectoryName(directory)!,part=>storage.PathFor("models",part)));
+                if(w.Recipe.Engine=="audio.cpp")args.AddRange(await AudioCppRuntime.Arguments(storage.PathFor("models","models"),w.Id,selected.SelectMany(g=>g.Nodes).Distinct().ToArray()));
                 args.AddRange(TimezoneSettings.ContainerArguments());
                 if(w.Recipe.Kind=="Model" && w.Recipe.Hub!=null)args.AddRange(new HuggingFaceCredentials(Path.GetDirectoryName(directory)!).ContainerArguments());
                 args.AddRange(T3CodeWorkload.Is(w.Recipe)?await T3CodeGpuAccess.Arguments(observed.Gpus):ModelGpuArguments.For(w,observed.Gpus));

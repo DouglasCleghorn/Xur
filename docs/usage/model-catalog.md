@@ -174,3 +174,7 @@ automatic restart after passing health checks.
 and a separate drafter. That custom runtime is not implemented here. It is not the
 owner's MTP recipe, and Xur does not substitute between the two.
 See the [pinned model instructions](https://huggingface.co/lued/Qwen3.8-27B-INT8-W8A16-DFlash2/blob/2971c64ba386dd3faa6884cc215f67b3b2477a3e/README.md).
+
+For speech, transcription and music workloads, see [audio.cpp](audio-cpp.md). Its
+profile presets open the upstream audio model manager rather than the text-model
+Hugging Face picker.
