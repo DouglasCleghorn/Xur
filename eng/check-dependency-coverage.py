@@ -44,6 +44,12 @@ def check(root, config):
             require('pip', path)
         elif re.search(r'dockerfile|containerfile', path.name, re.I):
             images = re.findall(r'^FROM (\S+)', path.read_text(), re.M)
+            if (root / 'global.json').exists():
+                sdk = json.loads((root / 'global.json').read_text())['sdk']
+                for image in images:
+                    version = re.match(r'mcr\.microsoft\.com/dotnet/sdk:(\d+\.\d+\.\d+)(?:-|$)', image)
+                    if version and sdk.get('rollForward') == 'disable' and version[1] != sdk['version']:
+                        errors.append(f'{path.relative_to(root)}: SDK image must match global.json while SDK roll-forward is disabled')
             if any('/' in image and not image.startswith('localhost/') for image in images):
                 require('docker', path)
             directory = '/' + str(path.parent.relative_to(root)) if path.parent != root else '/'

@@ -1,7 +1,7 @@
 # Xur's XPU Omni layer follows upstream docker/Dockerfile.xpu at v0.30.0:
 # https://github.com/vllm-project/vllm-omni/blob/v0.30.0/docker/Dockerfile.xpu
 # Keep the vLLM base, Omni source revision and local image tag aligned.
-FROM mirror.gcr.io/vllm/vllm-openai-xpu:v0.32.0 AS omni-xpu
+FROM mirror.gcr.io/vllm/vllm-openai-xpu:v0.30.0 AS omni-xpu
 RUN apt-get update && apt-get install -y --no-install-recommends espeak-ng ffmpeg git jq && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace/vllm-omni
