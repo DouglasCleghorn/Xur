@@ -77,7 +77,7 @@
   function open(filter=''){
    const version=++request;clearTimeout(timer);render(filter);if(select.name!=='recipe')return;
    const row=select.closest('.workload-editor'),engine=row.querySelector('.catalog-engine').value;
-   if(engine==='Workstation'||engine==='Podman'||engine==='Unsloth'||engine==='XLeRobot')return;
+   if(engine==='audio.cpp'||engine==='Workstation'||engine==='Podman'||engine==='Unsloth'||engine==='XLeRobot')return;
    timer=setTimeout(async()=>{
     try{
      const models=await api('search?engine='+encodeURIComponent(engine)+'&q='+encodeURIComponent(filter));
@@ -198,6 +198,7 @@
   row.querySelector('.recipe-label').textContent=station?'Workstation':engine==='Unsloth'?'Unsloth server':engine==='Podman'?'Container':engine==='XLeRobot'?'Robot':'Model';
   row.querySelector('.container-library-link').hidden=engine!=='Podman';
   row.querySelector('.unsloth-link').hidden=engine!=='Unsloth';
+  row.querySelector('.audio-link').hidden=engine!=='audio.cpp';
   row.querySelector('.recipe-choice').hidden=station;row.querySelector('.station-devices').hidden=!station;
   const primary=row.querySelector('.station-primary');primary.disabled=!station;if(!station)primary.checked=false;usbChoices(row);
   row.querySelector('.station-user-choice').hidden=!station||!!row.querySelector('[name=stationId]').value;row.querySelector('.station-new-name').hidden=!station||!!row.querySelector('[name=stationId]').value;row.querySelector('.station-identity-choice').hidden=!station;

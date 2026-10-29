@@ -16,7 +16,7 @@ public sealed class ToolUpdateInventory
     public async Task<ToolUpdateInfo[]> Read()
     {
         var result=new List<ToolUpdateInfo>();
-        foreach(var (id,name) in new[]{("server","llama.cpp · CPU"),("server-cuda","llama.cpp · NVIDIA"),("server-rocm","llama.cpp · AMD"),("server-vulkan","llama.cpp · Vulkan"),("vllm","vLLM"),("vllm-rocm","vLLM · AMD"),("vllm-rocm-gfx1103","vLLM · AMD gfx1103"),("vllm-xpu","vLLM · Intel"),("omni","vLLM-Omni"),("omni-rocm","vLLM-Omni · AMD"),("omni-xpu","vLLM-Omni · Intel")})
+        foreach(var (id,name) in new[]{("audio-cpu","audio.cpp · CPU"),("audio-cuda","audio.cpp · NVIDIA"),("audio-vulkan","audio.cpp · Vulkan"),("server","llama.cpp · CPU"),("server-cuda","llama.cpp · NVIDIA"),("server-rocm","llama.cpp · AMD"),("server-vulkan","llama.cpp · Vulkan"),("vllm","vLLM"),("vllm-rocm","vLLM · AMD"),("vllm-rocm-gfx1103","vLLM · AMD gfx1103"),("vllm-xpu","vLLM · Intel"),("omni","vLLM-Omni"),("omni-rocm","vLLM-Omni · AMD"),("omni-xpu","vLLM-Omni · Intel")})
         {
             var image=EngineImages.Image(id);
             var exists=await Probe("podman",["image","exists",image],10);

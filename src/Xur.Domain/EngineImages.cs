@@ -14,11 +14,12 @@ public static class EngineImages
     }
     public static string Image(string id)=>images.TryGetValue(id,out var image)?image:throw new InvalidOperationException("Unknown engine image.");
     public static string Version(string id)
-    {var tag=Image(id).Split(':')[^1];return tag=="latest"||tag.StartsWith("server",StringComparison.Ordinal)?"Latest":tag;}
+    {var tag=Image(id).Split(':')[^1];return tag=="latest"||tag.StartsWith("full-",StringComparison.Ordinal)||tag.StartsWith("server",StringComparison.Ordinal)?"Latest":tag;}
     public static string For(Recipe recipe)=>For(recipe.Engine,recipe.Vendor);
     public static string For(string engine,string vendor)=>Image(engine switch {
         "vLLM"=>vendor switch {"NVIDIA"=>"vllm","AMD"=>"vllm-rocm","Intel"=>"vllm-xpu",_=>throw new InvalidOperationException("vLLM requires an available NVIDIA, AMD or Intel GPU.")},
         "vLLM-Omni"=>vendor switch {"NVIDIA"=>"omni","AMD"=>"omni-rocm","Intel"=>"omni-xpu",_=>throw new InvalidOperationException("vLLM-Omni requires an available NVIDIA, AMD or Intel GPU.")},
+        "audio.cpp"=>vendor switch {"CPU"=>"audio-cpu","NVIDIA"=>"audio-cuda","AMD" or "Intel"=>"audio-vulkan",_=>throw new InvalidOperationException("Unsupported audio.cpp device.")},
         "llama.cpp"=>vendor switch {
             "NVIDIA"=>"server-cuda", "AMD"=>"server-rocm", "Intel"=>"server-vulkan", _=>"server"},
         _=>throw new InvalidOperationException("Unknown model engine.")});

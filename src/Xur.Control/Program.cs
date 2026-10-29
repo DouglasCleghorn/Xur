@@ -422,6 +422,16 @@ async Task StartHost()
     if(!appliance.Installer)T3Models.Map(app,appliance,profileManager,gatewayData,gatewayClient,apiKeys);
     app.Map("/inference/{**path}",async(HttpContext c,string? path)=> {
         if(appliance.Installer){c.Response.StatusCode=409;return;}
+        if(c.Request.Method=="GET" && path is {} routePath && routePath.TrimEnd('/').IndexOf('/')<0)
+        {
+            var route=routePath.TrimEnd('/');
+            var state=await profileManager.State();
+            if(state.Active?.Workloads.FirstOrDefault(w=>w.Route==route && w.Recipe.Engine=="audio.cpp") is {} audio)
+            {
+                if(!c.Request.Path.Value!.EndsWith('/')){c.Response.Redirect(c.Request.Path+"/"+c.Request.QueryString);return;}
+                await AudioCppProxy.ForwardPage(c,gatewayData,route+"/",audio.Id);return;
+            }
+        }
         await StreamProxy.Forward(c,gatewayData,"http://localhost/"+(path??"")+c.Request.QueryString);
     });
     app.MapRazorComponents<App>();

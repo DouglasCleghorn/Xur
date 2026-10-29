@@ -31,6 +31,7 @@ if(args is ["--installer-progress",var installerOutput]){InstallationDiagnostics
 if(args is ["--profile-access"]){await ProfileAccessTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ProfileAccess",passed=results}));return;}
 if(args is ["--console-gamepad"]){await ConsoleGamepadTests.Run(Check);ConsoleStickKeyboardTests.Run(Check);ConsoleKeyboardOverlayTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ConsoleGamepad",passed=results}));return;}
 if(args is ["--display-power"]){await DisplayPowerTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="DisplayPower",passed=results}));return;}
+if(args is ["--audio-cpp"]){await AudioCppTests.Run(Check);await ModelImageUpdaterTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="AudioCpp",passed=results}));return;}
 if(args is ["--model-catalog"]){await ModelCatalogTests.Run(Check);await CheckpointFormatTests.Run(Check);await ModelGpuTests.Run(Check);await EngineStartupTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ModelCatalog",passed=results}));return;}
 if(args is ["--diagnostic-access"]){await DiagnosticAccessTests.Run(Check,validateOpenSsh:true);ApiKeyTests.Run(Check);await InstallerDiagnosticSshTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="DiagnosticAccess",passed=results}));return;}
 if(args is ["--station-controllers"]){StationControllerTests.Run(Check);await StationIdentityTests.Run(Check);await ParallelLoadTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="StationControllers",passed=results}));return;}
@@ -38,6 +39,7 @@ if(args is ["--profile-gpus"]){await RecipeGpuSelectionTests.Run(Check);Console.
 if(args is ["--data-storage"]){await DataStorageTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="DataStorage",passed=results}));return;}
 if(args is ["--unsloth"]){await UnslothTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="Unsloth",passed=results}));return;}
 if(args is ["--t3-code"]){await T3CodeTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="T3Code",passed=results}));return;}
+await AudioCppTests.Run(Check);
 await DataStorageTests.Run(Check);
 await UnslothTests.Run(Check);
 await RecipeGpuSelectionTests.Run(Check);
