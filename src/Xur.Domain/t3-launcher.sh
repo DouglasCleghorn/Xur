@@ -146,11 +146,7 @@ refresh() (
                 install_script https://astral.sh/uv/install.sh sh || result=$?
             fi ;;
         t3)
-            if [ -x "$binary" ]; then
-                timeout --foreground --kill-after=5s 120s "$binary" update --yes || result=$?
-            else
-                install_script https://t3.codes/install.sh sh || result=$?
-            fi ;;
+            install_script https://t3.codes/install.sh sh || result=$? ;;
         codex)
             export CODEX_INSTALL_DIR="$HOME/.local/bin" CODEX_NON_INTERACTIVE=1
             install_script https://chatgpt.com/codex/install.sh sh || result=$? ;;
@@ -188,15 +184,99 @@ fi
 
 # Pairing and other CLI calls must not trigger updates or race the live server.
 if [ "${1:-}" = start ]; then
-    # Start an installed T3 immediately. Each updater logs its own result and
-    # keeps native state in the persistent home; new T3 code is used next start.
+    # Only the upstream service launcher may select/restart a running T3.
+    # A concurrent `t3 update` would race its durable update/rollback state.
     for tool in codex claude opencode gh uv tools; do
         refresh "$tool" &
     done
-    if [ -x "$T3CODE_INSTALL_BIN_DIR/t3" ]; then
-        refresh t3 &
-    else
+    if [ ! -e "$T3CODE_HOME/runtime/service-state.json" ] && [ ! -x "$T3CODE_INSTALL_BIN_DIR/t3" ]; then
         refresh t3
     fi
 fi
-exec "$T3CODE_INSTALL_BIN_DIR/t3" "$@"
+
+# Run the upstream supervisor directly: Podman, rather than systemd inside the
+# container, owns its lifecycle. Keep the recipe's command stable for saved images.
+exec python3 -c "$(cat <<'XUR_T3_SERVICE'
+import json, os, re, subprocess, sys, tempfile
+from pathlib import Path
+
+args = sys.argv[1:]
+starting = args[:1] == ['start']
+if starting:
+    args = args[1:]
+    while args:
+        option = args.pop(0)
+        if option in ('--host', '--port', '--base-dir') and args:
+            os.environ[{'--host': 'T3CODE_HOST', '--port': 'T3CODE_PORT', '--base-dir': 'T3CODE_HOME'}[option]] = args.pop(0)
+        elif option == '--no-browser':
+            os.environ['T3CODE_NO_BROWSER'] = 'true'
+        elif not option.startswith('-') and not args:
+            os.chdir(option)
+        else:
+            sys.exit('Unsupported Xur T3 startup option: ' + option)
+
+home = Path(os.environ['T3CODE_HOME'])
+state_path = home / 'runtime/service-state.json'
+binary = Path(os.environ['T3CODE_INSTALL_BIN_DIR']) / 't3'
+# This is the upstream service-state/IPC protocol, not a release version pin.
+# Fail visibly if upstream changes it; never guess or overwrite recovery state.
+protocol = 3
+number = r'(?:0|[1-9][0-9]*)'
+prerelease = rf'(?:{number}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+version_pattern = rf'{number}\.{number}\.{number}(?:-{prerelease}(?:\.{prerelease})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?'
+
+def runtime(version):
+    if not isinstance(version, str) or not re.fullmatch(version_pattern, version):
+        raise ValueError('Invalid T3 service version; saved state retained.')
+    directory = home / 'runtime/versions' / version
+    if (directory / '.install-complete').read_text().strip() != version or not os.access(directory / 't3', os.X_OK):
+        raise ValueError('Selected T3 runtime is incomplete; saved state retained.')
+    return directory / 't3'
+
+try:
+    if starting and not state_path.exists():
+        # Adopt the official installer's selection once, before any server runs.
+        # Preflight checks the actual database and the upstream protocol contract.
+        result = subprocess.run([str(binary), '__service-preflight', '--database-path',
+                                 str(home / 'userdata/statev2.sqlite'), '--launcher-protocol', str(protocol)],
+                                check=True, capture_output=True, text=True, timeout=30)
+        preflight = json.loads(result.stdout)
+        if not isinstance(preflight, dict):
+            raise ValueError('Invalid T3 service preflight response.')
+        if preflight.get('status') != 'ready' or preflight.get('launcherProtocol') != protocol:
+            raise ValueError(preflight.get('reason', 'T3 service preflight failed.'))
+        version = preflight['version']
+        runtime(version)
+        state = {'protocol': protocol, 'activeVersion': version}
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix='.xur-service-', dir=state_path.parent)
+        try:
+            with os.fdopen(fd, 'w') as stream:
+                json.dump(state, stream)
+                stream.flush()
+                os.fsync(stream.fileno())
+            # Publish without replacing an existing launcher's state.
+            try:
+                os.link(temporary, state_path)
+            except FileExistsError:
+                pass
+            directory_fd = os.open(state_path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            os.unlink(temporary)
+
+    if state_path.exists():
+        state = json.loads(state_path.read_text())
+        if not isinstance(state, dict) or state.get('protocol') != protocol:
+            raise ValueError('Unsupported T3 service protocol; saved state retained.')
+        binary = runtime(state.get('activeVersion'))
+        # Existing pending/committed/rollback records belong to upstream. Its
+        # launcher validates and recovers them before starting the selected child.
+    os.execv(str(binary), [str(binary), *(['__service-launcher'] if starting else args)])
+except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+    sys.exit('T3 service startup failed: ' + str(error))
+XUR_T3_SERVICE
+)" "$@"

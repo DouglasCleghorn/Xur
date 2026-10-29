@@ -11,7 +11,8 @@ Xur does not proxy its HTTP or WebSocket connections.
 2. Auto-run is enabled by default. On first start, T3's native installer downloads the latest stable version into
    the persistent home volume. This needs internet access; workload logs show
    installation progress and any download errors. Later starts launch the saved
-   installation immediately while checking for updates in the background.
+   installation immediately. Use T3's update controls to update the server;
+   harnesses and development tools check for updates in the background.
 3. Return to **T3 Code → Create pairing link**. Use **Pair this device**, scan the
    QR code on a phone, or paste the link into **Add environment** in the T3 Code
    desktop app. Each link is single-use and expires after five minutes.
@@ -200,17 +201,35 @@ Project-specific SDKs and browser downloads can be installed separately.
 
 ## Updates
 
-Run `t3 update` in T3 Code's terminal to install the latest stable update using
-T3's native updater. Once it finishes, turn **Auto-run** off and back on to
-restart T3 on the updated version. Finish active coding work first. No new Xur
-release or container rebuild is needed.
+Use T3's sidebar update button or **Settings → Environments → Update server**.
+Xur runs T3 under its native service launcher, so T3 can download, verify and
+activate the requested release, restart the server and reconnect your client.
+Finish active coding work first: a server update can interrupt agents and terminals.
+No new Xur release or container rebuild is needed for normal T3 updates.
+
+Older Xur containers ran `t3 start` directly. T3 deliberately disables remote
+self-updates for foreground servers, so its update dialog reported that the
+server needed a manual update. After installing this Xur fix, turn **Auto-run**
+off and back on once to adopt the service launcher. Keep the existing storage;
+projects, credentials and pairings remain in place.
 
 T3's installer and updater keep the runtime under `/home/node/.t3/runtime` and
-select it with `/home/node/.local/bin/t3`. Both are in the persistent volume and
-writable by the workload user. Restarts and replacement containers honor that
-selection; they do not reinstall or overwrite an updated runtime. The native
+initially select it with `/home/node/.local/bin/t3`. On first service startup,
+Xur checks compatibility and adopts that selection into T3's native
+`runtime/service-state.json`. Afterwards that state is authoritative, including
+pending update and rollback records. Restarts and replacement containers preserve
+it even if the CLI symlink still points at an older release. All runtime and update
+state is in the persistent volume and writable by the workload user. Xur does not
+run a competing `t3 update` in the background. The native
 installer checks the downloaded archive against upstream release checksums and
 keeps its local web assets and dependency notices.
+
+Podman owns the container lifecycle; no nested systemd service or privileged
+container is required. The integration uses upstream's internal service launcher
+and checks its protocol before initial adoption. An incompatible launcher protocol,
+invalid state or missing selected runtime fails visibly without resetting saved
+update state. A future incompatible upstream service protocol may require a Xur
+integration change; normal releases on the supported protocol update independently.
 
 The Node base follows its LTS channel through Google's Docker Hub cache; there
 is no fallback to Docker Hub on a cache miss. T3's MIT notice is retained
@@ -229,7 +248,15 @@ to a release that cannot preserve it. See the [runtime implementation notes](../
 Automated tests cover recipe validation, single-server selection, persistent
 storage reuse, initial installation, updater selection across replacement
 launchers, offline restart, direct IPv4/hostname and IPv6 links, pairing responses
-and rollback compatibility. Building and booting this container on a Xur host
+and rollback compatibility. The optional native service contract check runs the
+actual upstream supervisor with synthetic server children to verify IPC update
+handoff, commit, database rollback, shutdown and restart persistence:
+
+```sh
+python3 -B tests/Xur.Integration.Tests/t3-service-native.py /path/to/installed/t3
+```
+
+Building and booting this container on a Xur host
 remains a separate integration check.
 
 The account/model setup checks use synthetic CLI sign-ins and streamed model

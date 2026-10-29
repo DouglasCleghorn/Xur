@@ -107,7 +107,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         var instance=await Inspect(definition);
         if(instance?.State!="running")throw new InvalidOperationException("Enable T3 Code first.");
         // Use the inspected immutable identity, never a caller-supplied command or container name.
-        var result=await Processes.Run("podman",["exec",instance.InstanceId,"/opt/t3/t3","auth","pairing","create",
+        var result=await Processes.Run("podman",["exec",instance.InstanceId,"sh","-c",T3CodeWorkload.Launcher,"t3-launcher","auth","pairing","create",
             "--base-dir",T3CodeWorkload.BaseDirectory,"--ttl","5m","--label","Xur connection","--json"],30);
         // Do not copy command output into logs/errors: it contains a pairing secret.
         if(result.ExitCode!=0)throw new InvalidOperationException("T3 Code could not create a pairing link. Check that the server is ready and retry.");
