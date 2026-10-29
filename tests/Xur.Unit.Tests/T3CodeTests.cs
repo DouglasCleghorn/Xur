@@ -89,7 +89,7 @@ static class T3CodeTests
         {
             await File.WriteAllTextAsync(root+"/launcher",T3CodeWorkload.Launcher);
             var result=await Processes.Run("python3",["tests/Xur.Integration.Tests/t3-startup.py",root+"/launcher"],60);
-            check(result.ExitCode==0,"T3 background startup updates: "+result.Output);
+            check(result.ExitCode==0,"T3 service startup and persistent updates: "+result.Output);
             var workload=new Workload("t3","T3 Code",Recipe(),[],"coding");
             using var old=JsonDocument.Parse("{}");
             using var current=JsonDocument.Parse(JsonSerializer.Serialize(new Dictionary<string,string>{{T3CodeRuntime.Label,T3CodeRuntime.Policy},{T3CodeGpuAccess.Label,"all-v1"}}));

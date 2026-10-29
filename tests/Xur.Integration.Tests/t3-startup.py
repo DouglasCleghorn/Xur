@@ -1,5 +1,6 @@
 """Exercise the actual launcher with gated upstream installers; no network/accounts."""
 import os
+import json
 from pathlib import Path
 import shutil
 import signal
@@ -16,11 +17,12 @@ FAKE = r'''#!/usr/bin/env python3
 import gzip, hashlib, io, json, os, pathlib, platform, shutil, sys, tarfile, time
 root=pathlib.Path(os.environ['FIXTURE'])
 home=pathlib.Path.home()
-def install(tool, version='initial'):
+def install(tool, version='0.0.1'):
     target=home/'.opencode/bin/opencode' if tool=='opencode' else home/'.local/bin'/tool
     if tool=='t3':
         actual=home/'.t3/runtime/versions'/version/'t3'
         actual.parent.mkdir(parents=True,exist_ok=True)
+        (actual.parent/'.install-complete').write_text(version)
         shutil.copyfile(root/'fake.py',actual);actual.chmod(0o700)
         target.parent.mkdir(parents=True,exist_ok=True);target.unlink(missing_ok=True);target.symlink_to(actual)
     elif tool=='gh':
@@ -39,7 +41,7 @@ def gate(tool):
 tool=pathlib.Path(sys.argv[0]).name
 args=sys.argv[1:]
 if tool=='fake.py':
-    install(args[1],args[2] if len(args)>2 else 'initial');sys.exit(0)
+    install(args[1],args[2] if len(args)>2 else '0.0.1');sys.exit(0)
 if tool=='curl':
     url=next(a for a in args if a.startswith('https://'))
     tool='tools' if 'micro.mamba.pm' in url or '/mamba-org/' in url else 'uv' if 'astral.sh' in url or '/astral-sh/' in url else 'gh' if 'github.com' in url else 't3' if 't3.codes' in url else 'codex' if 'chatgpt.com' in url else 'claude' if 'claude.ai' in url else 'opencode'
@@ -85,12 +87,19 @@ elif args==['--version']:
     print(tool+' fixture')
 elif args and args[0] in ('update','upgrade'):
     gate(tool)
-    if tool=='t3': install(tool,'updated')
-elif args and args[0]=='start':
+    if tool=='t3': install(tool,'0.0.2')
+elif args and args[0]=='__service-preflight':
+    if (root/'preflight-blocked').exists():
+        print(json.dumps(dict(status='blocked',reason='Fixture incompatible database')))
+    else:
+        print(json.dumps(dict(status='ready',version=pathlib.Path(sys.argv[0]).resolve().parent.name,launcherProtocol=3)))
+elif args and args[0]=='__service-launcher':
+    (root/'service-env').write_text(json.dumps({k:os.environ.get(k) for k in ('T3CODE_HOME','T3CODE_HOST','T3CODE_PORT','T3CODE_NO_BROWSER')}))
+    (root/'service-cwd').write_text(os.getcwd())
     (root/'launched').write_text(str(pathlib.Path(sys.argv[0]).resolve()))
     while True: time.sleep(.05)
 elif args[:2]==['auth','pairing']:
-    print('fixture pairing')
+    print('fixture pairing '+str(pathlib.Path(sys.argv[0]).resolve().parent.name))
 else: sys.exit(3)
 '''
 
@@ -137,27 +146,40 @@ class StartupTests(unittest.TestCase):
         self.processes.append(p)
         return p
 
-    def test_installed_server_starts_while_all_seven_updates_are_blocked(self):
+    def test_installed_server_uses_service_while_harness_updates_are_blocked(self):
         for tool in ('t3','claude','opencode'): self.install(tool)
         self.start()
         self.wait(lambda:(self.root/'launched').exists())
-        self.wait(lambda:all((self.root/(t+'.started')).exists() for t in ('t3','codex','claude','opencode','gh','uv','tools')))
-        self.assertIn('/initial/t3',(self.root/'launched').read_text())
+        self.wait(lambda:all((self.root/(t+'.started')).exists() for t in ('codex','claude','opencode','gh','uv','tools')))
+        self.assertIn('/0.0.1/t3',(self.root/'launched').read_text())
         self.assertFalse((self.home/'.local/bin/codex').exists())
         self.release('t3','codex','claude','opencode','gh','uv','tools')
-        self.wait(lambda:(self.home/'.local/bin/t3').resolve().parent.name=='updated')
+        self.assertFalse((self.root/'t3.started').exists(), 'No competing native updater while the service runs')
         self.wait(lambda:(self.home/'.local/bin/codex').exists())
         self.wait(lambda:(self.home/'.local/bin/gh').exists())
         self.wait(lambda:all((self.home/'.local/share/xur-tools/bin'/t).exists() for t in ('rg','fd','jq','git-lfs','rsync','zip','unzip','sqlite3')))
         self.wait(lambda:(self.home/'.local/bin/uv').exists())
         self.assertEqual((self.home/'projects/keep').read_text(),'saved project')
-        # The next container start uses the runtime selected by the background updater.
+        # A remote update's committed selection wins over a stale CLI symlink.
+        subprocess.run([sys.executable,str(self.root/'fake.py'),'install','t3','0.0.2'],env=self.env,check=True)
+        self.install('t3')
+        state=self.home/'.t3/runtime/service-state.json'
+        state.write_text(json.dumps(dict(protocol=3,activeVersion='0.0.2',update=dict(
+            id='test-update',fromVersion='0.0.1',targetVersion='0.0.2',status='committed'))))
+        before=state.read_bytes()
+        os.killpg(self.processes[0].pid,signal.SIGTERM);self.processes[0].wait(timeout=5)
+        # Replacement containers use upstream's selection, even offline.
+        (self.root/'fail').touch()
         replacement=self.root/'replacement';shutil.copyfile(LAUNCHER,replacement)
         (self.root/'launched').unlink()
         p=subprocess.Popen(['sh',str(replacement),'start'],env=self.env,stdout=self.log,stderr=self.log,start_new_session=True)
         self.processes.append(p)
         self.wait(lambda:(self.root/'launched').exists())
-        self.assertIn('/updated/t3',(self.root/'launched').read_text())
+        self.assertIn('/0.0.2/t3',(self.root/'launched').read_text())
+        self.assertEqual(state.read_bytes(),before)
+        pairing=subprocess.run(['sh',str(replacement),'auth','pairing','create'],env=self.env,capture_output=True,text=True,timeout=5)
+        self.assertEqual(pairing.returncode,0,pairing.stderr)
+        self.assertIn('fixture pairing 0.0.2',pairing.stdout)
 
     def test_first_install_waits_only_for_t3(self):
         self.start()
@@ -176,9 +198,9 @@ class StartupTests(unittest.TestCase):
         shutil.copyfile(self.root/'fake.py',prefix/'rg');(prefix/'rg').chmod(0o700)
         (self.root/'fail').touch();self.release('t3','codex','claude','opencode','gh','uv','tools')
         p=self.start()
-        self.wait(lambda:all(t+' update failed' in (self.root/'log').read_text() for t in ('t3','codex','claude','opencode','gh','uv','tools')))
+        self.wait(lambda:all(t+' update failed' in (self.root/'log').read_text() for t in ('codex','claude','opencode','gh','uv','tools')))
         self.assertIsNone(p.poll())
-        self.assertIn('/initial/t3',(self.root/'launched').read_text())
+        self.assertIn('/0.0.1/t3',(self.root/'launched').read_text())
 
     def test_failed_first_t3_install_is_retryable(self):
         (self.root/'fail').touch();self.release('t3','codex','claude','opencode','gh','uv','tools')
@@ -193,6 +215,48 @@ class StartupTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn('fixture pairing',result.stdout)
         self.assertEqual(list(self.root.glob('*.started')),[])
+
+    def test_start_options_preserve_listener_data_and_project(self):
+        self.install('t3')
+        p=subprocess.Popen(['sh',str(LAUNCHER),'start','--host','0.0.0.0','--port','3773',
+                            '--base-dir',str(self.home/'.t3'),'--no-browser',str(self.home/'projects')],
+                           env=self.env,stdout=self.log,stderr=self.log,start_new_session=True)
+        self.processes.append(p)
+        self.wait(lambda:(self.root/'launched').exists())
+        env=json.loads((self.root/'service-env').read_text())
+        self.assertEqual(env,dict(T3CODE_HOME=str(self.home/'.t3'),T3CODE_HOST='0.0.0.0',
+                                  T3CODE_PORT='3773',T3CODE_NO_BROWSER='true'))
+        self.assertEqual((self.root/'service-cwd').read_text(),str(self.home/'projects'))
+
+    def test_pending_recovery_state_is_preserved_for_upstream(self):
+        self.install('t3')
+        state=self.home/'.t3/runtime/service-state.json'
+        state.write_text(json.dumps(dict(protocol=3,activeVersion='0.0.1',update=dict(
+            id='pending',fromVersion='0.0.1',targetVersion='0.0.2',status='pending',dbPath='/fixture/db'))))
+        before=state.read_bytes()
+        (self.root/'preflight-blocked').touch()
+        self.start();self.wait(lambda:(self.root/'launched').exists())
+        self.assertEqual(state.read_bytes(),before, 'Only upstream may recover a pending trial')
+
+    def test_invalid_state_and_missing_runtime_fail_without_reset(self):
+        self.install('t3')
+        state=self.home/'.t3/runtime/service-state.json'
+        for value in ('broken', '[]', '{"protocol":4,"activeVersion":"0.0.1"}',
+                      '{"protocol":3,"activeVersion":"../../outside"}',
+                      '{"protocol":3,"activeVersion":"0.0.9"}'):
+            with self.subTest(value=value):
+                state.write_text(value)
+                p=self.start();self.assertNotEqual(p.wait(timeout=8),0)
+                self.assertEqual(state.read_text(),value)
+                self.assertFalse((self.root/'launched').exists())
+                self.assertFalse((self.root/'t3.started').exists())
+
+    def test_preflight_failure_never_creates_service_state(self):
+        self.install('t3');(self.root/'preflight-blocked').touch()
+        p=self.start();self.assertNotEqual(p.wait(timeout=8),0)
+        self.assertFalse((self.home/'.t3/runtime/service-state.json').exists())
+        self.assertFalse((self.root/'launched').exists())
+        self.assertIn('Fixture incompatible database',(self.root/'log').read_text())
 
     def update_gh(self):
         self.release('gh')
