@@ -851,3 +851,11 @@ capture date, privacy review, and the features whose next changes require a refr
   only, no credentials, people, user files or live robot camera imagery.
   Regenerate if the source arm, clip dimensions, placement or label size
   changes. These renders do not establish physical fit or motion clearance.
+
+- 2026-10-29: Regenerated the private `.build/fast/updates-{desktop,mobile}.png`
+  capture family from the synthetic Updates Razor fixture at `9933c8d` plus the
+  audio.cpp inventory test correction. Covers 21 tools at 1440 and 390 px; the
+  browser checks pass without horizontal overflow. Fixture-data privacy review:
+  synthetic versions and public image references only, with no live host,
+  account, credentials or model prompts. These supersede the 18-tool captures
+  for regression evidence. Not published; regenerate after inventory/UI changes.
