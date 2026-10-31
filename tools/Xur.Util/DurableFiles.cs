@@ -8,6 +8,20 @@ public class DurableFiles
 {
     public virtual void SyncDirectory(string path) => Linux.SyncDirectory(path);
 
+    // Flush only this release, without forcing unrelated telemetry buffers to disk.
+    public virtual void SyncTree(string path, CancellationToken cancellationToken = default)
+    {
+        foreach (var child in Directory.EnumerateFileSystemEntries(path))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var metadata = Linux.Inspect(child) ?? throw new IOException("Release changed during synchronization");
+            if ((metadata.Mode & 0xf000) == 0x4000) SyncTree(child, cancellationToken);
+            else if (metadata.Regular) Linux.SyncFile(child);
+            else throw new IOException("Unsafe release entry during synchronization");
+        }
+        SyncDirectory(path);
+    }
+
     public virtual void Write(string path, byte[] content, uint mode = 0x180,
         uint? uid = null, uint? gid = null, Action<Linux.Metadata>? published = null)
     {

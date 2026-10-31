@@ -241,6 +241,11 @@ public class SignedUpdater(UpdatePaths paths, Runtime runtime, DurableFiles file
         if (!Directory.Exists(release)) Directory.Move(bundle, release);
         else BundleArchive.Validate(release, entry);
         await runtime.Run(["restorecon", "-RF", release], seconds, cancellationToken);
+        // File contents, executable modes, labels and directory entries must all
+        // survive power loss before a durable current link can select them.
+        files.SyncTree(release, cancellationToken);
+        files.SyncDirectory(Path.GetDirectoryName(release)!);
+        files.SyncDirectory(paths.Root);
         return release;
     }
 
@@ -278,13 +283,30 @@ public class SignedUpdater(UpdatePaths paths, Runtime runtime, DurableFiles file
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { return false; }
     }
 
+    public void PrepareRecovery()
+    {
+        if (DurableFiles.ReadJson(Transaction) is JsonObject transaction)
+        {
+            Progress("Recovering", "Restoring the previous application version before service startup");
+            Link(JsonValues.RequiredText(transaction["previous"]));
+            // Keep the transaction until the independent health check succeeds.
+        }
+        else if (File.Exists(Maintenance))
+        {
+            File.Delete(Maintenance);
+            files.SyncDirectory(paths.Root);
+            Progress("Interrupted", "Interrupted update cleared; current application retained");
+        }
+    }
+
     public async Task Recover(CancellationToken cancellationToken = default)
     {
-        if (DurableFiles.ReadJson(Transaction) is not JsonObject transaction) return;
+        if (DurableFiles.ReadJson(Transaction) is not JsonObject transaction) { PrepareRecovery(); return; }
         var previous = JsonValues.RequiredText(transaction["previous"]);
         Progress("Recovering", "Restoring the previous application version");
         await runtime.Run(["systemctl", "stop", .. Services], 120, cancellationToken);
         Link(previous);
+        await runtime.Run(["systemctl", "reset-failed", .. Services], 10, cancellationToken);
         await runtime.Run(["systemctl", "start", "xur-gateway", "xur-agent", "xur-control"], 120, cancellationToken);
         if (!await Healthy(previous, cancellationToken: cancellationToken)) throw new UserError("Previous application did not become healthy; transaction retained for recovery");
         File.Delete(Transaction);
@@ -433,7 +455,8 @@ public class SignedUpdater(UpdatePaths paths, Runtime runtime, DurableFiles file
                 case "configure": Configure(arguments[0]); break;
                 case "channel": await SelectChannel(arguments[0], arguments.ElementAtOrDefault(1), arguments.ElementAtOrDefault(2), cancellationToken); break;
                 case "development": Development(bool.Parse(arguments[0])); break;
-                case "recover": await Recover(cancellationToken); File.Delete(Maintenance); files.SyncDirectory(paths.Root); break;
+                case "prepare-recovery": PrepareRecovery(); break;
+                case "recover": await Recover(cancellationToken); break;
                 case "rollback": await Activate(DurableFiles.ReadJson(AtRoot("previous.json")) as JsonObject ?? throw new UserError("No previous application version"), cancellationToken: cancellationToken); break;
                 case "check":
                 case "update":

@@ -7,6 +7,12 @@ using Xur.Util.Tests;
 
 Linux.Umask(0x3f);
 
+if (args is ["--update-crash-fixture", var crashRoot, var boundary])
+{
+    await RecoveryTests.CrashFixture(crashRoot, boundary);
+    return;
+}
+
 if (args is ["--tree-fixture", var root, var relative])
 {
     try { using var tree = new Xur.IO.DirectoryTree(root); using var child = tree.Open(relative,true); }

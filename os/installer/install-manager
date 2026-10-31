@@ -33,7 +33,8 @@ if ! test -d "$notices"; then notices=/usr/share/licenses/xurutil; fi
 cp -a "$notices" "$target/var/lib/xur/updater/licenses"
 install -m 644 /usr/share/xur/application-update-key.pem "$target/etc/xur/application-update-key.pem"
 install -m 644 /usr/lib/systemd/system/xur-app-recovery.service "$target/etc/systemd/system/"
-systemctl --root="$target" enable xur-app-recovery.service
+install -m 644 /usr/lib/systemd/system/xur-app-prepare-recovery.service "$target/etc/systemd/system/"
+systemctl --root="$target" enable xur-app-prepare-recovery.service xur-app-recovery.service
 printf '%s\n' '{"channel":"ghcr.io/ublue-os/bazzite-nvidia-open:stable"}' > "$target/etc/xur/upstream.json"
 chmod 644 "$target/etc/xur/upstream.json"
 if test -f "/run/xur/app/release-$release.json"; then

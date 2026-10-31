@@ -121,7 +121,7 @@ public static class Program
             if (result is not null) Console.WriteLine(result.ToJsonString());
         }
         Bind(application, token => Run("status", [], token));
-        foreach (var name in new[] { "status", "check", "update", "rollback", "recover" })
+        foreach (var name in new[] { "status", "check", "update", "rollback", "recover", "prepare-recovery" })
         {
             var command = new Command(name);
             application.Subcommands.Add(command);
