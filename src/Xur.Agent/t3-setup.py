@@ -14,6 +14,7 @@ import pty
 import re
 import secrets
 import select
+import shutil
 import signal
 import ssl
 import subprocess
@@ -82,6 +83,55 @@ def merge_provider(settings, identifier, entry):
     if (settings.read_text() if settings.exists() else "{}") != old:
         raise SetupError("T3 settings changed during setup. Retry the connection.")
     atomic(settings, json.dumps(data, indent=2) + "\n")
+
+
+def codex_subscription_id(data):
+    """Match native credential/runtime identity, never a display name or plan."""
+    home = paths()[0]
+    def resolved(value):
+        return Path(str(value).replace("~/", str(home) + "/", 1)).resolve()
+    def matches(entry):
+        config = entry.get("config", {})
+        if (entry.get("driver") != "codex" or entry.get("enabled") is False or
+                config.get("enabled") is False or entry.get("environment") or
+                config.get("setupMode") not in (None, "existing") or
+                config.get("shadowHomePath", "").strip() or config.get("launchArgs", "").strip()):
+            return False
+        executable = config.get("binaryPath", "").strip() or "codex"
+        if "/" not in executable:
+            executable = shutil.which(executable)
+        return (executable is not None and resolved(executable) == resolved(binary("codex")) and
+                resolved(config.get("homePath", "").strip() or home / ".codex") == resolved(home / ".codex"))
+    instances = data.get("providerInstances", {})
+    # Prefer the normal T3 identity. Preserve any explicitly different account,
+    # managed runtime, disabled entry, routing environment or launch arguments.
+    if "codex" not in instances or matches(instances["codex"]):
+        return "codex"
+    for identifier, entry in instances.items():
+        if matches(entry):
+            return identifier
+    raise SetupError("Codex in T3 uses another account or configuration. Sign in from that provider's T3 settings.")
+
+
+def codex_subscription(register=False):
+    settings = paths()[2]
+    def select():
+        old = settings.read_text() if settings.exists() else "{}"
+        data = json.loads(old)
+        identifier = codex_subscription_id(data)
+        if register and identifier not in data.get("providerInstances", {}):
+            data.setdefault("providerInstances", {})[identifier] = dict(driver="codex", enabled=True,
+                config=dict(setupMode="existing", binaryPath=binary("codex"), homePath=str(paths()[0] / ".codex")))
+            if (settings.read_text() if settings.exists() else "{}") != old:
+                raise SetupError("T3 settings changed during setup. Retry the connection.")
+            atomic(settings, json.dumps(data, indent=2) + "\n")
+        return identifier
+    if not register:
+        return select()
+    settings.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with os.fdopen(os.open(settings.with_suffix(".xur-lock"), os.O_RDWR | os.O_CREAT, 0o600), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return select()
 
 
 def subscription_environment():
@@ -219,6 +269,8 @@ def authenticate(provider, browser=False):
         raise SetupError("Install this harness first.")
     if browser and provider != "codex":
         raise SetupError("Browser callback sign-in is available for Codex only.")
+    if provider == "codex":
+        codex_subscription()  # Refuse incompatible setups before changing native credentials.
     args = [exe, "login"] + ([] if browser else ["--device-auth"]) if provider == "codex" else [exe, "auth", "login", "--claudeai"]
     master, slave = pty.openpty()
     attributes = termios.tcgetattr(slave)
@@ -286,11 +338,13 @@ def authenticate(provider, browser=False):
         state, message = account(provider)
         if state != "Signed in":
             raise SetupError(message)
-        config = dict(binaryPath=exe, homePath=str(paths()[0] / (".codex" if provider == "codex" else ".claude")))
         if provider == "codex":
-            config["setupMode"] = "existing"
-        provider_entry("xur_" + provider + "_subscription", dict(driver="codex" if provider == "codex" else "claudeAgent", displayName="ChatGPT subscription" if provider == "codex" else "Claude subscription", enabled=True, config=config))
-        emit("Succeeded", message)
+            identifier = codex_subscription(register=True)
+        else:
+            identifier = "xur_claude_subscription"
+            config = dict(binaryPath=exe, homePath=str(paths()[0] / ".claude"))
+            provider_entry(identifier, dict(driver="claudeAgent", displayName="Claude subscription", enabled=True, config=config))
+        emit("Succeeded", message, providerInstanceId=identifier)
     finally:
         stop_process(process)
         os.close(master)
@@ -430,7 +484,13 @@ def main():
     action, provider = payload["action"], payload.get("provider", "")
     if action == "status":
         state, message = account(provider)
-        emit(state, message)
+        identifier = None
+        if provider == "codex":
+            try:
+                identifier = codex_subscription()
+            except SetupError as error:
+                message += " " + str(error)
+        emit(state, message, providerInstanceId=identifier)
     elif action == "install":
         install(provider)
     elif action in ("login", "login-browser"):

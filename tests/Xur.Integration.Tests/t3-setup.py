@@ -170,9 +170,80 @@ while not (Path.home()/'authorized').exists(): time.sleep(.02)
             (self.home / "authorized").touch()
             self.assertEqual(self.read(process)["state"], "Succeeded")
             process.wait(timeout=5)
-        config = json.loads(self.settings.read_text())["providerInstances"]["xur_codex_subscription"]["config"]
+        instances = json.loads(self.settings.read_text())["providerInstances"]
+        self.assertEqual(list(instances), ["codex"])
+        config = instances["codex"]["config"]
         self.assertEqual(config["homePath"], str(self.home / ".codex"))
         self.assertEqual(config["setupMode"], "existing")
+
+    def native_codex(self, **config):
+        return dict(driver="codex", enabled=True, config=dict(setupMode="existing",
+            binaryPath=str(self.bin / "codex"), homePath=str(self.home / ".codex"), **config))
+
+    def test_codex_reuses_default_without_resetting_preferences_or_legacy_threads(self):
+        entry = self.native_codex(customModels=[dict(id="custom", name="Keep")])
+        entry.update(displayName="My Codex", accentColor="blue")
+        data = dict(providerInstances=dict(codex=entry, xur_codex_subscription=self.native_codex()),
+                    favorites=[dict(provider="codex", model="fixture")], unrelated="keep")
+        helper.atomic(self.settings, json.dumps(data))
+        before = self.settings.read_bytes()
+        self.assertEqual(helper.codex_subscription(register=True), "codex")
+        self.assertEqual(self.settings.read_bytes(), before)
+
+    def test_codex_matches_default_paths_and_symlinked_binary(self):
+        real = self.bin / "real-codex"; real.touch()
+        (self.bin / "codex").symlink_to(real)
+        for config in ({}, dict(binaryPath=str(real), homePath="~/.codex")):
+            with self.subTest(config=config), patch.object(helper.shutil, "which", return_value=str(self.bin / "codex")):
+                helper.atomic(self.settings, json.dumps(dict(providerInstances=dict(codex=dict(driver="codex", config=config)))))
+                before = self.settings.read_bytes()
+                self.assertEqual(helper.codex_subscription(register=True), "codex")
+                self.assertEqual(self.settings.read_bytes(), before)
+
+    def test_codex_creates_only_default_for_fresh_setup_and_status_is_read_only(self):
+        self.assertEqual(helper.codex_subscription(), "codex")
+        self.assertFalse(self.settings.exists())
+        self.assertEqual(helper.codex_subscription(register=True), "codex")
+        self.assertEqual(helper.codex_subscription(register=True), "codex")
+        self.assertEqual(list(json.loads(self.settings.read_text())["providerInstances"]), ["codex"])
+
+    def test_codex_preserves_different_accounts_routing_and_disabled_instances(self):
+        for change in (dict(setupMode="managed"), dict(homePath=str(self.home / "other-account")),
+                       dict(binaryPath="/another/codex"), dict(shadowHomePath="~/.codex-other"),
+                       dict(launchArgs="--config model_provider=other"), dict(enabled=False)):
+            with self.subTest(change=change):
+                entry = self.native_codex(); entry["config"].update(change)
+                helper.atomic(self.settings, json.dumps(dict(providerInstances=dict(codex=entry))))
+                before = self.settings.read_bytes()
+                with self.assertRaises(helper.SetupError): helper.codex_subscription(register=True)
+                self.assertEqual(self.settings.read_bytes(), before)
+        for field, value in (("environment", {"OPENAI_BASE_URL": "https://example.invalid"}), ("enabled", False), ("driver", "opencode")):
+            entry = self.native_codex(); entry[field] = value
+            helper.atomic(self.settings, json.dumps(dict(providerInstances=dict(codex=entry))))
+            before = self.settings.read_bytes()
+            with self.assertRaises(helper.SetupError): helper.codex_subscription(register=True)
+            self.assertEqual(self.settings.read_bytes(), before)
+
+    def test_codex_reuses_existing_matching_instance_when_default_is_separate(self):
+        managed = dict(driver="codex", config=dict(setupMode="managed"))
+        helper.atomic(self.settings, json.dumps(dict(providerInstances=dict(codex=managed, personal=self.native_codex()))))
+        before = self.settings.read_bytes()
+        self.assertEqual(helper.codex_subscription(register=True), "personal")
+        self.assertEqual(self.settings.read_bytes(), before)
+
+    def test_codex_rechecks_configuration_after_login(self):
+        self.assertEqual(helper.codex_subscription(), "codex")
+        helper.atomic(self.settings, json.dumps(dict(providerInstances=dict(codex=dict(driver="codex", config=dict(setupMode="managed"))))))
+        before = self.settings.read_bytes()
+        with self.assertRaises(helper.SetupError): helper.codex_subscription(register=True)
+        self.assertEqual(self.settings.read_bytes(), before)
+
+    def test_codex_incompatible_setup_is_rejected_before_starting_login(self):
+        (self.bin / "codex").touch()
+        helper.atomic(self.settings, json.dumps(dict(providerInstances=dict(codex=dict(driver="codex", config=dict(setupMode="managed"))))))
+        with patch.object(helper.subprocess, "Popen") as start:
+            with self.assertRaises(helper.SetupError): helper.authenticate("codex")
+            start.assert_not_called()
 
     def test_browser_callback_rejects_other_destinations_and_attempts(self):
         callback = "http://localhost:1455/auth/callback?code=fixture-code&state=fixture-state"
@@ -250,7 +321,8 @@ while not server.finished: server.handle_request()
             process.wait(timeout=5)
             self.assertEqual(process.stderr.read(), "")
         self.assertEqual((self.home / "requests").read_text().splitlines(), ["/auth/callback", "/success"])
-        entry = json.loads(self.settings.read_text())["providerInstances"]["xur_codex_subscription"]
+        self.assertEqual(completed["providerInstanceId"], "codex")
+        entry = json.loads(self.settings.read_text())["providerInstances"]["codex"]
         self.assertEqual(entry["config"]["homePath"], str(self.home / ".codex"))
         self.assertNotIn("fixture-code", self.settings.read_text())
         self.assertNotIn("NEVER-EXPOSE", self.settings.read_text())

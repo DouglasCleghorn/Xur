@@ -58,6 +58,19 @@ provider's normal account flow; an API key is not required.
 Harnesses install automatically. **Retry setup** retries a missing installation.
 After sign-in, the button becomes a quieter **Sign in again** action.
 
+Codex sign-in reuses T3's default **Codex** provider when it uses the same native
+CLI and credential directory. Existing names, model preferences and other settings
+are preserved. A matching custom instance can also be reused; the link opens the
+actual selected instance. Managed accounts, custom routing, separate credential
+directories and disabled providers are not overwritten. If no compatible instance
+is available, sign in through that provider's settings in T3.
+
+Older Xur sign-ins created an additional **ChatGPT subscription** provider. If it
+duplicates the default Codex account, hide its models in T3's provider settings to
+remove duplicate picker choices while retaining the provider for existing threads.
+Xur does not delete or disable old entries automatically. Keep intentionally
+separate accounts and local-model providers enabled as needed.
+
 Xur shows installation, waiting, verification and signed-in states. A page
 refresh can recover a sign-in while the agent and container are still running.
 Cancel or restart an expired sign-in; it has a fifteen-minute limit. Provider
