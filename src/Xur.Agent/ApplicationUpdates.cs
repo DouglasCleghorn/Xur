@@ -39,7 +39,7 @@ public sealed class ApplicationUpdates
             }
             var osUpdate=await Processes.Run("systemctl",["is-active","--quiet","xur-os-manual.service"],5);
             if(osUpdate.ExitCode==0)throw new InvalidOperationException("Wait for the OS update to finish.");
-            var result=await Processes.Run("systemd-run",["--unit=xur-app-update","--collect","--no-block","--property=Type=oneshot","--property=TimeoutStartSec=1h",Path.GetFullPath(Path.Combine(Directory.ResolveLinkTarget("/var/lib/xur/app/current",true)!.FullName,"host/xurutil")),"app-update",request.Action],15);
+            var result=await Processes.Run("systemd-run",["--unit=xur-app-update","--collect","--no-block","--property=Type=oneshot","--property=TimeoutStartSec=1h","--property=OnFailure=xur-app-recovery.service",Path.GetFullPath(Path.Combine(Directory.ResolveLinkTarget("/var/lib/xur/app/current",true)!.FullName,"host/xurutil")),"app-update",request.Action],15);
             if(result.ExitCode!=0)throw new InvalidOperationException("Could not start the application update.");
         }finally{gate.Release();}
     }

@@ -1,0 +1,15 @@
+[Unit]
+Description=Select the previous Xur application after an interrupted update
+After=local-fs.target
+Before=xur-network.service xur-gateway.service xur-agent.service xur-control.service
+ConditionKernelCommandLine=!xur.installer=1
+ConditionPathExists=|/var/lib/xur/app/transaction.json
+ConditionPathExists=|/var/lib/xur/app/maintenance
+
+[Service]
+Type=oneshot
+ExecStart=/var/lib/xur/updater/xurutil app-update prepare-recovery
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

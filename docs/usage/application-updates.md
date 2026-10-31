@@ -70,11 +70,33 @@ and Tailscale state stay in their existing persistent locations. Releases with
 an unsupported data schema are rejected. This implementation supports schema 1;
 future incompatible migrations require an explicit migration implementation.
 
-The old release is retained. Failed manager/agent/gateway health checks restore
-it automatically. A durable transaction and a separate boot recovery unit
-recover interrupted activation. The recovery implementation is installed at
+The old release is retained. Before activation, the updater flushes the new
+release's files, executable permissions, SELinux labels and directories to disk.
+It then records a durable transaction and atomically changes the active symlink.
+Interrupted downloads or staging leave the running application selected.
+Failed manager/agent/gateway health checks restore the previous release automatically.
+
+After an interrupted activation, an early boot unit restores the previous
+selection before network setup, the gateway, agent or control service starts.
+A separate recovery unit restarts and health-checks that version, clearing service
+restart limits first. Recovery keeps the transaction until all three services
+report the expected bundle ID, so another interruption or failed health check
+can retry on the next boot. A transaction triggers recovery even if its maintenance
+marker is missing. An interruption while draining, before any activation transaction,
+clears the stale maintenance marker and retains the current version.
+Application-update job failures and termination of either application-update or
+Update All jobs also request recovery during the same boot. This does not
+provide automatic OS boot rollback.
+
+The recovery implementation is installed at
 `/var/lib/xur/updater/xurutil`, outside the replaceable app, so a broken app
 cannot replace its own recovery path. Normal updates execute the current bundle’s updater as a separate systemd job; the independent recovery copy retains the transaction recovery contract.
+The startup migration installs and enables the early recovery unit on existing
+installations while preserving administrator replacements. These protections
+require an installation or successful update carrying this recovery code;
+they cannot repair a machine that already cannot start its agent.
+The recovery unit uses a distinct execution directive so older startup migrations
+leave the independent utility in place after an application rollback.
 The new agent also repairs the exact legacy installer-owned
 `/etc/systemd/system/xur-agent.service` startup dependencies before reporting
 health. This runs on the first upgrade even when the preceding updater has no
@@ -175,6 +197,15 @@ hostile archives and invalid signatures without touching the host installation.
 `tests/Xur.Media.Tests/check-application-updates.py NAME` runs actual signed
 updates through the API in an installed disposable VM. Bad releases are served
 only by a temporary loopback test repository, never by the LAN repository.
+The native utility suite also exits updater subprocesses abruptly while draining,
+stopping services, starting the new version, recording healthy activation and
+committing. Fresh updater instances exercise early selection, repeated recovery,
+missing maintenance markers and failed rollback health checks. Release-flush
+faults verify staging failures leave services untouched. Systemd verifies the
+enabled recovery/application unit graph without starting host services. These
+fixtures exercise process interruption; physical power-loss testing remains
+separate.
+
 The test preserves a real llama.cpp process, an active streaming request,
 profile state, browser authentication and saved files, and exercises failed
 health checks and explicit rollback. It also interrupts an activation, reboots,

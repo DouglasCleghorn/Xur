@@ -64,6 +64,12 @@ sealed class FaultyFiles : DurableFiles
 {
     public Action<string>? BeforeWrite { get; set; }
     public Action<string>? BeforeSync { get; set; }
+    public Action<string>? BeforeTree { get; set; }
+    public override void SyncTree(string path, CancellationToken cancellationToken = default)
+    {
+        BeforeTree?.Invoke(path);
+        base.SyncTree(path, cancellationToken);
+    }
     public override void Write(string path, byte[] content, uint mode = 0x180, uint? uid = null, uint? gid = null, Action<Linux.Metadata>? published = null)
     {
         BeforeWrite?.Invoke(path);

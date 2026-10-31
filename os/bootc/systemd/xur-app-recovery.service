@@ -1,11 +1,12 @@
 [Unit]
 Description=Recover interrupted Xur application update
 After=xur-control.service
-ConditionPathExists=/var/lib/xur/app/maintenance
+ConditionPathExists=|/var/lib/xur/app/transaction.json
+ConditionPathExists=|/var/lib/xur/app/maintenance
 
 [Service]
 Type=oneshot
-ExecStart=/var/lib/xur/updater/xurutil app-update recover
+ExecStart=:/var/lib/xur/updater/xurutil app-update recover
 TimeoutStartSec=5min
 
 [Install]

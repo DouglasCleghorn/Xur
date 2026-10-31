@@ -18,7 +18,7 @@ public sealed class UpdateAll
         foreach(var unit in new[]{"xur-app-update.service","xur-os-manual.service"})
             if((await Processes.Run("systemctl",["is-active",unit],5)).Output.Trim() is "active" or "activating")throw new InvalidOperationException("Wait for the current update to finish.");
         var executable=Path.Combine(Directory.ResolveLinkTarget("/var/lib/xur/app/current",true)!.FullName,"host/xurutil");
-        var result=await Processes.Run("systemd-run",["--unit=xur-update-all","--collect","--no-block","--property=Type=oneshot","--property=TimeoutStartSec=4h",executable,"update-all","run"],15);
+        var result=await Processes.Run("systemd-run",["--unit=xur-update-all","--collect","--no-block","--property=Type=oneshot","--property=TimeoutStartSec=4h","--property=OnFailure=xur-app-recovery.service",executable,"update-all","run"],15);
         if(result.ExitCode!=0)throw new InvalidOperationException("Could not start Update All.");
     }
 }

@@ -84,6 +84,13 @@ public static partial class Linux
         Check(Fsync(handle.DangerousGetHandle().ToInt32()), "Sync directory " + path);
     }
 
+    public static void SyncFile(string path)
+    {
+        using var handle = OpenRead(path);
+        if (!Inspect(handle).Regular) throw new IOException("Unsafe release file");
+        Check(Fsync(handle.DangerousGetHandle().ToInt32()), "Sync file " + path);
+    }
+
     public static void SetMetadata(SafeFileHandle handle, uint mode, uint? uid = null, uint? gid = null)
     {
         var fd = handle.DangerousGetHandle().ToInt32();

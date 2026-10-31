@@ -7,7 +7,19 @@ public sealed class RecoveryMigration(Runtime runtime, DurableFiles files)
 {
     public const string Unit = "/etc/systemd/system/xur-app-recovery.service";
     const string Legacy = "ExecStart=/usr/bin/python3 /var/lib/xur/updater/app-update recover";
-    const string Native = "ExecStart=/var/lib/xur/updater/xurutil app-update recover";
+    const string PreviousNative = "ExecStart=/var/lib/xur/updater/xurutil app-update recover";
+    // The ':' systemd prefix disables environment substitution and distinguishes
+    // this contract from older migrations, which must not downgrade the utility
+    // after an application rollback while leaving the early recovery unit enabled.
+    const string Native = "ExecStart=:/var/lib/xur/updater/xurutil app-update recover";
+
+    static byte[] PrepareConfiguration()
+    {
+        using var input = typeof(RecoveryMigration).Assembly.GetManifestResourceStream("Xur.Util.PrepareRecoveryService")!;
+        using var output = new MemoryStream();
+        input.CopyTo(output);
+        return output.ToArray();
+    }
 
     public async Task<string> Migrate(string executable, string directory = "/var/lib/xur/updater",
         string unit = Unit, uint owner = 0, CancellationToken cancellationToken = default)
@@ -31,8 +43,26 @@ public sealed class RecoveryMigration(Runtime runtime, DurableFiles files)
             if (line.StartsWith('[')) section = line.Trim();
             else if (section == "[Service]" && line.Split('=', 2)[0].Trim() == "ExecStart") starts.Add(line);
         }
-        if (starts.Count != 1 || starts[0] is not (Legacy or Native)) return "custom";
-        var updated = Encoding.UTF8.GetBytes(string.Join('\n', lines.Select(line => line == Legacy ? Native : line)));
+        if (starts.Count != 1 || starts[0] is not (Legacy or PreviousNative or Native)) return "custom";
+        var updated = Encoding.UTF8.GetBytes(string.Join('\n', lines.Select(line => line switch
+        {
+            Legacy => Native,
+            PreviousNative => Native,
+            "ConditionPathExists=/var/lib/xur/app/maintenance" =>
+                "ConditionPathExists=|/var/lib/xur/app/maintenance\nConditionPathExists=|/var/lib/xur/app/transaction.json",
+            _ => line
+        })));
+        var unitDirectory = Path.GetDirectoryName(unit)!;
+        var prepare = Path.Combine(unitDirectory, "xur-app-prepare-recovery.service");
+        var prepareContent = PrepareConfiguration();
+        var existingPrepare = Linux.Inspect(prepare);
+        if (existingPrepare is { } existing && (!existing.Regular || existing.Uid != owner || (existing.Mode & 0x12) != 0 ||
+            !HostServiceMigration.ReadBounded(prepare, out _, 65536).SequenceEqual(prepareContent))) return "custom";
+        var wants = Path.Combine(unitDirectory, "multi-user.target.wants");
+        var enabled = Path.Combine(wants, "xur-app-prepare-recovery.service");
+        var existingEnabled = Linux.Inspect(enabled);
+        if (existingEnabled is not null && (new FileInfo(enabled).LinkTarget is not { } enabledTarget ||
+            Path.GetFullPath(Path.Combine(wants, enabledTarget)) != prepare)) return "custom";
         var content = HostServiceMigration.ReadBounded(executable, out var source, 64 * 1024 * 1024);
         if (source.Uid != owner || (source.Mode & 0x12) != 0 || content.Length < 4 || !content.AsSpan(0, 4).SequenceEqual(new byte[] { 0x7f, 69, 76, 70 }))
             throw new IOException("Recovery requires an owned, protected native utility executable");
@@ -51,11 +81,11 @@ public sealed class RecoveryMigration(Runtime runtime, DurableFiles files)
         var changedBinary = installed is null || !HostServiceMigration.ReadBounded(stable, out _, 64 * 1024 * 1024).SequenceEqual(content) || (installed.Value.Mode & 0xfff) != 0x1c0;
         var changedUnit = !original.SequenceEqual(updated);
         var pending = Path.Combine(directory, ".xurutil-recovery.pending");
-        if (!changedBinary && !changedUnit && notices.Count == 0 && !File.Exists(pending)) return "current";
+        if (!changedBinary && !changedUnit && existingPrepare is not null && existingEnabled is not null && notices.Count == 0 && !File.Exists(pending)) return "current";
         files.Write(pending, Encoding.UTF8.GetBytes("Recovery activation pending\n"), 0x180, owner, metadata.Value.Gid);
         if (changedBinary) files.Write(stable, content, 0x1c0, owner, metadata.Value.Gid);
         foreach (var (target, bytes) in notices) files.Write(target, bytes, 0x1a4, owner, metadata.Value.Gid);
-        Linux.Metadata? publication = null;
+        Linux.Metadata? publication = null, preparePublication = null, enablePublication = null;
         try
         {
             if (changedUnit)
@@ -63,12 +93,21 @@ public sealed class RecoveryMigration(Runtime runtime, DurableFiles files)
                 if (!(Linux.Inspect(unit) is { } latest && metadata.Value.Unchanged(latest))) throw new IOException("Recovery unit changed during migration");
                 files.Write(unit, updated, (uint)(metadata.Value.Mode & 0xfff), metadata.Value.Uid, metadata.Value.Gid, value => publication = value);
             }
+            if (existingPrepare is null) files.Write(prepare, prepareContent, 0x1a4, owner, metadata.Value.Gid, value => preparePublication = value);
             // Older installations invoked a Python script from this directory;
             // an ELF executable also needs its own persistent executable label.
             var context = Encoding.UTF8.GetString(await runtime.Run(["matchpathcon", "-n", stable], 10, cancellationToken)).Trim().Split(':');
             if (context.Length < 3 || context[2] != "bin_t")
                 await runtime.Run(["semanage", "fcontext", "-a", "-t", "bin_t", stable], 10, cancellationToken);
-            await runtime.Run(["restorecon", stable, unit], 10, cancellationToken);
+            await runtime.Run(["restorecon", stable, unit, prepare], 10, cancellationToken);
+            foreach (var path in new[] { stable, unit, prepare }) Linux.SyncFile(path);
+            if (existingEnabled is null)
+            {
+                Directory.CreateDirectory(wants);
+                Linux.PublishLink(enabled, "../xur-app-prepare-recovery.service");
+                enablePublication = Linux.Inspect(enabled);
+                files.SyncDirectory(unitDirectory);
+            }
             await runtime.Run(["systemctl", "daemon-reload"], 10, cancellationToken);
             File.Delete(pending);
             files.SyncDirectory(directory);
@@ -79,6 +118,20 @@ public sealed class RecoveryMigration(Runtime runtime, DurableFiles files)
                 HostServiceMigration.ReadBounded(unit, out _, 65536).SequenceEqual(updated))
             {
                 files.Write(unit, original, (uint)(metadata.Value.Mode & 0xfff), metadata.Value.Uid, metadata.Value.Gid);
+                // An older migration recognizes the restored unit and may put
+                // back an updater that lacks prepare-recovery. Remove only the
+                // early unit/link published by this failed migration.
+                if (enablePublication is { } link && Linux.Inspect(enabled) is { } currentLink && link.SamePublication(currentLink))
+                {
+                    File.Delete(enabled);
+                    files.SyncDirectory(wants);
+                }
+                if (preparePublication is { } early && Linux.Inspect(prepare) is { } currentEarly && early.SamePublication(currentEarly) &&
+                    HostServiceMigration.ReadBounded(prepare, out _, 65536).SequenceEqual(prepareContent))
+                {
+                    File.Delete(prepare);
+                    files.SyncDirectory(unitDirectory);
+                }
                 await runtime.Run(["restorecon", unit], 10);
                 await runtime.Run(["systemctl", "daemon-reload"], 10);
             }

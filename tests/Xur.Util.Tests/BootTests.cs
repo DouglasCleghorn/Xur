@@ -24,6 +24,7 @@ static class BootTests
         await Migration();
         await Compression();
         await Recovery();
+        await RecoveryOrdering();
         await OldUpdater();
     }
 
@@ -187,7 +188,9 @@ static class BootTests
     {
         using var fixture = new Fixture();
         fixture.Write("recovery.service", File.ReadAllText("os/bootc/systemd/xur-app-recovery.service")
-            .Replace("ExecStart=/var/lib/xur/updater/xurutil app-update recover", "ExecStart=/usr/bin/python3 /var/lib/xur/updater/app-update recover"));
+            .Replace("ConditionPathExists=|/var/lib/xur/app/transaction.json\n", "")
+            .Replace("ConditionPathExists=|/var/lib/xur/app/maintenance", "ConditionPathExists=/var/lib/xur/app/maintenance")
+            .Replace("ExecStart=:/var/lib/xur/updater/xurutil app-update recover", "ExecStart=/usr/bin/python3 /var/lib/xur/updater/app-update recover"));
         fixture.Write("binary", "\u007fELFfixture");
         foreach (var name in new[] { "System.CommandLine-LICENSE.txt", "dotnet-LICENSE.txt", "dotnet-THIRD-PARTY-NOTICES.TXT", "TeeForge-LICENSE.txt", "TeeForge-THIRD-PARTY-NOTICES.txt" }) fixture.Write("licenses/" + name, "fixture notice\n");
         File.SetUnixFileMode(fixture.PathOf("binary"), (UnixFileMode)0x1ed);
@@ -203,16 +206,31 @@ static class BootTests
         Task<string> Run() => migration.Migrate(fixture.PathOf("binary"), fixture.PathOf("updater"), fixture.PathOf("recovery.service"), Linux.EffectiveUser());
         Verify.That(await Run() == "migrated", "First upgrade installs independent recovery executable");
         Verify.That(File.ReadAllText(fixture.PathOf("recovery.service")).Contains("/var/lib/xur/updater/xurutil app-update recover"), "Recovery does not use current bundle link or Python");
+        Verify.That(File.ReadAllText(fixture.PathOf("recovery.service")).Contains("ConditionPathExists=|/var/lib/xur/app/transaction.json"), "Legacy recovery triggers on surviving transactions even without maintenance");
+        Verify.That(File.ReadAllText(fixture.PathOf("xur-app-prepare-recovery.service")) == File.ReadAllText("os/bootc/systemd/xur-app-prepare-recovery.service") &&
+            new FileInfo(fixture.PathOf("multi-user.target.wants/xur-app-prepare-recovery.service")).LinkTarget == "../xur-app-prepare-recovery.service", "Existing installations receive the enabled early recovery unit");
         Verify.That(File.ReadAllBytes(fixture.PathOf("updater/xurutil")).SequenceEqual(File.ReadAllBytes(fixture.PathOf("binary"))), "Independent recovery copy matches running native utility");
         Verify.That((Linux.Inspect(fixture.PathOf("updater/xurutil"))!.Value.Mode & 0xfff) == 0x1c0, "Recovery executable is root-private");
         Verify.That(label == "bin_t" && runtime.Commands.Any(command => command[0] == "semanage"), "Older hosts receive persistent native recovery executable label");
         Verify.That(File.ReadAllText(fixture.PathOf("updater/licenses/dotnet-THIRD-PARTY-NOTICES.TXT")) == "fixture notice\n", "Independent recovery retains runtime license notices");
         runtime.Commands.Clear();
         Verify.That(await Run() == "current" && runtime.Commands.Count == 0, "Recovery migration is idempotent");
+        fixture.Write("recovery.service", File.ReadAllText(fixture.PathOf("recovery.service"))
+            .Replace("ExecStart=:/var/lib/xur/updater/xurutil", "ExecStart=/var/lib/xur/updater/xurutil"));
+        Verify.That(await Run() == "migrated" && File.ReadAllText(fixture.PathOf("recovery.service")).Contains("ExecStart=:/var/lib/xur/updater/xurutil"),
+            "Previous native recovery migrates to a contract older startup migrations cannot downgrade");
+        File.Delete(fixture.PathOf("multi-user.target.wants/xur-app-prepare-recovery.service"));
+        Verify.That(await Run() == "migrated" && File.Exists(fixture.PathOf("multi-user.target.wants/xur-app-prepare-recovery.service")), "Interrupted early unit enablement retries");
+        fixture.Write("xur-app-prepare-recovery.service", "Administrator recovery\n");
+        runtime.Commands.Clear();
+        Verify.That(await Run() == "custom" && runtime.Commands.Count == 0, "Administrator early recovery units are preserved");
+        fixture.Write("xur-app-prepare-recovery.service", File.ReadAllText("os/bootc/systemd/xur-app-prepare-recovery.service"));
         fixture.Write("updater/.xurutil-recovery.pending", "pending\n");
         Verify.That(await Run() == "migrated" && runtime.Commands.Count == 3, "Interrupted recovery activation retries labels and reload");
-        var original = File.ReadAllText(fixture.PathOf("recovery.service")).Replace("ExecStart=/var/lib/xur/updater/xurutil app-update recover", "ExecStart=/usr/bin/python3 /var/lib/xur/updater/app-update recover");
+        var original = File.ReadAllText(fixture.PathOf("recovery.service")).Replace("ExecStart=:/var/lib/xur/updater/xurutil app-update recover", "ExecStart=/usr/bin/python3 /var/lib/xur/updater/app-update recover");
         fixture.Write("recovery.service", original);
+        File.Delete(fixture.PathOf("xur-app-prepare-recovery.service"));
+        File.Delete(fixture.PathOf("multi-user.target.wants/xur-app-prepare-recovery.service"));
         var failed = false;
         runtime.OnRun = (command, _) =>
         {
@@ -221,10 +239,35 @@ static class BootTests
         };
         await Verify.Reject(async () => await Run(), "Recovery migration failure propagates");
         Verify.That(File.ReadAllText(fixture.PathOf("recovery.service")) == original && File.Exists(fixture.PathOf("updater/.xurutil-recovery.pending")), "Failed recovery migration restores legacy unit and retains retry marker");
+        Verify.That(!File.Exists(fixture.PathOf("xur-app-prepare-recovery.service")) &&
+            Linux.Inspect(fixture.PathOf("multi-user.target.wants/xur-app-prepare-recovery.service")) is null,
+            "Failed first migration removes its early unit before an older agent can downgrade recovery");
         runtime.OnRun = (command, _) => Task.FromResult(command[0] == "matchpathcon" ? Encoding.UTF8.GetBytes("system_u:object_r:bin_t:s0\n") : Array.Empty<byte>());
         Verify.That(await Run() == "migrated", "Failed recovery migration retries on next boot");
         fixture.Write("recovery.service", "[Unit]\nDescription=Administrator service\n[Service]\nExecStart=/custom\n");
         runtime.Commands.Clear();
         Verify.That(await Run() == "custom" && runtime.Commands.Count == 0, "Custom recovery units are preserved");
+    }
+
+    static async Task RecoveryOrdering()
+    {
+        using var fixture = new Fixture();
+        foreach (var name in new[] { "xur-app-prepare-recovery.service", "xur-app-recovery.service", "xur-network.service", "xur-gateway.service", "xur-agent.service", "xur-control.service" })
+            fixture.Write("etc/systemd/system/" + name, File.ReadAllText("os/bootc/systemd/" + name));
+        foreach (var name in new[] { "sysinit", "basic", "local-fs", "shutdown", "multi-user" })
+            fixture.Write("etc/systemd/system/" + name + ".target", "[Unit]\nDescription=Fixture target\nDefaultDependencies=no\n");
+        foreach (var name in new[] { "NetworkManager", "systemd-vconsole-setup" })
+            fixture.Write("etc/systemd/system/" + name + ".service", "[Service]\nExecStart=/usr/bin/true\n");
+        foreach (var name in new[] { "usr/bin/true", "usr/bin/dmesg", "usr/bin/xur-agent", "usr/bin/xur-control", "usr/bin/xur-gateway", "usr/libexec/xur-network", "var/lib/xur/updater/xurutil" })
+        {
+            fixture.Write(name, "#!/bin/sh\nexit 0\n");
+            File.SetUnixFileMode(fixture.PathOf(name), (UnixFileMode)0x1ed);
+        }
+        var wants = fixture.PathOf("etc/systemd/system/multi-user.target.wants");
+        Directory.CreateDirectory(wants);
+        foreach (var name in new[] { "xur-app-prepare-recovery", "xur-app-recovery", "xur-network", "xur-gateway", "xur-agent", "xur-control" })
+            File.CreateSymbolicLink(Path.Combine(wants, name + ".service"), "../" + name + ".service");
+        await new Runtime().Run(["systemd-analyze", "verify", "--man=no", "--root=" + fixture.Root, "multi-user.target"]);
+        Verify.That(true, "Systemd verifies the enabled recovery and application boot graph without ordering cycles");
     }
 }

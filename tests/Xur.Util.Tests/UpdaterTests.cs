@@ -14,6 +14,7 @@ static class UpdaterTests
         await Trust();
         await Compatibility();
         await Transactions();
+        await RecoveryTests.Run();
         await Boundaries();
         await HttpDownloads();
     }
