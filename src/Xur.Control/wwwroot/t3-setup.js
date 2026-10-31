@@ -17,7 +17,7 @@
  function auth(card,data){
   const area=card.querySelector('.t3-auth'),provider=card.dataset.provider;
   // Preserve a code being typed while polling an unchanged interaction.
-  const signature=JSON.stringify([data.flowId,data.state,data.url,data.deviceCode,data.needsCode,data.needsCallback]);
+  const signature=JSON.stringify([data.flowId,data.state,data.url,data.deviceCode,data.needsCode,data.needsCallback,data.providerInstanceId]);
   if(area.dataset.signature===signature)return;area.dataset.signature=signature;area.replaceChildren();area.hidden=!active(data.state)&&data.state!=='Succeeded';
   if(data.url){
    const url=new URL(data.url),allowed=provider==='codex'?['auth.openai.com']:['claude.com','claude.ai','platform.claude.com','console.anthropic.com'];
@@ -35,10 +35,12 @@
    const cancel=el('button','Cancel sign-in','quiet');cancel.type='button';cancel.onclick=()=>action(card,'cancel',{flowId:data.flowId});area.append(cancel);
   }
   if(data.state==='Succeeded'){
-   const link=el('a','Continue in T3');link.href=providerUrl(provider==='codex'?'xur_codex_subscription':provider==='claude'?'xur_claude_subscription':'opencode');link.target='_blank';link.rel='noopener noreferrer';area.append(link);
+   const link=el('a','Continue in T3');link.href=providerUrl(data.providerInstanceId||card.querySelector('.t3-provider-link')?.dataset.instance||provider);link.target='_blank';link.rel='noopener noreferrer';area.append(link);
   }
  }
  function render(card,data){
+  const providerLink=card.querySelector('.t3-provider-link');
+  if(providerLink&&data.providerInstanceId){providerLink.dataset.instance=data.providerInstanceId;if(running)providerLink.href=providerUrl(data.providerInstanceId);}
   card.querySelector('.t3-provider-status').textContent=data.state+' · '+data.message;
   const login=card.querySelector('[data-action="login"]');
   if(login){

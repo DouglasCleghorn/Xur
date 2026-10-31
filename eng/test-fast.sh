@@ -36,6 +36,7 @@ node tests/Xur.Integration.Tests/audio-cpp-bridge.cjs > .build/fast/audio-cpp-br
 node tests/Xur.Integration.Tests/https-login.cjs > .build/fast/https-login.json
 node tests/Xur.Integration.Tests/updates-ui.cjs > .build/fast/updates-ui.json
 node tests/Xur.Integration.Tests/control-panel-ui.cjs > .build/fast/control-panel-ui.json
+node tests/Xur.Integration.Tests/t3-provider-links.cjs > .build/fast/t3-provider-links.log
 node tests/Xur.Integration.Tests/profile-switcher-ui.cjs > .build/fast/profile-switcher-ui.json
 node tests/Xur.Integration.Tests/endpoints-ui.cjs > .build/fast/endpoints-ui.json
 node tests/Xur.Integration.Tests/station-identity-ui.cjs > .build/fast/station-identity-ui.json
