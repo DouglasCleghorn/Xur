@@ -7,12 +7,14 @@
 else
 {
     <div class="file-tabs" role="tablist" aria-label="File locations">
-        <button type="button" id="storage-files-tab" role="tab" data-file-tab="storage" aria-controls="usage-explorer" aria-selected="true">Storage files</button>
-        <button type="button" id="workstation-files-tab" role="tab" data-file-tab="workstation" aria-controls="file-explorer" aria-selected="false" tabindex="-1">Workstation files</button>
+        <a class="button" href="/files?tab=storage" id="storage-files-tab" role="tab" data-file-tab="storage" aria-controls="usage-explorer" aria-selected="true">Storage files</a>
+        <a class="button" href="/files?tab=workstation" id="workstation-files-tab" role="tab" data-file-tab="workstation" aria-controls="file-explorer" aria-selected="false" tabindex="-1">Workstation files</a>
     </div>
     <section class="panel file-panel" id="usage-explorer" role="tabpanel" aria-labelledby="storage-files-tab">
         <div class="section-heading"><h2>Storage files</h2><button type="button" class="secondary" id="usage-refresh">Refresh</button></div>
+        <p class="secondary-text">Find what uses disk space. Sizes measure allocated space below each path, largest first. Mounts on the same filesystem can overlap; their sizes must not be added together.</p>
         <nav class="file-path" id="usage-path" aria-label="Storage path"></nav>
+        <p id="usage-total" class="file-usage-total" role="status"></p>
         <div class="file-toolbar"><label>Search this folder<input id="usage-filter" type="search" placeholder="Search all columns…" maxlength="200" /></label><button type="button" class="quiet" id="usage-clear">Clear filters</button></div>
         <p id="usage-status" role="status">Reading mount points…</p>
         <div id="usage-list" class="file-grid" aria-label="Storage files and folders"></div>
@@ -25,7 +27,7 @@ else
         <p id="file-status" role="status">Loading files…</p>
         <div id="file-list" class="file-grid" aria-label="Workstation files and folders"></div>
     </section>
-    <p class="secondary-text">Folder sizes show allocated space and are cached for 30 minutes. Refresh a folder’s size from its menu. Links and nested mounts are not followed. Hidden files are included.</p>
+    <p class="secondary-text">Sizes are scanned in the background and cached for 30 minutes. Storage Refresh scans sizes again. A ≥ marks an incomplete scan. Links and nested mounts are not followed. Hidden files are included. In the grid, use Enter or → to open a folder and ← to go up.</p>
     <script src="/vendor/ag-grid/ag-grid-community.min.js" defer></script>
     <script src="/file-navigation.js" defer></script>
     <script src="/file-grid.js" defer></script>

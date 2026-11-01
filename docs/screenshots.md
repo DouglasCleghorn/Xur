@@ -1,5 +1,20 @@
 # Screenshot and artwork register
 
+- 2026-10-31: Reviewed private user attachment
+  `/home/doug/.t3/userdata/attachments/a0014a2b-5b10-44ae-8785-e5ae42692897-7cbff784-76fc-4220-840e-6fa90fa9973d.png`
+  as the Files disk-usage correction reference. Capture version unspecified;
+  shows filesystem capacity repeated for bind mounts and subvolumes. Privacy
+  review: contains live device names, mount paths and a filesystem UUID; keep
+  private and exclude from shipped assets.
+
+- 2026-10-31: Refreshed the private Files grid capture family from the working
+  tree based on `86c3f64`: `.build/evidence/files-grid/files-{1440,390}.png`
+  and `storage-{1440,390}.png` in the same directory. Purpose: validate file menus,
+  allocated storage usage, largest-first sorting, usage bars, navigation links and responsive
+  layouts. Privacy review: synthetic paths, capacities and folder contents only;
+  no live host files, account details or credentials. Not published or shipped.
+  Supersedes the 2026-09-20 family below; regenerate after Files UI changes.
+
 - 2026-10-23: Storage location/migration controls validated on desktop and at
   390 pixels, on the working tree based on `6c0c68d`.
   Rendered fixtures and the local API test server live under
