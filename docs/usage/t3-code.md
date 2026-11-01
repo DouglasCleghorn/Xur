@@ -13,14 +13,15 @@ Xur does not proxy its HTTP or WebSocket connections.
    installation progress and any download errors. Later starts launch the saved
    installation immediately. Use T3's update controls to update the server;
    harnesses and development tools check for updates in the background.
-3. Return to **T3 Code → Create pairing link**. Use **Pair this device**, scan the
-   QR code on a phone, or paste the link into **Add environment** in the T3 Code
-   desktop app. Each link is single-use and expires after five minutes.
+3. Install the T3 Code app on your device, then return to Xur's
+   **T3 Code → Create pairing link**. Paste the link into **Add environment** in
+   the app, or scan the QR code on your phone. Each link is single-use and expires
+   after five minutes.
 4. Use **Coding accounts and harnesses** on Xur's T3 Code page to connect a
    subscription, or install a harness and choose a model under **Use Xur models
    in T3**.
 
-After pairing, **Open T3 Code** reconnects the browser using T3's saved session.
+After pairing, open the saved environment in the T3 Code app to reconnect.
 Turn **Auto-run** off to stop T3 Code and keep it off, including after reboot.
 Turn it back on to start the same installation. Projects, accounts, pairings and
 installed updates remain saved. If startup repeatedly fails, the page shows the
@@ -32,9 +33,8 @@ on its own port. Treat pairing links as credentials.
 
 The URL uses the hostname or IP used to open Xur, with HTTP port 3773. Both devices
 must be able to reach that address over the LAN or tailnet. Tailscale encrypts
-traffic between tailnet devices; direct LAN HTTP does not provide TLS. The hosted
-T3 web client requires HTTPS, so use the locally served web app or desktop client
-for this direct HTTP connection. See the upstream
+traffic between tailnet devices; direct LAN HTTP does not provide TLS. Use the
+T3 Code app for this direct HTTP connection. See the upstream
 [remote access guide](https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md)
 for T3's other connection options. Xur does not configure those services.
 

@@ -1,5 +1,11 @@
 # Screenshot and artwork register
 
+- 2026-10-31: Retired the connection controls shown in the T3 Code validation
+  families dated 2026-10-17, 2026-10-21 and 2026-10-24 below. The page now guides
+  users to pair the installed app using Copy link or the QR code; the browser
+  launch buttons have been removed. Recapture the connection section before
+  using those images for release documentation. No new screenshots captured.
+
 - 2026-10-31: Reviewed private user attachment
   `/home/doug/.t3/userdata/attachments/a0014a2b-5b10-44ae-8785-e5ae42692897-7cbff784-76fc-4220-840e-6fa90fa9973d.png`
   as the Files disk-usage correction reference. Capture version unspecified;
