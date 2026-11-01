@@ -51,7 +51,8 @@ static class ModelDeletionTests
             var workload=new Workload("test","Using model",recipe,[],"fixture");
             await Reject(Request(gguf),[workload]);await Reject(Request(first),[workload]);
             await Reject(Request(gguf),[workload with{Recipe=UnslothWorkload.Recipe}]);
-            await Reject(Request(gguf),[workload with{Recipe=T3CodeTests.Recipe()}]);
+            var t3=workload with{Id="t3-service",Name="T3 Code",Recipe=T3CodeTests.Recipe()};
+            await Reject(Request(gguf),[t3,workload]);
             // Recipes may mount a model set made from the same cached assets.
             ModelFile[] files=[new("fixture.gguf",recipe.Model!)];
             var set=Path.Combine(state,"model-sets",Canonical.Hash(files));
@@ -63,16 +64,18 @@ static class ModelDeletionTests
             await Reject(Request(setFile),[workload with{Recipe=recipe with{Model=null,Files=files}}]);
             var runtimeDirectory=Path.Combine(state,"runtime");Directory.CreateDirectory(runtimeDirectory);
             File.WriteAllText(Path.Combine(runtimeDirectory,"test.json"),JsonSerializer.Serialize(workload));
+            File.WriteAllText(Path.Combine(runtimeDirectory,"t3-service.json"),JsonSerializer.Serialize(t3));
             var runtime=new WorkloadRuntime(runtimeDirectory,new RecipeCatalog("catalog"),dataStorage:new DataStorage(state));
             var rejected=false;try{await runtime.DeleteModel(library,Request(gguf));}catch(InvalidOperationException){rejected=true;}
             check(rejected&&File.Exists(gguf),"Runtime deletion checks saved workload ownership before touching weights");
             File.Delete(Path.Combine(runtimeDirectory,"test.json"));
             await runtime.DeleteModel(library,Request(gguf));
+            check(runtime.SavedWorkloads().Single().Id==t3.Id,"Running T3 Code does not block deleting an unused GGUF or require stopping its service");
             check(!File.Exists(gguf)&&File.Exists(other)&&File.ReadAllText(setFile)=="GGUFfixture"&&library.Status().Models.All(m=>m.Path!=gguf),"Deleting GGUF removes only the selected file, preserves hard-linked copies and updates inventory immediately");
-            await library.Delete(Request(setFile),[]);
+            await library.Delete(Request(setFile),[t3]);
             check(!File.Exists(setFile),"A remaining model-set location can be deleted independently");
             await Reject(new(gguf,gguf,true));
-            await library.Delete(Request(first),[]);
+            await library.Delete(Request(first),[t3]);
             check(!Directory.Exists(repository)&&File.Exists(outside)&&library.Status().Models.All(m=>!m.Path.StartsWith(repository)),"HF deletion frees blobs and all revisions without following nested directory links");
             var saved=JsonSerializer.Deserialize<ModelScanStatus>(File.ReadAllText(Path.Combine(state,"model-library.json")))!;
             check(saved.Models.All(m=>m.Path!=gguf&&!m.Path.StartsWith(repository)),"Deleted model locations are removed from the persisted inventory");
