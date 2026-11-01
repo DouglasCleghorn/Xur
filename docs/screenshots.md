@@ -499,40 +499,41 @@ usernames, file paths, account names, or model prompts in public screenshots.
 No live-server screenshots are published. The diagrams above are artwork.
 The following app screenshots are produced by `node eng/capture-website.cjs`
 using the actual Razor renderer and synthetic test fixtures. No real host is
-contacted. Dates refer to the reviewed working tree based on `f2d1d7c`; they do
-not imply a released app version.
+contacted. All nine images were regenerated and visually reviewed on
+**2026-11-01 UTC** from source `b766f6353b61ac29c4e5c250ec11d25eed2fc524`
+for Stable release preparation. This does not establish hardware acceptance.
 
 | Image | Used in | Capture / privacy review | Next review |
 | --- | --- | --- | --- |
-| `docs/assets/control-panel.jpg` | Website home; getting-started guide | 2026-09-20; synthetic Gaming/Studio profiles, no personal data, 1200×800 | Home/profile picker changes |
-| `docs/assets/workstations.jpg` | Website home; workstation guide | 2026-09-20; synthetic desktops and GPU, user replaced with `example-user`, connection details collapsed, 1200×800 | Workstation management/layout changes |
-| `docs/assets/profile-editor.jpg` | Getting-started guide | 2026-09-20; synthetic GPU and workstation, no account details, 1200×800 | Profile editor or USB assignment changes |
-| `docs/assets/model-lab.jpg` | Models guide | 2026-09-20; synthetic target, blank prompt, no responses or benchmark results, 1200×800 | Model lab controls changes |
-| `docs/assets/update-channel.jpg` | Updates guide | 2026-09-20; cropped to update-channel panel, Nightly selected, local server/key fields hidden; no network/account details, 944×327 | Update settings changes |
+| `docs/assets/control-panel.jpg` | Website home; getting-started guide | 2026-11-01; synthetic Gaming/Studio profiles and displays, no personal data, 1200×800 | Home/profile picker changes |
+| `docs/assets/workstations.jpg` | Website home; workstation guide | 2026-11-01; synthetic desktops, GPU and fixture accounts only; connection details collapsed, 1200×800 | Workstation management/layout changes |
+| `docs/assets/profile-editor.jpg` | Getting-started guide | 2026-11-01; synthetic GPU, workstation and controllers, no real account details, 1200×800 | Profile editor or USB assignment changes |
+| `docs/assets/model-lab.jpg` | Models guide | 2026-11-01; synthetic target, blank prompt, no responses or benchmark results, 1200×800 | Model lab controls changes |
+| `docs/assets/update-channel.jpg` | Updates guide | 2026-11-01; current selector rechecked and recaptured with identical bytes; Nightly selected, local server/key fields excluded, 944×327 | Update settings changes |
+| `docs/assets/setup-phone-sign-in.jpg` | `/guides/setup/`, step 3: enter the console code | 2026-11-01; empty code field with ABC-DEF placeholder, no real code, 390×844 | Login or mobile layout changes |
+| `docs/assets/setup-phone-account.jpg` | `/guides/setup/`, step 4: create the administrator | 2026-11-01; empty username/password fields, no credentials, 390×844 | Account creation or password-help changes |
+| `docs/assets/setup-phone-profile.jpg` | `/guides/setup/`, step 5: choose a workstation and GPU | 2026-11-01; synthetic Gaming desk, workstation and GPU, no personal data, 390×844 | Profile fields, device assignments or mobile navigation changes |
+| `docs/assets/setup-phone-home.jpg` | `/guides/setup/`, step 6: load a saved profile | 2026-11-01; synthetic Gaming/Studio profiles, idle state and update notice, no private data, 390×844 | Home/profile picker or mobile navigation changes |
 
-All five JPEGs were visually reviewed and have no EXIF or location metadata.
+All nine JPEGs were visually reviewed and have no EXIF or location metadata.
 Guide captions identify their example data. Full-resolution images are linked for
-readability; key actions are also described in text.
+readability; key actions are also described in text. These replace the September
+20 desktop and October 10 phone captures and resolve the refresh list below.
 
-Phone setup images were captured on 2026-10-10 from the working tree based on
-`21feb9e`, using the actual Razor renderer with synthetic fixtures and the
-collaborative browser at 390×844. `eng/capture-website.cjs` can regenerate this
-family. Each JPEG was visually reviewed, has no EXIF/location metadata, and
-is linked at full size from the guide. These captures are separate from the
-September desktop images and do not establish physical-device acceptance.
-
-| Image | Used in / purpose | Capture / privacy review | Next review |
-| --- | --- | --- | --- |
-| `docs/assets/setup-phone-sign-in.jpg` | `/guides/setup/`, step 3: enter the console code | 2026-10-10; empty code field with ABC-DEF placeholder; no real code, 390×844 | Login or mobile layout changes |
-| `docs/assets/setup-phone-account.jpg` | `/guides/setup/`, step 4: create the administrator | 2026-10-10; empty username/password fields; no credentials, 390×844 | Account creation or password-help changes |
-| `docs/assets/setup-phone-profile.jpg` | `/guides/setup/`, step 5: choose a workstation and GPU | 2026-10-10; synthetic Gaming desk, workstation and GPU, correct Profiles navigation; no personal data, 390×844 | Profile fields, device assignments or mobile navigation changes |
-| `docs/assets/setup-phone-home.jpg` | `/guides/setup/`, step 6: load a saved profile | 2026-10-10; synthetic Gaming/Studio profiles, idle state and update notice; no private data, 390×844 | Home/profile picker or mobile navigation changes |
+Private rendered fixtures remain under `.build/evidence/website-fixtures/`.
+The review contact sheet is
+`.build/evidence/release-stable/screenshots-review.jpg`, generated on 2026-11-01
+from the same synthetic images solely to review all nine together. It contains no
+live host information, credentials or personal data and is not shipped. Website
+regression captures remain in the documented `.build/evidence/website/` family.
+Regenerate these private review families after changing their source images.
 
 ## Release review — 2026-10-04
 
-Source review through `92fdea6` identifies the following refresh work. This is a
-comparison with changed UI controls, not a new image capture or privacy approval.
-The capture dates and privacy reviews in the table above remain unchanged.
+Historical source review through `92fdea6` identified the following refresh work,
+completed by the 2026-11-01 refresh above. This historical comparison did not
+constitute a new image capture or privacy approval; the current capture dates
+and privacy outcomes are recorded in the published-image table above.
 
 | Image | Work before the next release |
 | --- | --- |
@@ -542,8 +543,9 @@ The capture dates and privacy reviews in the table above remain unchanged.
 | `docs/assets/model-lab.jpg` | Review and refresh if needed for shared navigation; preserve blank prompts/results and synthetic fixtures. |
 | `docs/assets/update-channel.jpg` | Compare the cropped selector with current Settings; refresh if its controls or wording differ. |
 
-Regenerate from synthetic fixtures, review each image and its metadata, then
-record the actual source commit, date and privacy outcome before publication.
+For future refreshes, regenerate from synthetic fixtures, review each image and
+its metadata, then record the actual source commit, date and privacy outcome
+before publication.
 See [release preparation](development/release-preparation.md).
 
 ## Development captures
