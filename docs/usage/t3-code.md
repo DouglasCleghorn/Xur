@@ -170,7 +170,7 @@ from Xur's configuration export.
 
 ### Server drives and model files
 
-After installation, expand **Storage access** on the T3 page. By default T3 can
+After installation, expand **Storage and host access** on the T3 page. By default T3 can
 read and edit all server folders and mounted drives under `/host`. For example,
 `/var/mnt/xur/projects` on Xur is `/host/var/mnt/xur/projects` in T3. This includes
 system files; these are real files, not copies. New mounts propagate into the
@@ -192,6 +192,27 @@ T3 keeps the `node` user identity. Shared storage grants file-permission access
 without changing ownership or SELinux labels on server directories. Read-only
 filesystems remain read-only. Existing repositories owned by another user may
 require Git's explicit `safe.directory` approval for that repository.
+
+### Full host access
+
+**Full host access** is off by default. Enable it under **Storage and host
+access**, then select **Save access settings**. Saving restarts an enabled T3;
+the setting survives reboot and container replacement.
+
+This grants agents complete root control over Xur, including system services,
+devices, credentials and every host file, regardless of the folder selections.
+Use `xur-host id` to check the host identity, `xur-host systemctl status xur-agent`
+to run a host command, or `xur-host sh -lc 'your command'` for a host shell.
+Commands run from the host root directory with the host's tools and namespaces.
+Host filesystem restrictions such as read-only mounts still apply.
+
+T3 itself continues running as `node`, preserving ownership of projects,
+credentials and native updates. The privileged container installs a root-owned
+setuid helper in its disposable filesystem and shares host PIDs so that
+`xur-host` can enter the host environment. Turn the option off and save to
+replace that container, remove the helper and restore the selected storage
+policy. Disabling access does not undo host changes or terminate independent
+host services an agent has already started.
 
 ### Agent tools
 
@@ -237,8 +258,8 @@ run a competing `t3 update` in the background. The native
 installer checks the downloaded archive against upstream release checksums and
 keeps its local web assets and dependency notices.
 
-Podman owns the container lifecycle; no nested systemd service or privileged
-container is required. The integration uses upstream's internal service launcher
+Podman owns the container lifecycle; no nested systemd service is required. A privileged
+container is used only when Full host access is enabled. The integration uses upstream's internal service launcher
 and checks its protocol before initial adoption. An incompatible launcher protocol,
 invalid state or missing selected runtime fails visibly without resetting saved
 update state. A future incompatible upstream service protocol may require a Xur

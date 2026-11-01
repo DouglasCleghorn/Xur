@@ -37,7 +37,7 @@ public sealed class T3Storage(string state,DataStorage storage)
     public T3StorageConfig Save(T3StorageConfig config)
     {
         config=Normalize(config);
-        if(!config.AllDrives)foreach(var folder in config.Folders!)RequireFolder(folder);
+        if(!config.AllDrives&&!config.FullHostAccess)foreach(var folder in config.Folders!)RequireFolder(folder);
         lock(sync)
         {
             Directory.CreateDirectory(state);
@@ -58,7 +58,7 @@ public sealed class T3Storage(string state,DataStorage storage)
     public async Task<string[]> Arguments()
     {
         var config=Read();var args=new List<string>{"--label",Label+"="+Policy(config)};
-        if(config.AllDrives)args.AddRange(["--volume","/:/host:rw,rbind,rslave"]);
+        if(config.AllDrives||config.FullHostAccess)args.AddRange(["--volume","/:/host:rw,rbind,rslave"]);
         else foreach(var folder in config.Folders!)
         {
             RequireFolder(folder);
@@ -73,11 +73,13 @@ public sealed class T3Storage(string state,DataStorage storage)
                 args.AddRange(["--volume",path+":/"+part+":rw,rbind,rslave"]);
             }
         }
-        if(config.AllDrives||config.Models||config.Folders!.Length>0)
+        if(config.FullHostAccess)
+            args.AddRange(["--user","0:0","--userns=host","--pid=host","--privileged"]);
+        else if(config.AllDrives||config.Models||config.Folders!.Length>0)
         {
             // Retain node's identity and home ownership. Ambient DAC_OVERRIDE
             // lets it read/write shared files without chowning host directories.
-            // Never relabel the host root or make the container privileged.
+            // Ordinary storage sharing does not grant host command execution.
             args.AddRange(["--user","1000:1000","--cap-add=DAC_OVERRIDE","--security-opt=label=disable"]);
         }
         return args.ToArray();

@@ -127,10 +127,14 @@ static class T3CodeTests
             var status=await client.GetFromJsonAsync<T3CodeStatus>("/api/t3-code/status");
             check(status is {State:"Running",WorkloadId:"t3"},"Connection status reports the selected running T3 workload");
             var storageDefaults=await client.GetFromJsonAsync<T3StorageConfig>("/api/t3-code/storage");
-            check(storageDefaults is {AllDrives:true,Models:true},"Storage endpoint returns broad defaults for existing installations");
+            check(storageDefaults is {AllDrives:true,Models:true,FullHostAccess:false},"Storage endpoint returns broad defaults for existing installations");
             using var storageChanged=await client.PostAsJsonAsync("/api/t3-code/storage",new T3StorageConfig(false,true,["/data/projects"]));
             check(storageChanged.IsSuccessStatusCode&&storage is {AllDrives:false,Models:true}&&storage.Folders!.Single()=="/data/projects","Storage endpoint forwards the explicit folder selection");
             check(!ApiKeys.Allows("automation","POST","/api/t3-code/storage"),"An automation key cannot broaden T3's server file access");
+            using var fullAccess=await client.PostAsJsonAsync("/api/t3-code/storage",new T3StorageConfig(false,false,FullHostAccess:true));
+            check(fullAccess.IsSuccessStatusCode&&storage.FullHostAccess,"Storage endpoint forwards explicit full host access");
+            using var revokeAccess=await client.PostAsJsonAsync("/api/t3-code/storage",new T3StorageConfig(false,false));
+            check(revokeAccess.IsSuccessStatusCode&&!storage.FullHostAccess,"Storage endpoint forwards revocation of full host access");
             using var disabled=await client.PostAsJsonAsync("/api/t3-code/enabled",new T3CodeEnabled(false));
             check(disabled.IsSuccessStatusCode&&!enabled,"T3 disable requests reach the persistent lifecycle instead of profile operations");
             using var reenabled=await client.PostAsJsonAsync("/api/t3-code/enabled",new T3CodeEnabled(true));
