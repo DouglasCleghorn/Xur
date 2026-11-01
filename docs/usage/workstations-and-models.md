@@ -58,7 +58,8 @@ Use **Delete** beside a managed model on the Models page to remove it permanentl
 The confirmation shows the exact path. For Hugging Face caches this removes the
 whole cached repository, including blobs and all downloaded revisions. Stop or
 disable workloads using the files first; unload their profile when applicable.
-Models shared with Unsloth or T3 Code require those services to stop as well.
+Unsloth must stop before deleting models. T3 Code can remain running: shared
+storage access alone does not reserve the model downloads.
 Finish any model scan before deleting. Deletion is blocked during workload
 changes or storage moves. Saved profiles remain and can download missing files again.
 Other locations, including hard-linked copies, can still retain the weights and

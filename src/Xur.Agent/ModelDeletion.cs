@@ -40,6 +40,8 @@ public sealed partial class ModelLibrary
     }
     void RequireUnused(string target,Workload[] workloads)
     {
+        // T3 Code's shared storage access does not make it an owner of every
+        // model. Protect actual recipe assets and workload-specific caches.
         foreach(var w in workloads)
         {
             var assets=(w.Recipe.Model is {} asset?new[]{asset}:[]).Concat(w.Recipe.Files?.Select(f=>f.Asset)??[]);
@@ -47,7 +49,7 @@ public sealed partial class ModelLibrary
                 w.Recipe.Files!=null&&Overlaps(target,Path.Combine(SetsRoot,Canonical.Hash(w.Recipe.Files)))||
                 Overlaps(target,Path.Combine(volumes,"xur-cache-"+w.Id,"_data"))||
                 w.Recipe.Engine=="audio.cpp"&&Overlaps(target,Path.Combine(ModelsRoot,"audio.cpp",w.Id))||
-                UnslothWorkload.Is(w.Recipe)||T3CodeWorkload.Is(w.Recipe);
+                UnslothWorkload.Is(w.Recipe);
             if(used)throw new InvalidOperationException("Stop or disable '"+w.Name+"' before deleting this model. Unload its profile if it is profile-managed.");
         }
     }
