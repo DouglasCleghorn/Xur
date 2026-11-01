@@ -11,7 +11,7 @@ static class T3StorageTests
         {
             var data=new DataStorage(root);var settings=new T3Storage(root,data);
             var defaults=settings.Read();var args=await settings.Arguments();
-            check(defaults is {AllDrives:true,Models:true}&&args.Contains("/:/host:rw,rbind,rslave"),"T3 defaults to recursive read/write access to server folders and drives");
+            check(defaults is {AllDrives:true,Models:true,FullHostAccess:false}&&args.Contains("/:/host:rw,rbind,rslave"),"T3 defaults to recursive read/write access to server folders and drives");
             check(args.Contains(root+"/models:/models:rw,rbind,rslave")&&args.Contains(root+"/model-sets:/model-sets:rw,rbind,rslave"),"Both model stores have stable default mounts");
             check(args.Contains("1000:1000")&&args.Contains("--cap-add=DAC_OVERRIDE")&&!args.Contains("--privileged")&&!args.Any(a=>a.EndsWith(":z")||a.EndsWith(":Z")||a.EndsWith(":U")),"Storage permissions retain node identity without chowning or relabeling server files");
             var workload=new Workload("t3","T3 Code",T3CodeTests.Recipe(),[],"coding");
@@ -26,6 +26,23 @@ static class T3StorageTests
             check(settings.Fingerprint(workload,current.RootElement)!=workload.Fingerprint,"Changing storage invalidates the running container's storage policy");
             settings.Save(new(false,false));args=await settings.Arguments();
             check(!args.Contains("--volume")&&!args.Any(a=>a.StartsWith("--cap-add")),"Private storage mode removes host binds and file-permission capabilities");
+            // Old saved settings must not opt into host-root execution.
+            await File.WriteAllTextAsync(root+"/t3-storage.json", """{"allDrives":false,"models":false,"folders":[]}""");
+            check(!settings.Read().FullHostAccess,"Legacy settings leave full host access disabled");
+            settings.Save(new(false,false,FullHostAccess:true));
+            settings=new T3Storage(root,data);args=await settings.Arguments();
+            check(settings.Read().FullHostAccess&&args.Contains("--privileged")&&args.Contains("--pid=host")&&args.Contains("--userns=host")&&args.Contains("0:0")&&args.Contains("/:/host:rw,rbind,rslave"),
+                "Full host access persists and grants host root, host PIDs and the full host filesystem independently of storage selections");
+            check(!args.Contains("1000:1000")&&!args.Contains("--cap-add=DAC_OVERRIDE"),"Full access does not mix ordinary storage user overrides into privileged bootstrap");
+            labels[T3Storage.Label]=args[1].Split('=',2)[1];
+            using var privileged=JsonDocument.Parse(JsonSerializer.Serialize(labels));
+            check(settings.Fingerprint(workload,privileged.RootElement)==workload.Fingerprint,"Full access container policy is recognized");
+            var command=T3CodeRuntime.Command(workload.Recipe,true);
+            check(command[0]=="python3"&&command[2]==T3CodeRuntime.HostBootstrap&&command[3]=="sh"&&T3CodeRuntime.HostBootstrap.Contains("os.setuid(1000)"),
+                "Full access installs a host command helper while keeping T3 and its persistent files owned by node");
+            settings.Save(new(false,false));args=await settings.Arguments();
+            check(!args.Contains("--privileged")&&!args.Contains("--pid=host")&&!args.Contains("--volume")&&settings.Fingerprint(workload,privileged.RootElement)!=workload.Fingerprint,
+                "Revoking full access replaces the privileged container and restores private storage");
             async Task<bool> Rejected(string path)
             {
                 try{settings.Save(new(false,false,[path]));await settings.Arguments();return false;}catch(InvalidOperationException){return true;}

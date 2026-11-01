@@ -4,7 +4,7 @@ public record T3CodePrepareRequest(string? Volume=null);
 public record T3CodeStatus(string? WorkloadId,string State,bool Installed=false,bool Enabled=false,string? Error=null);
 public record T3CodeEnabled(bool Enabled);
 public record T3CodePairing(string Credential,DateTimeOffset ExpiresAt);
-public record T3StorageConfig(bool AllDrives=true,bool Models=true,string[]? Folders=null);
+public record T3StorageConfig(bool AllDrives=true,bool Models=true,string[]? Folders=null,bool FullHostAccess=false);
 
 public static class T3CodeWorkload
 {

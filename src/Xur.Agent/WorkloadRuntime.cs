@@ -107,7 +107,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         var instance=await Inspect(definition);
         if(instance?.State!="running")throw new InvalidOperationException("Enable T3 Code first.");
         // Use the inspected immutable identity, never a caller-supplied command or container name.
-        var result=await Processes.Run("podman",["exec",instance.InstanceId,"sh","-c",T3CodeWorkload.Launcher,"t3-launcher","auth","pairing","create",
+        var result=await Processes.Run("podman",["exec","--user","1000:1000",instance.InstanceId,"sh","-c",T3CodeWorkload.Launcher,"t3-launcher","auth","pairing","create",
             "--base-dir",T3CodeWorkload.BaseDirectory,"--ttl","5m","--label","Xur connection","--json"],30);
         // Do not copy command output into logs/errors: it contains a pairing secret.
         if(result.ExitCode!=0)throw new InvalidOperationException("T3 Code could not create a pairing link. Check that the server is ready and retry.");
@@ -301,9 +301,15 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 if(T3CodeWorkload.Is(w.Recipe))
                 {
                     args.AddRange(T3CodeRuntime.ContainerArguments());
-                    args.AddRange(await T3Storage.Arguments());
+                    var access=await T3Storage.Arguments();
+                    if(access.Contains("--privileged"))
+                    {
+                        args.Remove("--cap-drop=ALL");
+                        args.Remove("--security-opt=no-new-privileges");
+                    }
+                    args.AddRange(access);
                 }
-                args.Add(image);args.AddRange(T3CodeWorkload.Is(w.Recipe)?T3CodeRuntime.Command(w.Recipe):engineImage?.Command(w.Recipe.Command)??w.Recipe.Command);
+                args.Add(image);args.AddRange(T3CodeWorkload.Is(w.Recipe)?T3CodeRuntime.Command(w.Recipe,args.Contains("--privileged")):engineImage?.Command(w.Recipe.Command)??w.Recipe.Command);
                 var created=await Processes.Run("podman",args,60);
                 if(created.ExitCode!=0)throw Failure("Container creation failed",created);
                 instance=await Inspect(w) ?? throw new IOException();
