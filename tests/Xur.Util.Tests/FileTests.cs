@@ -76,6 +76,9 @@ static class FileTests
         using (var sparse = File.Create(fixture.PathOf("sparse"))) sparse.SetLength(128 * 1024 * 1024);
         scan = FolderScanner.Scan(fixture.Root, "");
         Verify.That(scan.Entries.Single(e => e.Name == "sparse").Bytes == DirectoryTree.Inspect(tree.Root, "sparse").Allocated, "Sparse files report allocated blocks rather than logical length");
+        var sparseRow = (await Run(fixture, "list")).Header["entries"]!.AsArray().Single(e => JsonValues.Text(e!["name"]) == "sparse")!;
+        Verify.That(JsonValues.Integer(sparseRow["bytes"]) == 128 * 1024 * 1024 && JsonValues.Integer(sparseRow["allocated"]) == DirectoryTree.Inspect(tree.Root, "sparse").Allocated,
+            "Listings distinguish apparent file length from allocated disk usage for sparse files");
         for (var i = 0; i < 2002; i++) fixture.Write("many/" + i, "x");
         scan = FolderScanner.Scan(fixture.Root, "many");
         Verify.That(scan.Truncated && scan.Partial && scan.Entries.Count == 2000, "Scanner caps direct children at 2000");

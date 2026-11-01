@@ -10,7 +10,7 @@ public sealed class FileOperations
 {
     public bool Started { get; private set; }
     static string Name(string path) => DirectoryTree.Parts(path).LastOrDefault() ?? throw new ArgumentException("Select a regular file or folder.");
-    static JsonObject Row(string name, string kind, long? bytes, double modified) => new() { ["name"] = name, ["kind"] = kind, ["bytes"] = bytes, ["modified"] = modified };
+    static JsonObject Row(string name, string kind, long? bytes, long? allocated, double modified) => new() { ["name"] = name, ["kind"] = kind, ["bytes"] = bytes, ["allocated"] = allocated, ["modified"] = modified };
     static async Task Header(Stream output, JsonObject value, CancellationToken token)
     {
         await output.WriteAsync(System.Text.Encoding.UTF8.GetBytes(value.ToJsonString() + "\n"), token);
@@ -64,7 +64,7 @@ public sealed class FileOperations
                 DirectoryTree.Metadata metadata;
                 try { metadata = DirectoryTree.Inspect(item, name); } catch (IOException) { continue; }
                 var kind = tree.Within(metadata) ? metadata.Kind : "mount";
-                rows.Add(Row(name, kind, kind == "file" ? checked((long)metadata.Size) : null, metadata.Modified));
+                rows.Add(Row(name, kind, kind == "file" ? checked((long)metadata.Size) : null, kind == "file" ? metadata.Allocated : null, metadata.Modified));
                 if (rows.Count > 501) rows.Remove(rows.Max!);
             }
             var entries = new JsonArray(); foreach (var row in rows.Take(500)) entries.Add((JsonNode)row);

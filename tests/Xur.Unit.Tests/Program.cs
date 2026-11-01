@@ -23,6 +23,7 @@ if(args is ["--website-render",var websiteOutput]) { await ControlPanelRender.Ru
 if(args is ["--console-overlay-render",var overlayOutput]) { ConsoleKeyboardOverlayTests.Capture(overlayOutput);return; }
 var results = new List<string>();
 void Check(bool value,string name) { if(!value) throw new Exception(name); results.Add(name); }
+if(args is ["--files"]){await FileEndpointTests.Run(Check);await FolderSizeCacheTests.Run(Check);ClientLibraryTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="Files",passed=results}));return;}
 if(args is ["--telemetry"]){await TelemetryTests.Run(Check);await ModelLabTests.Run(Check);await ModelLabApiTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="Telemetry",passed=results}));return;}
 if(args is ["--telemetry-server",var telemetrySocket]){using var metricsHttp=Xur.IO.HttpClients.Unix(telemetrySocket,TimeSpan.FromSeconds(30));var store=new VictoriaMetrics(metricsHttp);await TelemetryTests.Run(Check,store);await ModelLabTests.Run(Check,store);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="VictoriaMetrics",passed=results}));return;}
 if(args is ["--manager-account"]){AccountTests.Run(Check);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{suite="ManagerAccount",passed=results}));return;}

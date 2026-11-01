@@ -24,18 +24,20 @@ public static class StationFiles
                 }
                 catch(Exception e) when(Expected(e)){return Results.BadRequest(new{error=e.Message});}
             });
-            app.MapGet(prefix+"/size",async Task<IResult>(HttpContext ctx,string? user,string? id,string? path,bool? refresh)=>
+            app.MapGet(prefix+"/size",async Task<IResult>(HttpContext ctx,string? user,string? id,string? path,bool? refresh,bool? children)=>
             {
                 if(installer)return Results.Conflict();
                 try
                 {
                     var root=await Resolve(storage,user,id);path??="";Validate(path);
                     var folder=path;
-                    return Results.Json(Sizes.Get(root.Scope,path,refresh==true,async()=>
+                    var measurement=Sizes.Get(root.Scope,path,refresh==true,async()=>
                     {
                         using var data=await Json(root,folder,"","size",CancellationToken.None);
-                        return data.RootElement.GetProperty("sizes").EnumerateObject().ToDictionary(p=>p.Name,p=>new FolderSizeCache.Size(p.Value.GetProperty("bytes").GetInt64(),p.Value.GetProperty("partial").GetBoolean(),DateTimeOffset.UtcNow));
-                    }));
+                        var capturedAt=DateTimeOffset.UtcNow;
+                        return data.RootElement.GetProperty("sizes").EnumerateObject().ToDictionary(p=>p.Name,p=>new FolderSizeCache.Size(p.Value.GetProperty("bytes").GetInt64(),p.Value.GetProperty("partial").GetBoolean(),capturedAt));
+                    },requireChildren:children==true);
+                    return children==true?Results.Json(new{measurement.Bytes,measurement.Partial,measurement.CapturedAt,measurement.Scanning,measurement.Error,Children=Sizes.Children(root.Scope,path,measurement.CapturedAt)}):Results.Json(measurement);
                 }
                 catch(Exception e) when(Expected(e)){return Results.BadRequest(new{error=e.Message});}
             });
