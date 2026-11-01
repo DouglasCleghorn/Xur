@@ -1,13 +1,13 @@
 using System.Text.Json;
 using Xur.Domain;
 namespace Xur.Agent;
-public sealed class ModelLibrary(string directory="/var/lib/xur",DataStorage? storage=null)
+public sealed partial class ModelLibrary(string directory="/var/lib/xur",DataStorage? storage=null,string volumes="/var/lib/containers/storage/volumes")
 {
-    readonly object gate=new();ModelScanStatus snapshot=new(null,false,[],[],[]);
-    public ModelScanStatus Status(){lock(gate)return snapshot;}
+    readonly object gate=new();ModelScanStatus snapshot=new(null,false,[],[],[]);bool deleting;
+    public ModelScanStatus Status(){lock(gate)return snapshot with{Models=snapshot.Models.Select(DeletionInfo).ToArray()};}
     public void Start(bool allStorage)
     {
-        lock(gate){if(snapshot.Scanning)return;snapshot=snapshot with{Scanning=true};}
+        lock(gate){if(snapshot.Scanning||deleting)return;snapshot=snapshot with{Scanning=true};}
         _=Task.Run(async()=>{
             var models=new Dictionary<string,ModelFolder>();var roots=new List<string>();var warnings=new List<string>();
             try
@@ -16,7 +16,6 @@ public sealed class ModelLibrary(string directory="/var/lib/xur",DataStorage? st
                 if(storage!=null)await storage.Require("models");
                 var caches=new[]{storage?.PathFor("models","models")??directory+"/models",storage?.PathFor("models","model-sets")??directory+"/model-sets"};
                 foreach(var root in caches)if(Directory.Exists(root))roots.Add(root);
-                const string volumes="/var/lib/containers/storage/volumes";
                 if(Directory.Exists(volumes))roots.AddRange(Directory.GetDirectories(volumes,"xur-cache-*").Select(p=>p+"/_data"));
                 if(allStorage)
                 {

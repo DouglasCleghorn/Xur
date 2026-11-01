@@ -54,6 +54,16 @@ containers. Stopping workloads, changing profiles, application updates and
 rebooting do not delete these files or volumes. Temporary download files become
 complete files only after validation and durable flush.
 
+Use **Delete** beside a managed model on the Models page to remove it permanently.
+The confirmation shows the exact path. For Hugging Face caches this removes the
+whole cached repository, including blobs and all downloaded revisions. Stop or
+disable workloads using the files first; unload their profile when applicable.
+Models shared with Unsloth or T3 Code require those services to stop as well.
+Finish any model scan before deleting. Deletion is blocked during workload
+changes or storage moves. Saved profiles remain and can download missing files again.
+Other locations, including hard-linked copies, can still retain the weights and
+use disk space. Models found outside Xur-managed storage cannot be deleted here.
+
 Attached-storage searches do not move or delete models. Known unmounted
 filesystems are searched through read-only block devices and read-only mounts
 with replay disabled where applicable. Encrypted/unrecognized filesystems need
