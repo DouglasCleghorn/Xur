@@ -1,24 +1,38 @@
 @page "/models"
 @inject Appliance Device
 <PageTitle>Models · Xur</PageTitle>
-<div class="page-heading"><h1>Models</h1><a class="button quiet" href="/model-lab">Benchmark &amp; test chat</a><form method="post" action="/models/scan"><AntiforgeryToken /><button disabled="@(status?.Scanning==true)">Search attached storage</button></form></div>
+<div class="page-heading models-heading"><h1>Models</h1><a class="button quiet" href="/model-lab">Benchmark &amp; test chat</a><form method="post" action="/models/scan"><AntiforgeryToken /><button disabled="@(status?.Scanning==true)">Search attached storage</button></form></div>
 @if(Device.Installer) { <p>Models are available after installation.</p> }
 else if(status==null) { <p role="alert">Model storage is unavailable.</p> }
 else
 {
+    @if(!string.IsNullOrEmpty(Error)) { <p class="notice error" role="alert">@Error</p> }
+    @if(Deleted==true) { <p class="notice" role="status">Model deleted. Shared copies at other locations may still use disk space.</p> }
     <p class="secondary-text">Downloaded models stay on disk between reboots and profile changes.</p>
     @if(status.Scanning) { <p role="status">Searching model folders…</p><script src="/page-poll.js" data-path="/api/page-state/models" data-version="@Canonical.Hash(status)" defer></script> }
     <section class="panel"><div class="section-heading"><h2>@status.Models.Length model @(status.Models.Length==1?"location":"locations")</h2><label class="search-field"><span class="sr-only">Filter models</span><input type="search" id="model-filter" placeholder="Search models or paths" /></label></div>
     @foreach(var model in status.Models)
     {
-        <article class="model-library-row" data-model="@(model.Name+" "+model.Path)"><div><strong>@model.Name</strong><span class="secondary-text">@model.Format · @model.Source</span></div><span>@((model.Bytes/1073741824d).ToString("0.00")) GiB</span><code>@model.Path</code></article>
+        <article class="model-library-row" data-model="@(model.Name+" "+model.Path)"><div><strong>@model.Name</strong><span class="secondary-text">@model.Format · @model.Source</span></div><span>@((model.Bytes/1073741824d).ToString("0.00")) GiB</span>
+            <button type="button" class="quiet danger-text" aria-label="Delete model @model.Name" data-delete-model="@model.Path" data-delete-path="@model.DeletePath" data-delete-name="@model.Name" disabled="@(status.Scanning||model.DeletePath==null)">Delete</button>
+            <code>@model.Path</code>
+            @if(model.DeleteUnavailableReason!=null) { <p class="secondary-text model-delete-reason">@model.DeleteUnavailableReason</p> }
+        </article>
     }
     @if(status.Models.Length==0) { <p>No downloaded models found. Load a model in a <a href="/profiles">profile</a>, or search attached storage.</p> }
     </section>
     <details><summary>Scan details</summary><p>Mounted filesystems and unmounted supported data partitions are searched. Unmounted partitions are opened read-only. Encrypted or unsupported filesystems must be mounted first. Found models are listed without changing their files or automatically assigning them to a workload.</p>@foreach(var root in status.Searched) { <p><code>@root</code></p> }@foreach(var warning in status.Warnings) { <p>@warning</p> }</details>
+    <dialog id="delete-model-dialog" aria-labelledby="delete-model-heading" aria-describedby="delete-model-description"><form method="post" action="/models/delete"><AntiforgeryToken /><input type="hidden" name="path" /><input type="hidden" name="deletePath" /><input type="hidden" name="confirm" value="true" />
+        <h2 id="delete-model-heading">Delete model?</h2><p id="delete-model-description">Permanently delete this model location and all its contents? This cannot be undone.</p>
+        <p><code id="delete-model-path"></code></p><p id="delete-model-repository" hidden>This deletes the entire cached Hugging Face repository, including its weight files and all downloaded revisions.</p>
+        <p>Saved profiles stay. Loading a workload that needs these files will download them again. Shared copies at other locations may still use disk space.</p>
+        <div class="actions"><button type="button" class="secondary" id="cancel-model-delete" autofocus>Cancel</button><button class="danger">Delete model</button></div></form>
+    </dialog>
     <script src="/models.js" defer></script>
 }
 @code {
+    [SupplyParameterFromQuery] public string? Error {get;set;}
+    [SupplyParameterFromQuery] public bool? Deleted {get;set;}
     ModelScanStatus? status;
     protected override async Task OnInitializedAsync(){if(!Device.Installer)try{status=await Device.Agent.GetFromJsonAsync<ModelScanStatus>("/models");}catch{}}
 }

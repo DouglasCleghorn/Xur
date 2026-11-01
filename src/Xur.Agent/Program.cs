@@ -466,6 +466,16 @@ var modelLibrary=new ModelLibrary(stateDir,dataStorage);
 if(!installer)modelLibrary.Load();
 app.MapGet("/models",()=>installer?Results.Conflict():Results.Json(modelLibrary.Status()));
 app.MapPost("/models/scan",()=>{if(installer)return Results.Conflict();modelLibrary.Start(true);return Results.Accepted();});
+app.MapPost("/models/delete",async Task<IResult>(ModelDeleteRequest request)=>{
+    if(installer)return Results.Conflict();
+    try{await workloads.DeleteModel(modelLibrary,request);return Results.Ok();}
+    catch(InvalidOperationException error){return Results.Conflict(new{error=error.Message});}
+    catch(Exception error) when(error is IOException or UnauthorizedAccessException)
+    {
+        app.Logger.LogError(error,"Model deletion failed");
+        return Results.Conflict(new{error="Could not finish deleting this model. Check storage permissions and search storage again before retrying."});
+    }
+});
 var networkUsage=new NetworkUsage(metrics);if(!installer)_=Task.Run(()=>networkUsage.Run(app.Lifetime.ApplicationStopping));
 app.MapGet("/network-usage",async(int? minutes,CancellationToken ct)=>Results.Json(await networkUsage.Read(minutes??15,ct)));
 var monitor=new SystemMonitor();

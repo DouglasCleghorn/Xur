@@ -16,6 +16,13 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     public bool IndependentT3 {get;set;}
     bool Persisted(Workload w)=>PersistedOwner(w.Id)||(IndependentT3&&T3CodeWorkload.Is(w.Recipe));
     public Workload[] SavedWorkloads()=>Definitions();
+    public async Task DeleteModel(ModelLibrary library,ModelDeleteRequest request)
+    {
+        // Exclusive with starts, stops and storage migration: a model cannot
+        // become mounted or downloaded between the usage check and deletion.
+        if(!await gate.WaitAsync(0))throw new InvalidOperationException("Wait for the current workload or storage change before deleting a model.");
+        try{await library.Delete(request,Definitions());}finally{gate.Release();}
+    }
     Task? storageMove;
     public bool StorageMoveBusy=>storageMove is {IsCompleted:false};
     public async Task MoveStorage(DataStorageRequest request)

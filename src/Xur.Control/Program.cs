@@ -264,6 +264,18 @@ async Task StartHost()
     app.MapGet("/api/models",async()=>await appliance.Agent.GetFromJsonAsync<ModelScanStatus>("/models"));
     app.MapPost("/api/models/scan",async()=>Results.StatusCode((int)(await appliance.Agent.PostAsync("/models/scan",null)).StatusCode));
     app.MapPost("/models/scan",async()=>{await appliance.Agent.PostAsync("/models/scan",null);return Results.Redirect("/models");});
+    app.MapPost("/models/delete",async(HttpContext ctx)=>{
+        var form=await ctx.Request.ReadFormAsync();
+        try
+        {
+            using var response=await appliance.Agent.PostAsJsonAsync("/models/delete",new ModelDeleteRequest(form["path"].ToString(),form["deletePath"].ToString(),form["confirm"]=="true"));
+            if(response.IsSuccessStatusCode)return Results.Redirect("/models?deleted=true");
+            var error="Could not delete this model.";
+            try{error=(await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString()??error;}catch(JsonException){}
+            return Results.Redirect("/models?error="+Uri.EscapeDataString(error));
+        }
+        catch(HttpRequestException){return Results.Redirect("/models?error="+Uri.EscapeDataString("Model storage is unavailable. Refresh the page and check whether the model was deleted before retrying."));}
+    });
     app.MapGet("/api/network-usage",async(int? minutes,DateTimeOffset? since,HttpResponse response)=>TelemetryDelta.Filter((await appliance.Agent.GetFromJsonAsync<NetworkUsageSnapshot>("/network-usage?minutes="+Math.Clamp(minutes??15,1,1440)))!,since,response));
     app.MapGet("/api/workstations",async()=>WorkstationView.Build(await profileManager.State(),await appliance.Agent.GetFromJsonAsync<StationStreamStatus[]>("/workstations")??[]));
     app.MapWorkstationPreviews(appliance.Agent);
