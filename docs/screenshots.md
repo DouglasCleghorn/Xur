@@ -1,5 +1,11 @@
 # Screenshot and artwork register
 
+- 2026-10-31: Retired the connection controls shown in the T3 Code validation
+  families dated 2026-10-17, 2026-10-21 and 2026-10-24 below. The page now guides
+  users to pair the installed app using Copy link or the QR code; the browser
+  launch buttons have been removed. Recapture the connection section before
+  using those images for release documentation. No new screenshots captured.
+
 - 2026-10-23: Storage location/migration controls validated on desktop and at
   390 pixels, on the working tree based on `6c0c68d`.
   Rendered fixtures and the local API test server live under

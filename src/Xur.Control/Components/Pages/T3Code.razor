@@ -44,13 +44,13 @@ else
             <div class="section-heading"><h2 id="t3-connect-heading">Connect</h2><span id="t3-status" role="status">Checking server…</span></div>
             <p id="t3-stopped">T3 Code is not running.</p>
             <div id="t3-running" hidden>
-                <div class="actions"><a id="t3-open" class="button" target="_blank" rel="noopener noreferrer">Open T3 Code</a><button type="button" id="t3-pair" class="secondary">Create pairing link</button></div>
-                <p>For a new device, create a pairing link. Open it on this device, scan the QR code on your phone, or paste the link into <strong>Add environment</strong> in T3 Code on your desktop.</p>
-                <p class="secondary-text">Both devices must reach this server over your LAN or Tailscale. The connection goes directly to T3 Code on port 3773. Once paired, use Open T3 Code to reconnect.</p>
+                <p>Install the T3 Code app on your device, then create a pairing link and paste it into <strong>Add environment</strong> in the app. You can also scan the QR code on your phone.</p>
+                <div class="actions"><button type="button" id="t3-pair">Create pairing link</button></div>
+                <p class="secondary-text">Your device must reach this server over your LAN or Tailscale on port 3773. Once paired, open the saved environment in the T3 Code app.</p>
                 <section id="t3-pairing" hidden aria-label="Pairing link">
                     <div id="t3-qr" role="img" aria-label="Scan to pair with T3 Code"></div>
                     <div class="t3-pairing-details"><label>One-time pairing link<input id="t3-link" readonly autocomplete="off" spellcheck="false" /></label>
-                        <div class="actions"><a id="t3-pair-open" class="button" target="_blank" rel="noopener noreferrer">Pair this device</a><button type="button" id="t3-copy" class="secondary">Copy link</button></div>
+                        <div class="actions"><button type="button" id="t3-copy" class="secondary">Copy link</button></div>
                         <p id="t3-expiry"></p><p class="secondary-text">Keep this link private. It grants access to your coding environment. Create a new link for each device.</p>
                     </div>
                 </section>

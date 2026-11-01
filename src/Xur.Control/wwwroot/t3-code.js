@@ -4,12 +4,11 @@
  const csrf=page.querySelector('[name=__RequestVerificationToken]').value;
  let expires=0,running=false,pairing=false,changing=false,enabled=false,serviceError=false,statusSequence=0;
  const toggle=find('enabled'),retry=find('retry');
- const origin=new URL(location.href);origin.protocol='http:';origin.port='3773';origin.pathname='/';origin.search='';origin.hash='';find('open').href=origin.href;
  async function api(path,body){
   const response=await (window.xurFetch??window.fetch)('/api/t3-code/'+path,body?{method:'POST',headers:{'Content-Type':'application/json','RequestVerificationToken':csrf},body:JSON.stringify(body)}:{});
   const data=await response.json();if(!response.ok)throw Error(data.error||'T3 Code is unavailable. Retry after checking the workload.');return data;
  }
- function clearPair(){expires=0;find('pairing').hidden=true;find('link').value='';find('pair-open').removeAttribute('href');find('qr').replaceChildren();}
+ function clearPair(){expires=0;find('pairing').hidden=true;find('link').value='';find('qr').replaceChildren();}
  function fail(e){serviceError=false;error.textContent=e.message;error.hidden=false;}
  async function status(){
   const sequence=++statusSequence;
@@ -58,7 +57,7 @@
   pairing=true;pair.disabled=true;error.hidden=true;message.textContent='';clearPair();
   try{
    const data=await api('pair',{});if(!running)return;
-   expires=Date.parse(data.expiresAt);find('link').value=data.url;find('pair-open').href=data.url;
+   expires=Date.parse(data.expiresAt);find('link').value=data.url;
    // The QR is generated locally by Xur's QRCoder library, never a remote service.
    find('qr').innerHTML=data.qr;find('expiry').textContent='One use · Expires at '+new Date(expires).toLocaleTimeString();find('pairing').hidden=false;
   }catch(e){fail(e);}finally{pairing=false;pair.disabled=!running;}
