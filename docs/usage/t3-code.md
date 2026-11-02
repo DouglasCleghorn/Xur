@@ -358,10 +358,23 @@ wait for it to finish before connecting MCP. Update failures appear in T3 worklo
 logs and `~/.local/share/xur-mcp/update-status.json`.
 
 Each refresh builds the C# server with the latest stable official MCP SDK and
-hosting packages, then checks the MCP handshake and tool discovery. Only a verified
+hosting packages, then checks stateless discovery, tool calls and rejection of legacy clients. Only a verified
 build becomes active. Saved SDKs, MCP builds and selections survive container
 replacement; an unsuccessful update preserves the last working pair, and existing
 processes keep their original runtime. Identical updates reuse the same generation.
 No Xur release is needed to refresh upstream .NET or MCP dependencies. Xur-owned
 server source changes arrive through Xur updates. Python remains only in the
 existing container/account setup helper, not the MCP server or its protocol handling.
+
+### Stateless protocol only
+
+Xur MCP accepts only the **2026-07-28** protocol revision. Every request must carry
+its protocol version and client capabilities in `_meta`; there is no legacy
+`initialize` handshake or downgrade fallback. This uses the revision's
+[stateless stdio binding](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio),
+so T3 harnesses still launch it locally without exposing an HTTP port.
+Harnesses must support this revision; older clients fail explicitly. The update
+verification checks direct calls before discovery, missing metadata after a valid
+call, and rejection of all four earlier initialization-based revisions. SDK
+package updates remain on the floating latest stable channel; the protocol
+revision is an explicit compatibility boundary, not a dependency version pin.
