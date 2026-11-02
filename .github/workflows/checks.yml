@@ -26,6 +26,9 @@ jobs:
           python3 tests/Xur.Integration.Tests/web-assets.py
           dotnet run --project tests/Xur.Unit.Tests -c Release
           python3 -B tests/Xur.Integration.Tests/t3-setup.py
+          python3 -B tests/Xur.Integration.Tests/t3-mcp.py
+          node tests/Xur.Integration.Tests/t3-dotnet.cjs
+          XUR_DOTNET="$(command -v dotnet)" node tests/Xur.Integration.Tests/t3-dotnet-publish.cjs
           dotnet run --project tests/Xur.Robot.Tests -c Release
           dotnet run --project tests/Xur.Robot.Backup.Tests -c Release
           python3 tests/Xur.Integration.Tests/robot-boundary.py

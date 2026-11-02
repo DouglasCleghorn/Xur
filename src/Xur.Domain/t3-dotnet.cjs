@@ -44,9 +44,10 @@ async function update(){
   for(const [name,text]of Object.entries(sources))atomic(path.join(source,name),text);
   // Build away from project global.json files. Floating stable packages are
   // resolved on every refresh; no saved lock prevents upstream updates.
-  const dotnet=path.join(sdkDir,'dotnet'),output=path.join(stage,'app');
-  run(dotnet,['publish',path.join(source,'Xur.Mcp.csproj'),'-c','Release','--self-contained','false','-p:TargetFramework=net'+version.split('.')[0]+'.0','-o',output],{cwd:stage});
-  const assets=JSON.parse(fs.readFileSync(path.join(source,'.build/obj/project.assets.json'),'utf8'));
+  const dotnet=path.join(sdkDir,'dotnet'),output=path.join(stage,'app'),intermediate=path.join(source,'.build/obj')+path.sep;
+  // Set this before SDK imports: setting it only in the project is too late for NuGet.
+  run(dotnet,['publish',path.join(source,'Xur.Mcp.csproj'),'-c','Release','--self-contained','false','-p:TargetFramework=net'+version.split('.')[0]+'.0','-p:BaseIntermediateOutputPath='+intermediate,'-p:MSBuildProjectExtensionsPath='+intermediate,'-o',output],{cwd:stage});
+  const assets=JSON.parse(fs.readFileSync(path.join(intermediate,'project.assets.json'),'utf8'));
   const packages=Object.keys(assets.packageFolders)[0];
   // Preserve NuGet distributions, including their original notices and metadata.
   const notices=path.join(output,'licenses');fs.mkdirSync(notices);

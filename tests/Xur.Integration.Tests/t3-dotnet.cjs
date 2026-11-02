@@ -31,8 +31,9 @@ function run(command,args){
  if(args[0]==='publish'){
   if(publishFails)throw Error('fixture publish failure');
   const out=args.at(-1),src=path.dirname(args[1]);fs.mkdirSync(out);fs.writeFileSync(path.join(out,'Xur.Mcp.dll'),'fixture');
-  fs.mkdirSync(path.join(src,'.build/obj'),{recursive:true});
-  fs.writeFileSync(path.join(src,'.build/obj/project.assets.json'),JSON.stringify({packageFolders:{[home]:{}},libraries:{}}));return;
+  const intermediate=args.find(a=>a.startsWith('-p:MSBuildProjectExtensionsPath='))?.split('=')[1]??path.join(src,'obj');
+  fs.mkdirSync(intermediate,{recursive:true});
+  fs.writeFileSync(path.join(intermediate,'project.assets.json'),JSON.stringify({packageFolders:{[home]:{}},libraries:{}}));return;
  }
  if(args.at(-1)==='--verify')return;
  throw Error('Unexpected process: '+command);
