@@ -52,13 +52,19 @@ class Tests(unittest.TestCase):
         root = Path('.build/evidence/t3-mcp'); root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=root) as folder:
             home = Path(folder)
-            setup.atomic(home / '.local/share/xur-mcp/server', '#!/bin/sh\n')
             connection = dict(origin='https://xur.test', apiKey='fixture-secret', certificate='fixture-cert')
             client = MagicMock()
             client.getresponse.return_value.status = 403  # Permissions may initially be disabled.
             with patch.object(setup, 'paths', return_value=(home, home / '.local/bin', home / '.t3/userdata/settings.json')), \
                     patch.object(setup.ssl, 'create_default_context'), \
                     patch.object(setup.http.client, 'HTTPSConnection', return_value=client):
+                # The Connect button must fail safely while bootstrap is missing,
+                # then succeed on retry after the runtime has been installed.
+                with self.assertRaisesRegex(setup.SetupError, 'installation is not ready'):
+                    setup.configure_mcp(connection)
+                for native in (home / '.local/share/xur-mcp/connection.json', home / '.codex/config.toml', home / '.claude.json', home / '.config/opencode/opencode.json'):
+                    self.assertFalse(native.exists())
+                setup.atomic(home / '.local/share/xur-mcp/server', '#!/bin/sh\n')
                 setup.configure_mcp(connection)
                 setup.configure_mcp(connection)
             stored = home / '.local/share/xur-mcp/connection.json'
