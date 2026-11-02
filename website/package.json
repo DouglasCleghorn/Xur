@@ -2,6 +2,6 @@
   "name": "xur-website-tools",
   "private": true,
   "devDependencies": {
-    "wrangler": "4.152.0"
+    "wrangler": "4.156.0"
   }
 }
