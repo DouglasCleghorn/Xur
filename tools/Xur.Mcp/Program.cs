@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using ModelContextProtocol.Client;
@@ -13,7 +14,8 @@ using ModelContextProtocol.Client;
 if(args is ["--verify"])
 {
     using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(30));
-    await using var client=await McpClient.CreateAsync(new StdioClientTransport(new(){Command=Environment.ProcessPath!,Arguments=Path.GetFileNameWithoutExtension(Environment.ProcessPath)=="dotnet"?[typeof(XurTools).Assembly.Location]:[],Name="Xur validation"}),cancellationToken:timeout.Token);
+    StdioClientTransport Transport()=>new(new(){Command=Environment.ProcessPath!,Arguments=Path.GetFileNameWithoutExtension(Environment.ProcessPath)=="dotnet"?[typeof(XurTools).Assembly.Location]:[],Name="Xur validation"});
+    await using var client=await McpClient.CreateAsync(Transport(),new(){ProtocolVersion=XurTools.ProtocolVersion},cancellationToken:timeout.Token);
     var tools=await client.ListToolsAsync(cancellationToken:timeout.Token);
     if(!new[]{"xur_catalog","xur_read","xur_write"}.All(name=>tools.Any(t=>t.Name==name)))throw new InvalidOperationException("MCP tool discovery failed.");
     foreach(var path in new[]{"https://evil/api/status","//evil/api/status","/api/../auth","/api/%2e%2e/auth","/api/a\\b","/api/status#fragment"})
@@ -21,18 +23,54 @@ if(args is ["--verify"])
         var response=await client.CallToolAsync("xur_read",new Dictionary<string,object?>{{"path",path}},cancellationToken:timeout.Token);
         if(response.IsError!=true)throw new InvalidOperationException("MCP path validation failed.");
     }
-    Console.Error.WriteLine("Xur MCP SDK handshake, tool discovery and path validation passed.");
+    foreach(var version in new[]{"2024-11-05","2025-03-26","2025-06-18","2025-11-25"})
+    {
+        try
+        {
+            await using var legacy=await McpClient.CreateAsync(Transport(),new(){ProtocolVersion=version},cancellationToken:timeout.Token);
+            throw new InvalidOperationException("Legacy MCP was accepted: "+version);
+        }
+        catch(McpException){ /* A real protocol rejection is required; timeouts fail verification. */ }
+    }
+    // Exercise requests directly, without discovery or initialization, then omit
+    // metadata after a valid call to ensure no prior request state is reused.
+    var start=new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!){RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true,UseShellExecute=false};
+    if(Path.GetFileNameWithoutExtension(Environment.ProcessPath)=="dotnet")start.ArgumentList.Add(typeof(XurTools).Assembly.Location);
+    using var process=System.Diagnostics.Process.Start(start)??throw new InvalidOperationException("Could not start MCP verification.");
+    var stderr=process.StandardError.ReadToEndAsync(timeout.Token);
+    try
+    {
+        async Task Request(int id,object parameters,bool expectError)
+        {
+            await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new{jsonrpc="2.0",id,method="tools/list",@params=parameters}));
+            await process.StandardInput.FlushAsync(timeout.Token);
+            using var response=JsonDocument.Parse(await process.StandardOutput.ReadLineAsync(timeout.Token)??throw new IOException("Missing MCP response."));
+            if(response.RootElement.GetProperty("id").GetInt32()!=id||response.RootElement.TryGetProperty("error",out _)!=expectError)throw new InvalidOperationException("Stateless metadata validation failed for request "+id);
+        }
+        var metadata=new Dictionary<string,object>{{"io.modelcontextprotocol/protocolVersion",XurTools.ProtocolVersion},{"io.modelcontextprotocol/clientCapabilities",new{}},{"io.modelcontextprotocol/clientInfo",new{name="Xur validation",version="1.0"}}};
+        await Request(1,new{_meta=metadata},false);
+        await Request(2,new{},true);
+        await Request(3,new{_meta=metadata},false);
+        process.StandardInput.Close();
+        await process.WaitForExitAsync(timeout.Token);
+        await stderr;
+    }
+    finally{if(!process.HasExited)process.Kill(entireProcessTree:true);}
+    Console.Error.WriteLine("Xur MCP stateless 2026-07-28 discovery, tool/path validation and legacy rejection passed.");
     return;
 }
 var builder=Host.CreateApplicationBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole(o=>o.LogToStandardErrorThreshold=LogLevel.Trace);
-builder.Services.AddMcpServer().WithStdioServerTransport().WithTools<XurTools>();
+// This is a wire-protocol revision, not a dependency version pin. Reject all
+// initialize-handshake clients; every call must carry modern request metadata.
+builder.Services.AddMcpServer(o=>o.ProtocolVersion=XurTools.ProtocolVersion).WithStdioServerTransport().WithTools<XurTools>();
 await builder.Build().RunAsync();
 
 [McpServerToolType]
 public sealed class XurTools
 {
+    public const string ProtocolVersion="2026-07-28";
     const int Limit=8*1024*1024;
     static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     public record Connection(string Origin,string ApiKey,string Certificate);

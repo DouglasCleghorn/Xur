@@ -57,7 +57,7 @@ async function update(){
   }
   for(const name of ['LICENSE','licensing.md'])fs.copyFileSync(path.join(source,name),path.join(output,name));
   atomic(path.join(stage,'run'),'#!/bin/sh\nexec "'+dotnet+'" "$(dirname "$(readlink -f "$0")")/app/Xur.Mcp.dll" "$@"\n',0o700);
-  // A real SDK-client handshake/list probe must succeed before selecting this pair.
+  // Stateless discovery/calls and legacy rejection must pass before selecting this pair.
   run(dotnet,[path.join(output,'Xur.Mcp.dll'),'--verify'],{cwd:stage});
   const generation=crypto.createHash('sha256').update(JSON.stringify({version,sources,libraries:assets.libraries})).digest('hex');
   const selected=path.join(root,'versions',generation);fs.mkdirSync(path.dirname(selected),{recursive:true});
