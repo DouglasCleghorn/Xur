@@ -52,7 +52,12 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
     public string MountPath(string id)=>Path.Combine(mountRoot,id);
     public void CleanInterruptedPassword()
     {
-        File.Delete(Path.Combine(ServerRoot,"password"));File.Delete(Path.Combine(ServerRoot,"password.tmp"));File.Delete(Path.Combine(ServerRoot,"account.sh"));
+        foreach(var name in new[]{"password","password.tmp","account.sh"})
+        {
+            try{File.Delete(Path.Combine(ServerRoot,name));}
+            // Hosts that have never configured SMB have no server directory to clean.
+            catch(DirectoryNotFoundException){}
+        }
     }
     public static string[] WorkloadUnitProperties(string name,string[] units)=>units.Length==0?[]:
         ["--property=Requires="+string.Join(' ',units),"--property=After="+string.Join(' ',units),"--property=BindsTo="+string.Join(' ',units),
