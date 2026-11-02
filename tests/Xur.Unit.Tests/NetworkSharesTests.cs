@@ -66,7 +66,7 @@ static class NetworkSharesTests
         await shares.ConnectionAction(new(connection.Id,"remove"),[]);
         check(!File.Exists(credential)&&(await shares.Status()).Connections.Length==0,"Removing connections removes credentials and metadata");
         var local=root+"/local folder";Directory.CreateDirectory(local);
-        var hostedSaved=await shares.AddHosted(new("data",local,"reader","hosting-secret",1000,1000));
+        var hostedSaved=await shares.AddHosted(new("data",local,"reader","hosting-secret",1000,1000,AllowedClients:["192.0.2.10","198.51.100.0/24"]));
         check(!File.Exists(root+"/network-shares/server/password"),"Hosting discards plaintext passwords after account creation");
         check(calls.All(c=>!string.Join(' ',c.Args).Contains("hosting-secret")),"Hosting passwords never enter process arguments");
         await shares.SetServer(new("192.0.2.10",true));
@@ -77,7 +77,21 @@ static class NetworkSharesTests
         check((await Processes.Run("sh",["-n",root+"/network-shares/server/start.sh"])).ExitCode==0&&(await Processes.Run("sh",["-n",root+"/network-shares/server/verify.sh"])).ExitCode==0,"Generated hosting scripts pass shell syntax validation");
         check(File.ReadAllText(root+"/network-shares/server/verify.sh").Contains("fixture-uuid"),"Hosting checks the saved backing filesystem on each service start");
         await Reject(()=>shares.RemoveHosted(hostedSaved.Id),"Enabled hosting must stop before removing shares");
-        await shares.SetServer(new("192.0.2.10",false));wrongUuid=true;
+        await Reject(()=>shares.SetAccess(new(hostedSaved.Id,["203.0.113.5"])),"Client permissions cannot change while old SMB sessions remain active");
+        await shares.SetServer(new("192.0.2.10",false));
+        await shares.SetAccess(new(hostedSaved.Id,["203.0.113.5","198.51.100.19/24","203.0.113.5/32"]));
+        var accessShare=(await shares.Status()).Hosted.Single();
+        check(accessShare.AllowedClients!.SequenceEqual(new[]{"198.51.100.0/24","203.0.113.5"}),"Allowed clients normalize networks and deduplicate equivalent addresses");
+        check(NetworkShares.SambaConfiguration([accessShare]).Contains("hosts allow = 198.51.100.0/24 203.0.113.5"),"Samba receives each share's explicit client allowlist");
+        check(NetworkShares.AllowedClients(NetworkShares.AllowedClients(["0.0.0.1/1"])).Single()=="0.0.0.0/1","Normalized CIDR policies remain valid when reloaded");
+        await shares.SetAccess(new(hostedSaved.Id,[]));
+        var locked=NetworkShares.SambaConfiguration((await shares.Status()).Hosted);
+        check(locked.Contains("hosts deny = ALL 127.0.0.1 ::1")&&!locked.Contains("hosts allow ="),"An empty client list denies all hosts including Samba's loopback exception");
+        foreach(var invalid in new[]{"ALL","*","192.168.","nas.home","192.0.2.1\nhosts allow = ALL","0.0.0.0/0","256.1.1.1","192.0.2.1/33","::1","127.1"})
+            await Reject(()=>shares.SetAccess(new(hostedSaved.Id,[invalid])),"Invalid client access expression is rejected: "+invalid.Replace('\n',' '));
+        check((await shares.Status()).Hosted.Single().AllowedClients!.Length==0,"Invalid client updates retain the previous deny-all policy");
+        await Reject(()=>shares.SetAccess(new(hostedSaved.Id,Enumerable.Repeat("192.0.2.1",65).ToArray())),"Client allowlists are bounded");
+        wrongUuid=true;
         await Reject(()=>shares.SetServer(new("192.0.2.10",true)),"A replacement or missing backing filesystem blocks hosting");wrongUuid=false;
         await shares.RemoveHosted(hostedSaved.Id);
         check((await shares.Status()).Hosted.Length==0&&Directory.Exists(local),"Removing a hosted share retains its files");

@@ -18,6 +18,7 @@ public static class NetworkShareEndpoints
         app.MapPost("/storage/network/connections",(SmbConnectionRequest r)=>Safe(async()=>await shares.AddConnection(r)));
         app.MapPost("/storage/network/connections/action",(SmbAction r)=>Safe(async()=>{await shares.ConnectionAction(r,workloads.SavedWorkloads());return new{success=true};}));
         app.MapPost("/storage/network/hosted",(SmbHostRequest r)=>Safe(async()=>await shares.AddHosted(r)));
+        app.MapPost("/storage/network/hosted/access",(SmbShareAccess r)=>Safe(async()=>{await shares.SetAccess(r);return new{success=true};}));
         app.MapPost("/storage/network/hosted/remove",(SmbAction r)=>Safe(async()=>{await shares.RemoveHosted(r.Id);return new{success=true};}));
         app.MapPost("/storage/network/server",(SmbServerSettings r)=>Safe(async()=>{await shares.SetServer(r);return new{success=true};}));
     }

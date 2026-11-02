@@ -187,7 +187,12 @@ connection.
    This creates an SMB account inside the service, not a host login account.
    Each share has one account in this milestone. The selected UID/GID must have
    access to the folder; Xur does not recursively change ownership or permissions.
-3. Select read-only or read/write access. Choose this machine's specific LAN or
+3. Set **Allowed systems** to the IPv4 addresses or CIDR subnets that may access
+   this share, one per line (for example `192.168.1.20` or `192.168.1.0/24`).
+   A blank list denies every system, including localhost. Hostnames, wildcard
+   expressions and `/0` are not accepted. Each allowed system still needs the
+   share credentials.
+4. Select read-only or read/write access. Choose this machine's specific LAN or
    VPN IPv4 address and start hosting. Use the displayed `smb://address/share`
    address, or `\\address\share` on Windows. SMB3 encryption and authenticated
    access are required; guest access and SMB1 are disabled.
@@ -196,7 +201,14 @@ Hosting runs in `xur-smb.service`, independently of GPU profiles and the web
 interface. Podman publishes TCP 445 only on the chosen address. An existing SMB
 listener can prevent startup; Xur does not replace other SMB services. Stop
 hosting before adding/removing shares. Removing a share does not remove its
-files. To replace a hosting account/password, stop hosting, remove that share
+files. Each share has its own editable **Allowed systems** list. Stop hosting,
+change the list, then start hosting again; stopping terminates existing sessions
+so they cannot retain the previous access rules. IP restrictions use the source
+address observed by Samba: reserve DHCP addresses or use stable VPN addresses
+for individual machines. Hosts behind the same NAT address cannot be
+distinguished by IP rules; retain separate credentials where needed.
+
+To replace a hosting account/password, stop hosting, remove that share
 and recreate it with the new credentials.
 
 The saved filesystem UUID is checked before every service start so a missing
@@ -256,7 +268,7 @@ ordinary automation keys remain read-only for network shares.
 
 Authenticated read endpoint: `GET /api/storage/network`. Browser or write-enabled T3 MCP mutations:
 `POST /api/storage/network/runtime`, `/connections`, `/connections/action`,
-`/hosted`, `/hosted/remove`, and `/server` (all under `/api/storage/network`).
+`/hosted`, `/hosted/access`, `/hosted/remove`, and `/server` (all under `/api/storage/network`).
 Connection actions are `connect`, `test`, `disconnect`, and `remove`.
 
 Validation: run `Xur.Unit.Tests --network-shares` for credential boundaries,
@@ -275,6 +287,9 @@ operation descriptions. Use `xur_read` with `/api/storage/network` to inspect
 current state. Read-only permission cannot change storage. With write permission,
 use `xur_write` and the POST routes above to install the runtime, create shares
 and connections, test access, start/stop hosting, or disconnect/remove entries.
+Use `/api/storage/network/hosted/access` with
+`{ "id": "smb-…", "allowedClients": ["192.168.1.20", "192.168.2.0/24"] }`
+while hosting is stopped. An empty list revokes access for every client.
 The same workload-in-use checks, path validation and filesystem checks apply.
 Disabling permissions or revoking the MCP key takes effect on the next request.
 MCP cannot change its own permissions or create Xur manager credentials.

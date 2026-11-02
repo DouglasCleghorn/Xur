@@ -2,8 +2,9 @@ namespace Xur.Domain;
 
 public record SmbConnection(string Id,string Name,string Server,string Share,string Username,string Domain,int Uid,int Gid,bool ReadOnly=true,bool Encrypt=true);
 public record SmbConnectionRequest(string Name,string Server,string Share,string Username,string Password,string Domain="",int Uid=1000,int Gid=1000,bool ReadOnly=true,bool Encrypt=true);
-public record SmbHostedShare(string Id,string Name,string Path,string Username,int Uid,int Gid,bool ReadOnly,string FilesystemUuid);
-public record SmbHostRequest(string Name,string Path,string Username,string Password,int Uid,int Gid,bool ReadOnly=true);
+public record SmbHostedShare(string Id,string Name,string Path,string Username,int Uid,int Gid,bool ReadOnly,string FilesystemUuid,string[]? AllowedClients=null);
+public record SmbHostRequest(string Name,string Path,string Username,string Password,int Uid,int Gid,bool ReadOnly=true,string[]? AllowedClients=null);
+public record SmbShareAccess(string Id,string[] AllowedClients);
 public record SmbServerSettings(string Address="",bool Enabled=false);
 public record SmbAction(string Id,string Action);
 public record SmbConnectionStatus(SmbConnection Connection,string Path,bool Mounted,string? Error);

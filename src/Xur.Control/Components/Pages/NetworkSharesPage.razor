@@ -60,6 +60,11 @@ else
         {
             <article class="panel"><h3>@share.Name</h3><code class="mount-path">@share.Path</code><p>@share.Username · @(share.ReadOnly?"Read only":"Read/write") · UID @share.Uid / GID @share.Gid</p>
                 <label>Connection address<input readonly value="@("smb://"+(status.Server.Address.Length>0?status.Server.Address:"HOST")+"/"+share.Name)" /></label>
+                <p>Allowed systems: @(share.AllowedClients is {Length:>0}?string.Join(", ",share.AllowedClients):"None — access denied")</p>
+                <form class="smb-access-form" data-share="@share.Id" method="post" action="/api/storage/network/hosted/access">
+                    <label>Allowed systems<textarea name="allowedClients" rows="3" disabled="@status.Server.Enabled" placeholder="192.168.1.20&#10;192.168.1.0/24">@string.Join("\n",share.AllowedClients??[])</textarea></label>
+                    <button disabled="@status.Server.Enabled">Save allowed systems</button>
+                </form>
                 <button type="button" class="quiet" data-remove-share="@share.Id" disabled="@status.Server.Enabled">Remove share</button>
             </article>
         }
@@ -70,6 +75,8 @@ else
                 <legend>Folder and access</legend>
                 <label>Share name<input name="name" required pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}" maxlength="48" /></label>
                 <label>Existing local folder<input name="path" required placeholder="/var/home/your-user/datasets" /></label>
+                <label>Allowed systems<textarea name="allowedClients" rows="3" placeholder="192.168.1.20&#10;192.168.1.0/24"></textarea></label>
+                <p class="secondary-text">One IPv4 address or subnet per line. Blank denies every system. Allowed systems still need the share’s username and password.</p>
                 <label>New SMB username<input name="username" required pattern="[a-z_][a-z0-9_-]{0,31}" maxlength="32" autocomplete="off" /></label>
                 <label>New SMB password<input name="password" type="password" required maxlength="1024" autocomplete="new-password" /></label>
                 <label>Filesystem UID<input type="number" name="uid" min="1000" max="65533" value="1000" required /></label>
@@ -79,7 +86,7 @@ else
                 </fieldset>
             </form>
         </details>
-        <p class="secondary-text">Stop hosting before adding or removing folders. Existing local ext4, XFS and Btrfs folders are supported; symlinks and network-share re-export are excluded. Access is published only on the address above, TCP port 445.</p>
+        <p class="secondary-text">Stop hosting before adding/removing folders or changing allowed systems. Stopping disconnects existing sessions; new rules apply when hosting starts again. Existing local ext4, XFS and Btrfs folders are supported; symlinks and network-share re-export are excluded. Access is published only on the address above, TCP port 445.</p>
         <details open="@(!status.RuntimeReady)"><summary>SMB runtime</summary>
             <p>@(status.RuntimeReady?"Installed":"Not installed") · @status.Message</p>
             <p>Install or update Samba from the current Fedora packages. Installation needs internet access; ordinary hosting does not. Restart hosting after an update.</p>

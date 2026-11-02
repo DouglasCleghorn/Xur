@@ -12,10 +12,11 @@
   catch(error){message.textContent=error.message;}
   finally{busy=false;panel.removeAttribute('aria-busy');}
  }
- function details(form){const value=Object.fromEntries(new FormData(form));for(const name of ['uid','gid'])if(name in value)value[name]=Number(value[name]);for(const name of ['readOnly','encrypt'])if(form.elements[name])value[name]=form.elements[name].checked;return value;}
+ function details(form){const value=Object.fromEntries(new FormData(form));for(const name of ['uid','gid'])if(name in value)value[name]=Number(value[name]);for(const name of ['readOnly','encrypt'])if(form.elements[name])value[name]=form.elements[name].checked;if(form.elements.allowedClients)value.allowedClients=form.elements.allowedClients.value.split(/[\s,]+/).filter(Boolean);return value;}
  for(const [id,path] of [['smb-connection-form','/connections'],['smb-host-form','/hosted']]){
   const form=panel.querySelector('#'+id);form.addEventListener('submit',event=>{event.preventDefault();const body=details(form);act(path,body).finally(()=>{form.elements.password.value='';});});
  }
+ for(const form of panel.querySelectorAll('.smb-access-form'))form.addEventListener('submit',event=>{event.preventDefault();act('/hosted/access',{id:form.dataset.share,allowedClients:details(form).allowedClients});});
  const server=panel.querySelector('#smb-server-form');
  server.addEventListener('submit',event=>{event.preventDefault();act('/server',{address:server.elements.address.value,enabled:true});});
  panel.querySelector('#smb-stop').addEventListener('click',()=>act('/server',{address:server.elements.address.value,enabled:false}));

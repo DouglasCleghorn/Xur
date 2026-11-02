@@ -206,16 +206,51 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
         if(fs.GetProperty("fstype").GetString() is not ("ext4" or "xfs" or "btrfs") || string.IsNullOrEmpty(uuid) || !Regex.IsMatch(uuid,@"\A[a-zA-Z0-9-]+\z"))throw new InvalidOperationException("Host shares from an existing local ext4, XFS or Btrfs filesystem.");
         return uuid;
     }
+    public static string[] AllowedClients(string[]? entries)
+    {
+        if(entries is null)return [];
+        if(entries.Length>64)throw new InvalidOperationException("Use at most 64 client addresses or subnets per share.");
+        return entries.Select(entry=>
+        {
+            if(entry==null || !Regex.IsMatch(entry,@"\A(?:0|[1-9][0-9]{0,2})(?:\.(?:0|[1-9][0-9]{0,2})){3}(?:/(?:[1-9]|[12][0-9]|3[0-2]))?\z"))
+                throw new InvalidOperationException("Allowed systems must be IPv4 addresses or CIDR subnets with prefixes 1–32. Hostnames, wildcards and /0 are not supported.");
+            var parts=entry.Split('/');
+            if(!IPAddress.TryParse(parts[0],out var address)||address.AddressFamily!=System.Net.Sockets.AddressFamily.InterNetwork||(address.Equals(IPAddress.Any)&&parts.Length==1)||address.Equals(IPAddress.Broadcast))
+                throw new InvalidOperationException("Invalid allowed client address.");
+            var prefix=parts.Length==1?32:int.Parse(parts[1]);var bytes=address.GetAddressBytes();
+            uint number=((uint)bytes[0]<<24)|((uint)bytes[1]<<16)|((uint)bytes[2]<<8)|bytes[3];
+            number &= uint.MaxValue<<(32-prefix);
+            var network=new IPAddress(new[]{(byte)(number>>24),(byte)(number>>16),(byte)(number>>8),(byte)number}).ToString();
+            return prefix==32?network:network+"/"+prefix;
+        }).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+    }
+    public async Task SetAccess(SmbShareAccess request)
+    {
+        var clients=AllowedClients(request.AllowedClients);
+        await gate.WaitAsync();try
+        {
+            var config=Read();if(config.Server.Enabled)throw new InvalidOperationException("Stop hosting before changing allowed systems. Stopping disconnects sessions using the previous permissions.");
+            if(!config.Hosted.Any(s=>s.Id==request.Id))throw new InvalidOperationException("Hosted share no longer exists.");
+            Save(config with{Hosted=config.Hosted.Select(s=>s.Id==request.Id?s with{AllowedClients=clients}:s).ToArray()});
+        }finally{gate.Release();}
+    }
+    static string ClientAccess(SmbHostedShare share)
+    {
+        var clients=AllowedClients(share.AllowedClients);
+        // Explicit loopback denial suppresses Samba's localhost exception. An
+        // explicit allow match takes precedence, including an intentionally allowed localhost.
+        return "hosts deny = ALL 127.0.0.1 ::1\n"+(clients.Length==0?"":"hosts allow = "+string.Join(' ',clients)+"\n");
+    }
     public async Task<SmbHostedShare> AddHosted(SmbHostRequest r)
     {
         await gate.WaitAsync();try
         {
-            PrivateRoot();Account(r.Username,r.Uid,r.Gid);Password(r.Password);
+            PrivateRoot();Account(r.Username,r.Uid,r.Gid);Password(r.Password);var clients=AllowedClients(r.AllowedClients);
             if(r.Name==null || !Regex.IsMatch(r.Name,@"\A[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}\z") || new[]{"global","homes","printers","ipc$"}.Contains(r.Name.ToLowerInvariant()))throw new InvalidOperationException("Use a simple, unique share name.");
             var config=Read();if(config.Server.Enabled)throw new InvalidOperationException("Stop hosting before changing shares.");
             if(config.Hosted.Length>=32 || config.Hosted.Any(s=>s.Name.Equals(r.Name,StringComparison.OrdinalIgnoreCase)||s.Username==r.Username))throw new InvalidOperationException("Use a unique share name and SMB username (one account per share).");
             var path=HostedPath(r.Path);var uuid=await Filesystem(path);
-            var share=new SmbHostedShare(Id(),r.Name,path,r.Username,r.Uid,r.Gid,r.ReadOnly,uuid);
+            var share=new SmbHostedShare(Id(),r.Name,path,r.Username,r.Uid,r.Gid,r.ReadOnly,uuid,clients);
             var secret=Path.Combine(ServerRoot,"password");Write(secret,r.Password+"\n"+r.Password+"\n");
             try
             {
@@ -238,7 +273,7 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
             // solely from current shares. Keep the database for crash-safe recreation.
         }finally{gate.Release();}
     }
-    public static string SambaConfiguration(SmbHostedShare[] shares)=>"[global]\nserver role = standalone server\nsecurity = user\nmap to guest = Never\nserver min protocol = SMB3_00\nserver smb encrypt = required\nsmb ports = 445\nload printers = no\ndisable spoolss = yes\npassdb backend = tdbsam:/state/passdb.tdb\nprivate dir = /state/private\nlog file = /dev/stdout\nlogging = file\n"+string.Join("\n",shares.Select(s=>$"[{s.Name}]\npath = /shares/{s.Id}\nvalid users = {s.Username}\nread only = {(s.ReadOnly?"yes":"no")}\nwide links = no\nfollow symlinks = no\n"));
+    public static string SambaConfiguration(SmbHostedShare[] shares)=>"[global]\nserver role = standalone server\nsecurity = user\nmap to guest = Never\nserver min protocol = SMB3_00\nserver smb encrypt = required\nsmb ports = 445\nload printers = no\ndisable spoolss = yes\npassdb backend = tdbsam:/state/passdb.tdb\nprivate dir = /state/private\nlog file = /dev/stdout\nlogging = file\n"+string.Join("\n",shares.Select(s=>$"[{s.Name}]\npath = /shares/{s.Id}\nvalid users = {s.Username}\n{ClientAccess(s)}read only = {(s.ReadOnly?"yes":"no")}\nwide links = no\nfollow symlinks = no\n"));
     public async Task SetServer(SmbServerSettings settings)
     {
         await gate.WaitAsync();try

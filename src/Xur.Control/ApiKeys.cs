@@ -94,7 +94,7 @@ public sealed class ApiKeys
             return scope=="t3" && method=="POST" && path is
                 "/api/storage/network/runtime" or "/api/storage/network/connections" or
                 "/api/storage/network/connections/action" or "/api/storage/network/hosted" or
-                "/api/storage/network/hosted/remove" or "/api/storage/network/server";
+                "/api/storage/network/hosted/remove" or "/api/storage/network/hosted/access" or "/api/storage/network/server";
         }
         if(scope=="coding")return method is "GET" or "POST" && Regex.IsMatch(path,@"\A/api/t3-code/inference/xur_[a-f0-9]{24}/v1/(models|chat/completions|responses)\z");
         if(scope is "automation" or "t3")return true;
