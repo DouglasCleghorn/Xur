@@ -62,6 +62,22 @@ else if(state!=null && profile!=null)
                 <p class="container-library-link" hidden="@(w?.Recipe.Kind!="Container")"><a href="/containers">Prepare a container</a></p>
                 <p class="audio-link" hidden="@(w?.Recipe.Engine!="audio.cpp")">Select a device preset, load the profile, then use Open audio.cpp in Profiles to download and run audio models.</p>
                 <p class="unsloth-link" hidden="@(w?.Recipe.Engine!=UnslothWorkload.Engine)"><a href="/unsloth">Unsloth Studio</a> · Latest version, persistent training data and access to downloaded models. Use Add GPU to assign one or more NVIDIA GPUs.</p>
+                <details class="network-folder-choices" hidden="@(w?.Recipe.Kind is not ("Container" or "Model"))">
+                    <summary>Shared network folders</summary>
+                    <p>For container and model workloads. Missing storage blocks startup. <a href="/storage/network">Manage connections</a></p>
+                    @foreach(var connection in networkConnections)
+                    {
+                        var assigned=w?.NetworkShares?.SingleOrDefault(m=>m.ConnectionId==connection.Id);
+                        <div><label class="inline-option"><input type="checkbox" class="network-folder" name="network-@row" value="@connection.Id" checked="@(assigned!=null)" /> @connection.Name</label>
+                        <label class="inline-option"><input type="checkbox" class="network-folder-write" data-readonly="@connection.ReadOnly.ToString().ToLowerInvariant()" name="network-write-@row" value="@connection.Id" checked="@(assigned?.ReadOnly==false)" disabled="@connection.ReadOnly" /> Allow writes</label>
+                        <code class="mount-path">@("/shared/"+connection.Id)</code></div>
+                    }
+                    @foreach(var missing in (w?.NetworkShares??[]).Where(m=>!networkConnections.Any(c=>c.Id==m.ConnectionId)))
+                    {
+                        <label><input type="checkbox" class="network-folder" name="network-@row" value="@missing.ConnectionId" checked /> Unavailable connection @missing.ConnectionId</label>
+                        @if(!missing.ReadOnly) { <input type="hidden" class="network-folder-write" name="network-write-@row" value="@missing.ConnectionId" /> }
+                    }
+                </details>
                 <div class="gpu-choices">
                 @for(var g=0;g<(w?.Recipe.GpuCount ?? 0);g++)
                 {
@@ -138,12 +154,14 @@ else { <a href="/profiles">Profiles</a> }
 @code {
     [SupplyParameterFromQuery(Name="id")] public string? Id {get;set;}
     StationDeviceInventory peripherals=new([],[],[]);
+    SmbConnection[] networkConnections=[];
     StationAccount[] accounts=[];StationDefinition[] stations=[];
     ProfileState? state;Profile? profile;Workload?[] rows=[];
     protected override async Task OnInitializedAsync()
     {
         if(Device.Installer)return;
         try{peripherals=await Device.Agent.GetFromJsonAsync<StationDeviceInventory>("/station-devices")??peripherals;}catch{peripherals=new([],[],["Inventory unavailable"]);}
+        try{networkConnections=(await Device.Agent.GetFromJsonAsync<NetworkSharesStatus>("/storage/network"))?.Connections.Select(c=>c.Connection).ToArray()??[];}catch{}
         stations=await Profiles.Stations();
         accounts=await Device.Agent.GetFromJsonAsync<StationAccount[]>("/station-users") ?? [];
         state=await Profiles.State();profile=state.Profiles.SingleOrDefault(p=>p.Id==Id);

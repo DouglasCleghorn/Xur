@@ -333,8 +333,12 @@ The tools are `xur_catalog` (live API routes and request schemas), `xur_read`
 (data/settings), and `xur_write` (settings/actions). These cover Xur's published
 JSON APIs, including monitoring and telemetry, profiles, models, workloads,
 network, displays, storage and updates. Existing API validation, revision and
-approval requirements apply. Browser-only forms, credential creation, account
+approval requirements apply. Browser-only forms, manager credential creation, account
 setup, installation, T3 pairing and T3 permission changes are not exposed.
+Network-share management is available with MCP write permission, including SMB
+accounts and connections; see [Network shares](storage.md#managing-shares-through-xur-mcp)
+for the workflow and secret-input requirements. General automation keys remain
+read-only for these operations.
 Streaming endpoints and responses above 8 MiB require their dedicated clients;
 binary responses below that size are returned as base64. No extra telemetry
 store is created. HTTPS certificate and hostname validation remain enabled.

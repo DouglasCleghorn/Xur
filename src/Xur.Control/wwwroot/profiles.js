@@ -123,7 +123,7 @@
    if(userRow?.isConnected){const select=userRow.querySelector('[name=stationUser]');select.value=account.username;select.dispatchEvent(new CustomEvent('choices-changed'));}userDialog.close();
   }catch(e){message.textContent=e.message;message.hidden=false;}finally{submit.disabled=false;}
  });
- const renumber=()=>[...rows.children].forEach((row,i)=>{row.querySelectorAll('.gpu-choices select').forEach(s=>s.name='gpus-'+i);row.querySelectorAll('.station-usb,.station-usb-settings input').forEach(s=>s.name='usb-'+i);row.querySelectorAll('.station-controller').forEach(s=>s.name='controller-'+i);row.querySelector('.station-primary').name='primary-'+i;});
+ const renumber=()=>[...rows.children].forEach((row,i)=>{row.querySelectorAll('.gpu-choices select').forEach(s=>s.name='gpus-'+i);row.querySelectorAll('.station-usb,.station-usb-settings input').forEach(s=>s.name='usb-'+i);row.querySelectorAll('.station-controller').forEach(s=>s.name='controller-'+i);row.querySelector('.station-primary').name='primary-'+i;row.querySelectorAll('.network-folder').forEach(s=>s.name='network-'+i);row.querySelectorAll('.network-folder-write').forEach(s=>s.name='network-write-'+i);});
  function usbChoices(row){
   const primary=row.querySelector('.station-primary');
   // Disabled checkboxes need hidden fields to retain saved selections on submit.
@@ -195,6 +195,7 @@
  });
  function filterRecipes(row){
   const engine=row.querySelector('.catalog-engine').value,select=row.querySelector('[name=recipe]'),station=engine==='Workstation';
+  const folders=row.querySelector('.network-folder-choices');if(folders){folders.hidden=station||engine==='XLeRobot';folders.querySelectorAll('input').forEach(input=>input.disabled=folders.hidden||input.dataset.readonly==='true');}
   row.querySelector('.recipe-label').textContent=station?'Workstation':engine==='Unsloth'?'Unsloth server':engine==='Podman'?'Container':engine==='XLeRobot'?'Robot':'Model';
   row.querySelector('.container-library-link').hidden=engine!=='Podman';
   row.querySelector('.unsloth-link').hidden=engine!=='Unsloth';
@@ -277,7 +278,7 @@
  });
  form.addEventListener('click',event=>{if(event.target.matches('.remove-workload')){event.target.closest('.workload-editor').remove();renumber();refreshGpus();}});
  document.querySelector('#add-workload').addEventListener('click',()=>{
-  const row=template.cloneNode(true);row.querySelector('[name=workloadId]').value='';row.querySelector('[name=stationId]').value='';row.querySelector('[name=stationName]').value='';row.querySelectorAll('.station-devices input').forEach(input=>input.checked=false);row.querySelector('[name=recipe]').value='';row.querySelector('.catalog-engine').value='Workstation';row.querySelector('[name=stationUser] option[value=legacy]')?.remove();row.querySelector('[name=stationUser]').value='temporary';
+  const row=template.cloneNode(true);row.querySelector('[name=workloadId]').value='';row.querySelectorAll('.network-folder-choices input').forEach(input=>{input.checked=false;if(input.type==='hidden')input.remove();});row.querySelector('[name=stationId]').value='';row.querySelector('[name=stationName]').value='';row.querySelectorAll('.station-devices input').forEach(input=>input.checked=false);row.querySelector('[name=recipe]').value='';row.querySelector('.catalog-engine').value='Workstation';row.querySelector('[name=stationUser] option[value=legacy]')?.remove();row.querySelector('[name=stationUser]').value='temporary';
   row.querySelector('.gpu-choices').replaceChildren();row.querySelector('.model-options').replaceChildren();rows.append(row);initialize(row);defaultPrimary(row);renumber();refreshGpus();
   row.querySelector('.catalog-engine').nextElementSibling.querySelector('[role=combobox]').focus();
  });

@@ -90,7 +90,7 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
                 // An explicit new identity must not borrow another station's pairing.
                 if(recipe.Kind=="Workstation" && selection.StationId!=null)old=null;
                 if(recipe.Kind=="Workstation" && user==null && station==null && (old==null || old.Recipe.Kind!="Workstation" || old.User!=null))throw new InvalidOperationException("Select a workstation user.");
-                var candidate=new Workload("",recipe.Name,recipe,selection.Gpus,"",user,recipe.Kind=="Workstation"?selection.Devices:null);
+                var candidate=new Workload("",recipe.Name,recipe,selection.Gpus,"",user,recipe.Kind=="Workstation"?selection.Devices:null,selection.NetworkShares);
                 // Selecting the same runtime in another profile keeps its exact
                 // identity/allocation/route, rather than creating a second model.
                 if(recipe.Kind!="Workstation" || selection.StationId==null)old??=known.FirstOrDefault(w=>w.Fingerprint==candidate.Fingerprint && !used.Contains(w.Id));
@@ -220,7 +220,7 @@ public sealed partial class ProfileManager(ProfileStore store,IWorkloadRuntime r
         catch(Exception e){Console.Error.WriteLine("Profile switch logging failed: "+Redaction.Logs(e.Message));}
     }
 }
-public record WorkloadSelection(string? Id,string Recipe,string[] Gpus,StationUser? User=null,string? StationId=null,string? StationName=null,StationDevices? Devices=null);
+public record WorkloadSelection(string? Id,string Recipe,string[] Gpus,StationUser? User=null,string? StationId=null,string? StationName=null,StationDevices? Devices=null,NetworkShareMount[]? NetworkShares=null);
 
 public sealed class AgentWorkloadRuntime(HttpClient client):IWorkloadRuntime
 {

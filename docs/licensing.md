@@ -155,3 +155,12 @@ The optional audio.cpp workloads download upstream GHCR images at runtime.
 licensed under [Apache-2.0](https://github.com/0xShug0/audio.cpp/blob/main/LICENSE).
 Upstream dependencies and downloaded audio model packages retain their separate
 notices and license terms; Xur does not relicense them as MIT.
+
+### Optional SMB runtime
+
+Network shares install Samba and its dependencies from Fedora's current package
+repositories into a locally built image based on `quay.io/fedora/fedora:latest`.
+Samba is GPL-licensed, not MIT; Fedora package metadata and upstream copyright
+and license files remain in the image (including `/usr/share/licenses`). Xur
+neither relabels these packages nor embeds their binaries in its application
+bundle. See [Samba licensing](https://www.samba.org/samba/docs/GPL.html).

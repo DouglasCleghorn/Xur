@@ -79,13 +79,23 @@ public sealed class ApiKeys
 
     public static bool Allows(string scope,string method,string path)
     {
-        // No key may mint credentials or authenticate as the browser administrator.
+        // No key may mint manager credentials or authenticate as the browser administrator.
         path=path.ToLowerInvariant().TrimEnd('/');
         if(path.Contains('%') || path.Contains("..") || path.Contains('\\') || path.Contains("//"))return false;
         if(path.StartsWith("/robot/api/",StringComparison.Ordinal))path="/api/robotics/"+path[11..];
         if(!path.StartsWith("/api/") && !path.StartsWith("/inference/"))return false;
         if(path is "/api/unsloth/password" or "/api/unsloth/connect" || path is "/api/t3-code/mcp/connect" or "/api/t3-code/pair" or "/api/t3-code/setup" or "/api/t3-code/connect" || path=="/api/api-keys" || path.StartsWith("/api/api-keys/") || path=="/api/bootstrap" || path.StartsWith("/api/auth/") || path.StartsWith("/api/install/"))return false;
         if(path=="/api/t3-code/storage"&&method is not ("GET" or "HEAD"))return false;
+        if(path=="/api/storage/network" || path.StartsWith("/api/storage/network/"))
+        {
+            if(method is "GET" or "HEAD")return scope is "automation" or "t3";
+            // Only the live-permission-gated T3 MCP scope may manage SMB accounts,
+            // connections and exposure. General automation keys remain read-only here.
+            return scope=="t3" && method=="POST" && path is
+                "/api/storage/network/runtime" or "/api/storage/network/connections" or
+                "/api/storage/network/connections/action" or "/api/storage/network/hosted" or
+                "/api/storage/network/hosted/remove" or "/api/storage/network/hosted/access" or "/api/storage/network/server";
+        }
         if(scope=="coding")return method is "GET" or "POST" && Regex.IsMatch(path,@"\A/api/t3-code/inference/xur_[a-f0-9]{24}/v1/(models|chat/completions|responses)\z");
         if(scope is "automation" or "t3")return true;
         if(scope=="robotics")return (method is "GET" or "HEAD") && (path is "/api/robotics/status" or "/api/robotics/jobs" || Regex.IsMatch(path,@"\A/api/robotics/(jobs/[a-f0-9]{32}(/markers|/captures(/[a-z0-9-]+\.jpg)?)?|cameras/(head|hand))\z"))

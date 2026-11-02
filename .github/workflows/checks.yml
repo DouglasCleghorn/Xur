@@ -61,6 +61,7 @@ jobs:
           .build/browser/node_modules/.bin/playwright install --with-deps chromium
           dotnet run --project tests/Xur.Unit.Tests -c Release --no-build -- --control-panel-render .build/evidence/profile-picker-fixtures
           XUR_RENDER_OUTPUT=.build/evidence/profile-picker-fixtures node tests/Xur.Integration.Tests/models-ui.cjs
+          XUR_RENDER_OUTPUT=.build/evidence/profile-picker-fixtures node tests/Xur.Integration.Tests/network-shares-ui.cjs
           XUR_UI_FIXTURES=.build/evidence/profile-picker-fixtures node tests/Xur.Integration.Tests/station-identity-ui.cjs
           XUR_UI_FIXTURES=.build/evidence/profile-picker-fixtures XUR_BROWSER_TOUCH=1 node tests/Xur.Integration.Tests/station-identity-ui.cjs
   installer-usb:

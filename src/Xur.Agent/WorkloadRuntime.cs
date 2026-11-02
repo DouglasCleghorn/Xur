@@ -5,6 +5,12 @@ namespace Xur.Agent;
 public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,DisplayConsoles? consoles=null,DataStorage? dataStorage=null):IWorkloadRuntime
 {
     readonly DataStorage storage=dataStorage??new DataStorage(Path.GetDirectoryName(directory)!);
+    NetworkShares? networkShares;
+    public NetworkShares NetworkShares=>LazyInitializer.EnsureInitialized(ref networkShares,()=>new(Path.GetDirectoryName(directory)!));
+    public async Task<T> ChangeNetworkShares<T>(Func<Task<T>> action)
+    {
+        await gate.WaitAsync();try{return await action();}finally{gate.Release();}
+    }
     T3Storage? t3Storage;
     public T3Storage T3Storage=>LazyInitializer.EnsureInitialized(ref t3Storage,()=>new(Path.GetDirectoryName(directory)!,storage));
     public async Task<T3StorageConfig> SetT3Storage(T3StorageConfig config)
@@ -204,6 +210,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             catalog.Verify(w.Recipe);
             if(w.Recipe.Kind=="Model" || UnslothWorkload.Is(w.Recipe))await storage.Require("models");
             if(UnslothWorkload.Is(w.Recipe))await storage.Require("unsloth");
+            var network=await NetworkShares.RequireMounts(w);
             Directory.CreateDirectory(directory);
             var observed=await ObserveUnlocked();ProfilePolicy.Validate(new("runtime","Runtime",1,[w]),observed);
             if((w.Recipe.Kind=="Robotics" && Definitions().Any(d=>d.Id!=w.Id && d.Recipe.Kind is "Workstation" or "Robotics")) ||
@@ -283,7 +290,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 }
                 var image=engineImage?.Image??w.Recipe.Image;
                 var args=new List<string> {"create","--name",Name(w.Id),"--label","io.xur.fingerprint="+w.Fingerprint,"--label","io.xur.id="+w.Id,
-                    "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096",(UnslothWorkload.Is(w.Recipe)||w.Recipe.Kind=="Model"&&w.Recipe.Engine is "vLLM" or "vLLM-Omni")?"--shm-size=4g":"--shm-size=1g",w.Recipe.Kind=="Model"||UnslothWorkload.Is(w.Recipe)||Persisted(w)?"--restart=no":"--restart=unless-stopped"};
+                    "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096",(UnslothWorkload.Is(w.Recipe)||w.Recipe.Kind=="Model"&&w.Recipe.Engine is "vLLM" or "vLLM-Omni")?"--shm-size=4g":"--shm-size=1g",w.Recipe.Kind=="Model"||UnslothWorkload.Is(w.Recipe)||Persisted(w)||w.NetworkShares is {Length:>0}?"--restart=no":"--restart=unless-stopped"};
+                args.AddRange(network.Arguments);
                 if(w.Recipe.Port>0)args.AddRange(["--publish",T3CodeWorkload.Is(w.Recipe)?$"{T3CodeWorkload.HostPort}:{w.Recipe.Port}":UnslothWorkload.Is(w.Recipe)?UnslothWorkload.Publish:"127.0.0.1::"+w.Recipe.Port]);
                 if(w.Recipe.Container is {} container)
                 {
@@ -322,7 +330,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 instance=await Inspect(w) ?? throw new IOException();
             }
             var startupSince=DateTimeOffset.UtcNow.AddSeconds(-1).ToString("O");
-            if(w.Recipe.Kind=="Model"||Persisted(w))
+            if(w.Recipe.Kind=="Model"||Persisted(w)||w.NetworkShares is {Length:>0})
             {
                 await new EngineRestartPolicy().Set(Name(w.Id),instance.InstanceId,"no");
             }
@@ -334,7 +342,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 await Processes.Run("systemctl",["stop","xur-container-"+w.Id+".service"],20);
                 await Processes.Run("systemctl",["reset-failed","xur-container-"+w.Id+".service"],10);
                 var started=await Processes.Run("systemd-run",["--unit=xur-container-"+w.Id,"--collect","--property=Type=oneshot",
-                    "--property=RemainAfterExit=yes","--property=TimeoutStartSec=60","/usr/bin/podman","start",Name(w.Id)],75);
+                    "--property=RemainAfterExit=yes","--property=TimeoutStartSec=60",..Xur.Agent.NetworkShares.WorkloadUnitProperties(Name(w.Id),network.Units),"/usr/bin/podman","start",Name(w.Id)],75);
                 if(started.ExitCode!=0)throw Failure("Container startup failed",started);
             }
             using var health=new HttpClient(new SocketsHttpHandler {AllowAutoRedirect=false}) {Timeout=TimeSpan.FromSeconds(3)};

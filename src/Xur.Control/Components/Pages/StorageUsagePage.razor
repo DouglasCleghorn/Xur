@@ -3,6 +3,7 @@
 @inject ProfileManager Profiles
 <PageTitle>Storage · Xur</PageTitle>
 <div class="page-heading"><h1>Storage</h1>@if(!Device.Installer) { <form method="post" action="/storage/refresh"><AntiforgeryToken /><button class="secondary" disabled="@(usage?.Scanning==true)">Refresh usage</button></form> }</div>
+@if(!Device.Installer) { <p><a class="button secondary" href="/storage/network">Network shares · Host and connect</a></p> }
 @if(Device.Installer) { <p>Storage usage is available after installation.</p> }
 else if(usage==null) { <p role="alert">Storage usage is unavailable.</p> }
 else
