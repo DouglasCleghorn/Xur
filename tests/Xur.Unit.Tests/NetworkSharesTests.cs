@@ -22,6 +22,19 @@ static class NetworkSharesTests
             return Task.FromResult(new ProcessResult(0,""));
         }
         var shares=new NetworkShares(root,root+"/units",root+"/mounts",Run,path=>path);
+        shares.CleanInterruptedPassword();
+        check(!Directory.Exists(root+"/network-shares"),"Startup cleanup tolerates SMB never having been configured without creating state");
+        Directory.CreateDirectory(root+"/network-shares");
+        shares.CleanInterruptedPassword();
+        check(!Directory.Exists(root+"/network-shares/server"),"Startup cleanup tolerates a missing SMB server directory");
+        var serverRoot=root+"/network-shares/server";
+        Directory.CreateDirectory(serverRoot);
+        shares.CleanInterruptedPassword();
+        foreach(var name in new[]{"password","password.tmp","account.sh"})File.WriteAllText(Path.Combine(serverRoot,name),"interrupted temporary credential");
+        File.WriteAllText(Path.Combine(serverRoot,"keep"),"persistent server data");
+        shares.CleanInterruptedPassword();
+        shares.CleanInterruptedPassword();
+        check(Directory.GetFiles(serverRoot).Select(Path.GetFileName).SequenceEqual(new[]{"keep"}),"Startup cleanup removes only temporary credential files and is safe to repeat");
         async Task Reject(Func<Task> action,string name)
         {
             try{await action();throw new Exception("Accepted: "+name);}catch(InvalidOperationException){check(true,name);}
