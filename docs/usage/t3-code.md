@@ -311,14 +311,14 @@ MCP permissions do not restrict files already shared with the container.
 
 Save the permissions, wait for T3 to be running, then select **Connect or repair
 Xur MCP** from Xur's HTTPS LAN or Tailscale address. Start a new T3 thread after
-connection. This installs a standard-library Python stdio MCP server inside the
+connection. This registers a C# stdio MCP server using the official MCP SDK inside the
 container, registered as `xur` for native Codex, Claude and OpenCode accounts,
 including Xur's isolated local-model configurations. Custom managed provider
 homes may need the same registration in their own configuration. Existing
 unrelated harness settings are preserved; conflicting `xur` entries are reported
 rather than overwritten. For an existing OpenCode JSONC configuration, merge a
-local MCP named `xur` with command `["python3",
-"/home/node/.local/share/xur-mcp/server.py"]` and enable it, then remove or migrate
+local MCP named `xur` with command
+`["/home/node/.local/share/xur-mcp/server"]` and enable it, then remove or migrate
 the JSONC file to JSON before using the repair action.
 
 The server, certificate and restricted API key live under
@@ -342,3 +342,22 @@ store is created. HTTPS certificate and hostname validation remain enabled.
 Native registration follows the [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp),
 [Claude user scope](https://code.claude.com/docs/en/mcp), and
 [OpenCode local MCP](https://opencode.ai/docs/mcp-servers/) formats.
+
+### .NET and MCP updates
+
+T3 installs the latest supported stable .NET SDK (including its runtime) into
+`~/.local/share/dotnet` and exposes `dotnet` on the container PATH. Microsoft release
+metadata selects the SDK and its SHA-512 checksum at installation time; preview
+and end-of-life channels are excluded. The SDK and MCP refresh at container startup
+and every 24 hours while it runs. The first installation needs internet access;
+wait for it to finish before connecting MCP. Update failures appear in T3 workload
+logs and `~/.local/share/xur-mcp/update-status.json`.
+
+Each refresh builds the C# server with the latest stable official MCP SDK and
+hosting packages, then checks the MCP handshake and tool discovery. Only a verified
+build becomes active. Saved SDKs, MCP builds and selections survive container
+replacement; an unsuccessful update preserves the last working pair, and existing
+processes keep their original runtime. Identical updates reuse the same generation.
+No Xur release is needed to refresh upstream .NET or MCP dependencies. Xur-owned
+server source changes arrive through Xur updates. Python remains only in the
+existing container/account setup helper, not the MCP server or its protocol handling.

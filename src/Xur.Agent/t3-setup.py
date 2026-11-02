@@ -27,7 +27,6 @@ import urllib.request
 
 PROVIDERS = {"codex", "claude", "opencode"}
 LAUNCHER = "__XUR_T3_LAUNCHER__"
-MCP_SCRIPT = "__XUR_T3_MCP__"
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)")
 
 
@@ -476,7 +475,7 @@ def configure(model, provider):
     entry = dict(driver=provider, displayName=model["name"] + " · Xur", enabled=True, environment=environment, config=config)
     provider_entry(model["id"], entry)
     native_file = native if provider == "opencode" else native / "config.toml"
-    mcp_script = paths()[0] / ".local/share/xur-mcp/server.py"
+    mcp_script = paths()[0] / ".local/share/xur-mcp/server"
     if mcp_script.exists():
         mcp_registration(native_file, provider, mcp_script)
     hashes = {str(file.relative_to(directory)): hashlib.sha256(file.read_bytes()).hexdigest() for file in (key, cert, bundle, native_file)}
@@ -486,23 +485,32 @@ def configure(model, provider):
 def mcp_registration(path, provider, script):
     """Preserve unrelated native configuration; never overwrite another xur MCP."""
     old = path.read_text() if path.exists() else ""
+    legacy_script = str(script.with_name("server.py"))
     if provider == "codex":
         import tomllib
-        entry = dict(command="python3", args=[str(script)])
+        entry = dict(command=str(script), args=[])
         existing = tomllib.loads(old).get("mcp_servers", {}).get("xur")
-        if existing is not None:
-            if existing != entry:
-                raise SetupError("The xur MCP entry was changed. Remove or rename it before reconnecting.")
+        section = '[mcp_servers.xur]\ncommand = ' + json.dumps(str(script)) + '\nargs = []\n'
+        if existing == entry:
             return
-        content = old + '\n[mcp_servers.xur]\ncommand = "python3"\nargs = [' + json.dumps(str(script)) + ']\n'
+        if existing == dict(command="python3", args=[legacy_script]):
+            content, count = re.subn(r"(?ms)^\[mcp_servers\.xur\]\s*\n.*?(?=^\[|\Z)", lambda _: section, old, count=1)
+            if count != 1:
+                raise SetupError("Rename the old xur MCP entry before reconnecting.")
+        elif existing is not None:
+            raise SetupError("The xur MCP entry was changed. Remove or rename it before reconnecting.")
+        else:
+            content = old + '\n' + section
         tomllib.loads(content)
     else:
         data = json.loads(old or "{}")
         group = "mcpServers" if provider == "claude" else "mcp"
-        entry = (dict(type="stdio", command="python3", args=[str(script)]) if provider == "claude"
-                 else dict(type="local", command=["python3", str(script)], enabled=True))
+        entry = (dict(type="stdio", command=str(script), args=[]) if provider == "claude"
+                 else dict(type="local", command=[str(script)], enabled=True))
         entries = data.setdefault(group, {})
-        if "xur" in entries and entries["xur"] != entry:
+        legacy = (dict(type="stdio", command="python3", args=[legacy_script]) if provider == "claude"
+                  else dict(type="local", command=["python3", legacy_script], enabled=True))
+        if "xur" in entries and entries["xur"] not in (entry, legacy):
             raise SetupError("The xur MCP entry was changed. Remove or rename it before reconnecting.")
         entries["xur"] = entry
         content = json.dumps(data, indent=2) + "\n"
@@ -514,7 +522,7 @@ def mcp_registration(path, provider, script):
 def configure_mcp(connection):
     home = paths()[0]
     directory = home / ".local/share/xur-mcp"
-    script = directory / "server.py"
+    script = directory / "server"
     # Verify reachability and trust before publishing credentials.
     context = ssl.create_default_context(cadata=connection["certificate"])
     origin = urllib.parse.urlsplit(connection["origin"])
@@ -529,7 +537,8 @@ def configure_mcp(connection):
             raise SetupError("Xur MCP connection could not be verified.")
     finally:
         client.close()
-    atomic(script, MCP_SCRIPT)
+    if not script.is_file():
+        raise SetupError("The .NET and MCP installation is not ready. Check T3 workload update logs and retry.")
     mcp_registration(home / ".codex/config.toml", "codex", script)
     mcp_registration(home / ".claude.json", "claude", script)
     opencode = home / ".config/opencode/opencode.json"

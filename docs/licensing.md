@@ -31,6 +31,12 @@ Existing notices include:
   website alongside the font.
 - GitHub mark in the website header: GitHub Octicons, MIT; notice shipped in
   `website/assets/github-mark-LICENSE.txt`.
+- .NET in T3: Microsoft's verified SDK archives retain `LICENSE.txt` and
+  `ThirdPartyNotices.txt` in the persistent SDK installation. The C# MCP retains
+  Xur's `LICENSE` and this document, plus the original NuGet distributions under
+  each selected build's `app/licenses/`, including dependency notices and metadata.
+  The official ModelContextProtocol SDK and hosting dependencies retain their
+  upstream licenses; they are not relicensed as Xur code.
 - GitHub CLI in T3's persistent home: upstream MIT license from the verified
   official release archive, retained at `~/.local/share/gh/LICENSE`.
 - USB updater: TeeForge and System.CommandLine retain their MIT licenses.
