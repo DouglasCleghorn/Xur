@@ -426,6 +426,7 @@ async Task StartHost()
     });
     app.MapPost("/local/{action}",async(string action)=>{ if(action is not ("reboot" or "poweroff")) return Results.BadRequest(); return Results.StatusCode((int)(await appliance.Agent.PostAsync("/power/"+action,null)).StatusCode); });
     app.MapProfiles(appliance,profileManager,catalog);
+    app.MapNetworkShares(appliance);
     app.MapRobotProxy(appliance);
     app.MapUpdates(appliance);
     app.MapNetworkSettings(appliance);

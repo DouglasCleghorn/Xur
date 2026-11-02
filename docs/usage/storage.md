@@ -166,3 +166,101 @@ Further SSD-wear improvements to consider:
 RAM-only logging would reduce writes further but loses logs on reboot or power
 loss. Persistent logging, retention, and synchronization intervals are unchanged
 by this compression default.
+
+## Network shares
+
+Open **Storage → Network shares** to host encrypted SMB3 folders or connect to
+an existing SMB3 server. Install the **SMB runtime** on that page first. This
+builds a persistent local container image from the current Fedora image at
+`quay.io/fedora/fedora:latest` and its supported Samba packages. **Update SMB
+runtime** resolves current packages again; restart hosting to use the update.
+A failed build retains the previous image. Normal startup does not download or
+install software. The host also needs `mount.cifs` from `cifs-utils` (included in
+the upstream Bazzite images); a missing helper is reported before saving a
+connection.
+
+### Hosting a folder
+
+1. Choose an existing local ext4, XFS or Btrfs data folder beneath `/var/home`,
+   `/var/mnt`, `/var/srv`, `/mnt` or `/srv`. Symlink paths and network re-exports are rejected.
+2. Add a share name, a dedicated SMB username/password and a filesystem UID/GID.
+   This creates an SMB account inside the service, not a host login account.
+   Each share has one account in this milestone. The selected UID/GID must have
+   access to the folder; Xur does not recursively change ownership or permissions.
+3. Select read-only or read/write access. Choose this machine's specific LAN or
+   VPN IPv4 address and start hosting. Use the displayed `smb://address/share`
+   address, or `\\address\share` on Windows. SMB3 encryption and authenticated
+   access are required; guest access and SMB1 are disabled.
+
+Hosting runs in `xur-smb.service`, independently of GPU profiles and the web
+interface. Podman publishes TCP 445 only on the chosen address. An existing SMB
+listener can prevent startup; Xur does not replace other SMB services. Stop
+hosting before adding/removing shares. Removing a share does not remove its
+files. To replace a hosting account/password, stop hosting, remove that share
+and recreate it with the new credentials.
+
+The saved filesystem UUID is checked before every service start so a missing
+backing disk cannot turn into an empty share on the system disk. Private bind
+mounts retain the original filesystem if a host mount is detached. Samba does
+not follow symlinks inside shared folders. The Samba container disables SELinux
+label separation for itself to access explicitly selected existing folders
+without relabeling user data; host SELinux remains enabled. The server receives
+only hosting configuration/password hashes and selected folders, not saved
+credentials for outgoing connections.
+
+### Connecting and assigning folders
+
+Save a server DNS name or IPv4 address, share name, credentials and the local
+UID/GID that should access the mounted files. Read-only access and required
+SMB encryption are the defaults. Select **Connect** or **Test access** to verify
+an independent SMB login and the mounted filesystem. Saved status distinguishes
+mounted from unmounted; a mounted share is not proof that its server is online.
+
+Connections use stable paths under `/var/mnt/xur-smb/`. They mount on demand after
+reboot and do not require the remote server during ordinary boot. **Disconnect**
+stops and disables the automount; **Connect** enables it again. Starting an
+assigned workload also mounts its required connection. To replace server details
+or credentials, remove/recreate the connection and update its assignments.
+
+In the profile editor, expand **Shared network folders** on a container or model
+workload. Select connections and optionally allow writes; a read-only connection
+cannot be assigned writable. Each appears at the displayed `/shared/smb-…` path
+inside the workload. The mount GID is added to the container’s supplementary
+groups so workloads can access the mapped files without DAC override
+capabilities. Existing persistent volumes cannot overlap these paths.
+Changing assignments or write permissions changes the workload fingerprint and
+therefore recreates the container on the next profile load. Workstations can
+access the host mount path using the configured local UID/GID; per-desktop
+storage isolation is outside this milestone.
+
+Every assigned connection is required. Startup checks a fresh SMB session and
+verifies the expected CIFS mount; cached metadata alone cannot admit startup.
+Mount failures remain visible as workload startup errors. Assigned containers
+use no automatic Podman restart policy, so restarts go through Xur's checks.
+Their systemd lifetime depends on all required mounts, and their private bind
+mounts never switch to an empty local directory. An outage during running I/O
+still follows Linux CIFS reconnect/error behavior; this feature does not provide
+an application-level transaction or an automatic workload restart on recovery.
+Unload all assigned workloads (including pending ones and independent services)
+before disconnecting/removing a connection.
+
+Credentials are stored in owner-only files below
+`/var/lib/xur/network-shares`; passwords are not returned in status, exported in
+ordinary configuration JSON or put in process arguments. The private recovery
+backup includes network-share configuration and credentials. It excludes
+container images, so reinstall the SMB runtime after restoring to a new host.
+Treat that backup as a secret. Browser mutations require the existing
+administrator session and CSRF protection; API keys cannot create credentials
+or publish host folders.
+
+Authenticated read endpoint: `GET /api/storage/network`. Browser-only mutations:
+`POST /api/storage/network/runtime`, `/connections`, `/connections/action`,
+`/hosted`, `/hosted/remove`, and `/server` (all under `/api/storage/network`).
+Connection actions are `connect`, `test`, `disconnect`, and `remove`.
+
+Validation: run `Xur.Unit.Tests --network-shares` for credential boundaries,
+persistent connections, mount identity, offline startup, permissions and removal
+guards. Live acceptance additionally needs a Bazzite host and SMB server: test
+read/write permissions, host reboot, server outage/recovery, profile switching,
+backing-disk removal and SELinux Enforcing before release. Automated command
+fixtures do not substitute for those live filesystem checks.

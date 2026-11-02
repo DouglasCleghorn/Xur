@@ -1,0 +1,98 @@
+@page "/storage/network"
+@inject Appliance Device
+<PageTitle>Network shares · Xur</PageTitle>
+<div class="page-heading"><div><a href="/storage">Storage</a><h1>Network shares</h1></div><a href="/storage/network">Refresh status</a></div>
+@if(Device.Installer) { <p>Network shares are available after installation.</p> }
+else if(status==null) { <p role="alert">Network shares are unavailable. Check Diagnostics and refresh.</p> }
+else
+{
+<div id="network-shares" data-busy="@status.Busy.ToString().ToLowerInvariant()">
+    <AntiforgeryToken />
+    <p id="network-share-message" role="status" aria-live="polite">@status.Message</p>
+    @if(!status.RuntimeReady) { <p>Install the <a href="#smb-runtime">SMB runtime</a> below before adding shares or connections.</p> }
+    <section class="panel" aria-labelledby="connections-heading">
+        <h2 id="connections-heading">Connected shares</h2>
+        <p>Save an SMB3 connection, then connect to test it. Assign folders in <a href="/profiles">Profiles</a> for container and model workloads. Desktops use the host path with the selected local UID/GID.</p>
+        @foreach(var item in status.Connections)
+        {
+            var c=item.Connection;
+            <article class="panel"><h3>@c.Name</h3><p>//@c.Server/@c.Share · @(c.ReadOnly?"Read only":"Read/write") · @(c.Encrypt?"Encryption required":"Encryption negotiated")</p>
+                <code class="mount-path">@item.Path</code>
+                <p>@(item.Mounted?"Mounted — use Test access to check filesystem access.":item.Error)</p>
+                <p class="secondary-text">Workload folder: <code>@("/shared/"+c.Id)</code> · Local UID @c.Uid / GID @c.Gid</p>
+                <div class="actions">
+                    <button type="button" data-connection="@c.Id" data-action="connect">Connect</button>
+                    <button type="button" class="secondary" data-connection="@c.Id" data-action="test">Test access</button>
+                    <button type="button" class="secondary" data-connection="@c.Id" data-action="disconnect">Disconnect</button>
+                    <button type="button" class="quiet" data-connection="@c.Id" data-action="remove">Remove connection</button>
+                </div>
+            </article>
+        }
+        @if(status.Connections.Length==0) { <p>No saved connections.</p> }
+        <details><summary>Add connection</summary>
+            <form id="smb-connection-form" method="post" action="/api/storage/network/connections">
+                <fieldset disabled="@(!status.RuntimeReady||status.Busy)"><legend>Connection and local access</legend>
+                <label>Name<input name="name" required maxlength="80" /></label>
+                <label>Server<input name="server" required placeholder="nas.home or 192.168.1.20" /></label>
+                <label>Share<input name="share" required placeholder="datasets" maxlength="80" /></label>
+                <label>SMB username<input name="username" required maxlength="128" autocomplete="off" /></label>
+                <label>Password<input type="password" name="password" required maxlength="1024" autocomplete="new-password" /></label>
+                <label>Domain (optional)<input name="domain" maxlength="128" /></label>
+                <label>Local UID<input type="number" name="uid" min="1000" max="65533" value="1000" required /></label>
+                <label>Local GID<input type="number" name="gid" min="1000" max="65533" value="1000" required /></label>
+                <label class="inline-option"><input type="checkbox" name="readOnly" checked /> Read only</label>
+                <label class="inline-option"><input type="checkbox" name="encrypt" checked /> Require encryption</label>
+                <button>Save connection</button></fieldset>
+            </form>
+        </details>
+        <p class="secondary-text">Connections mount on demand after reboot. Disconnect disables automatic mounting until Connect is used; starting an assigned workload also mounts its required folders. Unload assigned workloads before removing or disconnecting a connection. Removing a connection does not delete remote files.</p>
+    </section>
+    <section class="panel" aria-labelledby="hosting-heading">
+        <h2 id="hosting-heading">Hosted here</h2>
+        <p>Share existing local folders over encrypted SMB3. Hosting stays available across profile changes. Each share has its own SMB account; its UID/GID must already have the intended filesystem access. Xur does not change folder ownership.</p>
+        <p>Service: @(status.ServerRunning?"Running":status.Server.Enabled?"Enabled, but not running — check the system journal":"Stopped")</p>
+        <form id="smb-server-form" method="post" action="/api/storage/network/server">
+            <label>Listen address<input name="address" value="@status.Server.Address" placeholder="This machine’s LAN or VPN IPv4 address" required /></label>
+            <button disabled="@(!status.RuntimeReady||status.Busy)">@(status.Server.Enabled?"Restart hosting":"Start hosting")</button>
+            <button type="button" class="secondary" id="smb-stop" disabled="@(!status.Server.Enabled)">Stop hosting</button>
+        </form>
+        @foreach(var share in status.Hosted)
+        {
+            <article class="panel"><h3>@share.Name</h3><code class="mount-path">@share.Path</code><p>@share.Username · @(share.ReadOnly?"Read only":"Read/write") · UID @share.Uid / GID @share.Gid</p>
+                <label>Connection address<input readonly value="@("smb://"+(status.Server.Address.Length>0?status.Server.Address:"HOST")+"/"+share.Name)" /></label>
+                <button type="button" class="quiet" data-remove-share="@share.Id" disabled="@status.Server.Enabled">Remove share</button>
+            </article>
+        }
+        @if(status.Hosted.Length==0) { <p>No hosted folders.</p> }
+        <details><summary>Add hosted folder</summary>
+            <form id="smb-host-form" method="post" action="/api/storage/network/hosted">
+                <fieldset disabled="@(status.Server.Enabled||!status.RuntimeReady||status.Busy)">
+                <legend>Folder and access</legend>
+                <label>Share name<input name="name" required pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}" maxlength="48" /></label>
+                <label>Existing local folder<input name="path" required placeholder="/var/home/your-user/datasets" /></label>
+                <label>New SMB username<input name="username" required pattern="[a-z_][a-z0-9_-]{0,31}" maxlength="32" autocomplete="off" /></label>
+                <label>New SMB password<input name="password" type="password" required maxlength="1024" autocomplete="new-password" /></label>
+                <label>Filesystem UID<input type="number" name="uid" min="1000" max="65533" value="1000" required /></label>
+                <label>Filesystem GID<input type="number" name="gid" min="1000" max="65533" value="1000" required /></label>
+                <label class="inline-option"><input type="checkbox" name="readOnly" checked /> Read only</label>
+                <button>Add hosted folder</button>
+                </fieldset>
+            </form>
+        </details>
+        <p class="secondary-text">Stop hosting before adding or removing folders. Existing local ext4, XFS and Btrfs folders are supported; symlinks and network-share re-export are excluded. Access is published only on the address above, TCP port 445.</p>
+        <details open="@(!status.RuntimeReady)"><summary>SMB runtime</summary>
+            <p>@(status.RuntimeReady?"Installed":"Not installed") · @status.Message</p>
+            <p>Install or update Samba from the current Fedora packages. Installation needs internet access; ordinary hosting does not. Restart hosting after an update.</p>
+            <button type="button" id="smb-runtime" disabled="@status.Busy">@(status.RuntimeReady?"Update SMB runtime":"Install SMB runtime")</button>
+        </details>
+    </section>
+    <script src="/network-shares.js" defer></script>
+</div>
+}
+@code {
+    NetworkSharesStatus? status;
+    protected override async Task OnInitializedAsync()
+    {
+        if(!Device.Installer)try{status=await Device.Agent.GetFromJsonAsync<NetworkSharesStatus>("/storage/network");}catch{}
+    }
+}

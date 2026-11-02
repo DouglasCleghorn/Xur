@@ -257,6 +257,8 @@ app.MapGet("/display-consoles",()=>Results.Json(new{error=displayConsoles.Error}
 var dataStorage=new DataStorage(stateDir);
 var recipeCatalog=new RecipeCatalog(Environment.GetEnvironmentVariable("XUR_CATALOG") ?? "/usr/share/xur/catalog",Path.Combine(stateDir,"catalog-selected"));
 var workloads=new WorkloadRuntime(Path.Combine(stateDir,"workloads"),recipeCatalog,displayConsoles,dataStorage){IndependentT3=true};
+if(!installer)workloads.NetworkShares.CleanInterruptedPassword();
+app.MapNetworkShares(workloads,installer);
 var persisted=new PersistedCompute(stateDir,new PersistedRuntime(workloads),workloads.StartPersisted);
 workloads.PersistedOwner=persisted.Owns;
 if(!installer)

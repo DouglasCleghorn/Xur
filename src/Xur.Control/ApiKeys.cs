@@ -86,6 +86,7 @@ public sealed class ApiKeys
         if(!path.StartsWith("/api/") && !path.StartsWith("/inference/"))return false;
         if(path is "/api/unsloth/password" or "/api/unsloth/connect" || path is "/api/t3-code/mcp/connect" or "/api/t3-code/pair" or "/api/t3-code/setup" or "/api/t3-code/connect" || path=="/api/api-keys" || path.StartsWith("/api/api-keys/") || path=="/api/bootstrap" || path.StartsWith("/api/auth/") || path.StartsWith("/api/install/"))return false;
         if(path=="/api/t3-code/storage"&&method is not ("GET" or "HEAD"))return false;
+        if(path.StartsWith("/api/storage/network") && method is not ("GET" or "HEAD"))return false;
         if(scope=="coding")return method is "GET" or "POST" && Regex.IsMatch(path,@"\A/api/t3-code/inference/xur_[a-f0-9]{24}/v1/(models|chat/completions|responses)\z");
         if(scope is "automation" or "t3")return true;
         if(scope=="robotics")return (method is "GET" or "HEAD") && (path is "/api/robotics/status" or "/api/robotics/jobs" || Regex.IsMatch(path,@"\A/api/robotics/(jobs/[a-f0-9]{32}(/markers|/captures(/[a-z0-9-]+\.jpg)?)?|cameras/(head|hand))\z"))
