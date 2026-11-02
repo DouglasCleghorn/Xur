@@ -2,7 +2,7 @@
 @inject Appliance Device
 <PageTitle>GPU power · Xur</PageTitle>
 <div class="page-heading"><h1>GPU power</h1><a class="button secondary" href="/gpus">GPU monitoring</a></div>
-<p class="secondary-text">Limits are saved per card and restored after reboot.</p>
+<p class="secondary-text">Set limits by GPU type or individual card. Settings are saved per card and restored after reboot.</p>
 @if(error!=null) { <p class="notice error" role="alert">@error</p> }
 @if(saved) { <p class="notice" role="status">Power setting saved.</p> }
 @if(Device.Installer) { <p>Power controls are available after installation.</p> }
@@ -10,11 +10,44 @@ else if(state==null) { <p role="alert">Could not read GPU power controls.</p> }
 else if(state.Cards.Length==0) { <p>No GPUs detected.</p> }
 else
 {
+    var types=state.Cards.Where(c=>c.CanChange&&c.Model!=null).GroupBy(c=>new{c.Vendor,c.Model}).Where(g=>g.Count()>1).ToArray();
+    @if(types.Length>0)
+    {
+        <h2>By GPU type</h2>
+        <div class="gpu-power-grid">
+            @foreach(var type in types)
+            {
+                var first=type.First();
+                var minimum=type.Max(c=>c.MinimumWatts??1);
+                var maximum=type.Min(c=>c.MaximumWatts);
+                var values=type.Select(c=>c.SavedWatts??c.CurrentWatts).Distinct().ToArray();
+                <section class="gpu-panel" data-power-type="@type.Key.Model">
+                    <div class="gpu-card-heading"><h3>@type.Key.Model</h3><span class="secondary-text">@type.Key.Vendor</span></div>
+                    <p>Applies to all @type.Count() adjustable GPUs of this type.</p>
+                    <form method="post" action="/gpus/power/save" class="gpu-power-form">
+                        <AntiforgeryToken /><input type="hidden" name="pci" value="@first.Pci" /><input type="hidden" name="identity" value="@first.Identity" /><input type="hidden" name="sameType" value="true" />
+                        @if(minimum<=maximum)
+                        {
+                            <label>Power limit (W)<input type="number" name="watts" required min="@Invariant(minimum)" max="@Invariant(maximum)" step="1" value="@(values.Length==1?Invariant(values[0]):"")" placeholder="@(values.Length>1?"Mixed limits":null)" /></label>
+                            <p class="secondary-text">@Watts(minimum)–@Watts(maximum) · Shared supported range</p>
+                        }
+                        else { <p class="secondary-text">These cards have no shared supported power range. Set their limits individually or restore defaults.</p> }
+                        <div class="actions">
+                            @if(minimum<=maximum) { <button type="submit">Save for all @type.Count() GPUs</button> }
+                            <button type="submit" name="reset" value="true" formnovalidate class="secondary">Use defaults for all</button>
+                        </div>
+                        <p class="secondary-text">Defaults restore each card's own driver default. Cards without adjustable controls are excluded.</p>
+                    </form>
+                </section>
+            }
+        </div>
+        <h2>Individual GPUs</h2>
+    }
     <div class="gpu-power-grid">
         @foreach(var card in state.Cards)
         {
             <section class="gpu-panel" data-power-gpu="@card.Pci">
-                <div class="gpu-card-heading"><h2>@card.Name</h2><span class="secondary-text">@card.Vendor</span></div>
+                <div class="gpu-card-heading">@if(types.Length>0){<h3>@card.Name</h3>}else{<h2>@card.Name</h2>}<span class="secondary-text">@card.Vendor</span></div>
                 <p class="gpu-identity">@card.Pci</p>
                 <div class="gpu-readings"><div><span>Current limit</span><strong>@Watts(card.CurrentWatts)</strong></div><div><span>Saved setting</span><strong>@(card.SavedWatts is {} w?Watts(w):card.HasSavedSetting?"Driver default":"Not set")</strong></div></div>
                 @if(card.CanChange)

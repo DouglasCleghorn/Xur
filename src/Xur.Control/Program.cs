@@ -322,7 +322,7 @@ async Task StartHost()
             if(!double.TryParse(f["watts"],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out var value)||!double.IsFinite(value))return Results.Redirect("/gpus/power?error=Enter+a+valid+power+limit.");
             watts=value;
         }
-        var r=await appliance.Agent.PostAsJsonAsync("/gpu-power",new GpuPowerRequest(f["pci"].ToString(),f["identity"].ToString(),watts));
+        var r=await appliance.Agent.PostAsJsonAsync("/gpu-power",new GpuPowerRequest(f["pci"].ToString(),f["identity"].ToString(),watts,f["sameType"]=="true"));
         if(r.IsSuccessStatusCode)return Results.Redirect("/gpus/power?saved=true");
         var message="Could not change the power limit.";
         try{message=JsonDocument.Parse(await r.Content.ReadAsStringAsync()).RootElement.GetProperty("error").GetString()??message;}catch{}
