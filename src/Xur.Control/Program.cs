@@ -116,6 +116,7 @@ async Task StartHost()
     });
     var app = builder.Build();
     T3CodeEndpoints.MapEndpoints(app,appliance);
+    T3Mcp.Map(app,appliance,apiKeys);
     var unslothServe=new UnslothServe(proxy:"unix:"+unslothSocket);
     using var studioLoginClient=UnslothSession.CreateClient();
     using var studioProxyClient=UnslothProxy.CreateClient();
@@ -149,7 +150,7 @@ async Task StartHost()
     });
     app.UseBrowserErrors(Path.Combine(identityDirectory,"response-spool"));
     app.UseBrowserOrigin();
-    app.UseApiKeys(apiKeys,()=>auth.AccountConfigured);
+    app.UseApiKeys(apiKeys,()=>auth.AccountConfigured,async()=>await appliance.Agent.GetFromJsonAsync<T3StorageConfig>("/t3-code/storage")??throw new IOException("T3 permissions unavailable."));
     app.Use(async (ctx,next) => {
         if(ctx.GetEndpoint()?.Metadata.GetMetadata<PublicStaticAsset>()==null)ctx.Response.Headers.CacheControl = "no-store";
         ctx.Response.Headers.XContentTypeOptions = "nosniff";

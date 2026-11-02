@@ -45,7 +45,7 @@ public static class T3CodeEndpoints
         app.MapPost("/api/t3-code/setup",async Task<IResult>(HttpContext context,T3SetupRequest request)=>
         {
             if(appliance.Installer)return Results.Conflict();
-            if(request.Action is "connect" or "connection-status"||request.Model!=null)return Results.BadRequest(new{error="Use the model connection action."});
+            if(request.Action is "connect" or "connection-status" or "mcp-connect"||request.Model!=null||request.Mcp!=null)return Results.BadRequest(new{error="Use the model connection action."});
             context.Response.Headers.CacheControl="no-store";
             using var response=await appliance.Agent.PostAsJsonAsync("/t3-code/setup",request,context.RequestAborted);
             return Results.Content(await response.Content.ReadAsStringAsync(context.RequestAborted),"application/json",statusCode:(int)response.StatusCode);

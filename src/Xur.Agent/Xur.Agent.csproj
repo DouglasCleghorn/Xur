@@ -9,4 +9,5 @@
   <ItemGroup><EmbeddedResource Include="../../catalog/engines/vllm-rocm-gfx1103.Containerfile" LogicalName="Xur.VllmGfx1103" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../os/bootc/systemd/xur-metrics.service" LogicalName="Xur.MetricsService" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="t3-setup.py" LogicalName="Xur.T3Setup" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="t3-mcp.py" LogicalName="Xur.T3Mcp" /></ItemGroup>
 </Project>

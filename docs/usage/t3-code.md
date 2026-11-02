@@ -299,3 +299,46 @@ profile unloads and route reassignment. Desktop/phone browser checks use the rea
 Razor page with fake accounts. OpenCode configuration parsing is also covered. Real subscription authorization and inference from a deployed T3
 container still require validation on the target host; these tests do not consume
 subscription usage or run a real model.
+
+## Xur MCP in the T3 container
+
+Open **Permissions and storage** on the T3 Code page to choose **Read Xur
+data** and **Change Xur settings and run actions**. Changes imply read access.
+Both permissions default to off. **Full host access** inherently grants both;
+the individual controls are hidden while it is selected. Saved individual
+choices return when full host access is turned off. Folder access is separate:
+MCP permissions do not restrict files already shared with the container.
+
+Save the permissions, wait for T3 to be running, then select **Connect or repair
+Xur MCP** from Xur's HTTPS LAN or Tailscale address. Start a new T3 thread after
+connection. This installs a standard-library Python stdio MCP server inside the
+container, registered as `xur` for native Codex, Claude and OpenCode accounts,
+including Xur's isolated local-model configurations. Custom managed provider
+homes may need the same registration in their own configuration. Existing
+unrelated harness settings are preserved; conflicting `xur` entries are reported
+rather than overwritten. For an existing OpenCode JSONC configuration, merge a
+local MCP named `xur` with command `["python3",
+"/home/node/.local/share/xur-mcp/server.py"]` and enable it, then remove or migrate
+the JSONC file to JSON before using the repair action.
+
+The server, certificate and restricted API key live under
+`/home/node/.local/share/xur-mcp`, on the persistent home volume. Credentials are
+owner-only and are never placed in harness command arguments. Reconnection
+rotates the key; the old key is revoked only after successful setup. The key
+appears as **T3 Xur MCP** in API keys and can be revoked there. Permission changes
+are enforced by Xur on every request, including existing MCP processes, and a
+permission-service outage denies access.
+
+The tools are `xur_catalog` (live API routes and request schemas), `xur_read`
+(data/settings), and `xur_write` (settings/actions). These cover Xur's published
+JSON APIs, including monitoring and telemetry, profiles, models, workloads,
+network, displays, storage and updates. Existing API validation, revision and
+approval requirements apply. Browser-only forms, credential creation, account
+setup, installation, T3 pairing and T3 permission changes are not exposed.
+Streaming endpoints and responses above 8 MiB require their dedicated clients;
+binary responses below that size are returned as base64. No extra telemetry
+store is created. HTTPS certificate and hostname validation remain enabled.
+
+Native registration follows the [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp),
+[Claude user scope](https://code.claude.com/docs/en/mcp), and
+[OpenCode local MCP](https://opencode.ai/docs/mcp-servers/) formats.
