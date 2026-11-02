@@ -69,7 +69,8 @@ async function update(){
   atomic(path.join(root,'update-status.json'),JSON.stringify({checkedAt:new Date().toISOString(),sdk:version,state:'Ready'}));
  }finally{fs.rmSync(stage,{recursive:true,force:true});}
 }
-if(require.main===module)update().catch(error=>{
+// The embedded launcher runs `node -`; stdin modules have no require.main.
+if(require.main===module||process.argv?.[1]==='-')update().catch(error=>{
  console.error('Xur .NET/MCP update failed; any previous working installation is retained:',error.message);
  atomic(path.join(root,'update-status.json'),JSON.stringify({checkedAt:new Date().toISOString(),state:'Failed',error:error.message}));process.exitCode=1;
 });

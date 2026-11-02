@@ -3,6 +3,19 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const root=path.resolve('.build/evidence/t3-dotnet');fs.mkdirSync(root,{recursive:true});
 const home=fs.mkdtempSync(path.join(root,'home-'));
 const source=fs.readFileSync('src/Xur.Domain/t3-dotnet.cjs','utf8').replace('__XUR_MCP_SOURCES__',JSON.stringify({'Program.cs':'fixture','Xur.Mcp.csproj':'fixture','LICENSE':'MIT fixture','licensing.md':'notices fixture'}));
+// The container launcher sends the updater to node's stdin, not a script file.
+// Stop at metadata lookup so this real entry-point check needs no network or SDK.
+const bootstrapHome=fs.mkdtempSync(path.join(root,'bootstrap-'));
+try{
+ const result=require('node:child_process').spawnSync(process.execPath,['-'],{
+  input:'globalThis.fetch=async()=>{throw Error("fixture metadata unavailable")};\n'+source,
+  env:{...process.env,HOME:bootstrapHome},encoding:'utf8',timeout:10000
+ });
+ assert.equal(result.status,1,'stdin bootstrap must run the updater and report failure');
+ const status=JSON.parse(fs.readFileSync(path.join(bootstrapHome,'.local/share/xur-mcp/update-status.json'),'utf8'));
+ assert.equal(status.state,'Failed');
+ assert.equal(status.error,'fixture metadata unavailable');
+}finally{fs.rmSync(bootstrapHome,{recursive:true,force:true});}
 let mismatch=false,publishFails=false;
 const content=Buffer.from('SDK fixture'),hash=crypto.createHash('sha512').update(content).digest('hex');
 const sdkVersion='10.0.403';
