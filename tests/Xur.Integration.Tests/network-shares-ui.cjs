@@ -6,7 +6,7 @@ const fs=require('fs'),assert=require('assert/strict');
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage(),requests=[];
-  const html=fs.readFileSync('.build/evidence/network-shares-render/network-shares.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+'<script src="/network-shares.js"></script>';
+  const html=fs.readFileSync((process.env.XUR_RENDER_OUTPUT||'.build/evidence/network-shares-render')+'/network-shares.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+'<script src="/network-shares.js"></script>';
   await page.route('https://smb.test/**',route=>{
    const request=route.request(),path=new URL(request.url()).pathname;
    if(request.method()==='POST'){requests.push({path,headers:request.headers(),body:request.postDataJSON()});return route.fulfill({contentType:'application/json',body:'{}'});}

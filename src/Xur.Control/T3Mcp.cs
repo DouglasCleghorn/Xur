@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Schema;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Http.Metadata;
 using Xur.Domain;
 
 namespace Xur.Control;
@@ -28,7 +29,7 @@ public static class T3Mcp
                 .Where(e=>e.RoutePattern.RawText?.StartsWith("/api/",StringComparison.Ordinal)==true)
                 .SelectMany(e=>(e.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods??[])
                     .Where(m=>ApiKeys.Allows(scope,m,e.RoutePattern.RawText!))
-                    .Select(m=>new{method=m,path=e.RoutePattern.RawText,parameters=e.Metadata.GetMetadata<MethodInfo>()?.GetParameters()
+                    .Select(m=>new{method=m,path=e.RoutePattern.RawText,description=e.Metadata.GetMetadata<IEndpointDescriptionMetadata>()?.Description,parameters=e.Metadata.GetMetadata<MethodInfo>()?.GetParameters()
                         .Where(p=>p.ParameterType!=typeof(HttpContext)&&p.ParameterType!=typeof(HttpRequest)&&p.ParameterType!=typeof(HttpResponse)&&p.ParameterType!=typeof(CancellationToken))
                         .Select(Parameter).ToArray()??[]})).ToArray();
             return Results.Json(new{instructions="Use route parameters in the path, scalar parameters in the query and request objects as JSON bodies. Read current settings before updating. Preserve revision and approval fields. API errors are authoritative. Streaming and large downloads should use their dedicated clients.",endpoints});

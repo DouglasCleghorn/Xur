@@ -250,10 +250,11 @@ ordinary configuration JSON or put in process arguments. The private recovery
 backup includes network-share configuration and credentials. It excludes
 container images, so reinstall the SMB runtime after restoring to a new host.
 Treat that backup as a secret. Browser mutations require the existing
-administrator session and CSRF protection; API keys cannot create credentials
-or publish host folders.
+administrator session and CSRF protection. T3 MCP can perform these operations
+when **Change Xur settings and run actions** (or full host access) is enabled;
+ordinary automation keys remain read-only for network shares.
 
-Authenticated read endpoint: `GET /api/storage/network`. Browser-only mutations:
+Authenticated read endpoint: `GET /api/storage/network`. Browser or write-enabled T3 MCP mutations:
 `POST /api/storage/network/runtime`, `/connections`, `/connections/action`,
 `/hosted`, `/hosted/remove`, and `/server` (all under `/api/storage/network`).
 Connection actions are `connect`, `test`, `disconnect`, and `remove`.
@@ -264,3 +265,24 @@ guards. Live acceptance additionally needs a Bazzite host and SMB server: test
 read/write permissions, host reboot, server outage/recovery, profile switching,
 backing-disk removal and SELinux Enforcing before release. Automated command
 fixtures do not substitute for those live filesystem checks.
+
+
+### Managing shares through Xur MCP
+
+Connect Xur MCP from the T3 Code page and grant read or write permission there.
+Call `xur_catalog` first; network-share routes include request schemas and
+operation descriptions. Use `xur_read` with `/api/storage/network` to inspect
+current state. Read-only permission cannot change storage. With write permission,
+use `xur_write` and the POST routes above to install the runtime, create shares
+and connections, test access, start/stop hosting, or disconnect/remove entries.
+The same workload-in-use checks, path validation and filesystem checks apply.
+Disabling permissions or revoking the MCP key takes effect on the next request.
+MCP cannot change its own permissions or create Xur manager credentials.
+
+To assign a connection, read the profile and use the profile APIs from the
+catalog, preserving its revision and other workload settings. Each workload's
+`networkShares` array contains `{ "connectionId": "smb-…", "readOnly": true }`.
+Only container/model workloads support these assignments. Creating a connection
+or hosted account requires a password in the request body: use secure secret
+input, or create it in the browser and use MCP for subsequent management. Do not
+paste passwords into ordinary chat or commit them to configuration files.
