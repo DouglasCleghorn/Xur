@@ -4,7 +4,7 @@ public record T3CodePrepareRequest(string? Volume=null);
 public record T3CodeStatus(string? WorkloadId,string State,bool Installed=false,bool Enabled=false,string? Error=null);
 public record T3CodeEnabled(bool Enabled);
 public record T3CodePairing(string Credential,DateTimeOffset ExpiresAt);
-public record T3StorageConfig(bool AllDrives=true,bool Models=true,string[]? Folders=null,bool FullHostAccess=false);
+public record T3StorageConfig(bool AllDrives=true,bool Models=true,string[]? Folders=null,bool FullHostAccess=false,bool McpRead=false,bool McpWrite=false);
 
 public static class T3CodeWorkload
 {
@@ -35,12 +35,15 @@ public static class T3CodeWorkload
     static string ReadLauncher()
     {
         using var stream=typeof(T3CodeWorkload).Assembly.GetManifestResourceStream("Xur.T3Launcher")!;
-        using var reader=new StreamReader(stream);return reader.ReadToEnd();
+        using var reader=new StreamReader(stream);
+        string Resource(string name){using var input=typeof(T3CodeWorkload).Assembly.GetManifestResourceStream(name)!;using var text=new StreamReader(input);return text.ReadToEnd();}
+        var sources=new Dictionary<string,string>{{"Program.cs",Resource("Xur.McpProgram")},{"Xur.Mcp.csproj",Resource("Xur.McpProject")},{"LICENSE",Resource("Xur.McpLicense")},{"licensing.md",Resource("Xur.McpLicensing")}};
+        return reader.ReadToEnd().Replace("__XUR_DOTNET_UPDATER__",Resource("Xur.T3Dotnet").Replace("__XUR_MCP_SOURCES__",System.Text.Json.JsonSerializer.Serialize(sources),StringComparison.Ordinal),StringComparison.Ordinal);
     }
 
     public const string Dockerfile="""
         FROM mirror.gcr.io/library/node:lts
-        RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client ca-certificates curl python3 ripgrep bash \
+        RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client ca-certificates curl python3 ripgrep bash libicu-dev \
             && rm -rf /var/lib/apt/lists/*
         COPY t3-launcher /opt/t3/t3
         RUN chmod 755 /opt/t3/t3 && ln -s /opt/t3/t3 /usr/local/bin/t3 \

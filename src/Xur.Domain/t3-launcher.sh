@@ -4,6 +4,15 @@ export T3CODE_HOME="${T3CODE_HOME:-$HOME/.t3}"
 export T3CODE_INSTALL_BIN_DIR="${T3CODE_INSTALL_BIN_DIR:-$HOME/.local/bin}"
 export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$HOME/.local/share/xur-tools/bin:$PATH"
 
+# Install/update the SDK and C# MCP in the persistent home. flock is released
+# automatically if the container stops; failed updates retain the selected pair.
+refresh_dotnet() (
+    mkdir -p "$HOME/.local/share/xur-mcp"
+    timeout --foreground --kill-after=5s 900s flock -w 5 "$HOME/.local/share/xur-mcp/update.lock" node - <<'XUR_DOTNET_UPDATE'
+__XUR_DOTNET_UPDATER__
+XUR_DOTNET_UPDATE
+)
+
 # Download the complete upstream script before executing it. Bound each job so
 # an offline update cannot hold startup forever. Upstream owns versions/checksums.
 install_script() {
@@ -178,6 +187,7 @@ refresh() (
 
 # The setup UI uses the same installer, without launching or updating T3.
 if [ "${1:-}" = xur-install-harness ]; then
+    if [ "${2:-}" = dotnet ]; then refresh_dotnet; exit $?; fi
     case "${2:-}" in codex|claude|opencode|gh|uv|tools) refresh "$2"; exit $? ;; esac
     echo 'Choose Codex, Claude, OpenCode, gh, uv or tools.' >&2; exit 1
 fi
@@ -186,6 +196,7 @@ fi
 if [ "${1:-}" = start ]; then
     # Only the upstream service launcher may select/restart a running T3.
     # A concurrent `t3 update` would race its durable update/rollback state.
+    (while :; do refresh_dotnet || true; sleep 86400; done) &
     for tool in codex claude opencode gh uv tools; do
         refresh "$tool" &
     done

@@ -110,3 +110,11 @@ archive digest, matching source archive digest and license digest, update the pi
 review storage-format compatibility before allowing application rollback across
 versions. The runtime and upstream license are included in the app bundle; no
 Docker Hub image or runtime network download is involved.
+
+The container C# MCP project `tools/Xur.Mcp/Xur.Mcp.csproj` intentionally uses
+floating stable NuGet versions and no lock file. `src/Xur.Domain/t3-dotnet.cjs`
+resolves Microsoft's latest supported stable SDK with its published SHA-512 hash,
+then restores current stable MCP dependencies at startup and daily. Test with
+`dotnet run --project tools/Xur.Mcp -- --verify` and
+`node tests/Xur.Integration.Tests/t3-dotnet.cjs`. Failed builds do not replace the
+active SDK/MCP pair. Dependency distributions and notices remain with each build.

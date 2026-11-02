@@ -3,4 +3,11 @@
   <ItemGroup><EmbeddedResource Include="../../catalog/engines/Containerfile" LogicalName="Xur.EngineImages" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="t3-launcher.sh" LogicalName="Xur.T3Launcher" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../Xur.IO/Xur.IO.csproj" /></ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="t3-dotnet.cjs" LogicalName="Xur.T3Dotnet" />
+    <EmbeddedResource Include="../../tools/Xur.Mcp/Program.cs" LogicalName="Xur.McpProgram" />
+    <EmbeddedResource Include="../../tools/Xur.Mcp/Xur.Mcp.csproj" LogicalName="Xur.McpProject" />
+    <EmbeddedResource Include="../../LICENSE" LogicalName="Xur.McpLicense" />
+    <EmbeddedResource Include="../../docs/licensing.md" LogicalName="Xur.McpLicensing" />
+  </ItemGroup>
 </Project>

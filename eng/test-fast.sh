@@ -36,6 +36,10 @@ node tests/Xur.Integration.Tests/audio-cpp-bridge.cjs > .build/fast/audio-cpp-br
 node tests/Xur.Integration.Tests/https-login.cjs > .build/fast/https-login.json
 node tests/Xur.Integration.Tests/updates-ui.cjs > .build/fast/updates-ui.json
 node tests/Xur.Integration.Tests/control-panel-ui.cjs > .build/fast/control-panel-ui.json
+"$sdk" run --project tools/Xur.Mcp -- --verify > .build/fast/t3-mcp-sdk.log 2>&1
+node tests/Xur.Integration.Tests/t3-dotnet.cjs > .build/fast/t3-dotnet.log 2>&1
+python3 tests/Xur.Integration.Tests/t3-mcp.py > .build/fast/t3-mcp.log 2>&1
+node tests/Xur.Integration.Tests/t3-mcp-permissions.cjs >> .build/fast/t3-mcp.log 2>&1
 node tests/Xur.Integration.Tests/t3-provider-links.cjs > .build/fast/t3-provider-links.log
 node tests/Xur.Integration.Tests/profile-switcher-ui.cjs > .build/fast/profile-switcher-ui.json
 node tests/Xur.Integration.Tests/endpoints-ui.cjs > .build/fast/endpoints-ui.json

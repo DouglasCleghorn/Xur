@@ -32,24 +32,26 @@
  toggle.addEventListener('change',()=>setEnabled(toggle.checked));
  retry.addEventListener('click',()=>setEnabled(enabled));
  const storageFullHost=find('storage-full-host'),storageAll=find('storage-all'),storageModels=find('storage-models'),storageFolders=find('storage-folders'),storageSave=find('storage-save'),storageError=find('storage-error'),storageMessage=find('storage-message');
+ const mcpRead=find('mcp-read'),mcpWrite=find('mcp-write');
  let storageLoaded=false,storageLoading=false;
- function storageFields(){find('storage-folders-label').hidden=storageAll.checked;}
- function renderStorage(data){storageFullHost.checked=data.fullHostAccess===true;storageAll.checked=data.allDrives;storageModels.checked=data.models;storageFolders.value=(data.folders??[]).join('\n');storageFields();}
+ function storageFields(){find('storage-folders-label').hidden=storageAll.checked;find('mcp-permissions').hidden=storageFullHost.checked;find('mcp-host-note').hidden=!storageFullHost.checked;}
+ storageFullHost.addEventListener('change',storageFields);
+ function renderStorage(data){mcpRead.checked=data.mcpRead===true;mcpWrite.checked=data.mcpWrite===true;storageFullHost.checked=data.fullHostAccess===true;storageAll.checked=data.allDrives;storageModels.checked=data.models;storageFolders.value=(data.folders??[]).join('\n');storageFields();}
  storageAll.addEventListener('change',storageFields);
  async function loadStorage(){
   if(storageLoading)return;storageLoading=true;
-  try{renderStorage(await api('storage'));for(const input of [storageFullHost,storageAll,storageModels,storageFolders,storageSave])input.disabled=false;storageError.hidden=true;storageLoaded=true;}
+  try{renderStorage(await api('storage'));for(const input of [storageFullHost,storageAll,storageModels,storageFolders,storageSave,mcpRead,mcpWrite])input.disabled=false;storageError.hidden=true;storageLoaded=true;}
   catch(e){storageError.textContent=e.message;storageError.hidden=false;}
   finally{storageLoading=false;}
  }
  find('storage-form').addEventListener('submit',async event=>{
   event.preventDefault();storageError.hidden=true;storageMessage.textContent='';
-  for(const input of [storageFullHost,storageAll,storageModels,storageFolders,storageSave])input.disabled=true;
+  for(const input of [storageFullHost,storageAll,storageModels,storageFolders,storageSave,mcpRead,mcpWrite])input.disabled=true;
   try{
-   const data=await api('storage',{fullHostAccess:storageFullHost.checked,allDrives:storageAll.checked,models:storageModels.checked,folders:storageFolders.value.split('\n').map(s=>s.trim()).filter(Boolean)});
+   const data=await api('storage',{fullHostAccess:storageFullHost.checked,mcpRead:mcpRead.checked,mcpWrite:mcpWrite.checked,allDrives:storageAll.checked,models:storageModels.checked,folders:storageFolders.value.split('\n').map(s=>s.trim()).filter(Boolean)});
    renderStorage(data);clearPair();storageMessage.textContent='Access settings saved.';await status();
   }catch(e){storageError.textContent=e.message;storageError.hidden=false;}
-  finally{for(const input of [storageFullHost,storageAll,storageModels,storageFolders,storageSave])input.disabled=false;}
+  finally{for(const input of [storageFullHost,storageAll,storageModels,storageFolders,storageSave,mcpRead,mcpWrite])input.disabled=false;}
  });
  find('storage').addEventListener('toggle',()=>{if(find('storage').open&&!storageLoaded)loadStorage();});
  loadStorage();
@@ -65,6 +67,11 @@
  find('copy').addEventListener('click',async()=>{
   try{await navigator.clipboard.writeText(find('link').value);message.textContent='Pairing link copied.';}
   catch{find('link').focus();find('link').select();message.textContent='Copy the selected pairing link.';}
+ });
+ find('mcp-connect').addEventListener('click',async()=>{
+  const button=find('mcp-connect'),result=find('mcp-message');button.disabled=true;result.textContent='Connecting Xur tools…';
+  try{const data=await api('mcp/connect',{});result.textContent=data.message;}
+  catch(e){result.textContent=e.message;}finally{button.disabled=false;}
  });
  status();setInterval(()=>{if(!document.hidden)status();},5000);
  setInterval(()=>{if(expires && Date.now()>=expires){clearPair();message.textContent='Pairing link expired. Create a new one to connect another device.';}},1000);

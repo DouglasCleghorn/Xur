@@ -24,7 +24,7 @@ else
             <label><input type="checkbox" id="t3-enabled" disabled /> Auto-run</label>
             <button type="button" id="t3-retry" class="secondary" hidden>Retry</button>
             <details id="t3-storage">
-                <summary>Storage and host access</summary>
+                <summary>Permissions and storage</summary>
                 <form id="t3-storage-form">
                     <label><input type="checkbox" id="t3-storage-full-host" disabled /> Full host access</label>
                     <p class="secondary-text">Allow agents to run commands as root on this server using <code>xur-host</code>. This grants complete control of the host, regardless of the folder selections below.</p>
@@ -33,6 +33,13 @@ else
                     <label id="t3-storage-folders-label" hidden>Folders to share (one full server path per line)<textarea id="t3-storage-folders" rows="4" spellcheck="false" disabled></textarea></label>
                     <label><input type="checkbox" id="t3-storage-models" disabled /> Mount model library at <code>/models</code> and <code>/model-sets</code></label>
                     <p class="secondary-text">The library is also accessible through /host when all folders are shared.</p>
+                    <fieldset id="t3-mcp-permissions">
+                        <legend>Xur MCP permissions</legend>
+                        <label><input type="checkbox" id="t3-mcp-read" disabled /> Read Xur data</label>
+                        <label><input type="checkbox" id="t3-mcp-write" disabled /> Change Xur settings and run actions</label>
+                        <p class="secondary-text">Changes also allow reading data. These permissions apply to Xur tools; shared folders retain their own access.</p>
+                    </fieldset>
+                    <p id="t3-mcp-host-note" class="secondary-text" hidden>Full host access includes all Xur MCP permissions.</p>
                     <button id="t3-storage-save" type="submit" class="secondary" disabled>Save access settings</button>
                     <p class="secondary-text">Saving restarts T3 if enabled.</p>
                     <p id="t3-storage-message" role="status"></p>
@@ -56,6 +63,12 @@ else
                 </section>
             </div>
             <p id="t3-error" role="alert" hidden></p><p id="t3-message" role="status"></p>
+        </section>
+        <section class="panel" aria-labelledby="t3-mcp-heading">
+            <h2 id="t3-mcp-heading">Xur tools in T3</h2>
+            <p>Connect agents in the T3 container to Xur data and settings using the permissions above.</p>
+            <button type="button" id="t3-mcp-connect">Connect or repair Xur MCP</button>
+            <p id="t3-mcp-message" role="status"></p>
         </section>
         <section class="panel" id="t3-providers" aria-labelledby="t3-providers-heading">
             <div class="section-heading"><h2 id="t3-providers-heading">Coding accounts and harnesses</h2><button id="t3-setup-refresh" type="button" class="secondary">Refresh setup</button></div>
