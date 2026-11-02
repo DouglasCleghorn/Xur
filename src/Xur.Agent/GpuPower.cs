@@ -13,7 +13,7 @@ public sealed class GpuPower
     readonly Dictionary<string,string> errors=[];
     Dictionary<string,double?> saved=[];
     string? configurationError;
-    record Probe(GpuPowerCard Card,string? CapPath);
+    record Probe(GpuPowerCard Card,string? CapPath,GpuDevice Device);
     public GpuPower(string directory="/var/lib/xur",string sys="/sys",Func<Task<GpuDevice[]>>? inventory=null,Func<string,string[],int,Task<ProcessResult>>? run=null)
     {
         this.directory=directory;this.sys=sys;this.inventory=inventory??(()=>GpuInventory.Observe());this.run=run??((exe,args,timeout)=>Processes.Run(exe,args,timeout));
@@ -65,7 +65,7 @@ public sealed class GpuPower
         }
         catch(Exception e) when(e is IOException or UnauthorizedAccessException or InvalidOperationException){message="Could not read the driver's power controls.";}
         bool supported=current!=null&&(min!=null||intelSustained)&&max!=null&&normal!=null&&max>0&&(min??0)<=max&&normal>=(min??0)&&normal<=max&&(g.Vendor=="NVIDIA"||cap!=null);
-        return new(new(g.Pci,id,g.DisplayName,g.Vendor,current,min,max,normal,saved.TryGetValue(id,out var wanted)?wanted:null,supported&&configurationError==null,configurationError??errors.GetValueOrDefault(id)??(supported?(intelSustained?"Sustained limit (PL1). Xur caps it at the card’s rated default; the driver validates lower values.":null):message),saved.ContainsKey(id)),cap);
+        return new(new(g.Pci,id,g.DisplayName,g.Vendor,current,min,max,normal,saved.TryGetValue(id,out var wanted)?wanted:null,supported&&configurationError==null,configurationError??errors.GetValueOrDefault(id)??(supported?(intelSustained?"Sustained limit (PL1). Xur caps it at the card’s rated default; the driver validates lower values.":null):message),saved.ContainsKey(id),g.Name),cap,g);
     }
     async Task<Probe[]> Probes()
     {
@@ -87,25 +87,40 @@ public sealed class GpuPower
             if(r.ExitCode!=0)throw new InvalidOperationException("The NVIDIA driver rejected the power limit.");
         }
         else await File.WriteAllTextAsync(p.CapPath!,Math.Round(watts*1000000).ToString(CultureInfo.InvariantCulture));
-        var after=(await Probes()).SingleOrDefault(x=>x.Card.Identity==p.Card.Identity&&x.Card.Pci==p.Card.Pci);
-        if(after?.Card.CurrentWatts is not {} actual||Math.Abs(actual-watts)>.1)throw new InvalidOperationException("The driver did not confirm the requested power limit.");
+        var after=await Observe(p.Device);
+        if(after.Card.Identity!=p.Card.Identity||after.Card.CurrentWatts is not {} actual||Math.Abs(actual-watts)>.1)throw new InvalidOperationException("The driver did not confirm the requested power limit.");
     }
     public async Task Set(GpuPowerRequest request)
     {
         await gate.WaitAsync();try
         {
             if(configurationError!=null)throw new InvalidOperationException(configurationError);
-            var p=(await Probes()).SingleOrDefault(p=>p.Card.Pci==request.Pci&&p.Card.Identity==request.Identity)??throw new InvalidOperationException("GPU identity changed. Refresh the page.");
-            var watts=request.Watts??p.Card.DefaultWatts??throw new InvalidOperationException("The default power limit is unavailable.");
-            Validate(p,watts);
+            var probes=await Probes();
+            var p=probes.SingleOrDefault(p=>p.Card.Pci==request.Pci&&p.Card.Identity==request.Identity)??throw new InvalidOperationException("GPU identity changed. Refresh the page.");
+            if(!p.Card.CanChange)throw new InvalidOperationException("This GPU's power limit cannot be changed. Refresh the page.");
+            var targets=request.SameType?probes.Where(x=>x.Card.CanChange&&x.Card.Vendor==p.Card.Vendor&&x.Card.Model==p.Card.Model).ToArray():[p];
+            // Check every card before saving or applying any part of a type change.
+            double Watts(Probe target)=>request.Watts??target.Card.DefaultWatts??throw new InvalidOperationException("The default power limit is unavailable.");
+            foreach(var target in targets)Validate(target,Watts(target));
             var next=new Dictionary<string,double?>(saved);
-            next[p.Card.Identity]=request.Watts;
+            foreach(var target in targets)next[target.Card.Identity]=request.Watts;
             // Write the durable intent first. A crash is recovered by the next
             // reconciliation; driver errors remain visible and are retried.
             Directory.CreateDirectory(directory);var path=Path.Combine(directory,"gpu-power.json");
             using(var f=new FileStream(path+".tmp",FileMode.Create,FileAccess.Write)){JsonSerializer.Serialize(f,next);f.Flush(true);}
             File.SetUnixFileMode(path+".tmp",UnixFileMode.UserRead|UnixFileMode.UserWrite);File.Move(path+".tmp",path,true);saved=next;
-            try{await Apply(p,watts);errors.Remove(p.Card.Identity);}catch{errors[p.Card.Identity]="Saved, but the driver has not applied the limit. Check the GPU and try again.";throw;}
+            var failures=new List<string>();
+            foreach(var target in targets)
+            {
+                try{await Apply(target,Watts(target));errors.Remove(target.Card.Identity);}
+                catch(Exception e) when(e is InvalidOperationException or IOException or UnauthorizedAccessException)
+                {
+                    errors[target.Card.Identity]="Saved, but the driver has not applied the limit. Check the GPU and try again.";
+                    if(!request.SameType)throw;
+                    failures.Add(target.Card.Name+" ("+target.Card.Pci+")");
+                }
+            }
+            if(failures.Count>0)throw new InvalidOperationException($"Settings saved for {targets.Length} GPUs, but {failures.Count} could not apply the limit: {string.Join(", ",failures)}. Xur will retry.");
         }finally{gate.Release();}
     }
     public async Task Reconcile()

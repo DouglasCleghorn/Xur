@@ -5,11 +5,23 @@ Each detected card shows its current limit and saved setting. Supported cards
 have a wattage input, the driver's minimum/maximum/default, **Save limit**, and
 **Use default**. Unsupported cards explain why there is no control.
 
+When multiple adjustable cards share the same vendor and model, **By GPU type**
+provides one wattage input and **Save for all N GPUs**. The shared range is the
+intersection of those cards' supported ranges; Xur validates every target before
+saving anything. **Use defaults for all** restores each card's own driver default.
+Cards without adjustable controls are excluded. Individual controls remain
+available for exceptions. Mixed limits leave the group input empty until you
+choose a value.
+
 Settings belong to the machine, independently of profiles. They are saved in
 `/var/lib/xur/gpu-power.json` (root, mode 0600), retained through app/OS updates,
 and checked at agent startup and every 30 seconds. Driver resets are reconciled
 too. A saved default follows the default reported by the driver after reboot.
 A failed write or readback remains visible; the saved intent is retried.
+Type changes save all target settings together before applying them. If one
+driver write fails, Xur still tries the other cards, reports the failed cards,
+and retries their saved settings during reconciliation. Type changes apply to
+currently detected adjustable cards; newly installed cards need another save.
 
 NVIDIA uses `nvidia-smi` to query the PCI device's UUID, limit, default and bounds,
 then writes by UUID and verifies the reported limit. AMD uses GPU-local `hwmon` `power1_cap` with reported bounds and a default.
@@ -22,6 +34,10 @@ Authenticated API:
 
 - `GET /api/gpu-power` returns observed controls and saved settings.
 - `POST /api/gpu-power` accepts `{ "pci": "0000:01:00.0", "identity": "NVIDIA:GPU-…", "watts": 275 }`.
+- Add `"sameType": true` to apply to every currently adjustable card with the
+  selected card's vendor and model. GET exposes the unlabelled `model` separately
+  from the individual card's display `name`. The selected card must still have
+  its observed identity and adjustable controls.
 - Set `watts` to `null` to save the driver's default. Read the actual identity
   from GET; stale/replaced/duplicate identities and invalid limits are rejected.
 - Cookie requests also require the normal antiforgery token; bearer API sessions
