@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 sys.dont_write_bytecode = True
 
@@ -19,6 +20,11 @@ def load(name, path):
 setup = load('setup', 'src/Xur.Agent/t3-setup.py')
 
 class Tests(unittest.TestCase):
+    def setUp(self):
+        editor = patch.object(setup.subprocess, 'run', return_value=SimpleNamespace(returncode=0))
+        self.editor = editor.start()
+        self.addCleanup(editor.stop)
+
     def test_native_registration_preserves_settings_and_is_idempotent(self):
         root = Path('.build/evidence/t3-mcp'); root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=root) as folder:
@@ -33,6 +39,11 @@ class Tests(unittest.TestCase):
                 self.assertEqual(path.read_text(), first)
                 self.assertIn('keep', first)
                 self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                if provider == 'codex':
+                    import tomllib
+                    self.assertEqual(tomllib.loads(first)['mcp_servers']['xur']['env']['CODEX_MCP_PROTOCOL_VERSION'], '2026-07-28')
+                    self.assertEqual(self.editor.call_args.args[0][-3:], ['features', 'enable', 'mcp_2026_07_28'])
+                    self.assertEqual(self.editor.call_args.kwargs['env']['CODEX_HOME'], str(path.parent.resolve()))
                 with self.assertRaises(setup.SetupError):
                     setup.mcp_registration(path, provider, home / 'other.py')
 
@@ -46,6 +57,17 @@ class Tests(unittest.TestCase):
             setup.mcp_registration(native, 'codex', script)
             self.assertNotIn('python3', native.read_text())
             self.assertIn('[mcp_servers.other]', native.read_text())
+
+    def test_migrate_generated_csharp_registration_and_feature_failure(self):
+        root = Path('.build/evidence/t3-mcp'); root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=root) as folder:
+            home = Path(folder); script = home / 'server'; native = home / 'config.toml'
+            native.write_text('[mcp_servers.xur]\ncommand = '+json.dumps(str(script))+'\nargs = []\n')
+            setup.mcp_registration(native, 'codex', script)
+            self.assertIn('CODEX_MCP_PROTOCOL_VERSION', native.read_text())
+            self.editor.return_value.returncode = 1
+            with self.assertRaisesRegex(setup.SetupError, 'could not enable stateless MCP'):
+                setup.mcp_registration(native, 'codex', script)
 
     def test_container_setup_persists_private_connection_and_registers_all_harnesses(self):
         from unittest.mock import MagicMock
