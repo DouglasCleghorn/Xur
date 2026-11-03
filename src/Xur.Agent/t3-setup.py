@@ -488,12 +488,13 @@ def mcp_registration(path, provider, script):
     legacy_script = str(script.with_name("server.py"))
     if provider == "codex":
         import tomllib
-        entry = dict(command=str(script), args=[])
+        previous = dict(command=str(script), args=[])
+        entry = dict(command=str(script), args=[], env=dict(CODEX_MCP_PROTOCOL_VERSION="2026-07-28"))
         existing = tomllib.loads(old).get("mcp_servers", {}).get("xur")
-        section = '[mcp_servers.xur]\ncommand = ' + json.dumps(str(script)) + '\nargs = []\n'
+        section = '[mcp_servers.xur]\ncommand = ' + json.dumps(str(script)) + '\nargs = []\nenv = { CODEX_MCP_PROTOCOL_VERSION = "2026-07-28" }\n'
         if existing == entry:
-            return
-        if existing == dict(command="python3", args=[legacy_script]):
+            content = old
+        elif existing in (previous, dict(command="python3", args=[legacy_script])):
             content, count = re.subn(r"(?ms)^\[mcp_servers\.xur\]\s*\n.*?(?=^\[|\Z)", lambda _: section, old, count=1)
             if count != 1:
                 raise SetupError("Rename the old xur MCP entry before reconnecting.")
@@ -517,6 +518,14 @@ def mcp_registration(path, provider, script):
     if (path.read_text() if path.exists() else "") != old:
         raise SetupError("Harness settings changed during setup. Retry.")
     atomic(path, content)
+    if provider == "codex":
+        # Codex gates modern stdio discovery on both this feature and the server env.
+        # Its native config editor preserves arbitrary existing TOML layouts.
+        result = subprocess.run([binary("codex"), "features", "enable", "mcp_2026_07_28"],
+                                env=dict(os.environ, CODEX_HOME=str(path.parent.resolve())),
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+        if result.returncode != 0:
+            raise SetupError("Codex could not enable stateless MCP. Update Codex and reconnect.")
 
 
 def configure_mcp(connection):
