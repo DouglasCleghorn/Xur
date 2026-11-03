@@ -1,4 +1,8 @@
 using System.Reflection;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Schema;
 using Microsoft.AspNetCore.Routing;
@@ -9,6 +13,16 @@ namespace Xur.Control;
 
 public static class T3Mcp
 {
+    public static string ContainerOrigin(X509Certificate2 certificate,IEnumerable<IPAddress> localAddresses,int port)
+    {
+        var local=localAddresses.Where(a=>!IPAddress.IsLoopback(a)&&!a.IsIPv6LinkLocal).ToHashSet();
+        var extension=certificate.Extensions["2.5.29.17"];
+        var address=extension==null?null:new X509SubjectAlternativeNameExtension(extension.RawData,extension.Critical)
+            .EnumerateIPAddresses().Where(local.Contains).OrderBy(a=>a.AddressFamily==AddressFamily.InterNetwork?0:1).FirstOrDefault();
+        if(address==null)throw new InvalidOperationException("No current host address is covered by the manager certificate. Refresh the manager certificate before connecting MCP.");
+        return new UriBuilder("https",address.ToString(),port).Uri.GetLeftPart(UriPartial.Authority);
+    }
+
     public static bool Allowed(T3StorageConfig settings,string method)=>settings.FullHostAccess ||
         (method is "GET" or "HEAD" ? settings.McpRead || settings.McpWrite : settings.McpWrite);
 
@@ -37,12 +51,16 @@ public static class T3Mcp
         app.MapPost("/api/t3-code/mcp/connect",async Task<IResult>(HttpContext context)=>
         {
             if(appliance.Installer)return Results.Conflict();
-            // Bind credentials to the same HTTPS origin as the manager, never a supplied URL.
-            var origin=T3Models.ValidateOrigin("https://"+context.Request.Host);
             await gate.WaitAsync(context.RequestAborted);
             try
             {
                 using var cert=LocalTls.Load(appliance.StateDirectory);
+                // The container may not resolve MagicDNS or reach Tailscale Serve.
+                // Use our own TLS listener and an active address covered by its certificate.
+                string origin;
+                try{origin=ContainerOrigin(cert,NetworkInterface.GetAllNetworkInterfaces().Where(n=>n.OperationalStatus==OperationalStatus.Up)
+                    .SelectMany(n=>n.GetIPProperties().UnicastAddresses).Select(a=>a.Address),appliance.Port+363);}
+                catch(InvalidOperationException error){return Results.Conflict(new{error=error.Message});}
                 var key=keys.Create(new("T3 Xur MCP","t3",0));
                 try
                 {

@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System.Net;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using Xur.Control;
 using Xur.Domain;
 
@@ -9,6 +11,18 @@ static class T3McpTests
 {
     public static async Task Run(Action<bool,string> check)
     {
+        using(var rsa=RSA.Create(2048))
+        {
+            var request=new CertificateRequest("CN=Xur",rsa,HashAlgorithmName.SHA256,RSASignaturePadding.Pkcs1);
+            var names=new SubjectAlternativeNameBuilder();names.AddDnsName("xur-test");names.AddIpAddress(IPAddress.Loopback);
+            var lan=IPAddress.Parse("192.0.2.10");var v6=IPAddress.Parse("2001:db8::10");
+            names.AddIpAddress(v6);names.AddIpAddress(lan);request.CertificateExtensions.Add(names.Build());
+            using var cert=request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1),DateTimeOffset.UtcNow.AddDays(1));
+            check(T3Mcp.ContainerOrigin(cert,[IPAddress.Loopback,v6,lan],8443)=="https://192.0.2.10:8443","Container MCP uses a certificate-covered live host IP and direct TLS port without MagicDNS");
+            check(T3Mcp.ContainerOrigin(cert,[v6],9443)=="https://[2001:db8::10]:9443","Container MCP handles IPv6 and custom manager ports");
+            try{T3Mcp.ContainerOrigin(cert,[IPAddress.Loopback,IPAddress.Parse("192.0.2.11")],8443);throw new Exception("Accepted an uncertified address");}
+            catch(InvalidOperationException){check(true,"Container MCP rejects stale certificate addresses and loopback without disabling TLS checks");}
+        }
         var root=Path.GetFullPath(".build/evidence/t3-mcp-"+Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
