@@ -29,10 +29,10 @@ static class T3CodeGpuTests
         try
         {
             var empty=await T3CodeGpuAccess.Arguments([],root,Stat);
-            check(calls.Count==0 && empty.SequenceEqual(new[]{"--label",T3CodeGpuAccess.Label+"=all-v1"}),"GPU-free T3 hosts need no GPU devices, groups or security exceptions");
+            check(calls.Count==0 && empty.SequenceEqual(new[]{"--label",T3CodeGpuAccess.Label+"=all-v1"}),"GPU-free T3 hosts need no extra GPU devices, groups or security options");
             var nvidia=await T3CodeGpuAccess.Arguments(hardware[..2],root,Stat);
             check(Values(nvidia,"--device").SequenceEqual(new[]{"nvidia.com/gpu=all"})&&!nvidia.Any(a=>a.StartsWith("CUDA_VISIBLE_DEVICES=")),"T3 exposes every NVIDIA GPU through CDI without a CUDA device subset");
-            check(!nvidia.Contains("--security-opt=seccomp=unconfined")&&!nvidia.Contains("/dev/kfd"),"NVIDIA-only T3 containers keep the default syscall filter and omit AMD devices");
+            check(!nvidia.Contains("--security-opt=seccomp=unconfined")&&!nvidia.Contains("/dev/kfd"),"The NVIDIA GPU helper adds no syscall override or AMD devices");
             var mixed=await T3CodeGpuAccess.Arguments(hardware,root,Stat);
             var devices=Values(mixed,"--device");
             check(devices.Contains("nvidia.com/gpu=all")&&devices.Contains("/dev/kfd")&&devices.Contains("/dev/dri/renderD130")&&devices.Contains("/dev/dri/renderD131")&&devices.Contains("/dev/dri/card2")&&devices.Contains("/dev/dri/card3"),"Mixed-vendor T3 containers expose all GPU devices, including integrated GPUs without dedicated VRAM");

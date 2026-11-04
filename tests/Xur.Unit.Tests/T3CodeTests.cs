@@ -39,6 +39,7 @@ static class T3CodeTests
         await Preparation(check);
         await T3CodeGpuTests.Run(check);
         await T3StorageTests.Run(check);
+        await T3RuntimeTests.Run(check);
         await Endpoints(check);
         await T3ModelTests.Run(check);
     }
@@ -88,7 +89,8 @@ static class T3CodeTests
         try
         {
             await File.WriteAllTextAsync(root+"/launcher",T3CodeWorkload.Launcher);
-            var result=await Processes.Run("python3",["tests/Xur.Integration.Tests/t3-startup.py",root+"/launcher"],60);
+            await File.WriteAllTextAsync(root+"/native-launcher",T3CodeWorkload.NativeLauncher);
+            var result=await Processes.Run("python3",["-B","tests/Xur.Integration.Tests/t3-startup.py",root+"/launcher",root+"/native-launcher"],60);
             check(result.ExitCode==0,"T3 service startup and persistent updates: "+result.Output);
             var workload=new Workload("t3","T3 Code",Recipe(),[],"coding");
             using var old=JsonDocument.Parse("{}");
@@ -97,10 +99,16 @@ static class T3CodeTests
                 "Existing T3 containers migrate once to current bootstrap while preserving recipe identity");
             var command=T3CodeRuntime.Command(workload.Recipe);
             var arguments=T3CodeRuntime.ContainerArguments();
-            check(arguments[0]=="--hostname" && arguments[1]==Environment.MachineName,
+            check(arguments[Array.IndexOf(arguments,"--hostname")+1]==Environment.MachineName,
                 "T3 advertises the Xur host name instead of a generated container identity");
-            check(command[2]==T3CodeWorkload.Launcher && command.Skip(4).SequenceEqual(workload.Recipe.Command.Skip(1)),
+            check(command[2]==T3CodeRuntime.DockerBootstrap && command[6]==T3CodeWorkload.Launcher && command.Skip(8).SequenceEqual(workload.Recipe.Command.Skip(1)),
                 "Saved T3 images use current startup updates without rebuilding their image or changing storage");
+            check(arguments.Contains("--privileged") && arguments.Contains("--tmpfs") && arguments.Contains("DOCKER_HOST=unix:///run/user/1000/docker.sock") && !arguments.Any(a=>a.Contains("/var/run/docker.sock")) && !arguments.Contains("--pid=host") && !command.Contains(T3CodeRuntime.HostBootstrap) && command[3]=="private",
+                "DinD uses a private rootless daemon without mounting the host engine socket or sharing host PIDs");
+            var docker=await Processes.Run("python3",["-B","tests/Xur.Integration.Tests/t3-docker.py"],60);
+            check(docker.ExitCode==0,"T3 Docker lifecycle and persistent signed package selection: "+docker.Output);
+            var ui=await Processes.Run("node",["tests/Xur.Integration.Tests/t3-runtime-ui.cjs"],15);
+            check(ui.ExitCode==0,"Runtime switch UI preserves pairing links: "+ui.Output);
         }
         finally{Directory.Delete(root,true);}
     }
@@ -115,6 +123,9 @@ static class T3CodeTests
         agent.MapGet("/t3-code/status",()=>new T3CodeStatus("t3","Running",true,enabled));
         agent.MapPost("/t3-code/enabled",(T3CodeEnabled request)=>{enabled=request.Enabled;return Results.Ok(new{enabled});});
         T3StorageConfig storage=new();
+        var runtimeMode="Container";
+        agent.MapGet("/t3-code/runtime",()=>new{mode=runtimeMode,stage="Ready"});
+        agent.MapPost("/t3-code/runtime",(T3RuntimeRequest request)=>{runtimeMode=request.Mode;return Results.Json(new{mode=runtimeMode,stage="Ready"});});
         agent.MapGet("/t3-code/storage",()=>storage);
         agent.MapPost("/t3-code/storage",(T3StorageConfig request)=>storage=request);
         agent.MapPost("/t3-code/pair",IResult()=>available?Results.Json(new T3CodePairing("test/credential+only",expires)):Results.Conflict(new{error="Enable T3 Code first."}));
@@ -126,6 +137,10 @@ static class T3CodeTests
             await agent.StartAsync();await front.StartAsync();using var client=new HttpClient{BaseAddress=new Uri(front.Urls.Single())};client.DefaultRequestHeaders.Host="coding.test:8443";
             var status=await client.GetFromJsonAsync<T3CodeStatus>("/api/t3-code/status");
             check(status is {State:"Running",WorkloadId:"t3"},"Connection status reports the selected running T3 workload");
+            using var runtimeChanged=await client.PostAsJsonAsync("/api/t3-code/runtime",new T3RuntimeRequest("Native"));
+            var selectedRuntime=await client.GetFromJsonAsync<JsonElement>("/api/t3-code/runtime");
+            check(runtimeChanged.IsSuccessStatusCode&&selectedRuntime.GetProperty("mode").GetString()=="Native","Runtime configuration round-trips through the authenticated control API");
+            check(!ApiKeys.Allows("automation","POST","/api/t3-code/runtime"),"An automation key cannot switch T3 execution runtimes");
             var storageDefaults=await client.GetFromJsonAsync<T3StorageConfig>("/api/t3-code/storage");
             check(storageDefaults is {AllDrives:true,Models:true,FullHostAccess:false},"Storage endpoint returns broad defaults for existing installations");
             using var storageChanged=await client.PostAsJsonAsync("/api/t3-code/storage",new T3StorageConfig(false,true,["/data/projects"]));

@@ -23,6 +23,18 @@ else
         <section class="panel" aria-label="T3 Code service">
             <label><input type="checkbox" id="t3-enabled" disabled /> Auto-run</label>
             <button type="button" id="t3-retry" class="secondary" hidden>Retry</button>
+            <form id="t3-runtime-form">
+                <label for="t3-runtime-mode">Runtime</label>
+                <select id="t3-runtime-mode" disabled>
+                    <option value="Container">DinD</option>
+                    <option value="Native">Host</option>
+                </select>
+                <button id="t3-runtime-save" type="submit" class="secondary" disabled>Apply runtime</button>
+                <p class="secondary-text">Keeps the same environment, pairings, accounts and projects. Switching briefly restarts T3; your paired app reconnects. Finish active commands first.</p>
+                <p id="t3-runtime-note" class="secondary-text"></p>
+                <p id="t3-runtime-message" role="status"></p>
+                <p id="t3-runtime-error" role="alert" hidden></p>
+            </form>
             <details id="t3-storage">
                 <summary>Permissions and storage</summary>
                 <form id="t3-storage-form">
@@ -66,7 +78,7 @@ else
         </section>
         <section class="panel" aria-labelledby="t3-mcp-heading">
             <h2 id="t3-mcp-heading">Xur tools in T3</h2>
-            <p>Connect agents in the T3 container to Xur data and settings using the permissions above.</p>
+            <p>Connect agents in T3 to Xur data and settings using the permissions above.</p>
             <button type="button" id="t3-mcp-connect">Connect or repair Xur MCP</button>
             <p id="t3-mcp-message" role="status"></p>
         </section>

@@ -164,3 +164,16 @@ Samba is GPL-licensed, not MIT; Fedora package metadata and upstream copyright
 and license files remain in the image (including `/usr/share/licenses`). Xur
 neither relabels these packages nor embeds their binaries in its application
 bundle. See [Samba licensing](https://www.samba.org/samba/docs/GPL.html).
+
+T3's Docker Engine, containerd, runc, RootlessKit, Compose and Buildx retain their
+upstream licenses and dependency notices. The signed upstream Debian packages
+are extracted into `~/.local/share/xur-docker/versions/`; their original
+`usr/share/doc/*/copyright` files remain with each installation. These components
+are not relicensed as Xur code. DinD's OS prerequisites retain the base image's
+package copyright notices.
+
+T3's optional native host runtime uses conda-forge packages for Node.js, Python,
+Git, OpenSSH, curl, ripgrep and Bash. Those components retain their respective
+licenses; their metadata, upstream notices and source information remain in
+`~/.local/share/mamba/pkgs/*/info/`. The systemd service binds host binaries and
+libraries without relicensing or copying the host OS into a new distribution.

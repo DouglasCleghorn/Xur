@@ -38,11 +38,11 @@ static class T3StorageTests
             using var privileged=JsonDocument.Parse(JsonSerializer.Serialize(labels));
             check(settings.Fingerprint(workload,privileged.RootElement)==workload.Fingerprint,"Full access container policy is recognized");
             var command=T3CodeRuntime.Command(workload.Recipe,true);
-            check(command[0]=="python3"&&command[2]==T3CodeRuntime.HostBootstrap&&command[3]=="sh"&&T3CodeRuntime.HostBootstrap.Contains("os.setuid(1000)"),
+            check(command[0]=="python3"&&command[2]==T3CodeRuntime.DockerBootstrap&&command[3]=="host"&&command[6]==T3CodeRuntime.HostBootstrap&&command[7]=="sh"&&T3CodeRuntime.HostBootstrap.Contains("os.setuid(1000)"),
                 "Full access installs a host command helper while keeping T3 and its persistent files owned by node");
             settings.Save(new(false,false));args=await settings.Arguments();
             check(!args.Contains("--privileged")&&!args.Contains("--pid=host")&&!args.Contains("--volume")&&settings.Fingerprint(workload,privileged.RootElement)!=workload.Fingerprint,
-                "Revoking full access replaces the privileged container and restores private storage");
+                "Revoking full host access replaces host PID access and host mounts with private storage");
             async Task<bool> Rejected(string path)
             {
                 try{settings.Save(new(false,false,[path]));await settings.Arguments();return false;}catch(InvalidOperationException){return true;}

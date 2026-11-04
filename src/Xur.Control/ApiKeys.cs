@@ -85,7 +85,7 @@ public sealed class ApiKeys
         if(path.StartsWith("/robot/api/",StringComparison.Ordinal))path="/api/robotics/"+path[11..];
         if(!path.StartsWith("/api/") && !path.StartsWith("/inference/"))return false;
         if(path is "/api/unsloth/password" or "/api/unsloth/connect" || path is "/api/t3-code/mcp/connect" or "/api/t3-code/pair" or "/api/t3-code/setup" or "/api/t3-code/connect" || path=="/api/api-keys" || path.StartsWith("/api/api-keys/") || path=="/api/bootstrap" || path.StartsWith("/api/auth/") || path.StartsWith("/api/install/"))return false;
-        if(path=="/api/t3-code/storage"&&method is not ("GET" or "HEAD"))return false;
+        if(path is "/api/t3-code/storage" or "/api/t3-code/runtime" && method is not ("GET" or "HEAD"))return false;
         if(path=="/api/storage/network" || path.StartsWith("/api/storage/network/"))
         {
             if(method is "GET" or "HEAD")return scope is "automation" or "t3";

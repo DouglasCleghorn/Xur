@@ -47,17 +47,18 @@ public sealed class T3Storage(string state,DataStorage storage)
         }
         return config;
     }
-    string Policy(T3StorageConfig config)=>Canonical.Hash(new{Version=1,Config=config,
+    string PolicyFor(T3StorageConfig config)=>Canonical.Hash(new{Version=1,Config=config,
         Models=config.Models?new[]{storage.PathFor("models","models"),storage.PathFor("models","model-sets")}:[]});
+    public string CurrentPolicy=>PolicyFor(Read());
     public string Fingerprint(Workload workload,JsonElement labels)
     {
-        var expected=Policy(Read());
+        var expected=PolicyFor(Read());
         return labels.TryGetProperty(Label,out var label)&&label.GetString()==expected
             ?T3CodeRuntime.Fingerprint(workload,labels):Canonical.Hash(new{Workload=workload.Fingerprint,Storage=expected,Stale=true});
     }
     public async Task<string[]> Arguments()
     {
-        var config=Read();var args=new List<string>{"--label",Label+"="+Policy(config)};
+        var config=Read();var args=new List<string>{"--label",Label+"="+PolicyFor(config)};
         if(config.AllDrives||config.FullHostAccess)args.AddRange(["--volume","/:/host:rw,rbind,rslave"]);
         else foreach(var folder in config.Folders!)
         {

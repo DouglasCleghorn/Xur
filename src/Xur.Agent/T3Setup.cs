@@ -44,7 +44,7 @@ public sealed class T3Setup(WorkloadRuntime workloads):IDisposable
             {
                 if(!flows.TryGetValue(request.FlowId,out var flow)||flow.Provider!=request.Provider)throw new InvalidOperationException("This setup session expired. Start again.");
                 var same=await workloads.WithT3Code(id=>Task.FromResult(id==flow.Container));
-                if(!same){Close(flow);throw new InvalidOperationException("T3's container changed. Start setup again.");}
+                if(!same){Close(flow);throw new InvalidOperationException("T3's runtime changed. Start setup again.");}
                 if(request.Action=="respond")
                 {
                     var waiting=flow.State;
@@ -72,7 +72,7 @@ public sealed class T3Setup(WorkloadRuntime workloads):IDisposable
             {
                 if(request.Action=="status")
                 {
-                    if(!await workloads.WithT3Code(id=>Task.FromResult(id==current.Container))){Close(current);throw new InvalidOperationException("T3's container changed. Start setup again.");}
+                    if(!await workloads.WithT3Code(id=>Task.FromResult(id==current.Container))){Close(current);throw new InvalidOperationException("T3's runtime changed. Start setup again.");}
                     return current.State;
                 }
                 throw new InvalidOperationException("Finish or cancel the current setup for this harness first.");
@@ -82,8 +82,9 @@ public sealed class T3Setup(WorkloadRuntime workloads):IDisposable
             {old.Process.Dispose();flows.Remove(old.Id);}
             started=await workloads.WithT3Code(async container=>
             {
-                var info=new ProcessStartInfo("podman"){UseShellExecute=false,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true};
-                foreach(var arg in new[]{"exec","--interactive","--user","node","--workdir",T3CodeWorkload.Home,container,"python3","-u","-c",script})info.ArgumentList.Add(arg);
+                var command=T3CodeRuntime.Exec(container,["python3","-u","-c",script],interactive:true);
+                var info=new ProcessStartInfo(command[0]){UseShellExecute=false,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true};
+                foreach(var arg in command.Skip(1))info.ArgumentList.Add(arg);
                 var process=Process.Start(info)??throw new InvalidOperationException("Could not start T3 setup.");
                 var flow=new Flow(Guid.NewGuid().ToString("N"),request.Provider,request.Action,container,process);
                 flows.Add(flow.Id,flow);
