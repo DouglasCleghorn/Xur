@@ -4,6 +4,8 @@
   <ItemGroup><EmbeddedResource Include="t3-launcher.sh" LogicalName="Xur.T3Launcher" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../Xur.IO/Xur.IO.csproj" /></ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="t3-native.sh" LogicalName="Xur.T3Native" />
+    <EmbeddedResource Include="t3-docker.py" LogicalName="Xur.T3Docker" />
     <EmbeddedResource Include="t3-dotnet.cjs" LogicalName="Xur.T3Dotnet" />
     <EmbeddedResource Include="../../tools/Xur.Mcp/Program.cs" LogicalName="Xur.McpProgram" />
     <EmbeddedResource Include="../../tools/Xur.Mcp/Xur.Mcp.csproj" LogicalName="Xur.McpProject" />

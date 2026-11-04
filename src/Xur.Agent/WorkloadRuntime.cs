@@ -18,6 +18,20 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         await using var allocation=await Stops.Resources(["t3-code"]);
         return T3Storage.Save(config);
     }
+    public Func<string> T3Mode {get;set;}=()=>"Container";
+    T3NativeRuntime? nativeT3;
+    public T3NativeRuntime NativeT3=>LazyInitializer.EnsureInitialized(ref nativeT3,()=>new(Path.GetDirectoryName(directory)!,T3Storage,()=>T3Mode()));
+    public async Task PrepareT3Runtime(Workload workload,string mode)
+    {
+        if(mode=="Native"){await NativeT3.Prepare(workload);return;}
+        var home=await NativeT3.Home(workload);
+        // Preflight only Docker; do not open the live T3 database or its listener.
+        var source=T3CodeWorkload.Resource("Xur.T3Docker");
+        var script="SOURCE = "+JsonSerializer.Serialize(source)+"\nexec(SOURCE)\nraise SystemExit(run([\"/bin/true\"]))";
+        var result=await Processes.Run("podman",["run","--rm","--pull=never",..T3CodeRuntime.ContainerArguments(),"--volume",home+":"+T3CodeWorkload.Home+":rw",
+            workload.Recipe.Image,"python3","-c",T3CodeRuntime.DockerBootstrap,"private","python3","-c",script],600);
+        if(result.ExitCode!=0)throw new InvalidOperationException("DinD could not be prepared. "+Redaction.Logs(result.Output));
+    }
     public Func<string,bool> PersistedOwner {get;set;} = _=>false;
     public bool IndependentT3 {get;set;}
     bool Persisted(Workload w)=>PersistedOwner(w.Id)||(IndependentT3&&T3CodeWorkload.Is(w.Recipe));
@@ -120,8 +134,9 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         var instance=await Inspect(definition);
         if(instance?.State!="running")throw new InvalidOperationException("Enable T3 Code first.");
         // Use the inspected immutable identity, never a caller-supplied command or container name.
-        var result=await Processes.Run("podman",["exec","--user","1000:1000",instance.InstanceId,"sh","-c",T3CodeWorkload.Launcher,"t3-launcher","auth","pairing","create",
-            "--base-dir",T3CodeWorkload.BaseDirectory,"--ttl","5m","--label","Xur connection","--json"],30);
+        var command=T3CodeRuntime.Exec(instance.InstanceId,["sh","-c",T3CodeWorkload.Launcher,"t3-launcher","auth","pairing","create",
+            "--base-dir",T3CodeWorkload.BaseDirectory,"--ttl","5m","--label","Xur connection","--json"]);
+        var result=await Processes.Run(command[0],command.Skip(1),30);
         // Do not copy command output into logs/errors: it contains a pairing secret.
         if(result.ExitCode!=0)throw new InvalidOperationException("T3 Code could not create a pairing link. Check that the server is ready and retry.");
         try
@@ -165,13 +180,14 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         if(w.Recipe.Kind=="Robotics")
             return await robotWeb.Inspect(w);
         if(w.Recipe.Kind=="Workstation")return await station.Inspect(w);
+        var native=T3CodeWorkload.Is(w.Recipe)?await NativeT3.Inspect(w):null;
         ProcessResult r=new(1,"");
         for(int attempt=0;attempt<3;attempt++)
         {
             r=await Processes.Run("podman",["container","inspect",Name(w.Id)],20);
             if(r.ExitCode==0)break;
             var exists=await Processes.Run("podman",["container","exists",Name(w.Id)],10);
-            if(exists.ExitCode==1)return null;
+            if(exists.ExitCode==1)return native;
             if(exists.ExitCode!=0)throw new IOException("Container observation failed");
             // A create may finish between inspect and exists. Re-observe its
             // completed metadata instead of treating this normal race as failure.
@@ -184,7 +200,12 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         string endpoint="";
         if(ports.ValueKind==JsonValueKind.Object && ports.TryGetProperty(w.Recipe.Port+"/tcp",out var bindings) && bindings.ValueKind==JsonValueKind.Array && bindings.GetArrayLength()>0)
             endpoint="http://127.0.0.1:"+bindings[0].GetProperty("HostPort").GetString()+"/";
-        var fingerprint=T3CodeWorkload.Is(w.Recipe)?T3Storage.Fingerprint(w,labels):w.Fingerprint;
+        if(native!=null)
+        {
+            if(c.GetProperty("State").GetProperty("Status").GetString()=="running")throw new InvalidOperationException("Both T3 runtimes are active. Stop the extra server before using its shared database.");
+            return native;
+        }
+        var fingerprint=T3CodeWorkload.Is(w.Recipe)?T3Mode()=="Native"?"stale-container:"+w.Fingerprint:T3Storage.Fingerprint(w,labels):w.Fingerprint;
         return new(w.Id,fingerprint,c.GetProperty("Id").GetString()!,c.GetProperty("State").GetProperty("Pid").GetInt32(),File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim(),endpoint,
             c.GetProperty("State").GetProperty("Status").GetString()!,w.Gpus);
     }
@@ -234,7 +255,9 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             }finally{receipts.Release();}
             var instance=await Inspect(w);
             if(T3CodeWorkload.Is(w.Recipe) && instance!=null && instance.Fingerprint!=w.Fingerprint)
-                throw new InvalidOperationException("Disable and re-enable T3 Code to recreate it with shared GPU access. Its persistent storage will be retained.");
+                throw new InvalidOperationException("Disable and re-enable T3 Code to recreate it with current runtime support. Its persistent storage will be retained.");
+            if(T3CodeWorkload.Is(w.Recipe)&&T3Mode()=="Native")
+                return await NativeT3.Start(w,cancellationToken);
             if(w.Recipe.Kind=="Workstation")
             {
                 RuntimeInstance started;
@@ -315,16 +338,13 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 if(w.Recipe.Engine is "vLLM" or "vLLM-Omni")args.AddRange(["--entrypoint","vllm"]);
                 if(T3CodeWorkload.Is(w.Recipe))
                 {
-                    args.AddRange(T3CodeRuntime.ContainerArguments());
                     var access=await T3Storage.Arguments();
-                    if(access.Contains("--privileged"))
-                    {
-                        args.Remove("--cap-drop=ALL");
-                        args.Remove("--security-opt=no-new-privileges");
-                    }
+                    args.Remove("--cap-drop=ALL");
+                    args.Remove("--security-opt=no-new-privileges");
                     args.AddRange(access);
+                    args.AddRange(T3CodeRuntime.ContainerArguments());
                 }
-                args.Add(image);args.AddRange(T3CodeWorkload.Is(w.Recipe)?T3CodeRuntime.Command(w.Recipe,args.Contains("--privileged")):engineImage?.Command(w.Recipe.Command)??w.Recipe.Command);
+                args.Add(image);args.AddRange(T3CodeWorkload.Is(w.Recipe)?T3CodeRuntime.Command(w.Recipe,args.Contains("--pid=host"),args.Contains("--cap-add=DAC_OVERRIDE")):engineImage?.Command(w.Recipe.Command)??w.Recipe.Command);
                 var created=await Processes.Run("podman",args,60);
                 if(created.ExitCode!=0)throw Failure("Container creation failed",created);
                 instance=await Inspect(w) ?? throw new IOException();
@@ -394,6 +414,10 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             // A concurrent retry may have removed the receipt while this call waited.
             saved=Definitions().SingleOrDefault(w=>w.Id==request.Id);if(saved==null)return;
             var instance=await Inspect(saved);
+            if(T3CodeWorkload.Is(saved.Recipe)&&(instance?.InstanceId.StartsWith("native:",StringComparison.Ordinal)==true||request.InstanceId.StartsWith("native:",StringComparison.Ordinal)))
+            {
+                await NativeT3.Stop(saved,request);File.Delete(ReceiptPath(request.Id));return;
+            }
             if(saved.Recipe.Kind=="Robotics")
             {
                 await robotWeb.Stop(request);File.Delete(ReceiptPath(request.Id));return;
@@ -493,6 +517,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
     {
         if(!ProfilePolicy.EntityIdentifier(id) || !File.Exists(ReceiptPath(id)))throw new InvalidOperationException("Unknown workload.");
         var saved=Definitions().Single(w=>w.Id==id);
+        if(T3CodeWorkload.Is(saved.Recipe)&&(T3Mode()=="Native"||(await NativeT3.Inspect(saved))!=null))return Redaction.Logs(await NativeT3.Logs());
         if(saved.Recipe.Kind=="Workstation")return Redaction.Logs(await station.Logs(saved));
         if(saved.Recipe.Kind=="Robotics")return await robotWeb.Logs();
         var r=await Processes.Run("podman",["logs","--tail=200",Name(id)],10);var error=Path.Combine(directory,id+".error.log");var update=Path.Combine(directory,id+".update.log");return Redaction.Logs((File.Exists(error) ? File.ReadAllText(error)+"\n" : "")+(File.Exists(update)?File.ReadAllText(update)+"\n":"")+r.Output);

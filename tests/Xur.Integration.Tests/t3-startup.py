@@ -11,6 +11,7 @@ import time
 import unittest
 
 LAUNCHER = Path(sys.argv.pop(1)).resolve() if len(sys.argv) > 1 else Path('src/Xur.Domain/t3-launcher.sh').resolve()
+NATIVE_LAUNCHER = Path(sys.argv.pop(1)).resolve() if len(sys.argv) > 1 else None
 EVIDENCE = Path('.build/evidence/t3-startup').resolve()
 EVIDENCE.mkdir(parents=True, exist_ok=True)
 FAKE = r'''#!/usr/bin/env python3
@@ -77,6 +78,9 @@ elif tool=='micromamba':
     if args[0] in ('create','install'):
         prefix=pathlib.Path(args[args.index('--prefix')+1]);(prefix/'bin').mkdir(parents=True,exist_ok=True)
         (prefix/'conda-meta').mkdir(exist_ok=True);(prefix/'conda-meta/history').touch()
+        if prefix.name=='xur-native':
+            for name,actual in (('python3',sys.executable),('node',shutil.which('node')),*[(tool,shutil.which(tool)) for tool in ('git','ssh','curl','bash')]):
+                if not (prefix/'bin'/name).exists(): (prefix/'bin'/name).symlink_to(actual)
         for command in ('rg','fd','jq','git-lfs','rsync','zip','unzip','sqlite3'):
             shutil.copyfile(root/'fake.py',prefix/'bin'/command);(prefix/'bin'/command).chmod(0o700)
 elif tool=='git-lfs' and args==['install','--skip-repo']:
@@ -257,6 +261,36 @@ class StartupTests(unittest.TestCase):
         self.assertFalse((self.home/'.t3/runtime/service-state.json').exists())
         self.assertFalse((self.root/'launched').exists())
         self.assertIn('Fixture incompatible database',(self.root/'log').read_text())
+
+    @unittest.skipUnless(NATIVE_LAUNCHER, 'Requires the expanded native launcher')
+    def test_container_native_container_preserves_pairing_home_and_runtime(self):
+        self.install('t3');self.install('micromamba');self.release('tools')
+        secret=self.home/'.t3/pairing-fixture'
+        secret.write_bytes(b'fixture saved environment credential')
+        native=self.env | {'XUR_T3_DOCKER':'0'}
+        prepared=subprocess.run(['sh',str(NATIVE_LAUNCHER),'xur-native-prepare'],env=native,
+                                capture_output=True,text=True,timeout=8)
+        self.assertEqual(prepared.returncode,0,prepared.stderr)
+        self.assertFalse((self.root/'launched').exists(),'Preflight must not open the T3 database or listener')
+        versions=[]
+        for launcher in (LAUNCHER,NATIVE_LAUNCHER,LAUNCHER):
+            (self.root/'launched').unlink(missing_ok=True)
+            process=subprocess.Popen(['sh',str(launcher),'start','--host','0.0.0.0','--port','3773',
+                                      '--base-dir',str(self.home/'.t3'),'--no-browser',str(self.home/'projects')],
+                                     env=native,stdout=self.log,stderr=self.log,start_new_session=True)
+            self.processes.append(process)
+            self.wait(lambda:(self.root/'launched').exists())
+            versions.append((self.root/'launched').read_text())
+            self.assertEqual(secret.read_bytes(),b'fixture saved environment credential')
+            self.assertEqual((self.home/'projects/keep').read_text(),'saved project')
+            env=json.loads((self.root/'service-env').read_text())
+            self.assertEqual(env['T3CODE_HOME'],str(self.home/'.t3'))
+            self.assertEqual(env['T3CODE_PORT'],'3773')
+            pairing=subprocess.run(['sh',str(launcher),'auth','pairing','create'],env=native,
+                                   capture_output=True,text=True,timeout=5)
+            self.assertEqual(pairing.returncode,0,pairing.stderr)
+            os.killpg(process.pid,signal.SIGTERM);process.wait(timeout=5)
+        self.assertEqual(len(set(versions)),1,'Both modes select the same persistent native T3 release')
 
     def update_gh(self):
         self.release('gh')

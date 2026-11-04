@@ -287,6 +287,17 @@ app.MapPost("/unsloth/password",async Task<IResult>()=>{
 });
 var containers=new ContainerLibrary(stateDir);
 var t3Service=new T3PersistedService(persisted,recipeCatalog,workloads,containers);
+var t3Runtime=new T3RuntimeMode(stateDir,async mode=>{
+    var service=persisted.Services().Single(s=>s.Id==T3PersistedService.Id);
+    await workloads.NativeT3.Home(service.Workload);
+    if(service.Enabled)await workloads.PrepareT3Runtime(service.Workload,mode);
+},async()=>{
+    persisted.Retry(T3PersistedService.Id);
+    await persisted.Reconcile();
+    var service=persisted.Services().Single(s=>s.Id==T3PersistedService.Id);
+    if(service.Error!=null)throw new InvalidOperationException(service.Error);
+});
+workloads.T3Mode=()=>t3Runtime.Read().Mode;
 if(!installer)
 {
     t3Service.Discover();
@@ -299,6 +310,7 @@ if(!installer)
                 if(!File.Exists(Path.Combine(stateDir,"app","maintenance")))
                 {
                     t3Service.Discover();
+                    t3Runtime.Resume();
                     try{await persisted.Reconcile(token);}
                     catch(Exception e) when(e is not OperationCanceledException){applicationLog.Write("PersistedCompute",Microsoft.Extensions.Logging.LogLevel.Error,Redaction.Logs(e.Message));}
                 }
@@ -336,6 +348,16 @@ app.MapPost("/t3-code/setup",async Task<IResult>(T3SetupRequest request)=>{
     catch(Exception e)when(e is InvalidOperationException or IOException or TimeoutException){return Results.Conflict(new{error=e is InvalidOperationException?e.Message:"T3 setup is unavailable. Check the workload and retry."});}
 });
 app.MapGet("/t3-code/status",async()=>installer?Results.Conflict():Results.Json(await t3Service.Status()));
+app.MapGet("/t3-code/runtime",()=>installer?Results.Conflict():Results.Json(t3Runtime.Read()));
+app.MapPost("/t3-code/runtime",(T3RuntimeRequest request)=>{
+    if(installer||File.Exists("/var/lib/xur/app/maintenance"))return Results.Conflict();
+    try
+    {
+        if(!persisted.Services().Any(s=>s.Id==T3PersistedService.Id))throw new InvalidOperationException("Install T3 Code first.");
+        return Results.Json(t3Runtime.Change(request.Mode));
+    }
+    catch(Exception e)when(e is InvalidOperationException or IOException){return Results.Conflict(new{error=Redaction.Logs(e.Message)});}
+});
 app.MapGet("/t3-code/storage",()=>installer?Results.Conflict():Results.Json(workloads.T3Storage.Read()));
 app.MapPost("/t3-code/storage",async Task<IResult>(T3StorageConfig request)=>{
     if(installer||File.Exists("/var/lib/xur/app/maintenance"))return Results.Conflict();
@@ -343,11 +365,12 @@ app.MapPost("/t3-code/storage",async Task<IResult>(T3StorageConfig request)=>{
     {
         var service=persisted.Services().SingleOrDefault(s=>s.Id==T3PersistedService.Id);
         if(service==null)return Results.Conflict(new{error="Install T3 Code first."});
-        var config=await workloads.SetT3Storage(request);
-        // Clear retry state; reconciliation compares the storage label and
-        // replaces the container while retaining its home and enabled state.
-        persisted.Retry(T3PersistedService.Id);
-        return Results.Json(config);
+        return await t3Runtime.ChangeSettings(async()=>{
+            var config=await workloads.SetT3Storage(request);
+            // Reconcile the same home and enabled intent in either runtime.
+            persisted.Retry(T3PersistedService.Id);
+            return Results.Json(config);
+        });
     }
     catch(Exception e)when(e is InvalidOperationException or IOException or UnauthorizedAccessException)
     {return Results.Conflict(new{error=Redaction.Logs(e.Message)});}

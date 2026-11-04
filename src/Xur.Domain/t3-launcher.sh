@@ -286,8 +286,13 @@ try:
         binary = runtime(state.get('activeVersion'))
         # Existing pending/committed/rollback records belong to upstream. Its
         # launcher validates and recovers them before starting the selected child.
+    if starting and os.environ.get('XUR_T3_DOCKER') == '1':
+        docker_source = __XUR_DOCKER__
+        scope = {'SOURCE': docker_source}
+        exec(docker_source, scope)
+        sys.exit(scope['run']([str(binary), '__service-launcher']))
     os.execv(str(binary), [str(binary), *(['__service-launcher'] if starting else args)])
-except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
     sys.exit('T3 service startup failed: ' + str(error))
 XUR_T3_SERVICE
 )" "$@"

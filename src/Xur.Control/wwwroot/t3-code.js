@@ -2,7 +2,7 @@
  const page=document.querySelector('#t3-code-page');if(!page)return;
  const find=id=>document.getElementById('t3-'+id),error=find('error'),message=find('message'),pair=find('pair');
  const csrf=page.querySelector('[name=__RequestVerificationToken]').value;
- let expires=0,running=false,pairing=false,changing=false,enabled=false,serviceError=false,statusSequence=0;
+ let expires=0,running=false,pairing=false,changing=false,enabled=false,serviceError=false,statusSequence=0,runtimeBusy=false,runtimeLoaded=false,runtimeDirty=false,runtimeSequence=0;
  const toggle=find('enabled'),retry=find('retry');
  async function api(path,body){
   const response=await (window.xurFetch??window.fetch)('/api/t3-code/'+path,body?{method:'POST',headers:{'Content-Type':'application/json','RequestVerificationToken':csrf},body:JSON.stringify(body)}:{});
@@ -13,6 +13,7 @@
  async function status(){
   const sequence=++statusSequence;
   try{
+   await loadRuntime();
    const data=await api('status');if(sequence!==statusSequence)return;running=data.state==='Running';find('status').textContent=data.state;
    enabled=data.enabled;
    if(!changing){toggle.checked=enabled;toggle.disabled=!data.installed||!data.workloadId;}
@@ -20,8 +21,8 @@
    find('stopped').textContent=data.state==='Failed'?'T3 Code needs attention.':enabled?'T3 Code is starting.':'T3 Code is disabled.';
    if(data.error){error.textContent=data.error;error.hidden=false;serviceError=true;}else if(serviceError){error.hidden=true;serviceError=false;}
    find('running').hidden=!running;find('stopped').hidden=running;pair.disabled=!running||pairing;
-   if(!running)clearPair();
-  }catch(e){toggle.disabled=true;running=false;pair.disabled=true;find('status').textContent='Status unavailable';find('running').hidden=true;clearPair();fail(e);}
+   if(!running&&!runtimeBusy)clearPair();
+  }catch(e){toggle.disabled=true;running=false;pair.disabled=true;find('status').textContent='Status unavailable';find('running').hidden=true;if(!runtimeBusy)clearPair();fail(e);}
  }
  async function setEnabled(value){
   changing=true;statusSequence++;toggle.disabled=true;retry.disabled=true;error.hidden=true;
@@ -31,6 +32,29 @@
  }
  toggle.addEventListener('change',()=>setEnabled(toggle.checked));
  retry.addEventListener('click',()=>setEnabled(enabled));
+ const runtimeMode=find('runtime-mode'),runtimeSave=find('runtime-save'),runtimeMessage=find('runtime-message'),runtimeError=find('runtime-error');
+ let savedRuntime='Container';
+ function renderRuntime(data){
+  savedRuntime=data.mode;runtimeBusy=['Preparing','Switching','RollingBack'].includes(data.stage);
+  if(!runtimeLoaded||runtimeBusy||!runtimeDirty)runtimeMode.value=data.target??data.mode;
+  runtimeLoaded=true;runtimeMode.disabled=runtimeBusy;runtimeSave.disabled=runtimeBusy||runtimeMode.value===savedRuntime;
+  const target=data.target==='Native'?'Host':'DinD';
+  runtimeMessage.textContent=data.stage==='Preparing'?'Preparing '+target+' while the current server stays available…':data.stage==='Switching'?'Switching runtime. Your saved environment will reconnect…':data.stage==='RollingBack'?'Restoring the previous runtime…':data.stage==='Ready'?'Runtime: '+(data.mode==='Native'?'Host':'DinD')+'.':'';
+  find('runtime-note').textContent=data.mode==='Native'?'Runs directly on the host as UID 1000. Host files and tools are available with that user’s permissions; shared-folder settings add path shortcuts.':'Includes Docker, Compose and Buildx. The outer container has privileged device access; use trusted agents.';
+  runtimeError.textContent=data.error??'';runtimeError.hidden=!data.error;
+  if(storageLoaded)storageSave.disabled=runtimeBusy;
+ }
+ async function loadRuntime(){
+  const sequence=++runtimeSequence;
+  try{const data=await api('runtime');if(sequence===runtimeSequence)renderRuntime(data);}
+  catch(e){runtimeError.textContent=e.message;runtimeError.hidden=false;}
+ }
+ runtimeMode.addEventListener('change',()=>{runtimeDirty=true;runtimeSave.disabled=runtimeBusy||runtimeMode.value===savedRuntime;});
+ find('runtime-form').addEventListener('submit',async event=>{
+  event.preventDefault();runtimeSave.disabled=true;runtimeMode.disabled=true;runtimeError.hidden=true;
+  try{const data=await api('runtime',{mode:runtimeMode.value});runtimeDirty=false;renderRuntime(data);}
+  catch(e){runtimeError.textContent=e.message;runtimeError.hidden=false;runtimeMode.disabled=false;runtimeSave.disabled=false;}
+ });
  const storageFullHost=find('storage-full-host'),storageAll=find('storage-all'),storageModels=find('storage-models'),storageFolders=find('storage-folders'),storageSave=find('storage-save'),storageError=find('storage-error'),storageMessage=find('storage-message');
  const mcpRead=find('mcp-read'),mcpWrite=find('mcp-write');
  let storageLoaded=false,storageLoading=false;
@@ -40,7 +64,7 @@
  storageAll.addEventListener('change',storageFields);
  async function loadStorage(){
   if(storageLoading)return;storageLoading=true;
-  try{renderStorage(await api('storage'));for(const input of [storageFullHost,storageAll,storageModels,storageFolders,storageSave,mcpRead,mcpWrite])input.disabled=false;storageError.hidden=true;storageLoaded=true;}
+  try{renderStorage(await api('storage'));for(const input of [storageFullHost,storageAll,storageModels,storageFolders,storageSave,mcpRead,mcpWrite])input.disabled=false;storageError.hidden=true;storageLoaded=true;storageSave.disabled=runtimeBusy;}
   catch(e){storageError.textContent=e.message;storageError.hidden=false;}
   finally{storageLoading=false;}
  }
@@ -49,9 +73,9 @@
   for(const input of [storageFullHost,storageAll,storageModels,storageFolders,storageSave,mcpRead,mcpWrite])input.disabled=true;
   try{
    const data=await api('storage',{fullHostAccess:storageFullHost.checked,mcpRead:mcpRead.checked,mcpWrite:mcpWrite.checked,allDrives:storageAll.checked,models:storageModels.checked,folders:storageFolders.value.split('\n').map(s=>s.trim()).filter(Boolean)});
-   renderStorage(data);clearPair();storageMessage.textContent='Access settings saved.';await status();
+   renderStorage(data);storageMessage.textContent='Access settings saved.';await status();
   }catch(e){storageError.textContent=e.message;storageError.hidden=false;}
-  finally{for(const input of [storageFullHost,storageAll,storageModels,storageFolders,storageSave,mcpRead,mcpWrite])input.disabled=false;}
+  finally{for(const input of [storageFullHost,storageAll,storageModels,storageFolders,storageSave,mcpRead,mcpWrite])input.disabled=false;storageSave.disabled=runtimeBusy;}
  });
  find('storage').addEventListener('toggle',()=>{if(find('storage').open&&!storageLoaded)loadStorage();});
  loadStorage();

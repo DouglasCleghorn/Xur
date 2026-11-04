@@ -1,6 +1,7 @@
 # T3 Code
 
-T3 Code runs through Persisted Compute with shared access to all host GPUs.
+T3 Code runs through Persisted Compute as a DinD container or native host service,
+with shared access to all host GPUs.
 It starts automatically after installation and reboot, independently of profiles.
 Phones and desktops connect
 **directly to T3 Code on TCP port 3773**.
@@ -39,8 +40,53 @@ T3 Code app for this direct HTTP connection. See the upstream
 for T3's other connection options. Xur does not configure those services.
 
 One T3 Code workload can run on the host at a time. If another service already
-uses port 3773, its container start fails and workload logs show the error. T3's
+uses port 3773, its selected runtime fails to start and workload logs show the error. T3's
 traffic is excluded from Xur's inference gateway routes.
+
+## Runtime configuration and switching
+
+Choose **Runtime → Host** (native host service) or **DinD** (Docker-in-Docker
+container), then select
+**Apply runtime**. Existing installations default to the DinD container.
+The setting persists across reboot; changing it while auto-run is off keeps T3
+off and uses the new mode the next time you enable it.
+
+Both modes use the **same existing named home volume**, mounted at `/home/node`,
+and the same `.t3` database, pairing credentials, accounts, native T3 release,
+projects, hostname and TCP port 3773. There is no data copy, ownership conversion,
+new environment or fresh pairing. Keep using the saved environment in the T3 app.
+Required native tools or Docker packages are prepared while the current server
+stays available. A failed preflight leaves that server alone. Xur then stops the
+old server, verifies it stopped and starts the selected runtime. A failed handoff
+restores the previous runtime and reports the error. Interrupted switches resume
+or roll back after an agent restart.
+
+The handoff briefly restarts T3: an existing TCP/WebSocket connection cannot stay
+open while its server moves between processes. The paired client reconnects to
+the same address using its saved credentials. Finish active commands before
+applying; ongoing terminals, agents and account sign-in flows may be interrupted.
+Outstanding pairing links keep their existing expiry during the handoff.
+
+Native mode runs a systemd service as numeric UID/GID 1000, preserving the
+container home’s ownership. It uses the host kernel, network, devices, tools and
+libraries, without an OCI container or separate OS image. A systemd filesystem
+namespace supplies the existing `/home/node`, `/host`, `/models` and `/model-sets`
+paths, including on an immutable host root. It is a set of host bind mounts, not
+a copy of the host OS. Native projects can also use host paths directly with the
+host user's permissions. Folder selections control the shortcuts and additional
+file access; they do not isolate native agents from that user's other files.
+**Full host access** additionally provides `xur-host` root commands in either mode.
+Native mode does not start the inner Docker daemon; use the host's container tools
+with their normal user permissions, or select DinD for a private Docker engine.
+
+Node, Python, Git, SSH, curl, ripgrep and Bash are installed for native mode from
+conda-forge into `~/.local/share/xur-native`; the OS image is not modified. Their
+package metadata and license notices remain in the persistent mamba cache.
+To update this native tool environment, run
+`micromamba update --all --yes --prefix ~/.local/share/xur-native --override-channels --channel conda-forge`.
+T3 and harness native update controls work in either mode. Native service output
+is available through Xur's workload logs or
+`journalctl -u xur-t3-code-native.service`.
 
 ## ChatGPT and Claude subscriptions
 
@@ -72,7 +118,7 @@ Xur does not delete or disable old entries automatically. Keep intentionally
 separate accounts and local-model providers enabled as needed.
 
 Xur shows installation, waiting, verification and signed-in states. A page
-refresh can recover a sign-in while the agent and container are still running.
+refresh can recover a sign-in while the agent and T3 runtime are still running.
 Cancel or restart an expired sign-in; it has a fifteen-minute limit. Provider
 passwords and subscription tokens never pass through the Xur page. The one-time
 Claude code is sent over Xur's authenticated, CSRF-protected connection, held
@@ -142,9 +188,10 @@ existing device-release checks still apply to allocated workloads.
 
 NVIDIA GPUs use the host's CDI configuration (`nvidia.com/gpu=all`), including
 driver libraries. AMD and Intel GPUs receive their DRM devices; AMD also receives
-`/dev/kfd`. The container keeps its unprivileged `node` user and adds the numeric
-host device groups needed for access. GPU containers disable SELinux label
-isolation, and AMD/Intel access also permits the compute runtime's system calls.
+`/dev/kfd`. T3 runs as `node` with the numeric host device groups needed for
+access. In container mode, the outer container is privileged to support Docker-in-Docker,
+disabling SELinux, seccomp and device isolation. Native mode uses the host GPU
+devices and driver libraries directly, retaining their permission groups.
 Device access does not install CUDA, ROCm, Level Zero or project-specific libraries;
 install the tools needed by your project inside the coding environment.
 
@@ -154,7 +201,7 @@ disable and re-enable T3 to refresh its device mappings and supplementary groups
 
 ## Persistent storage
 
-The named volume mounted at `/home/node` retains projects, T3's database and
+The named volume mounted at `/home/node` in both modes retains projects, T3's database and
 pairings under `/home/node/.t3`, the installed T3 runtime and updater selection,
 and provider credentials. Keep repositories in
 `/home/node/projects`. Tools installed under `/home/node/.local` also persist;
@@ -183,12 +230,12 @@ model-library option mounts both selected model stores at `/models` and
 and leave the folder list empty to use only T3's own persistent home. Removing
 the model shortcuts does not hide model files accessible through `/host`.
 
-Saving applies the settings by replacing an enabled container, preserving its
+Saving applies the settings by restarting the enabled runtime, preserving its
 home, accounts, projects and auto-run setting. Disabled T3 stays disabled.
 Missing selected folders or model storage report an error rather than silently
 creating an empty replacement. Choose real directories instead of symlink paths.
 
-T3 keeps the `node` user identity. Shared storage grants file-permission access
+T3 keeps UID/GID 1000 in both modes (the `node` user in the container). Shared storage grants file-permission access
 without changing ownership or SELinux labels on server directories. Read-only
 filesystems remain read-only. Existing repositories owned by another user may
 require Git's explicit `safe.directory` approval for that repository.
@@ -210,9 +257,54 @@ T3 itself continues running as `node`, preserving ownership of projects,
 credentials and native updates. The privileged container installs a root-owned
 setuid helper in its disposable filesystem and shares host PIDs so that
 `xur-host` can enter the host environment. Turn the option off and save to
-replace that container, remove the helper and restore the selected storage
-policy. Disabling access does not undo host changes or terminate independent
+restart the runtime, remove the helper and restore the selected storage
+policy. Docker-in-Docker still requires a privileged outer container; this
+setting controls the host command helper and host PID access, and is not a
+security boundary for untrusted agents. Disabling access does not undo host changes or terminate independent
 host services an agent has already started.
+
+### Docker-in-Docker
+
+In **DinD** mode, T3 includes a private **rootless Docker Engine**, **Docker Compose** and
+**Buildx**. Run `docker info`, `docker compose version` or `docker buildx version`
+in a T3 terminal. The daemon runs as `node` inside T3; Xur does not mount the
+host's Docker or Podman socket. Bind mounts use paths as seen inside T3, so a
+project under `/home/node/projects` can be mounted at that same path.
+
+Docker's signed stable APT repository supplies the latest packages without
+version pins. Binaries, plugins and package copyright notices stay under
+`~/.local/share/xur-docker`; images, build caches and named volumes stay under
+`~/.local/share/docker`. These survive container replacement with the existing
+home volume. Each start checks for package updates in the background. An
+installed daemon starts immediately from its saved selection, including offline;
+a new selection takes effect at the next T3 restart. First installation requires
+internet access. Failed downloads retain the last complete selection.
+
+T3 waits for Docker readiness before starting its server. Docker startup errors
+and an unexpected daemon exit appear in workload logs and fail the service so
+Persisted Compute can retry. Stopping T3 also stops the inner daemon. The Docker
+API uses a private Unix socket at `/run/user/1000/docker.sock`; no Docker API TCP
+port is exposed. Inner published ports are inside T3's network namespace; only
+T3's port 3773 is published to the host. Rootless Docker without an inner systemd
+session has limited cgroup resource controls; check `docker info` before relying
+on per-container CPU or memory limits.
+
+Use fully qualified images such as `mirror.gcr.io/library/alpine:latest` in
+`docker run`, Dockerfiles, Compose files and Buildx builds. Docker Hub images
+must use Google's cache explicitly; there is no configured fallback to Hub.
+GHCR and Quay retain their own registry addresses. A missing cached image must
+be resolved explicitly rather than retrying against Docker Hub.
+
+In container mode, the outer T3 container uses privileged mode as required by
+[Docker's rootless DinD setup](https://docs.docker.com/engine/security/rootless/tips/#rootless-docker-in-docker).
+It has access to host devices even when **Full host access** is off. Treat T3
+agents as trusted server users; folder selections and the host command helper
+are convenience controls, not isolation from hostile code.
+
+Existing T3 installations adopt this runtime policy while preserving their
+recipe identity and home volume. Disable and re-enable T3 to recreate an old
+container if requested by the service. The first migration of an older image
+also installs namespace/network prerequisites in its disposable filesystem.
 
 ### Agent tools
 
@@ -258,8 +350,10 @@ run a competing `t3 update` in the background. The native
 installer checks the downloaded archive against upstream release checksums and
 keeps its local web assets and dependency notices.
 
-Podman owns the container lifecycle; no nested systemd service is required. A privileged
-container is used only when Full host access is enabled. The integration uses upstream's internal service launcher
+In container mode, Podman owns the container lifecycle; no nested systemd service is required. The
+outer container is privileged for rootless DinD. Full host access additionally
+shares host PIDs and installs the host command helper. The integration uses
+upstream's internal service launcher
 and checks its protocol before initial adoption. An incompatible launcher protocol,
 invalid state or missing selected runtime fails visibly without resetting saved
 update state. A future incompatible upstream service protocol may require a Xur
