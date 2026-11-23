@@ -59,6 +59,9 @@ class Handler(BaseHTTPRequestHandler):
             for key in ("running", "modelReady", "failConnect", "installed", "installStage", "enabled"):
                 if key in data:
                     state[key] = data[key]
+            if data.get("githubApproved") and "gh" in state["flows"]:
+                state["flows"].pop("gh")
+                state["accounts"]["gh"] = "Signed in"
             return self.send(state)
         if self.headers.get("RequestVerificationToken") != "fixture-only":
             return self.send(dict(error="Missing antiforgery header"), 400)
@@ -76,6 +79,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(dict(state="Succeeded", message="Harness installed.", provider=provider))
             if action in ("login", "login-browser"):
                 flow = dict(state="Waiting", message="Complete sign-in.", flowId="fixture-" + provider, provider=provider, url="https://claude.com/oauth/authorize?state=fixture-only" if provider == "claude" else "https://auth.openai.com/codex/device", needsCode=provider == "claude", deviceCode="ABCD-EFGHJ" if provider == "codex" else None)
+                if provider == "gh":
+                    flow.update(url="https://github.com/login/device", deviceCode="DEMO-CODE")
                 if action == "login-browser":
                     flow.update(url="https://auth.openai.com/oauth/authorize?state=fixture-only", needsCallback=True, deviceCode=None)
                 state["flows"][provider] = flow
@@ -88,7 +93,7 @@ class Handler(BaseHTTPRequestHandler):
             if action == "cancel":
                 state["flows"].pop(provider, None)
                 return self.send(dict(state="Cancelled", message="Sign-in cancelled.", provider=provider))
-            return self.send(state["flows"].get(provider) or dict(state=state["accounts"].get(provider, "Missing"), message="Fixture account state.", provider=provider))
+            return self.send(state["flows"].get(provider) or dict(state=state["accounts"].get(provider, "Signed out" if provider == "gh" else "Missing"), message="Fixture account state.", provider=provider))
         if path == "/api/t3-code/connect":
             if state["failConnect"]:
                 return self.send(dict(error="The endpoint did not pass the streaming tool-call check."), 409)

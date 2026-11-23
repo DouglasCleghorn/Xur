@@ -82,6 +82,32 @@ else
             <button type="button" id="t3-mcp-connect">Connect or repair Xur MCP</button>
             <p id="t3-mcp-message" role="status"></p>
         </section>
+        <section class="panel" id="t3-github" data-provider="gh" aria-labelledby="t3-gh-heading">
+            <div class="section-heading">
+                <h2 id="t3-gh-heading">GitHub CLI</h2>
+                <span class="state-label t3-provider-status" role="status">Checking…</span>
+            </div>
+            <p id="t3-gh-note">Connect your GitHub account to run <code>gh</code> commands in T3 Code.</p>
+            <div class="actions" id="t3-gh-actions">
+                <button type="button" data-action="login" disabled>Sign in with GitHub</button>
+                <button type="button" data-action="status" class="secondary" disabled>Check connection</button>
+                <button type="button" data-action="install" class="secondary" hidden>Retry CLI setup</button>
+            </div>
+            <div class="t3-auth" hidden>
+                <div id="t3-gh-device" hidden>
+                    <p>Enter this one-time code on GitHub to authorize T3’s CLI.</p>
+                    <div class="t3-gh-code-row">
+                        <code id="t3-gh-code"></code>
+                        <button type="button" class="secondary" id="t3-gh-copy">Copy code</button>
+                    </div>
+                </div>
+                <div class="actions">
+                    <a id="t3-gh-open" class="button" href="https://github.com/login/device" target="_blank" rel="noopener noreferrer" hidden>Open GitHub</a>
+                    <button type="button" class="quiet" id="t3-gh-cancel">Cancel sign-in</button>
+                </div>
+            </div>
+            <p class="t3-gh-error error" role="alert" hidden></p>
+        </section>
         <section class="panel" id="t3-providers" aria-labelledby="t3-providers-heading">
             <div class="section-heading"><h2 id="t3-providers-heading">Coding accounts and harnesses</h2><button id="t3-setup-refresh" type="button" class="secondary">Refresh setup</button></div>
             <p id="t3-setup-stopped">Enable T3 Code to set up accounts and local models.</p>

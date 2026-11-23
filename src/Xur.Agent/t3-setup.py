@@ -25,7 +25,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-PROVIDERS = {"codex", "claude", "opencode"}
+PROVIDERS = {"codex", "claude", "opencode", "gh"}
 LAUNCHER = "__XUR_T3_LAUNCHER__"
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)")
 
@@ -45,7 +45,7 @@ def paths():
 
 def binary(provider):
     if provider not in PROVIDERS:
-        raise SetupError("Choose Codex, Claude or OpenCode.")
+        raise SetupError("Choose Codex, Claude, OpenCode or GitHub CLI.")
     return str(paths()[1] / provider)
 
 
@@ -143,10 +143,25 @@ def subscription_environment():
     return env
 
 
+def github_environment():
+    env = dict(os.environ, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1", NO_COLOR="1")
+    for key in ("GITHUB_TOKEN", "GH_TOKEN"):
+        env.pop(key, None)
+    return env
+
+
 def account(provider):
     exe = binary(provider)
     if not Path(exe).is_file():
         return "Missing", "Automatic setup has not finished. Retry setup if it remains unavailable."
+    if provider == "gh":
+        result = subprocess.run([exe, "auth", "status", "--hostname", "github.com", "--active"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=20, env=github_environment())
+        if result.returncode and b"not logged into" in result.stderr:
+            return "Signed out", "Sign in to connect GitHub CLI."
+        if result.returncode:
+            return "Unverified", "Could not verify a GitHub.com account. Check connectivity or sign in."
+        return "Signed in", "GitHub CLI is connected to GitHub.com."
     if provider == "opencode":
         return "Installed", "OpenCode is installed. Connect an Xur model below."
     args = [exe, "login", "status"] if provider == "codex" else [exe, "auth", "status"]
@@ -193,6 +208,10 @@ def install(provider):
 
 def auth_interaction(provider, output):
     clean = ANSI.sub("", output).replace("\r", "")
+    if provider == "gh":
+        code = re.search(r"one-time code:\s*([A-Z0-9]{4}-[A-Z0-9]{4})\b", clean)
+        return dict(url="https://github.com/login/device" if code else None,
+                    deviceCode=code.group(1) if code else None, needsCode=False)
     allowed = {"auth.openai.com"} if provider == "codex" else {"claude.com", "claude.ai", "platform.claude.com", "console.anthropic.com"}
     url = None
     for candidate in re.findall(r'https://[^\s<>"\x1b]+', clean):
@@ -262,21 +281,27 @@ def relay_callback(port, target):
 
 
 def authenticate(provider, browser=False):
-    if provider not in ("codex", "claude"):
-        raise SetupError("Subscription sign-in is available for Codex and Claude.")
+    if provider not in ("codex", "claude", "gh"):
+        raise SetupError("Choose Codex, Claude or GitHub CLI to sign in.")
     exe = binary(provider)
     if not Path(exe).is_file():
         raise SetupError("Install this harness first.")
     if browser and provider != "codex":
         raise SetupError("Browser callback sign-in is available for Codex only.")
+    env = subscription_environment()
     if provider == "codex":
         codex_subscription()  # Refuse incompatible setups before changing native credentials.
-    args = [exe, "login"] + ([] if browser else ["--device-auth"]) if provider == "codex" else [exe, "auth", "login", "--claudeai"]
+        args = [exe, "login"] + ([] if browser else ["--device-auth"])
+    elif provider == "claude":
+        args = [exe, "auth", "login", "--claudeai"]
+    else:
+        args = [exe, "auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web"]
+        env = github_environment()
     master, slave = pty.openpty()
     attributes = termios.tcgetattr(slave)
     attributes[3] &= ~termios.ECHO
     termios.tcsetattr(slave, termios.TCSANOW, attributes)
-    process = subprocess.Popen(args, stdin=slave, stdout=slave, stderr=slave, start_new_session=True, env=subscription_environment())
+    process = subprocess.Popen(args, stdin=subprocess.DEVNULL if provider == "gh" else slave, stdout=slave, stderr=slave, start_new_session=True, env=env)
     os.close(slave)
     decoder = codecs.getincrementaldecoder("utf-8")("replace")
     output, last, pending, callback_sent = "", None, b"", False
@@ -338,6 +363,9 @@ def authenticate(provider, browser=False):
         state, message = account(provider)
         if state != "Signed in":
             raise SetupError(message)
+        if provider == "gh":
+            emit(state, message)
+            return
         if provider == "codex":
             identifier = codex_subscription(register=True)
         else:

@@ -3,3 +3,21 @@
 #t3-storage{margin-top:1rem}#t3-storage-form{margin-top:1rem}#t3-storage-form label{display:block;margin-block:.5rem}#t3-storage-form [hidden]{display:none}#t3-storage-folders{display:block;width:100%;box-sizing:border-box;margin-block:.5rem}
 
 #t3-runtime-form{margin-top:1rem}#t3-runtime-form label{display:block;margin-bottom:.5rem}#t3-runtime-mode{max-width:100%;margin-right:.5rem}#t3-runtime-save{margin-top:.5rem}
+
+#t3-github [hidden] { display: none; }
+#t3-github .section-heading { flex-wrap: wrap; gap: .5rem; }
+#t3-github .t3-provider-status { min-height: 0; }
+#t3-github .t3-auth { margin: 0; }
+#t3-gh-device { padding-block: .25rem .5rem; }
+#t3-gh-device p { margin-top: 0; }
+.t3-gh-code-row { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
+#t3-gh-code {
+    padding: .3rem .65rem;
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    background: var(--canvas);
+    color: var(--text);
+    font-size: 1.4rem;
+    letter-spacing: .08em;
+    user-select: all;
+}
