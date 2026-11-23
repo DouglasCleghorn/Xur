@@ -10,7 +10,7 @@ FROM localhost/xur/vllm-rocm-gfx1103:v0.31.0-rocm10.0.0 AS vllm-rocm-gfx1103
 FROM mirror.gcr.io/vllm/vllm-openai-xpu:latest AS vllm-xpu
 FROM mirror.gcr.io/vllm/vllm-omni:latest AS omni
 # Upstream has no ROCm latest tag or prebuilt XPU Omni image.
-FROM mirror.gcr.io/vllm/vllm-omni-rocm:v0.28.0 AS omni-rocm
+FROM mirror.gcr.io/vllm/vllm-omni-rocm:v0.30.0 AS omni-rocm
 FROM localhost/xur/vllm-omni-xpu:v0.30.0 AS omni-xpu
 FROM ghcr.io/0xshug0/audio.cpp:full-cpu AS audio-cpu
 FROM ghcr.io/0xshug0/audio.cpp:full-cuda12 AS audio-cuda
