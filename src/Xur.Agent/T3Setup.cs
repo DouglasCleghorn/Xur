@@ -30,12 +30,12 @@ public sealed class T3Setup(WorkloadRuntime workloads):IDisposable
     static bool Active(Flow flow)=>!flow.Done.Task.IsCompleted;
     public async Task<T3SetupState> Execute(T3SetupRequest request)
     {
-        if(request.Action!="mcp-connect" && request.Provider is not ("codex" or "claude" or "opencode"))throw new InvalidOperationException("Choose Codex, Claude or OpenCode.");
+        if(request.Action!="mcp-connect" && request.Provider is not ("codex" or "claude" or "opencode" or "gh"))throw new InvalidOperationException("Choose Codex, Claude, OpenCode or GitHub CLI.");
         if(request.Action is not ("status" or "install" or "login" or "login-browser" or "respond" or "cancel" or "connect" or "connection-status" or "mcp-connect"))throw new InvalidOperationException("Unsupported setup action.");
         if(request.Action=="mcp-connect" && request.Mcp==null)throw new InvalidOperationException("Missing MCP connection.");
         if(request.Action=="login-browser" && request.Provider!="codex")throw new InvalidOperationException("Browser callback sign-in is available for Codex only.");
         if(request.Action=="login" && request.Provider=="opencode")throw new InvalidOperationException("Connect an Xur model to OpenCode.");
-        if(request.Action is "connect" or "connection-status" && (request.Model==null || request.Provider=="claude"))throw new InvalidOperationException("Choose a local model and compatible harness.");
+        if(request.Action is "connect" or "connection-status" && (request.Model==null || request.Provider is not ("opencode" or "codex")))throw new InvalidOperationException("Choose a local model and compatible harness.");
         await gate.WaitAsync();
         Flow? started=null;
         try

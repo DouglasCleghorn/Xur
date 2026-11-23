@@ -1,5 +1,12 @@
 # Screenshot and artwork register
 
+- 2026-11-23: T3 Code GitHub CLI sign-in, working tree based on `372413b`.
+  Private validation captures in `.build/evidence/t3-gh-auth/` include
+  `sign-in.png`, `device-code.png`, `connected.png`, and `mobile-device-code.png`.
+  These crops show the rendered setup section at desktop and phone widths.
+  Privacy review found only fixture state and the inert sample code DEMO-CODE.
+  Regenerate after changes to GitHub CLI setup.
+
 - 2026-10-31: Retired the connection controls shown in the T3 Code validation
   families dated 2026-10-17, 2026-10-21 and 2026-10-24 below. The page now guides
   users to pair the installed app using Copy link or the QR code; the browser

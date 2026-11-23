@@ -38,6 +38,33 @@
    const link=el('a','Continue in T3');link.href=providerUrl(data.providerInstanceId||card.querySelector('.t3-provider-link')?.dataset.instance||provider);link.target='_blank';link.rel='noopener noreferrer';area.append(link);
   }
  }
+ const gh=page.querySelector('[data-provider="gh"]');
+ const ghCode=gh.querySelector('#t3-gh-code'),ghCopy=gh.querySelector('#t3-gh-copy');
+ ghCopy.onclick=async()=>{
+  try{await navigator.clipboard.writeText(ghCode.textContent);ghCopy.textContent='Copied';}
+  catch{const range=document.createRange();range.selectNodeContents(ghCode);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);ghCopy.textContent='Code selected';}
+ };
+ gh.querySelector('#t3-gh-cancel').onclick=()=>action(gh,'cancel',{flowId:flows.get('gh')});
+ function renderGithub(data){
+  const signingIn=data.state==='Waiting'||(data.state==='Starting'&&gh.dataset.setupAction==='login');
+  const connected=data.state==='Signed in';
+  const state=gh.querySelector('.t3-provider-status');
+  state.textContent=connected?'Connected':data.state==='Waiting'?'Awaiting approval':data.state;
+  state.classList.toggle('running',connected);
+  state.classList.toggle('pending',signingIn);
+  const note=gh.querySelector('#t3-gh-note');
+  note.hidden=signingIn&&!!data.deviceCode;
+  note.textContent=connected?'Your GitHub account is ready for gh commands in T3 Code.':
+   data.state==='Signed out'?'Connect your GitHub account to run gh commands in T3 Code.':data.message;
+  gh.querySelector('#t3-gh-actions').hidden=signingIn;
+  gh.querySelector('.t3-auth').hidden=!signingIn;
+  gh.querySelector('#t3-gh-device').hidden=!data.deviceCode;
+  gh.querySelector('#t3-gh-open').hidden=!data.deviceCode;
+  gh.querySelector('#t3-gh-cancel').disabled=!signingIn;
+  if(ghCode.textContent!==(data.deviceCode||''))ghCopy.textContent='Copy code';
+  ghCode.textContent=data.deviceCode||'';
+  ghCopy.disabled=!data.deviceCode;
+ }
  function render(card,data){
   const providerLink=card.querySelector('.t3-provider-link');
   if(providerLink&&data.providerInstanceId){providerLink.dataset.instance=data.providerInstanceId;if(running)providerLink.href=providerUrl(data.providerInstanceId);}
@@ -46,19 +73,22 @@
   if(login){
    const signedIn=data.state==='Signed in'||(data.state==='Succeeded'&&['login','login-browser'].includes(card.dataset.setupAction));
    login.classList.toggle('quiet',signedIn);
-   login.textContent=signedIn?'Sign in again':card.dataset.provider==='codex'?'Sign in with device code':'Sign in with Claude';
+   login.textContent=signedIn?'Sign in again':card.dataset.provider==='codex'?'Sign in with device code':card.dataset.provider==='gh'?'Sign in with GitHub':'Sign in with Claude';
   }
   if(data.flowId&&active(data.state))flows.set(card.dataset.provider,data.flowId);else flows.delete(card.dataset.provider);
   card.querySelectorAll('[data-action]').forEach(b=>b.disabled=!running||active(data.state)||busy.has(card.dataset.provider)||(['login','login-browser'].includes(b.dataset.action)&&data.state==='Missing'));
   card.querySelectorAll('[data-action="install"]').forEach(b=>b.hidden=data.state!=='Missing'&&data.state!=='Failed');
-  auth(card,data);
+  card.dataset.state=data.state;
+  if(card===gh)renderGithub(data);else auth(card,data);
  }
  async function action(card,operation,extra={}){
-  const provider=card.dataset.provider;if(busy.has(provider)||!running)return;busy.add(provider);error.hidden=true;
+  const provider=card.dataset.provider;if(busy.has(provider)||!running)return;busy.add(provider);const actionError=card.querySelector('.t3-gh-error')||error;actionError.hidden=true;
   if(['install','login','login-browser'].includes(operation))card.dataset.setupAction=operation;
   if(operation!=='status')card.querySelectorAll('button').forEach(b=>b.disabled=true);
   try{const data=await api('setup',{action:operation,provider,...extra});busy.delete(provider);render(card,data);}
-  catch(e){busy.delete(provider);fail(e);card.querySelectorAll('button').forEach(b=>b.disabled=!running);}
+  catch(e){busy.delete(provider);
+   if(card===gh&&extra.flowId)render(card,{state:'Unavailable',message:'Check the connection or start sign-in again.'});
+   actionError.textContent=e.message;actionError.hidden=false;card.querySelectorAll('button').forEach(b=>b.disabled=!running);}
  }
  cards.forEach(card=>card.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>action(card,b.dataset.action)));
  async function refresh(){
@@ -66,7 +96,9 @@
    const status=await api('status');running=status.state==='Running';document.getElementById('t3-setup-stopped').hidden=running;
    page.querySelectorAll('.t3-provider-link').forEach(a=>{a.setAttribute('aria-disabled',String(!running));a.tabIndex=running?0:-1;if(running)a.href=providerUrl(a.dataset.instance);else a.removeAttribute('href');});
    if(!running){flows.clear();cards.forEach(c=>render(c,{state:'Stopped',message:'Enable T3 Code to continue.'}));return;}
-   await Promise.all(cards.map(c=>action(c,'status',flows.has(c.dataset.provider)?{flowId:flows.get(c.dataset.provider)}:{})));
+   // gh auth status contacts GitHub. Recheck settled accounts only on request.
+   const due=cards.filter(c=>c!==gh||!['Signed out','Signed in','Unverified','Cancelled','Failed'].includes(c.dataset.state));
+   await Promise.all(due.map(c=>action(c,'status',flows.has(c.dataset.provider)?{flowId:flows.get(c.dataset.provider)}:{})));
   }catch(e){running=false;cards.forEach(c=>render(c,{state:'Unavailable',message:'Check the T3 workload and retry.'}));fail(e);}
  }
  async function models(){
@@ -103,6 +135,6 @@
  }
  document.getElementById('t3-setup-refresh').onclick=refresh;document.getElementById('t3-models-refresh').onclick=()=>{previous='';models();};
  refresh().then(models);setInterval(()=>{if(!document.hidden)refresh();},5000);setInterval(()=>{if(!document.hidden)models();},15000);
- window.addEventListener('pagehide',()=>{page.querySelectorAll('.t3-auth').forEach(a=>{a.replaceChildren();delete a.dataset.signature;});});
+ window.addEventListener('pagehide',()=>{ghCode.textContent='';gh.querySelector('.t3-auth').hidden=true;page.querySelectorAll('.t3-provider .t3-auth').forEach(a=>{a.replaceChildren();delete a.dataset.signature;});});
  window.addEventListener('pageshow',event=>{if(event.persisted)refresh();});
 })();

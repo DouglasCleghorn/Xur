@@ -96,6 +96,40 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(value['deviceCode'], 'ABCD-EFGHJ')
         self.assertEqual(value['url'], 'https://auth.openai.com/codex/device')
 
+    def test_github_device_login_and_persistent_status(self):
+        binary = self.bin / "gh"
+        binary.write_text("""#!/usr/bin/env python3
+import os, sys, time
+from pathlib import Path
+marker = Path.home() / "connected"
+if sys.argv[1:] == ["auth", "status", "--hostname", "github.com", "--active"]:
+    print("NEVER-EXPOSE")
+    sys.exit(0 if marker.exists() else 1)
+assert sys.argv[1:] == ["auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web"]
+assert not sys.stdin.isatty()
+assert os.environ["GH_PROMPT_DISABLED"] == "1"
+print("! First copy your one-time code: ABCD-1234", file=sys.stderr, flush=True)
+while not marker.exists():
+    time.sleep(0.05)
+""")
+        binary.chmod(0o700)
+        self.assertEqual(helper.account("gh")[0], "Unverified")
+        with self.start() as process:
+            process.stdin.write('{"action":"login","provider":"gh"}\n')
+            process.stdin.flush()
+            state = self.read(process)
+            self.assertEqual(state["state"], "Waiting")
+            self.assertEqual(state["url"], "https://github.com/login/device")
+            self.assertEqual(state["deviceCode"], "ABCD-1234")
+            (self.home / "connected").touch()
+            self.assertEqual(self.read(process)["state"], "Signed in")
+            process.wait(timeout=5)
+        with self.start() as process:
+            process.stdin.write('{"action":"status","provider":"gh"}\n')
+            process.stdin.flush()
+            self.assertEqual(self.read(process)["state"], "Signed in")
+        self.assertFalse(self.settings.exists())
+
     def fake_claude(self):
         binary = self.bin / "claude"
         binary.write_text('''#!/usr/bin/env python3

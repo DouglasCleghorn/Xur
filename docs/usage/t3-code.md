@@ -312,7 +312,7 @@ Node/npm, Git, SSH, curl, Python and ripgrep are included in the base image.
 GitHub CLI, uv/uvx, fd, jq, Git LFS, rsync, zip/unzip and SQLite install in the
 persistent home on startup. The tools become available as their independent
 background installers finish. The tool bundle also keeps ripgrep current.
-Use `gh auth login` to connect your GitHub account. Git LFS initializes its
+On the T3 Code page, choose **Sign in with GitHub** under **GitHub CLI**, then enter the displayed device code on GitHub.com. The CLI saves the connection in T3’s persistent home. You can also run `gh auth login` in a T3 terminal. Git LFS initializes its
 filters in the persistent home using `git lfs install --skip-repo`, without
 forcing replacement of custom filter settings.
 
