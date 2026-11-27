@@ -38,7 +38,10 @@ public static class SharedModelCache
             var copy=await Processes.Run("cp",["--reflink=auto","--no-dereference","--",blob,temporary],86400);
             if(copy.ExitCode!=0||new FileInfo(temporary).LinkTarget!=null)return null;
             await using(var stream=File.OpenRead(temporary))
+            {
                 if(stream.Length!=asset.Bytes||Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(stream))!=asset.Sha256)return null;
+                RandomAccess.FlushToDisk(stream.SafeFileHandle);
+            }
             File.Move(temporary,target,true);
             return target;
         }

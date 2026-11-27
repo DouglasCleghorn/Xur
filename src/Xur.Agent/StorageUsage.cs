@@ -94,7 +94,8 @@ public sealed class StorageUsage(VictoriaMetrics? metrics=null,Func<Task<(Storag
             await RefreshDisks(refresh);
             var categories=new List<StorageCategory>();
             var caches=ModelCaches("/var/lib/containers/storage/volumes");
-            categories.Add(await Measure("Models",[storage?.PathFor("models","models")??"/var/lib/xur/models",storage?.PathFor("models","model-sets")??"/var/lib/xur/model-sets",..caches]));
+            string[] localModels=storage?.StorageConnections().Length>0?[]:[storage?.PathFor("models","models")??"/var/lib/xur/models",storage?.PathFor("models","model-sets")??"/var/lib/xur/model-sets"];
+            categories.Add(await Measure("Models",[..localModels,..caches]));
             if(storage?.Selected("unsloth")==true)categories.Add(await Measure("Unsloth data",[storage.PathFor("unsloth","workspace"),storage.PathFor("unsloth","studio")]));
             categories.Add(await Measure("Workstation streaming",["/var/lib/xur-streaming","/var/lib/xur-streaming-runtime"]));
             categories.Add(await Measure("Containers & engines",["/var/lib/containers/storage"],caches));

@@ -108,7 +108,7 @@
   if(action==='accept'){if(review.contains(document.activeElement))document.activeElement.click();}
   else if(action==='up'||action==='down'){
    const targets=[...review.querySelectorAll('button:not(:disabled), summary, a[href]')],index=targets.indexOf(document.activeElement);
-   targets[(index+(action==='down'?1:-1)+targets.length)%targets.length]?.focus();
+   targets[index<0?(action==='down'?0:targets.length-1):(index+(action==='down'?1:-1)+targets.length)%targets.length]?.focus();
   }
   return;
  }if(action==='up'||action==='down')move(action==='up'?-1:1);else if(action==='accept')document.activeElement?.click();}

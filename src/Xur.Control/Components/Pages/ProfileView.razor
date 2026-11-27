@@ -9,7 +9,7 @@
     <div class="page-heading profile-view-heading"><h1>@profile.Name</h1><a class="button secondary" href="/profiles/edit?id=@profile.Id">Edit profile</a></div>
     <ProfileBadges Profile="profile" State="state" />
     <section class="panel"><h2>Workloads</h2>
-        <ProfileWorkloads Profile="profile" Runtime="state.Runtime" ShowState="true" />
+        <ProfileWorkloads Profile="profile" Runtime="state.Runtime" Accounts="accounts" ShowState="true" />
     </section>
     <form method="post" action="/profiles/preview"><AntiforgeryToken /><input type="hidden" name="id" value="@profile.Id" />
         <button disabled="@(state.Operation?.Stage is "Applying" or "Cancelling" or "Failed")">Review changes</button>
@@ -24,11 +24,13 @@ else
     [SupplyParameterFromQuery] public string? Id { get; set; }
     ProfileState? state;
     Profile? profile;
+    StationAccount[] accounts=[];
     protected override async Task OnParametersSetAsync()
     {
         if (!Device.Installer)
         {
             try { state = await Manager.State(); } catch { state = null; }
+            try { accounts = await Device.Agent.GetFromJsonAsync<StationAccount[]>("/station-users") ?? []; } catch { accounts = []; }
         }
         profile = state?.Profiles.FirstOrDefault(p => p.Id == Id);
     }

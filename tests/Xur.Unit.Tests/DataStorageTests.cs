@@ -93,7 +93,7 @@ static class DataStorageTests
     }
     static async Task NetworkStorage(Action<bool,string> check)
     {
-        using var f=new Fixture();var offline=false;var wrong=false;var readOnlyMount=false;
+        using var f=new Fixture();var offline=false;var wrong=false;var readOnlyMount=false;var legacy=false;
         const string id="smb-11111111111111111111111111111111";
         var connection=new SmbConnection(id,"Models","nas.test","models","user","",1000,1000,ReadOnly:false);
         Directory.CreateDirectory(f.Root+"/state/network-shares");
@@ -104,7 +104,7 @@ static class DataStorageTests
             if(exe=="systemd-escape")return new(0,"network.mount");
             if(exe=="systemctl")return new(0,"");
             if(exe=="podman")return new(offline?1:0,"");
-            if(exe=="findmnt"&&args.Contains("--mountpoint"))return new(0,JsonSerializer.Serialize(new{filesystems=new[]{new{source=wrong?"//other/share":"//nas.test/models",fstype="cifs",options=readOnlyMount?"ro,vers=3":"rw,vers=3"}}}));
+            if(exe=="findmnt"&&args.Contains("--mountpoint"))return new(0,JsonSerializer.Serialize(new{filesystems=new[]{new{source=wrong?"//other/share":"//nas.test/models",fstype="cifs",options=legacy?"rw,vers=3":readOnlyMount?"ro,vers=3,mfsymlinks":"rw,vers=3,mfsymlinks"}}}));
             return await f.Run(exe,args,seconds);
         }
         var shares=new NetworkShares(f.Root+"/state",f.Root+"/units",f.Root+"/network",Run);
@@ -115,6 +115,7 @@ static class DataStorageTests
         check(storage.StorageConnections().SequenceEqual(new[]{id})&&(await storage.Status()).NetworkShares!.Single().Connection.Id==id,"Selected network storage exposes its persistent connection identity for startup and the picker");
         offline=true;await Reject(()=>storage.Require("models"),"Offline model shares fail closed without using system storage",check);offline=false;
         wrong=true;await Reject(()=>storage.Require("models"),"An unrelated filesystem at the SMB mount is rejected",check);wrong=false;
+        legacy=true;await Reject(()=>storage.Require("models"),"Legacy SMB mounts require reconnection before writing any model files",check);legacy=false;
         readOnlyMount=true;await Reject(()=>storage.Require("models"),"A share remounted read-only blocks model startup",check);readOnlyMount=false;
         Save(connection with{ReadOnly=true});await Reject(()=>storage.Require("models"),"Read-only network connections cannot receive model downloads",check);Save(connection);
         await Reject(()=>storage.Move(new("default",id)),"Network model storage does not move Studio accounts onto SMB",check);

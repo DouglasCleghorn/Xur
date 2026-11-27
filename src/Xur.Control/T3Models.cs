@@ -61,9 +61,9 @@ public sealed class T3Models
         {
             try
             {
-                using var props=await gateway.GetAsync(Uri.EscapeDataString(w.Route)+"/props",timeout.Token);
-                await props.Content.LoadIntoBufferAsync(1024*1024,timeout.Token);
+                using var props=await gateway.GetAsync(Uri.EscapeDataString(w.Route)+"/props",HttpCompletionOption.ResponseHeadersRead,timeout.Token);
                 props.EnsureSuccessStatusCode();
+                await props.Content.LoadIntoBufferAsync(1024*1024,timeout.Token);
                 using var info=JsonDocument.Parse(await props.Content.ReadAsStringAsync(timeout.Token));
                 var context=info.RootElement.GetProperty("default_generation_settings").GetProperty("n_ctx").GetInt32();
                 if(context is >=1024 and <=2097152)foreach(var id in result.Keys.ToArray())result[id]=context;

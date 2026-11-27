@@ -74,7 +74,7 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
         if(r.ExitCode!=0)return false;
         using var doc=JsonDocument.Parse(r.StandardOutput);
         return doc.RootElement.GetProperty("filesystems").EnumerateArray().Any(f=>f.GetProperty("fstype").GetString()=="cifs" && f.GetProperty("source").GetString()=="//"+connection.Server+"/"+connection.Share
-            && (!writable || f.TryGetProperty("options",out var options) && options.GetString()?.Split(',').Contains("rw")==true));
+            && (!writable || f.TryGetProperty("options",out var options) && options.GetString()?.Split(',') is {} flags && flags.Contains("rw") && flags.Contains("mfsymlinks")));
     }
     public async Task<NetworkSharesStatus> Status()
     {
@@ -172,7 +172,7 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
             "--volume",Credentials(c.Id)+":/run/smb-auth:ro",Image,"smbclient","//"+c.Server+"/"+c.Share,
             "--authentication-file=/run/smb-auth","--option=client min protocol=SMB3_00",
             "--option=client smb encrypt="+(c.Encrypt?"required":"if_required"),"--timeout=8","--command=quit"],20);
-        if(!await Mounted(c,writable))throw new InvalidOperationException(writable?"The model share must be mounted read/write from the configured server.":"The expected SMB filesystem is not mounted. Workload startup is blocked.");
+        if(!await Mounted(c,writable))throw new InvalidOperationException(writable?"The model share must be mounted read/write with mfsymlinks from the configured server. Disconnect and reconnect the share before selecting it for model storage.":"The expected SMB filesystem is not mounted. Workload startup is blocked.");
         await Require("stat",["--file-system","--",MountPath(c.Id)],10);
     }
     public async Task<string> RequireStorage(string id)

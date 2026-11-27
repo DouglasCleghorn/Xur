@@ -110,7 +110,7 @@ cache at `/shared-models/huggingface`, backed by `<models>/huggingface`. The bui
 recipe remains compatible with existing saved profiles and volumes. vLLM mounts
 the same directory. For GGUF, Xur copies a matching cached blob into the managed
 library, using a reflink when available, and verifies its size and SHA-256 before
-publishing it. Later Studio writes cannot change that copy. The immutable Xur blob/snapshot mounts remain read-only; dataset and
+publishing it. Reserve space for a full copy on filesystems without reflinks. Later Studio writes cannot change the verified weights. The immutable Xur blob/snapshot mounts remain read-only; dataset and
 training output writes belong in `/workspace`. Legacy workspace downloads remain
 available there, without rewriting or deleting them.
 

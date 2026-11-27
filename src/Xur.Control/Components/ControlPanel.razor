@@ -16,9 +16,9 @@
             <form class="control-profile-picker" method="post" action="/profiles/preview"><AntiforgeryToken />
                 <fieldset class="profile-choices"><legend>Choose a profile</legend>
                 @foreach(var profile in ProfileDisplay.Ordered(state)) {
-                    <label class="profile-choice"><input type="radio" name="id" value="@profile.Id" checked="@(profile.Id==(state.Active?.Id??state.Profiles.OrderBy(p=>p.Name).First().Id))" disabled="@Busy" required />
+                    <label class="profile-choice"><input type="radio" name="id" value="@profile.Id" checked="@(profile.Id==(state.Active?.Id??ProfileDisplay.Ordered(state).First().Id))" disabled="@Busy" required />
                     <span><strong>@profile.Name</strong><ProfileBadges Profile="profile" State="state" />
-                        <ProfileWorkloads Profile="profile" Runtime="state.Runtime" />
+                        <ProfileWorkloads Profile="profile" Runtime="state.Runtime" Accounts="accounts" />
                     </span></label>
                 }
                 </fieldset><button disabled="@Busy">Review changes</button>
@@ -38,11 +38,12 @@
 <DisplayControls />
 <script src="/control-panel.js" defer></script>
 @code {
+    StationAccount[] accounts=[];
     ProfileState? state;UpdateAllStatus? updates;OsUpdateStatus? osUpdates;
     bool Busy=>state?.Operation?.Stage is "Applying" or "Cancelling" or "Failed";
     protected override async Task OnInitializedAsync()
     {
-        async Task ReadProfiles(){try{state=await Profiles.State();}catch{}}
+        async Task ReadProfiles(){try{state=await Profiles.State();accounts=await Device.Agent.GetFromJsonAsync<StationAccount[]>("/station-users") ?? [];}catch{}}
         async Task ReadUpdates(){try{updates=await Device.Agent.GetFromJsonAsync<UpdateAllStatus>("/update-all");}catch{}}
         async Task ReadOs(){try{osUpdates=await Device.Agent.GetFromJsonAsync<OsUpdateStatus>("/updates");}catch{}}
         await Task.WhenAll(ReadProfiles(),ReadUpdates(),ReadOs());

@@ -108,7 +108,10 @@
    const q=new URLSearchParams(location.search),requested=storage?q.get('location'):null;
    let folder=q.get(storage?'folder':'path')||'';
    if(requested){
-    selected=roots.filter(r=>requested===r.path||requested.startsWith(r.path.replace(/\/$/,'')+'/')).sort((a,b)=>b.path.length-a.path.length)[0];
+    const managed=requested.match(/^\/var\/mnt\/(?:xur|xur-smb)\/[^/]+/)?.[0];
+    const devicePath=/^\/dev\/[^:]+:(?:\/|$)/.test(requested);
+    selected=devicePath?null:roots.filter(r=>(!managed||r.path===managed||r.path.startsWith(managed+'/'))&&
+     (requested===r.path||requested.startsWith(r.path.replace(/\/$/,'')+'/'))).sort((a,b)=>b.path.length-a.path.length)[0];
     if(!selected){rows=[];grid.setGridOption('rowData',[]);nav.replaceChildren();folderSize=null;reportTotal();status.textContent='This storage location is not mounted. Connect its drive or network share, then refresh.';return;}
     folder=requested.slice(selected.path.replace(/\/$/,'').length).replace(/^\//,'');
    }else selected=roots.find(r=>r[storage?'id':'username']===q.get(storage?'mount':'user'))||(storage?null:roots[0]);

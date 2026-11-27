@@ -101,7 +101,14 @@ public static class ProfileEndpoints
                     else if(chosen=="legacy" && existing?.Workloads.SingleOrDefault(w=>w.Id==ids[i]) is {Recipe.Kind:"Workstation",User:null}){}
                     else {var account=accounts.SingleOrDefault(a=>a.Username==chosen) ?? throw new InvalidOperationException("Select a workstation user.");user=new(account.Username,account.Uid);}
                 }
-                selections.Add(new(ids[i],recipes[i] ?? "",f["gpus-"+i].ToArray().Select(s=>s!).ToArray(),user,stationIds.ElementAtOrDefault(i),stationNames.ElementAtOrDefault(i),catalog.Recipes.SingleOrDefault(r=>r.Id==recipes[i])?.Kind=="Workstation"?new StationDevices(f["primary-"+i]=="true",f["usb-"+i].Select(s=>s!).ToArray(),f["controller-"+i].Select(s=>s!).ToArray()):null,f["network-"+i].Select(s=>new NetworkShareMount(s!,!f["network-write-"+i].Contains(s))).ToArray(),int.TryParse(f["contextTokens"].ElementAtOrDefault(i),out var contextTokens)?contextTokens:null));
+                var contextText=f["contextTokens"].ElementAtOrDefault(i);
+                int? contextTokens=null;
+                if(!string.IsNullOrWhiteSpace(contextText))
+                {
+                    if(!int.TryParse(contextText,out var parsed))throw new InvalidOperationException("Enter a whole number for the serving context.");
+                    contextTokens=parsed;
+                }
+                selections.Add(new(ids[i],recipes[i] ?? "",f["gpus-"+i].ToArray().Select(s=>s!).ToArray(),user,stationIds.ElementAtOrDefault(i),stationNames.ElementAtOrDefault(i),catalog.Recipes.SingleOrDefault(r=>r.Id==recipes[i])?.Kind=="Workstation"?new StationDevices(f["primary-"+i]=="true",f["usb-"+i].Select(s=>s!).ToArray(),f["controller-"+i].Select(s=>s!).ToArray()):null,f["network-"+i].Select(s=>new NetworkShareMount(s!,!f["network-write-"+i].Contains(s))).ToArray(),contextTokens));
             }
             if(!long.TryParse(f["revision"],out var revision))throw new InvalidOperationException("Reload the profile form.");
             await manager.SaveSelection(f["id"].ToString(),revision,selections.ToArray(),f.ContainsKey("name")?f["name"].ToString():null);return Results.Redirect("/profiles");

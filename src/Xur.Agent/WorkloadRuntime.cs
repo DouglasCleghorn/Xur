@@ -205,7 +205,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             if(c.GetProperty("State").GetProperty("Status").GetString()=="running")throw new InvalidOperationException("Both T3 runtimes are active. Stop the extra server before using its shared database.");
             return native;
         }
-        var staleStorage=SharedModelCache.Applies(w)&&(!labels.TryGetProperty(SharedModelCache.Label,out var modelStorage)||modelStorage.GetString()!=SharedModelCache.Policy(w,storage));
+        var staleStorage=c.GetProperty("State").GetProperty("Status").GetString()!="running"&&SharedModelCache.Applies(w)&&(!labels.TryGetProperty(SharedModelCache.Label,out var modelStorage)||modelStorage.GetString()!=SharedModelCache.Policy(w,storage));
         var fingerprint=staleStorage?"stale-storage:"+w.Fingerprint:T3CodeWorkload.Is(w.Recipe)?T3Mode()=="Native"?"stale-container:"+w.Fingerprint:T3Storage.Fingerprint(w,labels):w.Fingerprint;
         return new(w.Id,fingerprint,c.GetProperty("Id").GetString()!,c.GetProperty("State").GetProperty("Pid").GetInt32(),File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim(),endpoint,
             c.GetProperty("State").GetProperty("Status").GetString()!,w.Gpus);
@@ -232,7 +232,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             catalog.Verify(w.Recipe);
             if(w.Recipe.Kind=="Model" || UnslothWorkload.Is(w.Recipe))await storage.Require("models");
             if(UnslothWorkload.Is(w.Recipe))await storage.Require("unsloth");
-            var storageConnections=w.Recipe.Kind=="Model"||UnslothWorkload.Is(w.Recipe)?storage.StorageConnections():[];
+            var storageConnections=w.Recipe.Kind=="Model"||UnslothWorkload.Is(w.Recipe)||T3CodeWorkload.Is(w.Recipe)&&T3Storage.Read().Models?storage.StorageConnections():[];
             var network=await NetworkShares.RequireMounts(w,storageConnections);
             Directory.CreateDirectory(directory);
             var observed=await ObserveUnlocked();ProfilePolicy.Validate(new("runtime","Runtime",1,[w]),observed);
@@ -493,10 +493,20 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                     // SMB servers may not support hard links. A verified copy is still
                     // a complete snapshot; publish it only after checking its contents.
                     DataStorage.CheckCapacity(root,file.Asset.Bytes);
-                    File.Copy(source!,target+".partial",true);
-                    await using(var copy=File.OpenRead(target+".partial"))
-                        if(Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(copy))!=file.Asset.Sha256)throw new IOException("Model snapshot checksum mismatch.");
-                    File.Move(target+".partial",target,true);
+                    var temporary=target+"."+Guid.NewGuid().ToString("N")+".partial";
+                    try
+                    {
+                        await using(var input=File.OpenRead(source!))
+                        await using(var copy=new FileStream(temporary,FileMode.CreateNew,FileAccess.ReadWrite,FileShare.None))
+                        {
+                            await input.CopyToAsync(copy);
+                            copy.Position=0;
+                            if(Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(copy))!=file.Asset.Sha256)throw new IOException("Model snapshot checksum mismatch.");
+                            copy.Flush(true);
+                        }
+                        File.Move(temporary,target,true);
+                    }
+                    finally{File.Delete(temporary);}
                 }}
         }
         return root;
