@@ -157,3 +157,23 @@ Tailscale, Podman, Plasma, Mesa, the running kernel and NVIDIA driver report hos
 versions and use the OS update lifecycle. Their buttons check or stage the whole
 OS deployment. A reboot activates it. Missing tools are shown as unavailable or
 not installed rather than given a build-time version.
+
+## Automatic storage maintenance
+
+On installed appliances, `xur-storage-maintenance.timer` runs daily, with a
+random delay of up to 30 minutes. A missed run catches up after boot. It removes
+abandoned application downloads and obsolete installed bundles older than seven
+days. It keeps the active and rollback bundles, and defers application cleanup
+while an update holds the lock or recovery is pending.
+
+The same service runs Podman's dangling-image prune with a seven-day image
+creation-age filter. Before pruning, Xur tags locally available immutable image
+references in its catalog, saved profiles, and persisted workloads. If this
+inventory fails, image cleanup is skipped. Newly prepared custom containers
+also receive a local tag. Tagged images, images in use by containers, and
+volumes are retained. The job leaves application data, telemetry, benchmarks,
+recordings and journals in place.
+
+Use `systemctl list-timers xur-storage-maintenance.timer` to see the next run
+and `journalctl -u xur-storage-maintenance.service` to see removals or errors.
+Use `systemctl disable --now xur-storage-maintenance.timer` to turn it off.
