@@ -28,6 +28,7 @@ with tempfile.TemporaryDirectory(dir=base) as tmp:
     (root / 'current').symlink_to(current.relative_to(root))
     (root / 'previous.json').write_text(json.dumps({'id': previous.name}))
     download = directory(root / ('download-' + '1' * 32))
+    legacy = directory(root / 'download-_abc12xy')
     partial = directory(root / ('obsolete-' + '2' * 64))
     unrelated = directory(root / 'download-unrecognized')
     outside = directory(root / 'models')
@@ -46,7 +47,7 @@ with tempfile.TemporaryDirectory(dir=base) as tmp:
     for _ in range(2):
         module['clean'](root, now)
     assert all(p.exists() for p in (current, previous, fresh, unrelated, alias, outside))
-    assert not any(p.exists() for p in (unused, download, partial))
+    assert not any(p.exists() for p in (unused, download, legacy, partial))
     # A corrupt rollback selection fails closed for bundles and still allows
     # the independent Podman cleanup to run using the dangling-only default.
     (root / 'previous.json').write_text('{}')

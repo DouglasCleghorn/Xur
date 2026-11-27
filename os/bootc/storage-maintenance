@@ -76,8 +76,9 @@ def clean(root, now):
         def expired(path):
             return removable(path) and path.stat().st_mtime < now - WEEK
 
+        # Native updaters use GUIDs. Earlier Python updaters used tempfile names.
         for path in root.glob('download-*'):
-            if re.fullmatch(r'download-[0-9a-f]{32}', path.name) and expired(path):
+            if re.fullmatch(r'download-(?:[0-9a-f]{32}|[a-z0-9_]{8})', path.name) and expired(path):
                 print('Removing abandoned update download', path.name, flush=True)
                 shutil.rmtree(path)
         # Rename before deletion so a crash cannot leave a partially removed
