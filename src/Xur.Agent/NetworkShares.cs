@@ -68,12 +68,13 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
         if(r.ExitCode!=0 || !Regex.IsMatch(r.Output.Trim(),@"\A[a-zA-Z0-9\\_.-]+\.mount\z"))throw new InvalidOperationException("Could not name the SMB mount unit.");
         return r.Output.Trim();
     }
-    async Task<bool> Mounted(SmbConnection connection)
+    async Task<bool> Mounted(SmbConnection connection,bool writable=false)
     {
-        var r=await run("findmnt",["--json","--mountpoint",MountPath(connection.Id),"--output","SOURCE,FSTYPE"],10);
+        var r=await run("findmnt",["--json","--mountpoint",MountPath(connection.Id),"--output","SOURCE,FSTYPE,OPTIONS"],10);
         if(r.ExitCode!=0)return false;
         using var doc=JsonDocument.Parse(r.StandardOutput);
-        return doc.RootElement.GetProperty("filesystems").EnumerateArray().Any(f=>f.GetProperty("fstype").GetString()=="cifs" && f.GetProperty("source").GetString()=="//"+connection.Server+"/"+connection.Share);
+        return doc.RootElement.GetProperty("filesystems").EnumerateArray().Any(f=>f.GetProperty("fstype").GetString()=="cifs" && f.GetProperty("source").GetString()=="//"+connection.Server+"/"+connection.Share
+            && (!writable || f.TryGetProperty("options",out var options) && options.GetString()?.Split(',').Contains("rw")==true));
     }
     public async Task<NetworkSharesStatus> Status()
     {
@@ -163,7 +164,7 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
             }
         }finally{gate.Release();}
     }
-    async Task Check(SmbConnection c)
+    async Task Check(SmbConnection c,bool writable=false)
     {
         // A mounted CIFS filesystem may be offline with cached metadata. A fresh SMB
         // session verifies authentication/tree access before admitting a workload.
@@ -171,7 +172,7 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
             "--volume",Credentials(c.Id)+":/run/smb-auth:ro",Image,"smbclient","//"+c.Server+"/"+c.Share,
             "--authentication-file=/run/smb-auth","--option=client min protocol=SMB3_00",
             "--option=client smb encrypt="+(c.Encrypt?"required":"if_required"),"--timeout=8","--command=quit"],20);
-        if(!await Mounted(c))throw new InvalidOperationException("The expected SMB filesystem is not mounted. Workload startup is blocked.");
+        if(!await Mounted(c,writable))throw new InvalidOperationException(writable?"The model share must be mounted read/write from the configured server.":"The expected SMB filesystem is not mounted. Workload startup is blocked.");
         await Require("stat",["--file-system","--",MountPath(c.Id)],10);
     }
     public async Task<string> RequireStorage(string id)
@@ -180,7 +181,7 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
         {
             var connection=Read().Connections.SingleOrDefault(c=>c.Id==id)??throw new InvalidOperationException("The selected storage connection has been removed.");
             if(connection.ReadOnly)throw new InvalidOperationException("Model downloads require a writable network connection.");
-            await Require("systemctl",["start",await Unit(id)],45);await Check(connection);
+            await Require("systemctl",["start",await Unit(id)],45);await Check(connection,true);
             return MountPath(id);
         }finally{gate.Release();}
     }
@@ -207,7 +208,7 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
             {
                 var c=config.Connections.SingleOrDefault(c=>c.Id==id)??throw new InvalidOperationException("The selected storage connection has been removed.");
                 if(c.ReadOnly)throw new InvalidOperationException("Model downloads require a writable network connection.");
-                var unit=await Unit(c.Id);await Require("systemctl",["start",unit],45);await Check(c);
+                var unit=await Unit(c.Id);await Require("systemctl",["start",unit],45);await Check(c,true);
                 if(groups.Add(c.Gid))args.AddRange(["--group-add",c.Gid.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
                 if(!units.Contains(unit))units.Add(unit);
             }

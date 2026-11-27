@@ -17,7 +17,7 @@ static class NetworkSharesTests
             if(exe=="systemctl"&&args[0]=="start"&&args[1].EndsWith(".mount"))mounted=true;
             if(exe=="systemctl"&&args[0]=="stop")mounted=false;
             if(exe=="findmnt"&&args.Contains("--target"))return Task.FromResult(new ProcessResult(0,JsonSerializer.Serialize(new{filesystems=new[]{new{fstype="ext4",uuid=wrongUuid?"wrong-uuid":"fixture-uuid"}}})));
-            if(exe=="findmnt")return Task.FromResult(new ProcessResult(mounted?0:1,mounted?JsonSerializer.Serialize(new{filesystems=new[]{new{source=wrongSource?"//other/wrong":"//nas.home/data",fstype="cifs"}}}):""));
+            if(exe=="findmnt")return Task.FromResult(new ProcessResult(mounted?0:1,mounted?JsonSerializer.Serialize(new{filesystems=new[]{new{source=wrongSource?"//other/wrong":"//nas.home/data",fstype="cifs",options="rw,vers=3"}}}):""));
             if(exe=="podman"&&args.Contains("smbclient")&&offline)return Task.FromResult(new ProcessResult(1,"private authentication diagnostic"));
             return Task.FromResult(new ProcessResult(0,""));
         }
