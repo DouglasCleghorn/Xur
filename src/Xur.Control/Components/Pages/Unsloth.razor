@@ -7,7 +7,7 @@ else
 {
     <section class="panel" id="unsloth-page">
         <AntiforgeryToken />
-        <p>Add <strong>Unsloth · Model training</strong> to a profile, select an NVIDIA GPU, then load the profile. The latest image is downloaded before each start. A running server stays on its current version until unloaded and loaded again.</p>
+        <p>Add <strong>Unsloth Studio · Inference and training</strong> to a profile, select an NVIDIA GPU, then load the profile. The latest image is downloaded before each start. A running server stays on its current version until unloaded and loaded again.</p>
         <p id="unsloth-status" role="status">Checking server…</p>
         <div id="unsloth-running" hidden>
             <div class="actions"><a id="unsloth-open" class="button" hidden target="_blank" rel="noopener noreferrer">Open Unsloth Studio</a></div>
@@ -23,7 +23,8 @@ else
         <p id="unsloth-error" role="alert" hidden></p>
         <h2>Persistent storage</h2>
         <p><a href="/storage#data-storage">Choose a data drive and move existing storage</a> to give Studio room for large models. Container paths stay the same.</p>
-        <p>Save training files and downloaded models under <code>/workspace</code>. Studio settings, accounts and outputs also persist. All Unsloth profiles share this storage; unloading or deleting a profile keeps it.</p>
+        <p>Save datasets and training outputs under <code>/workspace</code>. Studio settings, accounts and outputs also persist. All Unsloth profiles share this storage; unloading or deleting a profile keeps it.</p>
+        <p>Studio downloads new models into the shared Hugging Face cache at <code>/shared-models/huggingface</code>. vLLM uses the same cache, and Xur’s Models page discovers these files. Existing downloads in the workspace remain there; no files are deleted. GGUF files and Safetensors checkpoints still need a compatible runtime.</p>
         <p>Xur’s downloaded models are available read-only at <code>/models</code> and complete model snapshots at <code>/model-sets</code>. Save fine-tuned models to <code>/workspace</code> to keep the original downloads intact.</p>
     </section>
     <script src="/unsloth.js" defer></script>

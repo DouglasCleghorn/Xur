@@ -6,20 +6,41 @@
  let state,plan,selected,opener,request,applying=false,revision=0,trigger='web-menu';
  const controllers=new Map();
  function message(text){error.textContent=text;error.hidden=!text;}
- async function api(path,body,signal){
-  const response=await window.xurFetch(path,{...(body!==undefined?{method:'POST',headers:{'Content-Type':'application/json',...(path==='/api/profiles/apply'?{'X-Xur-Switch-Trigger':trigger}:{})},body:JSON.stringify(body)}:{}),signal});
+ async function api(path,body,signal,html=false){
+  const response=await window.xurFetch(path,{...(body!==undefined?{method:'POST',headers:{'Content-Type':'application/json',...(html?{Accept:'text/html'}:{}),...(path==='/api/profiles/apply'?{'X-Xur-Switch-Trigger':trigger}:{})},body:JSON.stringify(body)}:{}),signal});
   if(!response.ok){let detail;try{detail=(await response.json()).error;}catch{}throw Error(detail??(response.status===401?'Your session expired. Sign in again.':'Could not load profiles. Try again.'));}
-  return response.json();
+  return html?response.text():response.json();
  }
- function current(p){return state.active?.id===p.id&&state.active.revision===p.revision&&state.runtime.instances.length===p.workloads.length&&p.workloads.every(w=>state.runtime.instances.some(i=>i.id===w.id&&i.fingerprint===w.fingerprint&&i.state==='running'));}
+ function loadedCompletely(){
+  const active=state.active,instances=state.runtime.instances;
+  return active && instances.length===active.workloads.length && active.workloads.every(w=>
+   instances.some(i=>i.id===w.id&&i.fingerprint===w.fingerprint&&i.state==='running'));
+ }
+ function deviceLabel(w){
+  if(w.recipe.kind==='Container'&&w.recipe.engine==='T3 Code')return 'All GPUs (shared)';
+  return (w.gpus??[]).map(id=>state.runtime.gpus.find(g=>g.pci===id)?.displayName??id).join(', ')||'CPU';
+ }
  function textNode(tag,text,className){const el=document.createElement(tag);el.textContent=text;if(className)el.className=className;return el;}
  function render(){
   list.replaceChildren();const term=search.value.toLocaleLowerCase(),busy=['Applying','Cancelling','Failed'].includes(state.operation?.stage);
   const profiles=state.profiles.filter(p=>(p.name+' '+p.workloads.map(w=>w.name+' '+w.recipe.name).join(' ')).toLocaleLowerCase().includes(term)).sort((a,b)=>Number(state.active?.id===b.id)-Number(state.active?.id===a.id)||a.name.localeCompare(b.name,undefined,{numeric:true}));
   for(const p of profiles){
-   const loaded=state.active?.id===p.id,button=textNode('button','','switcher-choice'+(loaded?' is-loaded':''));button.type='button';button.dataset.profileId=p.id;button.disabled=busy||current(p);
-   const identity=document.createElement('span');identity.append(textNode('strong',p.name),textNode('small',p.workloads.length?p.workloads.map(w=>w.name||w.recipe.name).join(', '):'No workloads'));button.append(identity);
-   if(loaded)button.append(textNode('span',current(p)?'Loaded':'Saved changes','state-label '+(current(p)?'running':'pending')));
+   const loaded=state.active?.id===p.id,button=textNode('button','','switcher-choice'+(loaded?' is-loaded':''));button.type='button';button.dataset.profileId=p.id;button.disabled=busy||(loaded&&loadedCompletely()&&p.revision===state.active.revision);
+   const identity=textNode('span','');identity.append(textNode('strong',p.name));
+   for(const w of p.workloads){
+    const workload=textNode('span','','profile-workload');
+    const kind=w.recipe.kind==='Workstation'?'Workstation · '+(w.user?.temporary?'Temporary user':w.user?.username??'Default user'):w.recipe.engine;
+    workload.append(textNode('span',w.name||w.recipe.name),textNode('small',[kind,deviceLabel(w)].filter(Boolean).join(' · ')));
+    identity.append(workload);
+   }
+   if(!p.workloads.length)identity.append(textNode('small','No workloads configured'));
+   button.append(identity);
+   if(loaded){
+    const badges=textNode('span','','profile-badges'),complete=loadedCompletely();
+    badges.append(textNode('span',complete?'Loaded':'Partially running','state-label '+(complete?'running':'pending')));
+    if(p.revision!==state.active.revision)badges.append(textNode('span','Saved changes','state-label pending'));
+    button.append(badges);
+   }
    button.addEventListener('click',()=>choose(p));list.append(button);
   }
   if('unload all stop running workstations ai services'.includes(term)){
@@ -54,24 +75,25 @@
  }
  async function load(){
   request?.abort();request=new AbortController();const version=++revision;
-  loadDisplays(version,request.signal);
-  state=undefined;plan=undefined;selected=undefined;picker.hidden=false;review.hidden=true;byId('switcher-accept-label').textContent='Review';search.value='';list.replaceChildren();list.setAttribute('aria-busy','true');empty.hidden=true;recovery.hidden=true;message('');byId('switcher-current').textContent='Loading profiles…';
-  try{const data=await api('/api/profiles',undefined,request.signal);if(version!==revision||!dialog.open)return;state=data;byId('switcher-current').textContent=state.active?'Loaded: '+state.active.name:state.runtime.instances.length?'Partially loaded workloads':'No profile loaded';render();search.focus();}
+  byId('switcher-display-controls').open=false;loadDisplays(version,request.signal);
+  state=undefined;plan=undefined;selected=undefined;picker.hidden=false;review.hidden=true;byId('switcher-accept-label').textContent='Review changes';search.value='';list.replaceChildren();list.setAttribute('aria-busy','true');empty.hidden=true;recovery.hidden=true;message('');byId('switcher-current').textContent='Loading profiles…';
+  try{const data=await api('/api/profiles',undefined,request.signal);if(version!==revision||!dialog.open)return;state=data;byId('switcher-current').textContent=state.active?(loadedCompletely()?'Loaded: ':'Partially running: ')+state.active.name:state.runtime.instances.length?'Partially loaded workloads':'No profile loaded';render();search.focus();}
   catch(e){if(e.name!=='AbortError'&&version===revision&&dialog.open){message(e.message);byId('switcher-current').textContent='Profiles unavailable';recovery.hidden=false;byId('switcher-retry').hidden=false;byId('switcher-retry').focus();}}
   finally{if(version===revision)list.setAttribute('aria-busy','false');}
  }
  function open(source,origin='web-menu'){if(dialog.open)return;trigger=origin;opener=source??document.activeElement;dialog.showModal();load();}
  function close(){if(applying)return;revision++;request?.abort();dialog.close();opener?.focus();}
- function back(){if(applying)return;if(review.hidden){close();return;}revision++;request?.abort();plan=undefined;picker.hidden=false;review.hidden=true;byId('switcher-accept-label').textContent='Review';message('');list.querySelector('[data-profile-id="'+CSS.escape(selected?.id??'')+'"]')?.focus();}
+ function back(){if(applying)return;if(review.hidden){close();return;}revision++;request?.abort();plan=undefined;picker.hidden=false;review.hidden=true;byId('switcher-accept-label').textContent='Review changes';message('');list.querySelector('[data-profile-id="'+CSS.escape(selected?.id??'')+'"]')?.focus();}
  async function choose(p){
-  if(applying)return;request?.abort();request=new AbortController();const version=++revision;selected=p;plan=undefined;message('');picker.hidden=true;review.hidden=false;byId('switcher-accept-label').textContent='Select';apply.disabled=true;apply.textContent=p.unload?'Unload all':'Load profile';byId('switcher-desktop-warning').hidden=true;byId('switcher-review-title').textContent=p.name;byId('switcher-changes').replaceChildren(textNode('p','Preparing review…'));byId('switcher-back').focus();
+  if(applying)return;request?.abort();request=new AbortController();const version=++revision;selected=p;plan=undefined;message('');picker.hidden=true;review.hidden=false;byId('switcher-accept-label').textContent='Select';apply.disabled=true;apply.textContent=p.unload?'Unload all':'Load profile';byId('switcher-review-title').textContent=p.name;byId('switcher-changes').replaceChildren(textNode('p','Preparing review…'));byId('switcher-back').focus();
   try{
-   const preview=await api(p.unload?'/api/profiles/unload/preview':'/api/profiles/'+encodeURIComponent(p.id)+'/preview',{},request.signal);if(version!==revision||!dialog.open)return;plan=preview;
-   const changes=byId('switcher-changes');changes.replaceChildren();
-   const definitions=new Map([...state.profiles.flatMap(p=>p.workloads),...(state.active?.workloads??[]),...plan.target.workloads].map(w=>[w.id,w]));
-   for(const step of plan.steps.filter(s=>['Keep','Stop','Start'].includes(s.kind))){const row=textNode('div','','switcher-change'),w=definitions.get(step.workloadId),description=document.createElement('div');row.append(textNode('span',step.kind==='Keep'?'Keep running':step.kind,'state-label '+(step.kind==='Keep'?'running':'pending')));description.append(textNode('strong',w?.name??'Workload '+step.workloadId),textNode('small',w?.recipe.name??step.description));row.append(description);changes.append(row);}
-   if(!changes.children.length)changes.append(textNode('p','No workloads need to start or stop.'));
-   byId('switcher-desktop-warning').hidden=!plan.steps.some(s=>s.kind==='Stop'&&definitions.get(s.workloadId)?.recipe.kind==='Workstation');apply.disabled=false;
+   const html=await api(p.unload?'/api/profiles/unload/preview':'/api/profiles/'+encodeURIComponent(p.id)+'/preview',{},request.signal,true);
+   if(version!==revision||!dialog.open)return;
+   const body=new DOMParser().parseFromString(html,'text/html').querySelector('.profile-changes');
+   if(!body?.dataset.planId||!body.dataset.digest||!Number.isFinite(Date.parse(body.dataset.expires)))throw Error('Could not read this review. Go back and try again.');
+   plan={id:body.dataset.planId,digest:body.dataset.digest,expires:body.dataset.expires,unload:p.unload};
+   byId('switcher-changes').replaceChildren(body);
+   apply.disabled=false;
   }catch(e){if(e.name!=='AbortError'&&version===revision&&dialog.open){message(e.message);byId('switcher-changes').replaceChildren();}}
  }
  async function approve(){
@@ -81,8 +103,15 @@
   catch(e){message(e.message+' Go back to refresh the review.');plan=undefined;}
   finally{applying=false;apply.textContent=selected?.unload?'Unload all':'Load profile';byId('switcher-back').disabled=false;}
  }
- function move(direction){const choices=[...picker.querySelectorAll('#switcher-profiles button:not(:disabled),#switcher-displays button:not(:disabled)')];if(!choices.length)return;const index=choices.indexOf(document.activeElement);choices[(index<0?(direction>0?0:choices.length-1):(index+direction+choices.length)%choices.length)].focus();}
- function control(action){if(!dialog.open)return;if(action==='back'){back();return;}if(!review.hidden){if(action==='accept'){if(document.activeElement===apply&&!apply.disabled)approve();else if(document.activeElement===byId('switcher-back'))back();}else if(action==='up'||action==='down'){(document.activeElement===apply?byId('switcher-back'):apply.disabled?byId('switcher-back'):apply).focus();}return;}if(action==='up'||action==='down')move(action==='up'?-1:1);else if(action==='accept')document.activeElement?.click();}
+ function move(direction){const choices=[...picker.querySelectorAll('#switcher-profiles button:not(:disabled),#switcher-display-controls summary,#switcher-display-controls[open] button:not(:disabled)')];if(!choices.length)return;const index=choices.indexOf(document.activeElement);choices[(index<0?(direction>0?0:choices.length-1):(index+direction+choices.length)%choices.length)].focus();}
+ function control(action){if(!dialog.open)return;if(action==='back'){back();return;}if(!review.hidden){
+  if(action==='accept'){if(review.contains(document.activeElement))document.activeElement.click();}
+  else if(action==='up'||action==='down'){
+   const targets=[...review.querySelectorAll('button:not(:disabled), summary, a[href]')],index=targets.indexOf(document.activeElement);
+   targets[index<0?(action==='down'?0:targets.length-1):(index+(action==='down'?1:-1)+targets.length)%targets.length]?.focus();
+  }
+  return;
+ }if(action==='up'||action==='down')move(action==='up'?-1:1);else if(action==='accept')document.activeElement?.click();}
  document.querySelectorAll('[data-profile-switcher-open]').forEach(button=>button.addEventListener('click',()=>open(button)));
  document.querySelectorAll('[data-switcher-close]').forEach(button=>button.addEventListener('click',close));byId('switcher-back').addEventListener('click',back);apply.addEventListener('click',approve);byId('switcher-retry').addEventListener('click',load);search.addEventListener('input',()=>state&&render());dialog.addEventListener('cancel',e=>{e.preventDefault();back();});
  document.addEventListener('keydown',e=>{

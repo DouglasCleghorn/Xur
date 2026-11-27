@@ -68,12 +68,13 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
         if(r.ExitCode!=0 || !Regex.IsMatch(r.Output.Trim(),@"\A[a-zA-Z0-9\\_.-]+\.mount\z"))throw new InvalidOperationException("Could not name the SMB mount unit.");
         return r.Output.Trim();
     }
-    async Task<bool> Mounted(SmbConnection connection)
+    async Task<bool> Mounted(SmbConnection connection,bool writable=false)
     {
-        var r=await run("findmnt",["--json","--mountpoint",MountPath(connection.Id),"--output","SOURCE,FSTYPE"],10);
+        var r=await run("findmnt",["--json","--mountpoint",MountPath(connection.Id),"--output","SOURCE,FSTYPE,OPTIONS"],10);
         if(r.ExitCode!=0)return false;
         using var doc=JsonDocument.Parse(r.StandardOutput);
-        return doc.RootElement.GetProperty("filesystems").EnumerateArray().Any(f=>f.GetProperty("fstype").GetString()=="cifs" && f.GetProperty("source").GetString()=="//"+connection.Server+"/"+connection.Share);
+        return doc.RootElement.GetProperty("filesystems").EnumerateArray().Any(f=>f.GetProperty("fstype").GetString()=="cifs" && f.GetProperty("source").GetString()=="//"+connection.Server+"/"+connection.Share
+            && (!writable || f.TryGetProperty("options",out var options) && options.GetString()?.Split(',') is {} flags && flags.Contains("rw") && flags.Contains("mfsymlinks")));
     }
     public async Task<NetworkSharesStatus> Status()
     {
@@ -130,7 +131,7 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
         File.SetUnixFileMode(mountRoot,UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute|UnixFileMode.GroupRead|UnixFileMode.GroupExecute|UnixFileMode.OtherRead|UnixFileMode.OtherExecute);
         if(!Directory.Exists(MountPath(c.Id)))Directory.CreateDirectory(MountPath(c.Id),UnixFileMode.None);
         var unit=await Unit(c.Id);
-        var options=$"credentials={Credentials(c.Id)},vers=3,uid={c.Uid},gid={c.Gid},forceuid,forcegid,file_mode=0660,dir_mode=0770,nosuid,nodev,noexec"+(c.ReadOnly?",ro":",rw")+(c.Encrypt?",seal":"")+",context=system_u:object_r:container_file_t:s0";
+        var options=$"credentials={Credentials(c.Id)},vers=3,uid={c.Uid},gid={c.Gid},forceuid,forcegid,file_mode=0660,dir_mode=0770,mfsymlinks,nosuid,nodev,noexec"+(c.ReadOnly?",ro":",rw")+(c.Encrypt?",seal":"")+",context=system_u:object_r:container_file_t:s0";
         // systemd values are not shell arguments. Validated remote names and generated paths
         // cannot introduce new directives; percent specifiers must be escaped.
         Write(Path.Combine(systemDirectory,unit),$"[Unit]\nDescription=Xur SMB connection\nWants=network-online.target\nAfter=network-online.target\n[Mount]\nWhat=//{c.Server}/{c.Share}\nWhere={MountPath(c.Id)}\nType=cifs\nOptions={options}\nTimeoutSec=30\n");
@@ -163,7 +164,7 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
             }
         }finally{gate.Release();}
     }
-    async Task Check(SmbConnection c)
+    async Task Check(SmbConnection c,bool writable=false)
     {
         // A mounted CIFS filesystem may be offline with cached metadata. A fresh SMB
         // session verifies authentication/tree access before admitting a workload.
@@ -171,12 +172,22 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
             "--volume",Credentials(c.Id)+":/run/smb-auth:ro",Image,"smbclient","//"+c.Server+"/"+c.Share,
             "--authentication-file=/run/smb-auth","--option=client min protocol=SMB3_00",
             "--option=client smb encrypt="+(c.Encrypt?"required":"if_required"),"--timeout=8","--command=quit"],20);
-        if(!await Mounted(c))throw new InvalidOperationException("The expected SMB filesystem is not mounted. Workload startup is blocked.");
+        if(!await Mounted(c,writable))throw new InvalidOperationException(writable?"The model share must be mounted read/write with mfsymlinks from the configured server. Disconnect and reconnect the share before selecting it for model storage.":"The expected SMB filesystem is not mounted. Workload startup is blocked.");
         await Require("stat",["--file-system","--",MountPath(c.Id)],10);
     }
-    public async Task<(string[] Arguments,string[] Units)> RequireMounts(Workload w)
+    public async Task<string> RequireStorage(string id)
     {
-        NetworkSharePolicy.Validate(w);if(w.NetworkShares is not {Length:>0})return([],[]);
+        await gate.WaitAsync();try
+        {
+            var connection=Read().Connections.SingleOrDefault(c=>c.Id==id)??throw new InvalidOperationException("The selected storage connection has been removed.");
+            if(connection.ReadOnly)throw new InvalidOperationException("Model downloads require a writable network connection.");
+            await Require("systemctl",["start",await Unit(id)],45);await Check(connection,true);
+            return MountPath(id);
+        }finally{gate.Release();}
+    }
+    public async Task<(string[] Arguments,string[] Units)> RequireMounts(Workload w,string[]? storageConnections=null)
+    {
+        NetworkSharePolicy.Validate(w);if(w.NetworkShares is not {Length:>0}&&storageConnections is not {Length:>0})return([],[]);
         await gate.WaitAsync();try
         {
             var config=Read();var args=new List<string>();var units=new List<string>();var groups=new HashSet<int>();
@@ -189,6 +200,17 @@ public sealed class NetworkShares(string stateDirectory,string systemDirectory="
                 // Private bind propagation retains the mounted filesystem, never the empty
                 // underlying directory, if the host mount is subsequently detached.
                 args.AddRange(["--mount",$"type=bind,source={MountPath(c.Id)},destination={mount.Destination},ro={mount.ReadOnly.ToString().ToLowerInvariant()},bind-propagation=rprivate,bind-nonrecursive"]);units.Add(unit);
+            }
+            // Model storage needs the share's group and lifetime dependency, but
+            // only its library subdirectories are bound by the runtime. Selecting
+            // download storage does not expose the rest of the share in /shared.
+            foreach(var id in (storageConnections??[]).Distinct())
+            {
+                var c=config.Connections.SingleOrDefault(c=>c.Id==id)??throw new InvalidOperationException("The selected storage connection has been removed.");
+                if(c.ReadOnly)throw new InvalidOperationException("Model downloads require a writable network connection.");
+                var unit=await Unit(c.Id);await Require("systemctl",["start",unit],45);await Check(c,true);
+                if(groups.Add(c.Gid))args.AddRange(["--group-add",c.Gid.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+                if(!units.Contains(unit))units.Add(unit);
             }
             return(args.ToArray(),units.ToArray());
         }finally{gate.Release();}

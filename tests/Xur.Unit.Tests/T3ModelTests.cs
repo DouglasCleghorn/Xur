@@ -9,9 +9,12 @@ static class T3ModelTests
 {
     sealed class Engine:HttpMessageHandler
     {
+        public string? ModelsJson,PropsJson;
         public int Posts;public string? ExpectedWorkload,ExpectedEndpoint,Body;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token)
         {
+            if(request.RequestUri!.AbsolutePath.EndsWith("/props"))return new(PropsJson==null?HttpStatusCode.NotFound:HttpStatusCode.OK){Content=new StringContent(PropsJson??"{}")};
+            if(request.Method==HttpMethod.Get&&ModelsJson!=null)return new(HttpStatusCode.OK){Content=new StringContent(ModelsJson)};
             if(request.Method==HttpMethod.Get)return new(HttpStatusCode.OK){Content=JsonContent.Create(new{data=new[]{new{id="deepseek-1017",max_model_len=32768}}})};
             Posts++;ExpectedWorkload=request.Headers.GetValues("X-Xur-Expected-Workload").Single();ExpectedEndpoint=request.Headers.GetValues("X-Xur-Expected-Endpoint").Single();Body=await request.Content!.ReadAsStringAsync(token);
             return new(HttpStatusCode.OK){Content=new StringContent("data: {\"choices\":[]}\n\ndata: [DONE]\n\n",Encoding.UTF8,"text/event-stream")};
@@ -38,9 +41,28 @@ static class T3ModelTests
         {
             var models=New();var available=await models.Available();
             check(available.Single() is {State:"Ready",ModelIds:["deepseek-1017"]}&&available[0].ContextLimits!["deepseek-1017"]==32768,"T3 discovers exact model IDs and serving context limits");
+            var originalState=state;
+            var llama=workload with{Recipe=workload.Recipe with{Engine="llama.cpp"}};
+            state=state with{Active=profile with{Workloads=[llama]},Profiles=[profile with{Workloads=[llama]}],Runtime=state.Runtime with{Instances=[instance with{Fingerprint=llama.Fingerprint}]}};
+            engine.ModelsJson="""{"models":[{"model":"deepseek-1017","meta":{"n_ctx_train":131072}}]}""";
+            engine.PropsJson="""{"default_generation_settings":{"n_ctx":16384}}""";
+            available=await models.Available();
+            check(available.Single() is {State:"Ready",ModelIds:["deepseek-1017"]}&&available[0].ContextLimits!["deepseek-1017"]==16384,"Legacy llama model discovery uses the live per-slot context rather than training context");
+            engine.ModelsJson="""{"data":[]}""";
+            check((await models.Available()).Single() is {Error:not null,State:not "Ready"},"An empty server model list is shown as unavailable instead of an unusable connection form");
+            state=originalState;engine.ModelsJson=null;engine.PropsJson=null;
+            var overridden=workload with{ContextTokens=65536,Recipe=recipe with{Command=["serve","model","--max-model-len=4096"]}};
+            check(ModelContext.Command(overridden).SequenceEqual(new[]{"serve","model","--max-model-len","65536"})&&overridden.Fingerprint!=(overridden with{ContextTokens=null}).Fingerprint,"Serving context overrides replace the runtime flag and change workload identity");
+            check(overridden.Fingerprint==(overridden with{NetworkShares=[]}).Fingerprint,"Empty network assignments preserve an explicit context's identity");
+            var llamaContext=llama with{ContextTokens=32768,Recipe=llama.Recipe with{Command=["-m","model.gguf","-c","4096","--parallel","1"]}};
+            check(ModelContext.Command(llamaContext).SequenceEqual(new[]{"-m","model.gguf","--parallel","1","--ctx-size","32768"}),"llama serving context replaces the short flag without changing parallelism");
+            foreach(var invalid in new[]{0,512,2097153})
+            {bool denied=false;try{ModelContext.Command(workload with{ContextTokens=invalid});}catch(InvalidOperationException){denied=true;}check(denied,"Invalid serving context is rejected: "+invalid);}
+            check(ModelContext.Command(workload).SequenceEqual(recipe.Command),"Existing workloads retain their exact serving command until the context is edited");
             foreach(var origin in new[]{"http://xur.test","https://localhost","https://127.0.0.1","https://user:secret@xur.test","https://xur.test/path","https://xur.test/#fragment"})
             {bool denied=false;try{T3Models.ValidateOrigin(origin);}catch(InvalidOperationException){denied=true;}check(denied,"T3 rejects unreachable or unsafe endpoint origins: "+origin);}
-            var connection=await models.Connect(new(workload.Id,"opencode","deepseek-1017","https://xur.test:8443",32768));
+            var connection=await models.Connect(new(workload.Id,"opencode","deepseek-1017","https://xur.test:8443"));
+            check(configured?.ContextTokens==32768,"An automatic T3 context resolves to the active serving limit");
             check(connection.Configured&&configured?.BaseUrl=="https://xur.test:8443/api/t3-code/inference/"+connection.Id+"/v1"&&configured.Certificate=="public certificate only","T3 connection receives a workload-bound endpoint and public TLS certificate");
             check(!File.ReadAllText(directory+"/t3-connections.json").Contains(configured!.ApiKey)&&keys.Authenticate(configured.ApiKey)?.Scope=="coding","T3 connection records retain key IDs without bearer secrets");
             check((await New().Connect(new(workload.Id,"opencode","deepseek-1017","https://xur.test:8443",32768))).Id==connection.Id&&keys.List().Length==1,"T3 connections survive restart and repeated connect does not mint extra keys");

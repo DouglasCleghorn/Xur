@@ -17,7 +17,7 @@ const fs=require('node:fs');
   }
   const section=id=>page.locator(`article[data-profile="${id}"]`);
   async function apply(id){
-   await page.goto(base+'/profiles');await section(id).getByRole('button',{name:'Load profile',exact:true}).click();
+   await page.goto(base+'/profiles');await section(id).getByRole('button',{name:'Review changes',exact:true}).click();await page.waitForURL('**/profiles/review?*');await page.getByRole('button',{name:'Load profile',exact:true}).click();
    for(let n=0;n<300;n++){const s=await state();if(s.operation?.stage==='Failed')throw Error(s.operation.error);if(s.operation?.stage==='Complete'){await page.goto(base+'/profiles');return s;}await new Promise(r=>setTimeout(r,1000));}
    throw Error('Profile did not finish');
   }

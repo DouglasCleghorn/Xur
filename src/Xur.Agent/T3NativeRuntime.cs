@@ -86,6 +86,11 @@ public sealed class T3NativeRuntime(string directory,T3Storage storage,Func<stri
             // Keep path aliases while using host processes and libraries. The
             // service also has the host user's ordinary filesystem access.
             var access=await storage.Arguments();
+            if(config.Models && await storage.ModelMountUnits() is {Length:>0} units)
+            {
+                var mountsNeeded=string.Join(' ',units);
+                args.AddRange(["--property=Requires="+mountsNeeded,"--property=After="+mountsNeeded,"--property=BindsTo="+mountsNeeded]);
+            }
             var mounts=access.Select((value,index)=>(value,index)).Where(p=>p.value=="--volume").Select(p=>access[p.index+1].Split(':')).ToArray();
             binds.AddRange(mounts.Select(m=>Quote(m[0]+":"+m[1])));
             if(config.AllDrives||config.Models||config.Folders is {Length:>0})

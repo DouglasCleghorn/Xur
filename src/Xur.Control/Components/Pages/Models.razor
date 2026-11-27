@@ -8,6 +8,7 @@ else
 {
     @if(!string.IsNullOrEmpty(Error)) { <p class="notice error" role="alert">@Error</p> }
     @if(Deleted==true) { <p class="notice" role="status">Model deleted. Shared copies at other locations may still use disk space.</p> }
+    <ModelDownloadStorage />
     <p class="secondary-text">Downloaded models stay on disk between reboots and profile changes.</p>
     @if(status.Scanning) { <p role="status">Searching model folders…</p><script src="/page-poll.js" data-path="/api/page-state/models" data-version="@Canonical.Hash(status)" defer></script> }
     <section class="panel"><div class="section-heading"><h2>@status.Models.Length model @(status.Models.Length==1?"location":"locations")</h2><label class="search-field"><span class="sr-only">Filter models</span><input type="search" id="model-filter" placeholder="Search models or paths" /></label></div>
@@ -15,7 +16,7 @@ else
     {
         <article class="model-library-row" data-model="@(model.Name+" "+model.Path)"><div><strong>@model.Name</strong><span class="secondary-text">@model.Format · @model.Source</span></div><span>@((model.Bytes/1073741824d).ToString("0.00")) GiB</span>
             <button type="button" class="quiet danger-text" aria-label="Delete model @model.Name" data-delete-model="@model.Path" data-delete-path="@model.DeletePath" data-delete-name="@model.Name" disabled="@(status.Scanning||model.DeletePath==null)">Delete</button>
-            <code>@model.Path</code>
+            <a href="@StorageFiles.Url(model.Format=="GGUF"?System.IO.Path.GetDirectoryName(model.Path)!:model.Path)"><code>@model.Path</code></a>
             @if(model.DeleteUnavailableReason!=null) { <p class="secondary-text model-delete-reason">@model.DeleteUnavailableReason</p> }
         </article>
     }

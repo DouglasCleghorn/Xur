@@ -14,7 +14,13 @@ public sealed partial class ModelLibrary
         if(!Path.IsPathFullyQualified(path)||Path.GetFullPath(path)!=path)
             throw new InvalidOperationException("Mount this storage first. Only models in Xur-managed storage can be deleted here.");
         string target=path;
-        if(!Within(path,ModelsRoot)&&!Within(path,SetsRoot))
+        var hub=Path.Combine(ModelsRoot,"huggingface","hub");
+        if(Within(path,hub))
+        {
+            var repo=Path.GetRelativePath(hub,path).Split('/')[0];
+            if(repo.StartsWith("models--",StringComparison.Ordinal))target=Path.Combine(hub,repo);
+        }
+        else if(!Within(path,ModelsRoot)&&!Within(path,SetsRoot))
         {
             var relative=Path.GetRelativePath(volumes,path).Split('/');
             if(relative.Length<4||!relative[0].StartsWith("xur-cache-",StringComparison.Ordinal)||relative[1]!="_data"||!Within(path,volumes))
@@ -49,7 +55,7 @@ public sealed partial class ModelLibrary
                 w.Recipe.Files!=null&&Overlaps(target,Path.Combine(SetsRoot,Canonical.Hash(w.Recipe.Files)))||
                 Overlaps(target,Path.Combine(volumes,"xur-cache-"+w.Id,"_data"))||
                 w.Recipe.Engine=="audio.cpp"&&Overlaps(target,Path.Combine(ModelsRoot,"audio.cpp",w.Id))||
-                UnslothWorkload.Is(w.Recipe);
+                UnslothWorkload.Is(w.Recipe)||w.Recipe.Kind=="Model"&&Overlaps(target,Path.Combine(ModelsRoot,"huggingface"));
             if(used)throw new InvalidOperationException("Stop or disable '"+w.Name+"' before deleting this model. Unload its profile if it is profile-managed.");
         }
     }

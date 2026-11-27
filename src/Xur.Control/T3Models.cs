@@ -47,23 +47,28 @@ public sealed class T3Models
         response.EnsureSuccessStatusCode();await response.Content.LoadIntoBufferAsync(1024*1024,timeout.Token);
         using var document=JsonDocument.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
         var result=new Dictionary<string,int>();
-        foreach(var model in document.RootElement.GetProperty("data").EnumerateArray().Take(128))
+        var root=document.RootElement;
+        var list=root.TryGetProperty("data",out var data)?data:root.GetProperty("models");
+        foreach(var model in list.EnumerateArray().Take(128))
         {
-            var id=model.GetProperty("id").GetString();if(id==null||id.Length is <1 or >512||id.Any(char.IsControl))continue;
-            var context=model.TryGetProperty("max_model_len",out var length)&&length.TryGetInt32(out var tokens)?tokens:0;
+            var id=(model.TryGetProperty("id",out var identity)?identity:model.GetProperty("model")).GetString();if(id==null||id.Length is <1 or >512||id.Any(char.IsControl))continue;
+            var context=0;
+            foreach(var field in new[]{"max_model_len","context_length","n_ctx"})
+                if(model.TryGetProperty(field,out var length)&&length.TryGetInt32(out var tokens)&&tokens>0){context=tokens;break;}
             result[id]=context is >=1024 and <=2097152?context:0;
         }
-        if(w.Recipe.Engine=="llama.cpp"&&result.Values.Any(n=>n==0))
+        if(w.Recipe.Engine=="llama.cpp"&&result.Count>0)
         {
             try
             {
-                using var props=await gateway.GetAsync(Uri.EscapeDataString(w.Route)+"/props",timeout.Token);
+                using var props=await gateway.GetAsync(Uri.EscapeDataString(w.Route)+"/props",HttpCompletionOption.ResponseHeadersRead,timeout.Token);
+                props.EnsureSuccessStatusCode();
                 await props.Content.LoadIntoBufferAsync(1024*1024,timeout.Token);
                 using var info=JsonDocument.Parse(await props.Content.ReadAsStringAsync(timeout.Token));
                 var context=info.RootElement.GetProperty("default_generation_settings").GetProperty("n_ctx").GetInt32();
-                if(context is >=1024 and <=2097152)foreach(var id in result.Keys.ToArray())if(result[id]==0)result[id]=context;
+                if(context is >=1024 and <=2097152)foreach(var id in result.Keys.ToArray())result[id]=context;
             }
-            catch(Exception e)when(e is HttpRequestException or JsonException or KeyNotFoundException or InvalidOperationException){}
+            catch(Exception e)when(e is HttpRequestException or JsonException or KeyNotFoundException or InvalidOperationException or OperationCanceledException){}
         }
         return result;
     }
@@ -73,7 +78,7 @@ public sealed class T3Models
         foreach(var w in Definitions(state).Where(IsTextModel).DistinctBy(w=>w.Id))
         {
             var ready=Ready(w,state,published);Dictionary<string,int> ids=[];string? error=null;
-            if(ready)try{ids=await Models(w);}catch(Exception e)when(e is HttpRequestException or JsonException or KeyNotFoundException or OperationCanceledException or InvalidOperationException)
+            if(ready)try{ids=await Models(w);if(ids.Count==0)throw new InvalidOperationException("No served models.");}catch(Exception e)when(e is HttpRequestException or JsonException or KeyNotFoundException or OperationCanceledException or InvalidOperationException)
             {ready=false;error="Could not read the model list. Check the workload and retry.";}
             result.Add(new(w.Id,w.Name,w.Recipe.Engine,ready?"Ready":state.Runtime.Instances.Any(i=>i.Id==w.Id)?"Starting or unavailable":"Profile not loaded",
                 state.Profiles.Where(p=>p.Workloads.Any(x=>x.Id==w.Id&&x.Fingerprint==w.Fingerprint)).Select(p=>p.Name).ToArray(),ids.Keys.ToArray(),error,ids));
@@ -97,9 +102,10 @@ public sealed class T3Models
             var w=Definitions(state).FirstOrDefault(w=>w.Id==request.WorkloadId&&IsTextModel(w)&&Ready(w,state,published))??throw new InvalidOperationException("Load this model's profile and wait for its endpoint to be ready.");
             var served=await Models(w);
             if(!served.TryGetValue(request.ModelId,out var reportedContext))throw new InvalidOperationException("Choose an exact model ID served by this workload.");
-            if(request.ContextTokens is <1024 or >2097152||reportedContext>0&&request.ContextTokens>reportedContext)throw new InvalidOperationException("Set a context limit between 1,024 tokens and the model's serving limit.");
+            var contextTokens=request.ContextTokens==0?reportedContext:request.ContextTokens;
+            if(contextTokens is <1024 or >2097152||reportedContext>0&&contextTokens>reportedContext)throw new InvalidOperationException("Set a context limit between 1,024 tokens and the model's serving limit.");
             var id="xur_"+Canonical.Hash(new{w.Id,w.Fingerprint,request.ModelId,request.Harness})[..24];
-            var model=new T3ModelSetup(id,w.Name,request.ModelId,origin+"/api/t3-code/inference/"+id+"/v1","",certificate(),request.ContextTokens);
+            var model=new T3ModelSetup(id,w.Name,request.ModelId,origin+"/api/t3-code/inference/"+id+"/v1","",certificate(),contextTokens);
             var existing=Connections().FirstOrDefault(c=>c.Id==id&&c.Configured&&keys.List().Any(k=>k.Id==c.KeyId&&k.RevokedAt==null&&(k.ExpiresAt==null||k.ExpiresAt>DateTimeOffset.UtcNow)));
             if(existing!=null&&(await setup(new("connection-status",request.Harness,Model:model))).State=="Configured")return existing;
             var key=keys.Create(new("T3 · "+w.Name[..Math.Min(w.Name.Length,60)],"coding",0));

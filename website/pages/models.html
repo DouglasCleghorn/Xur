@@ -11,7 +11,10 @@
 <p>Audio clients use the workload’s audio API with a Xur API key. See the <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/usage/audio-cpp.md">audio.cpp guide</a> for backend compatibility and model storage.</p>
 <h2 id="training">Fine-tune a model in Unsloth Studio</h2>
 <p>Choose <strong>Unsloth · Model training</strong> in a profile and assign the NVIDIA GPUs you want to use. Load the profile, then select <strong>Open Unsloth Studio</strong> under running workloads. The workspace persists when you switch back to gaming or inference. See the <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/usage/container-workloads.md#unsloth-studio">Unsloth workload guide</a> for storage and GPU requirements.</p>
-<h2 id="model-storage">Make room for another model</h2>
+<h2 id="model-storage">Choose where your models live</h2>
+<p>Under <strong>Model download storage</strong> on Models or in the profile editor, choose a system disk, a local data drive or a writable SMB share. All profiles use that library. Unsloth Studio and vLLM can reuse compatible downloads in its shared Hugging Face cache.</p>
+<p>Save profile edits and disable T3 Code before moving the library. Xur unloads the current profile, copies and verifies the models, keeps the originals and reloads the profile.</p>
+<h3>Remove a downloaded model</h3>
 <p>Open <strong>Models</strong> to see downloaded locations and their sizes. Finish any scan and stop workloads using the files, including Unsloth if it is running. T3 Code can stay running. Select <strong>Delete</strong> beside a managed location and review the exact path before confirming. Deleting a cached Hugging Face repository removes all downloaded revisions at that location.</p>
 <p>Saved profiles can download the files again. Models discovered outside Xur-managed storage are listed for reference.</p>
 </article></div>

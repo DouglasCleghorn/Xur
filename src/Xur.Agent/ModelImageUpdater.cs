@@ -45,7 +45,7 @@ public sealed class ModelImageUpdater(Func<string,string[],int,Task<ProcessResul
         // Use pull's result, rather than re-reading a shared tag that another
         // simultaneous workload could have updated after our download.
         if(instance==null)return new(image,false,warning,native);
-        if(await StoppedImage(workload,instance)==image && (!native || await StoppedCommand(instance,new ModelImageSelection(image,false,EnforceEager:true).Command(workload.Recipe.Command))))return new(image,false,warning,native);
+        if(await StoppedImage(workload,instance)==image && (!native || await StoppedCommand(instance,new ModelImageSelection(image,false,EnforceEager:true).Command(ModelContext.Command(workload)))))return new(image,false,warning,native);
         // No force flag: a concurrently started container must not be removed.
         var removed=await run("podman",["rm",instance.InstanceId],20);
         if(removed.ExitCode!=0)throw new InvalidOperationException("Could not replace the stopped engine with its latest image: "+Redaction.Logs(removed.Output));

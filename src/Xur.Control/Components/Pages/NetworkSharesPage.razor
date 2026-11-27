@@ -17,7 +17,7 @@ else
         {
             var c=item.Connection;
             <article class="panel"><h3>@c.Name</h3><p>//@c.Server/@c.Share · @(c.ReadOnly?"Read only":"Read/write") · @(c.Encrypt?"Encryption required":"Encryption negotiated")</p>
-                <code class="mount-path">@item.Path</code>
+                <a href="@StorageFiles.Url(item.Path)"><code class="mount-path">@item.Path</code></a>
                 <p>@(item.Mounted?"Mounted — use Test access to check filesystem access.":item.Error)</p>
                 <p class="secondary-text">Workload folder: <code>@("/shared/"+c.Id)</code> · Local UID @c.Uid / GID @c.Gid</p>
                 <div class="actions">
@@ -58,7 +58,7 @@ else
         </form>
         @foreach(var share in status.Hosted)
         {
-            <article class="panel"><h3>@share.Name</h3><code class="mount-path">@share.Path</code><p>@share.Username · @(share.ReadOnly?"Read only":"Read/write") · UID @share.Uid / GID @share.Gid</p>
+            <article class="panel"><h3>@share.Name</h3><a href="@StorageFiles.Url(share.Path)"><code class="mount-path">@share.Path</code></a><p>@share.Username · @(share.ReadOnly?"Read only":"Read/write") · UID @share.Uid / GID @share.Gid</p>
                 <label>Connection address<input readonly value="@("smb://"+(status.Server.Address.Length>0?status.Server.Address:"HOST")+"/"+share.Name)" /></label>
                 <p>Allowed systems: @(share.AllowedClients is {Length:>0}?string.Join(", ",share.AllowedClients):"None — access denied")</p>
                 <form class="smb-access-form" data-share="@share.Id" method="post" action="/api/storage/network/hosted/access">

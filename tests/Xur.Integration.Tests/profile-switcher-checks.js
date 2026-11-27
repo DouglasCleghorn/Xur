@@ -17,12 +17,16 @@ window.runProfileSwitcherChecks=async()=>{
  key('ArrowDown');assert(document.activeElement.dataset.profileId==='2','Arrow keys focus matching profile');
  await choose();assert(!document.querySelector('#switcher-review').hidden,'Selection opens review');
  assert(document.querySelector('#switcher-changes').textContent.includes('Keep runningAssistant'),'Review names retained workload');
- assert(!document.querySelector('#switcher-desktop-warning').hidden,'Review explains stopped workstation');
+ assert(document.querySelector('#switcher-changes .notice.warning')?.textContent.includes('Gaming workstation will stop'),'Review explains stopped workstation');
  assert((await requests()).every(r=>r.path.endsWith('/preview')),'Review never applies');
  document.querySelector('#switcher-back').click();document.querySelector('[data-switcher-close]').click();
  assert(!dialog.open,'Back and Close dismiss without applying');
  document.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyP',key:'p',ctrlKey:true,altKey:true,bubbles:true}));await wait(()=>dialog.open&&document.querySelector('#switcher-profiles').getAttribute('aria-busy')==='false');
  assert(dialog.open,'Keyboard shortcut opens picker');dialog.close();
+ await mode('partial');await open();const partial=document.querySelector('[data-profile-id="1"]');
+ assert(partial.textContent.includes('Partially running')&&!partial.textContent.includes('Saved changes')&&!partial.disabled,'Runtime drift is distinct from a saved edit');dialog.close();
+ await mode('changed');await open();const changed=document.querySelector('[data-profile-id="1"]');
+ assert(changed.textContent.includes('Loaded')&&changed.textContent.includes('Saved changes')&&!changed.disabled,'Saved changes retain the status of the loaded revision');dialog.close();
  await mode('offline');await open();assert(!document.querySelector('#switcher-error').hidden,'Unavailable manager displays actionable error');
  await mode('normal');document.querySelector('#switcher-retry').click();await wait(()=>document.querySelector('#switcher-profiles').getAttribute('aria-busy')==='false');assert(document.querySelectorAll('.switcher-choice').length>0,'Retry restores profiles');dialog.close();
  await mode('empty');await open();assert(document.querySelector('#switcher-empty').textContent.includes('No profiles yet'),'Empty state directs creation');dialog.close();
@@ -40,7 +44,7 @@ window.runProfileSwitcherChecks=async()=>{
  await mode('rejected');await open();await unload();
  assert(document.querySelector('#switcher-apply').textContent==='Unload all','Unload all has a separate confirmation');
  assert(document.querySelector('#switcher-changes').textContent.includes('Assistant')&&!document.querySelector('#switcher-changes').textContent.includes('Start'),'Unload review stops all workloads without starting replacements');
- assert(!document.querySelector('#switcher-desktop-warning').hidden,'Unload warns before stopping desktops');
+ assert(document.querySelector('#switcher-changes .notice.warning')?.textContent.includes('Gaming workstation will stop'),'Unload warns before stopping desktops');
  document.querySelector('#switcher-back').click();assert(!(await requests()).some(r=>r.path.endsWith('/apply')),'Back from unload review never applies');
  dialog.close();await mode('rejected');
  document.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyP',key:'p',ctrlKey:true,altKey:true,bubbles:true}));await wait(()=>dialog.open&&document.querySelector('#switcher-profiles').getAttribute('aria-busy')==='false');

@@ -3,7 +3,7 @@ const fs=require('fs'),assert=require('assert/strict');
 (async()=>{
  const browser=await chromium.launch({headless:true});
  try{
-  for(const fail of [false,true]){
+  for(const scenario of ['success','copy-failure','t3-enabled']){
    const page=await browser.newPage();let visits=0,job=null,finishUsage,finishUnload;
    const events=[],usage=new Promise(resolve=>finishUsage=resolve),unload=new Promise(resolve=>finishUnload=resolve);
    await page.route('https://storage.test/**',async route=>{
@@ -18,23 +18,29 @@ const fs=require('fs'),assert=require('assert/strict');
      events.push(path);
      if(path==='/api/profiles/unload/preview')return json({id:'plan',digest:'digest'});
      if(path==='/api/storage/locations'){
-      if(fail)return route.fulfill({status:500,json:{error:'Fixture copy failure'}});
+      if(scenario==='copy-failure')return route.fulfill({status:500,json:{error:'Fixture copy failure'}});
       job={id:'move',stage:'Complete'};
      }
      return json({});
     }
     if(path==='/api/storage/locations')return json({busy:false,job});
+    if(path==='/api/t3-code/status')return json({enabled:scenario==='t3-enabled'});
     if(path==='/api/profiles')return json({active:{id:'8'}});
     if(path==='/api/profiles/progress'){await unload;return json({stage:'Complete'});}
     throw Error('Unexpected request: '+path);
    });
    await page.goto('https://storage.test/storage');
    await page.getByRole('button',{name:'Move',exact:true}).click();
+   if(scenario==='t3-enabled'){
+    await page.getByText(/Disable T3 Code before moving storage/).waitFor();
+    assert.deepEqual(events,[],'A persisted T3 service must block the move before unloading any profile');
+    finishUsage();finishUnload();await page.close();continue;
+   }
    await page.waitForFunction(()=>document.querySelector('#data-storage').dataset.moving==='true');
    const completed=page.waitForResponse('https://storage.test/api/storage/usage');finishUsage();await completed;
    await page.waitForTimeout(100);assert.equal(visits,1,'An in-flight usage response must not reload during unload');
    finishUnload();
-   if(fail){
+   if(scenario==='copy-failure'){
     await page.getByText(/Fixture copy failure/).waitFor();
     assert.equal(await page.locator('#data-storage').getAttribute('data-moving'),'false');
     assert(await page.getByRole('button',{name:'Move',exact:true}).isEnabled());
