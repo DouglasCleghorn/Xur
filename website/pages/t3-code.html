@@ -1,0 +1,35 @@
+<div class="guide wrap">
+{{guide_nav}}
+<article>
+  <h1>Keep your coding environment on the server.</h1>
+  <p class="intro">T3 Code holds your projects, sessions and tools on the Xur machine. Pair the app on each device to return to the same work, even after a GPU profile change.</p>
+  <p>These screens show Nightly 26.11.015. If you have an older build, check your <a href="/guides/updates/">application update channel</a>.</p>
+  <h2>Pair your first device</h2>
+  <ol>
+    <li>Open <strong>T3 Code</strong> in Xur and choose <strong>Install</strong>. The first start needs internet access. Leave <strong>Auto-run</strong> on to start T3 after a reboot.</li>
+    <li>Install the T3 Code app on your phone or computer. Connect to the server’s LAN or tailnet. The app needs to reach the server on port <code>3773</code>.</li>
+    <li>In Xur, choose <strong>Create pairing link</strong>. Paste it into <strong>Add environment</strong> in the T3 app, or scan the QR code on your phone. Each private link works once and expires after five minutes.</li>
+  </ol>
+  <figure class="guide-screenshot">
+    <a href="/assets/t3-connect.jpg" aria-label="Enlarge T3 pairing controls"><picture>
+          <source media="(max-width: 32rem)" srcset="/assets/t3-connect-phone.jpg" width="358" height="302">
+          <img src="/assets/t3-connect.jpg" width="944" height="236" loading="lazy" alt="T3 Code Connect panel showing Running and the Create pairing link button.">
+        </picture></a>
+    <figcaption>The Connect panel before a link is created, with example service data.</figcaption>
+  </figure>
+  <h2>Connect GitHub and a coding model</h2>
+  <p>Under <strong>GitHub CLI</strong>, choose <strong>Sign in with GitHub</strong>. Open GitHub and authorize the displayed device code. Use <strong>Check connection</strong> to verify that the CLI is ready. The connection stays in T3’s persistent home.</p>
+  <figure class="guide-screenshot">
+    <a href="/assets/t3-github.jpg" aria-label="Enlarge GitHub CLI setup"><picture>
+          <source media="(max-width: 32rem)" srcset="/assets/t3-github-phone.jpg" width="358" height="175">
+          <img src="/assets/t3-github.jpg" width="944" height="153" loading="lazy" alt="The signed-out GitHub CLI section offers Sign in with GitHub and Check connection.">
+        </picture></a>
+    <figcaption>GitHub CLI setup in a signed-out example environment.</figcaption>
+  </figure>
+  <p>Use <strong>Coding accounts and harnesses</strong> to connect an eligible ChatGPT or Claude subscription. To use your own GPU, load a <a href="/guides/models/">local language model</a>, open <strong>Use Xur models in T3</strong> and choose the served model, harness and context limit. <strong>Connect to T3</strong> checks that the model can complete a tool call.</p>
+  <h2>Choose where commands run</h2>
+  <p><strong>DinD</strong> gives the project a Docker-in-Docker environment. <strong>Host</strong> uses the host’s tools and the service user’s file access. Finish active commands before choosing <strong>Apply runtime</strong>. T3 restarts briefly, keeping the same projects, accounts and device pairings.</p>
+  <p>To let a coding agent inspect Xur, open <strong>Permissions and storage</strong> and enable <strong>Read Xur data</strong>. Save, then choose <strong>Connect or repair Xur MCP</strong> and start a new thread. Grant write access only when you want the agent to change settings or run actions. <strong>Full host access</strong> grants root commands on the server.</p>
+  <p>For runtime details, private networking and permissions, read the <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/usage/t3-code.md">T3 Code reference</a>.</p>
+</article>
+</div>

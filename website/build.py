@@ -4,24 +4,44 @@ from pathlib import Path
 import base64,hashlib,html,json,shutil
 ROOT=Path(__file__).resolve().parents[1];SITE=ROOT/'website';OUT=SITE/'dist'
 PAGES={
- '':('GPU workstations and local AI on Bazzite','Run workstations and local models on one Bazzite host, with GPU workload profiles managed from your browser.','home.html'),
+ '':('Run local AI on your gaming PC','Xur is an open-source OS for GPU PCs. Switch between a gaming desktop and local AI from your browser, pair T3 Code and connect workloads to your NAS.','home.html'),
  'download':('Download the online installer','Download the latest Xur online installer ISO and create a bootable USB with Rufus. Simple Windows instructions for your x86-64 GPU host.','download.html'),
- 'guides':('Guides','Get started with Xur, create workload profiles, stream a desktop and connect to local language models.','guides.html'),
+ 'guides':('Guides','Install Xur, stream a desktop, connect T3 Code, test local models and share storage with GPU workloads.','guides.html'),
  'guides/setup':('Set up Xur from your phone','Install Xur on your GPU host, connect from a phone browser, create your administrator account and load a first profile. A step-by-step guide with mobile screenshots.','setup.html'),
- 'guides/getting-started':('Get started','Install Xur and create your first GPU workload profile.','getting-started.html'),
+ 'guides/getting-started':('Getting started','Install Xur and create your first GPU workload profile.','getting-started.html'),
  'guides/workstations':('Workstations and Moonlight','Keep a desktop identity across profiles and stream it with Moonlight.','workstations.html'),
  'guides/models':('Local models and endpoints','Choose model workloads, connect clients and keep benchmark results.','models.html'),
+ 'guides/t3-code':('T3 Code','Keep coding projects on Xur. Pair a phone or desktop, connect GitHub CLI, choose a runtime and use a local model.','t3-code.html'),
+ 'guides/network-shares':('Network shares','Connect an encrypted SMB3 folder, give a model or container access, or host a folder for selected network clients.','network-shares.html'),
  'guides/network-and-answers':('Network settings and answer YAML','Configure static IP addresses and provide a bootstrap answer file while retaining explicit disk approval.','network-and-answers.html'),
  'guides/updates':('Updates and recovery','Choose a release channel and understand application updates, OS staging and rollback.','updates.html'),
  '404':('Page not found','Find a Xur guide or return to the project home page.','404.html')}
+def guide_navigation(current):
+ links = []
+ for route, (title, _, _) in PAGES.items():
+  if route.startswith('guides/'):
+   state = ' aria-current="page"' if route == current else ''
+   links.append(f'<a href="/{route}/"{state}>{html.escape(title)}</a>')
+ return ('<aside class="guide-menu"><a class="guide-overview" href="/guides/">All guides</a>'
+         '<nav aria-label="Guides">' + ''.join(links) + '</nav></aside>')
+
 def build():
  shutil.rmtree(OUT,ignore_errors=True);(OUT/'assets').mkdir(parents=True)
- for source in (SITE/'assets').iterdir():shutil.copy2(source,OUT/'assets'/source.name)
+ for name in ['site.css', 'site.js', 'download.js', 'github-mark-LICENSE.txt']:
+  shutil.copy2(SITE/'assets'/name,OUT/'assets'/name)
  app=ROOT/'src/Xur.Control/wwwroot'
  for name in ['xur-icon.svg','xur-icon-180.png','xur-icon-32.png']:
   shutil.copy2(app/'icons'/name,OUT/'assets'/name)
  for name in ['IBMPlexSans.ttf','OFL.txt']:shutil.copy2(app/'fonts'/name,OUT/'assets'/name)
- for name in ['xur-header.png','workstations-and-llm.png','control-panel.jpg','workstations.jpg','profile-editor.jpg','model-lab.jpg','update-channel.jpg','setup-phone-sign-in.jpg','setup-phone-account.jpg','setup-phone-profile.jpg','setup-phone-home.jpg']:shutil.copy2(ROOT/'docs/assets'/name,OUT/'assets'/name)
+ # Only reviewed publication assets enter the site. Raw fixture captures stay under .build/.
+ for name in [
+   'xur-header.png', 'workstations-and-llm.png', 'control-panel.jpg', 'workstations.jpg',
+   'profile-editor.jpg', 'model-lab.jpg', 'update-channel.jpg', 't3-connect.jpg',
+   't3-connect-phone.jpg', 't3-github.jpg', 't3-github-phone.jpg', 'network-shares.jpg',
+   'network-shares-phone.jpg', 'setup-phone-sign-in.jpg', 'setup-phone-account.jpg',
+   'setup-phone-profile.jpg', 'setup-phone-home.jpg',
+ ]:
+  shutil.copy2(ROOT/'docs/assets'/name,OUT/'assets'/name)
  shutil.copy2(ROOT/'LICENSE',OUT/'license.txt')
  (OUT/'examples').mkdir()
  shutil.copy2(ROOT/'docs/examples/xur.yml',OUT/'examples/xur.yml')
@@ -37,7 +57,9 @@ def build():
    graph.append({'@type':'BreadcrumbList','itemListElement':[{'@type':'ListItem','position':i+1,'name':name,'item':link} for i,(name,link) in enumerate(crumbs)]})
   data=json.dumps({'@context':'https://schema.org','@graph':graph},ensure_ascii=True).replace('<','\\u003c')
   hashes.add("'sha256-"+base64.b64encode(hashlib.sha256(data.encode()).digest()).decode()+"'")
-  page=template.replace('{{robots}}','noindex, follow' if path=='404' else 'index, follow, max-image-preview:large').replace('{{structured_data}}','<script type="application/ld+json">'+data+'</script>').replace('{{title}}',html.escape(title)).replace('{{description}}',html.escape(description)).replace('{{url}}',url).replace('{{content}}',(SITE/'pages'/file).read_text())
+  content=(SITE/'pages'/file).read_text()
+  if '{{guide_nav}}' in content:content=content.replace('{{guide_nav}}',guide_navigation(path))
+  page=template.replace('{{robots}}','noindex, follow' if path=='404' else 'index, follow, max-image-preview:large').replace('{{structured_data}}','<script type="application/ld+json">'+data+'</script>').replace('{{title}}',html.escape(title)).replace('{{description}}',html.escape(description)).replace('{{url}}',url).replace('{{content}}',content)
   target=OUT/'404.html' if path=='404' else OUT/path/'index.html';target.parent.mkdir(parents=True,exist_ok=True);target.write_text(page)
  (OUT/'_headers').write_text((SITE/'_headers').read_text().replace("script-src 'self'","script-src 'self' "+' '.join(sorted(hashes))))
  (OUT/'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: https://xur.app/sitemap.xml\n')

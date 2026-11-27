@@ -134,9 +134,9 @@ const fs=require('fs'),assert=require('assert/strict');
    await pointerChoose(gpuSelect,gpuValue);
    assert(await gpuInput.evaluate(e=>e.selectionStart===e.selectionEnd),'Choosing a different GPU must not merely highlight its input text');
    const userSelect=page.locator('[name=stationUser]'),userInput=page.getByRole('combobox',{name:'User',exact:true});
-   await pointerChoose(userSelect,'doug');await pointerChoose(userSelect,'temporary');
-   await userInput.click();await userInput.fill('dOuG');assert.equal(await page.getByRole('listbox').getByRole('option').count(),1);
-   await userInput.press('Enter');await assertPickerClosed(userSelect,'doug');
+   await pointerChoose(userSelect,'example-user');await pointerChoose(userSelect,'temporary');
+   await userInput.click();await userInput.fill('eXaMpLe');assert.equal(await page.getByRole('listbox').getByRole('option').count(),1);
+   await userInput.press('Enter');await assertPickerClosed(userSelect,'example-user');
    await page.locator('[name=stationName]').fill('Unsaved desktop');
    const unsaved=await formValues(),beforeCreate=created.length;
    // Cancel both by the visible button and Escape, including an already-open user picker.

@@ -1,12 +1,11 @@
 # xur.app
 
-The public Xur project site and short guides. Plain HTML, CSS and a small optional
-profile-diagram and release-download scripts; Python's standard library assembles shared navigation and
+The public Xur project site and short guides. Plain HTML, CSS and optional profile controls, an illustrated product tour
+and installer discovery; Python's standard library assembles shared navigation and
 copies the existing brand assets. No npm install, external fonts, tracking,
 server-side Functions or Worker code, database, or paid storage service. Xur’s
 original site code and content use the root MIT license; the font retains its OFL
-notice. The footer links to the repository’s [MIT license](https://github.com/DouglasCleghorn/Xur/blob/main/LICENSE).
-The build also includes `/license.txt` in the static output.
+notice. The footer links to the copy of the MIT license shipped at `/license.txt`.
 
 ## Local preview
 
@@ -21,6 +20,11 @@ Open http://localhost:8090. `website/dist/` is generated and ignored. Never serv
 the repository root. Source content is in `website/pages/`; common layout and
 styles are in `template.html` and `assets/`. Brand assets are copied from the
 application and documentation at build time rather than duplicated in Git.
+
+The home page demonstrates GPU assignments and links each control-panel view to
+a guide. T3 Code and network shares have dedicated guides and responsive
+desktop/phone screenshots. With JavaScript disabled, all tour entries appear
+in reading order. The shared guide navigation comes from the static build.
 
 The phone setup walkthrough is at `/guides/setup/`, sourced from
 `pages/setup.html`. It covers console installation, LAN HTTPS access from a
@@ -137,12 +141,17 @@ Regenerate public screenshots from synthetic app fixtures:
 node eng/capture-website.cjs
 ```
 
-The capture command refreshes five desktop images and the four phone setup
-images. Phone captures use a 390×844 viewport; they do not imply testing on a
-physical phone or in native Safari. Review every image and `docs/screenshots.md`
-before publishing. This command requires the local .NET SDK and Playwright test
-environment; it is not part of
-Cloudflare's build. Only reviewed JPEGs under `docs/assets` enter the static site.
+The command renders the real app in an isolated fixture environment and stages
+15 JPEGs under `.build/evidence/website-captures/`. T3 Code and network shares
+have desktop and phone crops. The four phone setup images use a 390×844 viewport.
+The workstation preview uses the approved Xur banner as its sample desktop.
+This command requires the project .NET SDK (set `XUR_DOTNET` to its executable
+if needed) and the prepared Playwright test environment.
+
+Review the staged pixels, form values and image metadata before copying approved
+files into `docs/assets/`. Record each file, its web pages and its provenance in
+`docs/screenshots.md`. The offline website build copies only explicitly listed
+documentation images.
 
 Run site checks (test dependencies stay in ignored `.build`):
 
