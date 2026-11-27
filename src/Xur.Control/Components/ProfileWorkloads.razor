@@ -1,0 +1,21 @@
+@foreach (var w in Profile.Workloads)
+{
+    <span class="profile-workload"><strong>@ProfileDisplay.Name(w)</strong>
+        <small>@(w.Recipe.Kind == "Workstation" ? "Workstation · " + UserName(w.User) : w.Recipe.Engine) · @ProfileDisplay.Devices(w, Runtime)</small>
+        @if (ShowState)
+        {
+            var instance = Runtime.Instances.FirstOrDefault(i => i.Id == w.Id);
+            <span class="secondary-text">@(instance == null ? "Stopped" : instance.Fingerprint != w.Fingerprint ? $"{instance.State} · different configuration" : instance.State)</span>
+        }
+    </span>
+}
+@if (Profile.Workloads.Length == 0) { <small>No workloads configured</small> }
+
+@code {
+    [Parameter, EditorRequired] public Profile Profile { get; set; } = default!;
+    [Parameter, EditorRequired] public RuntimeObservation Runtime { get; set; } = default!;
+    [Parameter] public StationAccount[] Accounts { get; set; } = [];
+    string UserName(StationUser? user) => user == null ? "Default user" : user.Temporary ? "Temporary user" :
+        Accounts.FirstOrDefault(a => a.Uid == user.Uid && a.Username == user.Username)?.Name ?? user.Username;
+    [Parameter] public bool ShowState { get; set; }
+}

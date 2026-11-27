@@ -40,7 +40,7 @@ public sealed class UnslothRuntime(Func<string,string[],int,Task<ProcessResult>>
             if(created.ExitCode!=0)throw new InvalidOperationException("Could not create Unsloth persistent storage.");
         }
     }
-    public static string[] ModelArguments(string state,Func<string,string>? resolve=null)
+    public static string[] ModelArguments(string state,Func<string,string>? resolve=null,bool network=false)
     {
         // Xur's content-addressed downloads must remain immutable. Training writes
         // belong in the writable workspace/Studio volumes, not the source cache.
@@ -48,8 +48,11 @@ public sealed class UnslothRuntime(Func<string,string[],int,Task<ProcessResult>>
         foreach(var (folder,target) in new[]{("models","/models"),("model-sets","/model-sets")})
         {
             var path=resolve?.Invoke(folder)??Path.Combine(state,folder);Directory.CreateDirectory(path);
-            args.AddRange(["--volume",path+":"+target+":ro,z"]);
+            args.AddRange(["--volume",path+":"+target+(network?":ro":":ro,z")]);
         }
+        var shared=Path.Combine(resolve?.Invoke("models")??Path.Combine(state,"models"),"huggingface");
+        Directory.CreateDirectory(shared);
+        args.AddRange(["--volume",shared+":/shared-models/huggingface:"+(network?"rw":"rw,z"),"--env","HF_HOME=/shared-models/huggingface","--env","HF_HUB_CACHE=/shared-models/huggingface/hub","--env","HF_TOKEN_PATH=/workspace/.cache/huggingface/token"]);
         return args.ToArray();
     }
     public static async Task<UnslothStatus> Status(bool running,HttpClient client)

@@ -49,7 +49,7 @@ public sealed partial class ModelLibrary
                 w.Recipe.Files!=null&&Overlaps(target,Path.Combine(SetsRoot,Canonical.Hash(w.Recipe.Files)))||
                 Overlaps(target,Path.Combine(volumes,"xur-cache-"+w.Id,"_data"))||
                 w.Recipe.Engine=="audio.cpp"&&Overlaps(target,Path.Combine(ModelsRoot,"audio.cpp",w.Id))||
-                UnslothWorkload.Is(w.Recipe);
+                UnslothWorkload.Is(w.Recipe)||w.Recipe.Kind=="Model"&&Overlaps(target,Path.Combine(ModelsRoot,"huggingface"));
             if(used)throw new InvalidOperationException("Stop or disable '"+w.Name+"' before deleting this model. Unload its profile if it is profile-managed.");
         }
     }

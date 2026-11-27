@@ -86,8 +86,9 @@ log/restart guidance, rather than advertised as ready.
 All Unsloth profiles share two persistent data directories, initially stored in
 Xur-owned volumes:
 
-- `/workspace`: training files, notebooks, downloaded models and the Hugging Face
-  cache (`HF_HOME=/workspace/.cache/huggingface`). Save exported models here.
+- `/workspace`: training files, notebooks and exported models. Old private downloads
+  remain here. New Hugging Face downloads use the shared model library at
+  `/shared-models/huggingface`.
 - `/opt/unsloth-studio`: Studio accounts, settings, chats and training outputs.
 
 Use **Storage → Workload storage** to select an existing ext4 or XFS data drive
@@ -98,14 +99,15 @@ continues if the browser closes; check Storage and reload the profile afterward.
 Original files remain in place. Keep sufficient room for model downloads and
 temporary files; Xur never automatically deletes caches or training outputs.
 A missing selected drive blocks startup instead of filling the system disk.
-These choices do not move container images or other engines' private caches.
+These choices do not move container images or legacy private caches. The model library
+can also use a writable network share; Studio settings and workspaces stay local.
 
 The existing Xur model library is mounted read-only at `/models` (files named by
 SHA-256) and `/model-sets` (complete snapshots grouped by their manifest hash).
 These are Xur's existing persistent directories, not copies. Use a complete
-checkpoint for training; GGUF files are primarily for inference. Models fetched
-directly by another engine into its private Hugging Face cache are not in these
-shared directories; Unsloth maintains its own persistent download cache.
+checkpoint for training; GGUF files are primarily for inference. Studio and vLLM now share their Hugging Face download cache in Xur’s selected
+model library. Xur lists these downloads in Models and reuses matching GGUF blobs
+after checking their size and SHA-256. Legacy private caches are retained separately.
 
 Only one Unsloth server runs per host. Changing its GPUs or profile identity waits
 for the previous server to stop before reusing storage and its local backend port.

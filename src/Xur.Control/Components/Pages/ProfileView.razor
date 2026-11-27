@@ -1,0 +1,35 @@
+@page "/profiles/view"
+@inject ProfileManager Manager
+@inject Appliance Device
+
+<PageTitle>@(profile?.Name ?? "Profile") · Xur</PageTitle>
+<a class="back-link" href="/profiles">Profiles</a>
+@if (profile != null && state != null)
+{
+    <div class="page-heading profile-view-heading"><h1>@profile.Name</h1><a class="button secondary" href="/profiles/edit?id=@profile.Id">Edit profile</a></div>
+    <ProfileBadges Profile="profile" State="state" />
+    <section class="panel"><h2>Workloads</h2>
+        <ProfileWorkloads Profile="profile" Runtime="state.Runtime" ShowState="true" />
+    </section>
+    <form method="post" action="/profiles/preview"><AntiforgeryToken /><input type="hidden" name="id" value="@profile.Id" />
+        <button disabled="@(state.Operation?.Stage is "Applying" or "Cancelling" or "Failed")">Review changes</button>
+    </form>
+}
+else
+{
+    <h1>Profile unavailable</h1><p role="status">@(state == null ? "Could not load profiles." : "This saved profile could not be found.")</p>
+}
+
+@code {
+    [SupplyParameterFromQuery] public string? Id { get; set; }
+    ProfileState? state;
+    Profile? profile;
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Device.Installer)
+        {
+            try { state = await Manager.State(); } catch { state = null; }
+        }
+        profile = state?.Profiles.FirstOrDefault(p => p.Id == Id);
+    }
+}

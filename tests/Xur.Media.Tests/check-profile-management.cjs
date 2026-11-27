@@ -11,8 +11,8 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{execFileSync}=
   const state=async()=>await(await context.request.get(base+'/api/profiles')).json();
   async function post(path,data={}){const r=await context.request.post(base+path,{headers:{Authorization:'Bearer '+jwt},data});assert(r.ok(),path+': '+await r.text());return r;}
   async function complete(){for(let i=0;i<180;i++){const s=await state();assert.notEqual(s.operation?.stage,'Failed',s.operation?.error);if(s.operation?.stage==='Complete'){await page.goto(base+'/profiles');return s;}await page.waitForTimeout(1000);}throw Error('Profile operation timed out');}
-  async function load(id){await page.goto(base+'/profiles');await row(id).getByRole('button',{name:'Load profile',exact:true}).click();await page.waitForURL(base+'/profiles');return complete();}
-  async function unload(){await page.getByRole('button',{name:'Unload profile',exact:true}).click();await page.waitForURL('**/profiles/review?*');assert.equal(await page.locator('h1').innerText(),'Unload profile');await page.getByRole('button',{name:'Unload profile',exact:true}).click();await page.waitForURL(base+'/profiles');return complete();}
+  async function load(id){await page.goto(base+'/profiles');await row(id).getByRole('button',{name:'Review changes',exact:true}).click();await page.waitForURL('**/profiles/review?*');await page.getByRole('button',{name:'Load profile',exact:true}).click();await page.waitForURL(base+'/profiles');return complete();}
+  async function unload(){await page.getByRole('button',{name:'Review unload',exact:true}).click();await page.waitForURL('**/profiles/review?*');assert.equal(await page.locator('h1').innerText(),'Unload profile');await page.getByRole('button',{name:'Unload profile',exact:true}).click();await page.waitForURL(base+'/profiles');return complete();}
   const row=id=>page.locator(`[data-profile="${id}"]`);
   const initial=await state();if(initial.active||initial.runtime.instances.length){await page.goto(base+'/profiles');await unload();}
   // Remove saved fixtures only in this disposable VM so the screenshots remain readable.

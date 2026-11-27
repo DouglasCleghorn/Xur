@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http.HttpResults;
+using Xur.Control.Components;
 using Xur.Domain;
 namespace Xur.Control;
 public static class ProfileEndpoints
@@ -61,9 +63,15 @@ public static class ProfileEndpoints
         }));
         app.MapPost("/api/profiles",(Profile p)=>Safe(async()=>Results.Json(await manager.Save(p))));
         app.MapPost("/api/profiles/create",(ProfileCreateRequest request)=>Safe(async()=>Results.Json(await manager.Create(request.Copy))));
-        app.MapPost("/api/profiles/unload/preview",()=>Safe(async()=>Results.Json(await manager.PreviewUnload())));
+        async Task<IResult> PreviewResult(ProfilePlan plan, HttpRequest request)
+        {
+            if (request.GetTypedHeaders().Accept?.Any(a => a.MediaType.Value == "text/html") != true)
+                return Results.Json(plan);
+            return new RazorComponentResult<ProfileChanges>(new { Plan = plan, State = await manager.State() });
+        }
+        app.MapPost("/api/profiles/unload/preview",(HttpRequest request)=>Safe(async()=>await PreviewResult(await manager.PreviewUnload(),request)));
         app.MapPost("/api/profiles/{id}/delete",(string id,ProfileDeleteRequest request)=>Safe(async()=>{await manager.Delete(id,request.Revision);return Results.Ok();}));
-        app.MapPost("/api/profiles/{id}/preview",(string id)=>Safe(async()=>Results.Json(await manager.Preview(id))));
+        app.MapPost("/api/profiles/{id}/preview",(string id,HttpRequest request)=>Safe(async()=>await PreviewResult(await manager.Preview(id),request)));
         app.MapPost("/api/profiles/{id}/load",(string id,HttpContext context)=>Safe(async()=>{var plan=await manager.Preview(id);return Results.Json(await manager.Apply(new(plan.Id,plan.Digest),ProfileSwitchAudit.Request(context)));}));
         app.MapPost("/api/profiles/apply",(Approval p,HttpContext context)=>Safe(async()=>Results.Json(await manager.Apply(p,ProfileSwitchAudit.Request(context)))));
         app.MapPost("/api/profiles/cancel",(ProfileCancelRequest request)=>Safe(async()=>{if(string.IsNullOrEmpty(request.Id))throw new InvalidOperationException("Specify the current operation ID.");await manager.Cancel(request.Id);return Results.Accepted();}));
@@ -93,7 +101,7 @@ public static class ProfileEndpoints
                     else if(chosen=="legacy" && existing?.Workloads.SingleOrDefault(w=>w.Id==ids[i]) is {Recipe.Kind:"Workstation",User:null}){}
                     else {var account=accounts.SingleOrDefault(a=>a.Username==chosen) ?? throw new InvalidOperationException("Select a workstation user.");user=new(account.Username,account.Uid);}
                 }
-                selections.Add(new(ids[i],recipes[i] ?? "",f["gpus-"+i].ToArray().Select(s=>s!).ToArray(),user,stationIds.ElementAtOrDefault(i),stationNames.ElementAtOrDefault(i),catalog.Recipes.SingleOrDefault(r=>r.Id==recipes[i])?.Kind=="Workstation"?new StationDevices(f["primary-"+i]=="true",f["usb-"+i].Select(s=>s!).ToArray(),f["controller-"+i].Select(s=>s!).ToArray()):null,f["network-"+i].Select(s=>new NetworkShareMount(s!,!f["network-write-"+i].Contains(s))).ToArray()));
+                selections.Add(new(ids[i],recipes[i] ?? "",f["gpus-"+i].ToArray().Select(s=>s!).ToArray(),user,stationIds.ElementAtOrDefault(i),stationNames.ElementAtOrDefault(i),catalog.Recipes.SingleOrDefault(r=>r.Id==recipes[i])?.Kind=="Workstation"?new StationDevices(f["primary-"+i]=="true",f["usb-"+i].Select(s=>s!).ToArray(),f["controller-"+i].Select(s=>s!).ToArray()):null,f["network-"+i].Select(s=>new NetworkShareMount(s!,!f["network-write-"+i].Contains(s))).ToArray(),int.TryParse(f["contextTokens"].ElementAtOrDefault(i),out var contextTokens)?contextTokens:null));
             }
             if(!long.TryParse(f["revision"],out var revision))throw new InvalidOperationException("Reload the profile form.");
             await manager.SaveSelection(f["id"].ToString(),revision,selections.ToArray(),f.ContainsKey("name")?f["name"].ToString():null);return Results.Redirect("/profiles");
@@ -111,14 +119,17 @@ public static class ProfileEndpoints
             try {var plan=await manager.PreviewUnload();return Results.Redirect("/profiles/review?id="+plan.Id);}
             catch(InvalidOperationException e){return Results.Redirect("/profiles?error="+Uri.EscapeDataString(e.Message));}
         });
-        app.MapPost("/profiles/preview",async Task<IResult> (HttpContext c)=>await Safe(async()=> {
-            var f=await c.Request.ReadFormAsync();var plan=await manager.Preview(f["id"].ToString());return Results.Redirect("/profiles/review?id="+plan.Id);
-        }));
-        app.MapPost("/profiles/load",async Task<IResult>(HttpContext c)=> {
+        async Task<IResult> Review(HttpRequest request)
+        {
             if(appliance.Installer)return Results.Conflict();
-            try {var f=await c.Request.ReadFormAsync();var plan=await manager.Preview(f["id"].ToString());await manager.Apply(new(plan.Id,plan.Digest),ProfileSwitchAudit.Request(c));return Results.Redirect("/profiles");}
-            catch(InvalidOperationException e){return Results.Redirect("/profiles?error="+Uri.EscapeDataString(e.Message));}
-        });
+            try {
+                var form=await request.ReadFormAsync();
+                var plan=await manager.Preview(form["id"].ToString());
+                return Results.Redirect("/profiles/review?id="+plan.Id);
+            }catch(InvalidOperationException e){return Results.Redirect("/profiles?error="+Uri.EscapeDataString(e.Message));}
+        }
+        app.MapPost("/profiles/preview",Review);
+        app.MapPost("/profiles/load",Review);
         app.MapPost("/profiles/apply",async Task<IResult> (HttpContext c)=>await Safe(async()=> {
             var f=await c.Request.ReadFormAsync();await manager.Apply(new(f["id"].ToString(),f["digest"].ToString()),ProfileSwitchAudit.Request(c));return Results.Redirect("/profiles");
         }));

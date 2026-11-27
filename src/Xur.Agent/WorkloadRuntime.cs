@@ -5,8 +5,8 @@ namespace Xur.Agent;
 public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,DisplayConsoles? consoles=null,DataStorage? dataStorage=null):IWorkloadRuntime
 {
     readonly DataStorage storage=dataStorage??new DataStorage(Path.GetDirectoryName(directory)!);
-    NetworkShares? networkShares;
-    public NetworkShares NetworkShares=>LazyInitializer.EnsureInitialized(ref networkShares,()=>new(Path.GetDirectoryName(directory)!));
+    public NetworkShares NetworkShares=>storage.NetworkShares;
+    public bool UsesStorageConnection(string id)=>storage.StorageConnections().Contains(id);
     public async Task<T> ChangeNetworkShares<T>(Func<Task<T>> action)
     {
         await gate.WaitAsync();try{return await action();}finally{gate.Release();}
@@ -205,7 +205,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             if(c.GetProperty("State").GetProperty("Status").GetString()=="running")throw new InvalidOperationException("Both T3 runtimes are active. Stop the extra server before using its shared database.");
             return native;
         }
-        var fingerprint=T3CodeWorkload.Is(w.Recipe)?T3Mode()=="Native"?"stale-container:"+w.Fingerprint:T3Storage.Fingerprint(w,labels):w.Fingerprint;
+        var staleStorage=SharedModelCache.Applies(w)&&(!labels.TryGetProperty(SharedModelCache.Label,out var modelStorage)||modelStorage.GetString()!=SharedModelCache.Policy(w,storage));
+        var fingerprint=staleStorage?"stale-storage:"+w.Fingerprint:T3CodeWorkload.Is(w.Recipe)?T3Mode()=="Native"?"stale-container:"+w.Fingerprint:T3Storage.Fingerprint(w,labels):w.Fingerprint;
         return new(w.Id,fingerprint,c.GetProperty("Id").GetString()!,c.GetProperty("State").GetProperty("Pid").GetInt32(),File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim(),endpoint,
             c.GetProperty("State").GetProperty("Status").GetString()!,w.Gpus);
     }
@@ -231,7 +232,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             catalog.Verify(w.Recipe);
             if(w.Recipe.Kind=="Model" || UnslothWorkload.Is(w.Recipe))await storage.Require("models");
             if(UnslothWorkload.Is(w.Recipe))await storage.Require("unsloth");
-            var network=await NetworkShares.RequireMounts(w);
+            var storageConnections=w.Recipe.Kind=="Model"||UnslothWorkload.Is(w.Recipe)?storage.StorageConnections():[];
+            var network=await NetworkShares.RequireMounts(w,storageConnections);
             Directory.CreateDirectory(directory);
             var observed=await ObserveUnlocked();ProfilePolicy.Validate(new("runtime","Runtime",1,[w]),observed);
             if((w.Recipe.Kind=="Robotics" && Definitions().Any(d=>d.Id!=w.Id && d.Recipe.Kind is "Workstation" or "Robotics")) ||
@@ -254,6 +256,13 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
             }
             }finally{receipts.Release();}
             var instance=await Inspect(w);
+            if(SharedModelCache.Applies(w)&&instance!=null&&instance.Fingerprint!=w.Fingerprint)
+            {
+                if(instance.State=="running")throw new InvalidOperationException("Unload and reload this model to use the selected shared storage.");
+                var removed=await Processes.Run("podman",["rm",instance.InstanceId],20);
+                if(removed.ExitCode!=0)throw Failure("Could not replace the stopped model container; its storage was retained",removed);
+                instance=null;
+            }
             if(T3CodeWorkload.Is(w.Recipe) && instance!=null && instance.Fingerprint!=w.Fingerprint)
                 throw new InvalidOperationException("Disable and re-enable T3 Code to recreate it with current runtime support. Its persistent storage will be retained.");
             if(T3CodeWorkload.Is(w.Recipe)&&T3Mode()=="Native")
@@ -314,6 +323,8 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 var image=engineImage?.Image??w.Recipe.Image;
                 var args=new List<string> {"create","--name",Name(w.Id),"--label","io.xur.fingerprint="+w.Fingerprint,"--label","io.xur.id="+w.Id,
                     "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096",(UnslothWorkload.Is(w.Recipe)||w.Recipe.Kind=="Model"&&w.Recipe.Engine is "vLLM" or "vLLM-Omni")?"--shm-size=4g":"--shm-size=1g",w.Recipe.Kind=="Model"||UnslothWorkload.Is(w.Recipe)||Persisted(w)||w.NetworkShares is {Length:>0}?"--restart=no":"--restart=unless-stopped"};
+                if(SharedModelCache.Applies(w))args.AddRange(["--label",SharedModelCache.Label+"="+SharedModelCache.Policy(w,storage)]);
+                if(storageConnections.Length>0)args.Add("--security-opt=label=disable");
                 args.AddRange(network.Arguments);
                 if(w.Recipe.Port>0)args.AddRange(["--publish",T3CodeWorkload.Is(w.Recipe)?$"{T3CodeWorkload.HostPort}:{w.Recipe.Port}":UnslothWorkload.Is(w.Recipe)?UnslothWorkload.Publish:"127.0.0.1::"+w.Recipe.Port]);
                 if(w.Recipe.Container is {} container)
@@ -328,13 +339,14 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                     foreach(var pair in container.Environment.OrderBy(p=>p.Key,StringComparer.Ordinal))args.AddRange(["--env",pair.Key+"="+pair.Value]);
                 }
                 else args.AddRange(["--volume","xur-cache-"+w.Id+":/root/.cache:Z"]);
-                if(UnslothWorkload.Is(w.Recipe))args.AddRange(UnslothRuntime.ModelArguments(Path.GetDirectoryName(directory)!,part=>storage.PathFor("models",part)));
+                if(UnslothWorkload.Is(w.Recipe))args.AddRange(UnslothRuntime.ModelArguments(Path.GetDirectoryName(directory)!,part=>storage.PathFor("models",part),storage.Config().Locations.GetValueOrDefault("models")?.ConnectionId!=null));
+                if(w.Recipe.Kind=="Model"&&w.Recipe.Hub!=null)args.AddRange(SharedModelCache.Arguments(storage));
                 if(w.Recipe.Engine=="audio.cpp")args.AddRange(await AudioCppRuntime.Arguments(storage.PathFor("models","models"),w.Id,selected.SelectMany(g=>g.Nodes).Distinct().ToArray()));
                 args.AddRange(TimezoneSettings.ContainerArguments());
                 if(w.Recipe.Kind=="Model" && w.Recipe.Hub!=null)args.AddRange(new HuggingFaceCredentials(Path.GetDirectoryName(directory)!).ContainerArguments());
                 args.AddRange(T3CodeWorkload.Is(w.Recipe)?await T3CodeGpuAccess.Arguments(observed.Gpus):ModelGpuArguments.For(w,observed.Gpus));
-                if(model!=null)args.AddRange(["--volume",model+":/model.gguf:ro,z"]);
-                if(modelFiles!=null)args.AddRange(["--volume",modelFiles+":/models:ro,z"]);
+                if(model!=null)args.AddRange(["--volume",model+":/model.gguf:"+(storageConnections.Length>0?"ro":"ro,z")]);
+                if(modelFiles!=null)args.AddRange(["--volume",modelFiles+":/models:"+(storageConnections.Length>0?"ro":"ro,z")]);
                 if(w.Recipe.Engine is "vLLM" or "vLLM-Omni")args.AddRange(["--entrypoint","vllm"]);
                 if(T3CodeWorkload.Is(w.Recipe))
                 {
@@ -344,7 +356,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                     args.AddRange(access);
                     args.AddRange(T3CodeRuntime.ContainerArguments());
                 }
-                args.Add(image);args.AddRange(T3CodeWorkload.Is(w.Recipe)?T3CodeRuntime.Command(w.Recipe,args.Contains("--pid=host"),args.Contains("--cap-add=DAC_OVERRIDE")):engineImage?.Command(w.Recipe.Command)??w.Recipe.Command);
+                args.Add(image);args.AddRange(T3CodeWorkload.Is(w.Recipe)?T3CodeRuntime.Command(w.Recipe,args.Contains("--pid=host"),args.Contains("--cap-add=DAC_OVERRIDE")):engineImage?.Command(ModelContext.Command(w))??ModelContext.Command(w));
                 var created=await Processes.Run("podman",args,60);
                 if(created.ExitCode!=0)throw Failure("Container creation failed",created);
                 instance=await Inspect(w) ?? throw new IOException();
@@ -453,6 +465,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         var path=Path.Combine(models,model.Sha256+".gguf");
         if(File.Exists(path) && new FileInfo(path).Length==model.Bytes)
         {await using var existing=File.OpenRead(path);if(Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(existing))==model.Sha256)return path;}
+        if(await SharedModelCache.FindAsset(storage,model) is {} shared)return shared;
         DataStorage.CheckCapacity(models,model.Bytes);
         using var timeout=new CancellationTokenSource(TimeSpan.FromHours(6));
         using var http=new HttpClient {Timeout=TimeSpan.FromHours(6)};
@@ -476,7 +489,16 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         {
             var target=Path.Combine(root,file.Name);var source=await DownloadModel(file.Asset);
             if(!File.Exists(target))
-            {var r=await Processes.Run("ln",[source!,target],30);if(r.ExitCode!=0)throw new IOException("Could not link the model snapshot.");}
+            {var r=await Processes.Run("ln",[source!,target],30);if(r.ExitCode!=0)
+                {
+                    // SMB servers may not support hard links. A verified copy is still
+                    // a complete snapshot; publish it only after checking its contents.
+                    DataStorage.CheckCapacity(root,file.Asset.Bytes);
+                    File.Copy(source!,target+".partial",true);
+                    await using(var copy=File.OpenRead(target+".partial"))
+                        if(Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(copy))!=file.Asset.Sha256)throw new IOException("Model snapshot checksum mismatch.");
+                    File.Move(target+".partial",target,true);
+                }}
         }
         return root;
     }

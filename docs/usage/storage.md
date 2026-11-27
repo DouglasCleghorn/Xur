@@ -30,6 +30,38 @@ Authenticated API: `GET /api/storage/usage`,
 bearer clients use the same API. Installer mode disables these installed-system
 endpoints.
 
+## Model downloads and shared caches
+
+**Model download storage** on Models and in the profile editor selects the model
+library before a profile downloads its models. The choice applies to all profiles.
+Choose the system disk, a local data drive, or a writable SMB connection configured
+under **Storage → Network shares**. Read-only connections cannot receive downloads.
+Changing this location unloads the current profile, copies and verifies existing
+models, retains originals, then reloads the profile. Save profile edits first and
+disable T3 Code before moving storage if it is running.
+
+Studio and vLLM share a Hugging Face cache inside the selected library. Studio's
+container path is `/shared-models/huggingface`; vLLM uses
+`/root/.cache/huggingface`. Xur also reuses Studio's GGUF cache blobs after checking
+the exact requested SHA-256 and size. Formats and checkpoint revisions must still
+match the selected runtime. Existing private caches remain in place; no files are
+automatically removed or imported. Studio datasets, settings and training outputs
+continue to use their own persistent local storage.
+
+Network storage is reconnected and its server/share identity checked before use.
+A missing, offline or read-only share blocks startup without falling back to the
+system disk. Selected storage connections cannot be disconnected or removed until
+the library has moved elsewhere. SMB connections support Hugging Face cache links
+through `mfsymlinks`; reconnect older connections to apply that mount option.
+Snapshots use verified copies if the server does not support hard links, requiring
+additional space. Local migrations preserve Unix metadata; SMB migrations verify
+names, file lengths, link targets and every file's contents using the share's
+configured UID/GID and permissions.
+
+Storage folder and mount paths are links to **Files → Storage files**. Links select
+the most specific mounted filesystem and open the requested folder; unavailable
+storage is reported instead of opening an unrelated directory.
+
 ## Write endurance remaining
 
 The disk table shows the SMART estimate of remaining write endurance when

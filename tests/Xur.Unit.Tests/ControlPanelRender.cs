@@ -30,7 +30,7 @@ static class ControlPanelRender
         agent.MapGet("/ntp",()=>new NtpStatus(true,true,true,["time.cloudflare.com"],""));
         DiagnosticSshStatus diagnosticSsh=new();
         agent.MapGet("/diagnostics/ssh",()=>diagnosticSsh);
-        agent.MapGet("/storage/locations",()=>new DataStorageStatus("system",[new("data","/data","/dev/nvme1n1p1","ext4",2L<<40,1L<<40,1L<<40,true,true,false,"a111-b222")],[new("models","Xur model library","inherit",["/var/lib/xur/models","/var/lib/xur/model-sets"],100L<<30,null),new("unsloth","Unsloth workspace and Studio","inherit",["/var/lib/containers/storage/volumes/example/_data"],100L<<30,null)],false,null));
+        agent.MapGet("/storage/locations",()=>new DataStorageStatus("system",[new("data","/data","/dev/nvme1n1p1","ext4",2L<<40,1L<<40,1L<<40,true,true,false,"a111-b222")],[new("models","Xur model library","inherit",["/var/lib/xur/models","/var/lib/xur/model-sets"],100L<<30,null),new("unsloth","Unsloth workspace and Studio","inherit",["/var/lib/containers/storage/volumes/example/_data"],100L<<30,null)],false,null,[new(new("smb-"+new string('b',32),"NAS models","nas.example","models","writer","",1000,1000,ReadOnly:false),"/var/mnt/xur-smb/models",true,null),new(new("smb-"+new string('a',32),"NAS archive","nas.example","archive","reader","",1000,1000),"/var/mnt/xur-smb/archive",true,null)]));
         agent.MapGet("/models",()=>new ModelScanStatus(DateTimeOffset.UtcNow,false,[
             new("GGUF fixture <safe>","/var/lib/xur/models/fixture.gguf","GGUF",1L<<30,1,"Xur model storage","/var/lib/xur/models/fixture.gguf"),
             new("owner/fixture","/var/lib/containers/storage/volumes/xur-cache-fixture/_data/huggingface/hub/models--owner--fixture/snapshots/revision","Safetensors",2L<<30,1,"Persistent engine cache","/var/lib/containers/storage/volumes/xur-cache-fixture/_data/huggingface/hub/models--owner--fixture"),
@@ -72,6 +72,20 @@ static class ControlPanelRender
         {
             await agent.StartAsync();var services=new ServiceCollection();services.AddLogging();var context=new DefaultHttpContext();context.Request.Scheme="https";context.Request.Host=new HostString("stations.test");services.AddSingleton<IHttpContextAccessor>(new HttpContextAccessor{HttpContext=context});services.AddSingleton(new Appliance());services.AddSingleton(manager);services.AddSingleton(new ProfileAccessSettings(root+"/profile-access.json"));services.AddSingleton(new RecipeCatalog(root+"/catalog"));services.AddSingleton(new Bootstrap(directory:root));services.AddSingleton<NavigationManager>(new Navigation());
             await using var provider=services.BuildServiceProvider();await using var renderer=new HtmlRenderer(provider,provider.GetRequiredService<ILoggerFactory>());
+            var desk = new Workload("gaming","Gaming workstation",stationRecipe,[gpu.Pci],"desktop");
+            var assistant = new Workload("assistant","Assistant",stationRecipe with { Kind="Model" },[],"assistant");
+            var loaded = new Profile("1","Gaming desk",1,[desk,assistant]);
+            var target = new Profile("2","Studio desk",1,[desk with {Id="studio",Name="Studio workstation"},assistant]);
+            var reviewState = new ProfileState([loaded,target],loaded,new("fixture",[gpu],[]),null);
+            foreach (var unload in new[]{false,true})
+            {
+                TransitionStep[] steps = unload ? [new("Stop","assistant","Stop Assistant"),new("Stop","gaming","Stop Gaming workstation")]
+                    : [new("Keep","assistant","Keep Assistant running"),new("Stop","gaming","Stop Gaming workstation"),new("Start","studio","Start Studio workstation")];
+                var plan = new ProfilePlan(unload?"plan-unload":"plan-2","fixture-digest","","",unload?loaded with {Workloads=[]}:target,steps,DateTimeOffset.UtcNow.AddMinutes(10),unload);
+                var parameters = ParameterView.FromDictionary(new Dictionary<string,object?>{{"Plan",plan},{"State",reviewState}});
+                var fragment = await renderer.Dispatcher.InvokeAsync(async()=> (await renderer.RenderComponentAsync<Xur.Control.Components.ProfileChanges>(parameters)).ToHtmlString());
+                await File.WriteAllTextAsync(Path.Combine(output,unload?"review-unload.html":"review-load.html"),fragment);
+            }
             if(documentation)
             {
                 foreach(var (page,type) in new[]{("login",typeof(Xur.Control.Components.Pages.Login)),("setup-account",typeof(Xur.Control.Components.Pages.SetupAccount))})
@@ -81,13 +95,13 @@ static class ControlPanelRender
                     await File.WriteAllTextAsync(Path.Combine(output,page+".html"),"<!doctype html><html lang=\"en\"><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><link rel=stylesheet href='/setup.css'></head><body>"+html+"</body></html>");
                 }
             }
-            foreach(var page in new[]{"unsloth","t3-code","t3-install","home","displays","workstations","endpoints","monitoring","files","models","model-lab","api-keys","settings","settings-ssh-enabled","diagnostics","network-settings","storage","network-shares","profile-edit","profile-switch"})
+            foreach(var page in new[]{"unsloth","t3-code","t3-install","home","displays","workstations","endpoints","monitoring","files","models","model-lab","api-keys","settings","settings-ssh-enabled","diagnostics","network-settings","storage","network-shares","profile-edit","profile-switch","profiles","profile-view"})
             {
                 if(page=="t3-install")File.Move(root+"/catalog/t3-code.json",root+"/t3-code.json");
                 diagnosticSsh=page=="settings-ssh-enabled"?new(true,2):new();
                 var priorSnapshot=observer.Snapshot;
                 if(page=="profile-edit")observer.Snapshot=observer.Snapshot with{Gpus=[gpu with{ShortId="GPU 1",Cards=["/dev/dri/card0"]}]};
-                RenderFragment body=b=>{b.OpenComponent(0,page=="unsloth"?typeof(Xur.Control.Components.Pages.Unsloth):page is "t3-code" or "t3-install"?typeof(Xur.Control.Components.Pages.T3Code):page=="displays"?typeof(Xur.Control.Components.Pages.Displays):page=="profile-switch"?typeof(Xur.Control.Components.Pages.ProfileSwitch):page=="workstations"?typeof(Xur.Control.Components.Pages.Workstations):page=="endpoints"?typeof(Xur.Control.Components.Pages.Endpoints):page=="profile-edit"?typeof(ProfileEditor):page=="network-settings"?typeof(Xur.Control.Components.Pages.NetworkSettingsPage):page is "settings" or "settings-ssh-enabled"?typeof(Xur.Control.Components.Pages.Network):page=="diagnostics"?typeof(Xur.Control.Components.Pages.Diagnostics):page=="network-shares"?typeof(Xur.Control.Components.Pages.NetworkSharesPage):page=="storage"?typeof(Xur.Control.Components.Pages.StorageUsagePage):page=="api-keys"?typeof(Xur.Control.Components.Pages.ApiKeysPage):page=="models"?typeof(Xur.Control.Components.Pages.Models):page=="model-lab"?typeof(Xur.Control.Components.Pages.ModelLab):page=="home"?typeof(Xur.Control.Components.Pages.Home):page=="files"?typeof(Xur.Control.Components.Pages.Files):typeof(Xur.Control.Components.Pages.Monitoring));b.CloseComponent();};
+                RenderFragment body=b=>{b.OpenComponent(0,page=="profiles"?typeof(Xur.Control.Components.Pages.Profiles):page=="profile-view"?typeof(FixtureProfileView):page=="unsloth"?typeof(Xur.Control.Components.Pages.Unsloth):page is "t3-code" or "t3-install"?typeof(Xur.Control.Components.Pages.T3Code):page=="displays"?typeof(Xur.Control.Components.Pages.Displays):page=="profile-switch"?typeof(Xur.Control.Components.Pages.ProfileSwitch):page=="workstations"?typeof(Xur.Control.Components.Pages.Workstations):page=="endpoints"?typeof(Xur.Control.Components.Pages.Endpoints):page=="profile-edit"?typeof(ProfileEditor):page=="network-settings"?typeof(Xur.Control.Components.Pages.NetworkSettingsPage):page is "settings" or "settings-ssh-enabled"?typeof(Xur.Control.Components.Pages.Network):page=="diagnostics"?typeof(Xur.Control.Components.Pages.Diagnostics):page=="network-shares"?typeof(Xur.Control.Components.Pages.NetworkSharesPage):page=="storage"?typeof(Xur.Control.Components.Pages.StorageUsagePage):page=="api-keys"?typeof(Xur.Control.Components.Pages.ApiKeysPage):page=="models"?typeof(Xur.Control.Components.Pages.Models):page=="model-lab"?typeof(Xur.Control.Components.Pages.ModelLab):page=="home"?typeof(Xur.Control.Components.Pages.Home):page=="files"?typeof(Xur.Control.Components.Pages.Files):typeof(Xur.Control.Components.Pages.Monitoring));b.CloseComponent();};
                 var html=await renderer.Dispatcher.InvokeAsync(async()=> (await renderer.RenderComponentAsync<Xur.Control.Components.Layout.MainLayout>(ParameterView.FromDictionary(new Dictionary<string,object?>{{"Body",body}}))).ToHtmlString());
                 // Static rendering has no HTTP request from which to generate antiforgery tokens.
                 // Supply a fixture token for browser tests; production renders AntiforgeryToken normally.
@@ -147,6 +161,7 @@ static class ControlPanelRender
         finally{await agent.StopAsync();Environment.SetEnvironmentVariable("XUR_RUN",previous);Environment.SetEnvironmentVariable("XUR_MODE",mode);}
         store.Dispose();Directory.Delete(root,true);
     }
+    sealed class FixtureProfileView:Xur.Control.Components.Pages.ProfileView { protected override async Task OnParametersSetAsync(){Id="1";await base.OnParametersSetAsync();} }
     sealed class ProfileEditor:Xur.Control.Components.Pages.ProfileEdit { protected override async Task OnInitializedAsync(){Id="1";await base.OnInitializedAsync();} }
     sealed class EmptyProfileEditor:Xur.Control.Components.Pages.ProfileEdit { protected override async Task OnInitializedAsync(){Id="2";await base.OnInitializedAsync();} }
     sealed class Navigation:NavigationManager {public Navigation(){Initialize("http://home.test/","http://home.test/");} protected override void NavigateToCore(string uri,bool forceLoad){} }

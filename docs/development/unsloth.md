@@ -102,3 +102,27 @@ Run `dotnet run --project tests/Xur.Unit.Tests -- --data-storage` for real-file
 copy/hash/link checks and injected mount identity, missing drive, read-only,
 capacity, concurrent move, interruption and partial-copy failures. No disk is
 mounted or formatted by the tests.
+
+## Shared model cache
+
+Studio's runtime overrides `HF_HOME` and `HF_HUB_CACHE` with the writable shared
+cache at `/shared-models/huggingface`, backed by `<models>/huggingface`. The built-in
+recipe remains compatible with existing saved profiles and volumes. vLLM mounts
+the same directory and Xur checks matching HF GGUF blobs by size and SHA-256 before
+reusing them. The immutable Xur blob/snapshot mounts remain read-only; dataset and
+training output writes belong in `/workspace`. Legacy workspace downloads remain
+available there, without rewriting or deleting them.
+
+A model-storage label records the selected paths and cache layout. Stopped
+containers with an old layout are recreated without deleting volumes. Running
+instances require an unload/reload. Model workloads inherit the selected network
+connection's group and systemd mount dependencies; network binds skip SELinux
+relabeling because CIFS uses its configured mount context. Deleting shared models
+is blocked while a model or Studio workload may be using them.
+
+For GGUF inference, Unsloth's published [changelog](https://unsloth.ai/docs/new/changelog)
+describes prebuilt llama.cpp and Studio tool parsing improvements. Xur retains a
+plain llama.cpp engine and a separate Studio app, labelled for inference and
+training, rather than claiming these are distinct low-level GGUF engines. Studio's
+API would need its own authenticated provider integration to expose those service
+features to Xur clients.

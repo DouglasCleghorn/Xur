@@ -130,6 +130,11 @@ const fs=require('fs'),assert=require('assert/strict');
   assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),'Storage usage overflows at '+width);
   await page.screenshot({path:'.build/evidence/files-grid/storage-'+width+'.png',fullPage:true});
  }
+ await page.goto('http://files.test/files?tab=storage&location=%2Fvar%2Fmodels');
+ await page.locator('#usage-path').getByRole('link',{name:'models',exact:true}).waitFor();
+ assert(sizes.some(u=>new URL(u).searchParams.get('id')==='ssd'&&new URL(u).searchParams.get('path')==='models'),'An absolute storage link resolves to the mount and relative folder');
+ await page.goto('http://files.test/files?tab=storage&location=%2Fmissing%2Fmodels');
+ await page.getByText('This storage location is not mounted.',{exact:false}).waitFor();
  assert.deepEqual(errors,[]);console.log(JSON.stringify({suite:'FilesUi',result:'Passed',desktopAndMobile:true,agGrid:true,searchAndSort:true,copyPaths:true,menus:true,confirmedDeleteAndMove:true,freshListings:true,folderSizeRefresh:true,allocatedMountUsage:true,offscreenSizeSort:true,sparseFileUsage:true,keyboardDrilldown:true,partialAndFailedScans:true,middleClickNavigation:true,controlClickNavigation:true}));
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

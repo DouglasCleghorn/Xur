@@ -1,0 +1,40 @@
+<div class="profile-changes" data-plan-id="@Plan.Id" data-digest="@Plan.Digest" data-expires="@Plan.Expires.ToString("O")">
+    @if (State.Active != null) { <p class="secondary-text">Currently loaded · @State.Active.Name</p> }
+    @foreach (var name in StoppedDesktops())
+    {
+        <p class="notice warning">@name will stop. Save any open work.</p>
+    }
+    <section class="transition-list" aria-label="Workload changes">
+        @foreach (var step in Plan.Steps.Where(s => s.Kind is "Keep" or "Start" or "Stop"))
+        {
+            var w = Definition(step);
+            <article class="transition-row"><span class="state-label @(step.Kind == "Keep" ? "running" : "pending")">@(step.Kind == "Keep" ? "Keep running" : step.Kind)</span><div><strong>@(w == null ? "Workload " + step.WorkloadId : ProfileDisplay.Name(w))</strong>
+                @if (w != null) { <p>@ProfileDisplay.Devices(w, State.Runtime)</p> }
+            </div></article>
+        }
+        @if (!Plan.Steps.Any(s => s.Kind is "Start" or "Stop" or "Keep")) { <p>No workloads need to start or stop.</p> }
+    </section>
+    <details><summary>Operation details</summary><ol>
+        @foreach (var step in Plan.Steps) { <li>@step.Description</li> }
+    </ol></details>
+    @foreach (var w in Plan.Target.Workloads.Where(w => w.Recipe.Hub != null || w.Recipe.Files is { Length: > 0 }))
+    {
+        var repository = w.Recipe.Hub?.Repository ?? w.Recipe.Files![0].Asset.Upstream;
+        var license = w.Recipe.Hub?.License ?? w.Recipe.Files![0].Asset.License;
+        <p>Loading @ProfileDisplay.Name(w) may download files under the <a href="@("https://huggingface.co/" + repository)" target="_blank" rel="noopener">@license</a> license.</p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ProfilePlan Plan { get; set; } = default!;
+    [Parameter, EditorRequired] public ProfileState State { get; set; } = default!;
+    Workload? Definition(TransitionStep step)
+    {
+        var prior = State.Active?.Workloads.FirstOrDefault(w => w.Id == step.WorkloadId);
+        var next = Plan.Target.Workloads.FirstOrDefault(w => w.Id == step.WorkloadId);
+        return (step.Kind == "Stop" ? prior ?? next : next ?? prior)
+            ?? State.Profiles.SelectMany(p => p.Workloads).FirstOrDefault(w => w.Id == step.WorkloadId);
+    }
+    IEnumerable<string> StoppedDesktops() => Plan.Steps.Where(s => s.Kind == "Stop").Select(Definition)
+        .OfType<Workload>().Where(w => w.Recipe.Kind == "Workstation").Select(ProfileDisplay.Name).Distinct();
+}

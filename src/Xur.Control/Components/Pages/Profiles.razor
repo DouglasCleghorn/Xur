@@ -11,9 +11,9 @@ else
 {
     @if(!string.IsNullOrEmpty(Error)) { <p class="notice error" role="alert">@Error</p> }
     <section class="loaded-strip" aria-label="Loaded profile">
-        <div><span class="state-label @(state.Active!=null?"running":"")">@(state.Active!=null?"Loaded":RunningCount>0?"Partial":"Idle")</span><strong>@(state.Active?.Name ?? (RunningCount>0?"No complete profile loaded":"No profile loaded"))</strong>
+        <div><span class="state-label @(ProfileDisplay.RuntimeLabel(state)=="Loaded"?"running":"")">@(ProfileDisplay.RuntimeLabel(state))</span><strong>@(state.Active?.Name ?? (RunningCount>0?"No complete profile loaded":"No profile loaded"))</strong>
             <span class="secondary-text">@RunningCount @(RunningCount==1?"workload":"workloads") running</span></div>
-        @if(state.Active!=null || state.Runtime.Instances.Length>0) { <form method="post" action="/profiles/unload"><AntiforgeryToken /><button class="secondary" disabled="@Busy">Unload profile</button></form> }
+        @if(state.Active!=null || state.Runtime.Instances.Length>0) { <form method="post" action="/profiles/unload"><AntiforgeryToken /><button class="secondary" disabled="@Busy">Review unload</button></form> }
     </section>
     @if(state.Operation is { Stage:"Applying" or "Cancelling" or "Cancelled" or "Failed" } op)
     {
@@ -35,23 +35,17 @@ else
     }
     <section class="profile-list" aria-labelledby="saved-profiles">
         <div class="section-heading"><h2 id="saved-profiles">Saved profiles <span class="count">@state.Profiles.Length</span></h2><label class="search-field"><span class="sr-only">Search profiles</span><input type="search" id="profile-search" placeholder="Search profiles" /></label></div>
-        <div class="profile-column-labels" aria-hidden="true"><span>Profile</span><span>Workloads</span><span>Devices</span><span>Actions</span></div>
-        @foreach(var p in state.Profiles.OrderByDescending(p=>state.Active?.Id==p.Id).ThenBy(p=>long.TryParse(p.Id,out var key)?key:long.MaxValue).ThenBy(p=>p.Name))
+        <div class="profile-column-labels" aria-hidden="true"><span>Profile</span><span>Workloads and devices</span><span>Actions</span></div>
+        @foreach(var p in ProfileDisplay.Ordered(state))
         {
             var loaded=state.Active?.Id==p.Id;
-            <article class="profile-row @(loaded?"is-loaded":"")" data-profile="@p.Id" data-search="@(p.Name+" "+string.Join(" ",p.Workloads.Select(w=>w.Recipe.Name)))">
-                <div class="profile-identity"><a class="profile-name" href="/profiles/edit?id=@p.Id">@p.Name</a>
-                    @if(loaded) { <span class="state-label running">Loaded</span> }
-                    @if(loaded && state.Active!.Revision!=p.Revision) { <span class="state-label pending">Saved changes</span> }
+            <article class="profile-row @(loaded?"is-loaded":"")" data-profile="@p.Id" data-search="@(p.Name+" "+string.Join(" ",p.Workloads.Select(w=>w.Name+" "+w.Recipe.Name)))">
+                <div class="profile-identity"><a class="profile-name" href="/profiles/view?id=@p.Id">@p.Name</a>
+                    <ProfileBadges Profile="p" State="state" />
                 </div>
-                <div class="profile-workloads">
-                    @if(p.Workloads.Length==0) { <span class="secondary-text">No workloads</span> }
-                    @foreach(var w in p.Workloads) { <div><span>@w.Recipe.Name</span><small>@(w.Recipe.Kind=="Workstation"?UserLabel(w):w.Recipe.Engine)</small></div> }
-                </div>
-                <div class="profile-devices">@foreach(var label in DeviceNames(p)) { <span>@label</span> }</div>
+                <div class="profile-workloads"><ProfileWorkloads Profile="p" Runtime="state.Runtime" Accounts="accounts" /></div>
                 <div class="row-actions">
-                    @if(!IsCurrent(p)) { <form method="post" action="/profiles/load"><AntiforgeryToken /><input type="hidden" name="id" value="@p.Id" /><button class="secondary" disabled="@Busy">Load profile</button></form> }
-                    <form method="post" action="/profiles/preview"><AntiforgeryToken /><input type="hidden" name="id" value="@p.Id" /><button class="quiet" disabled="@Busy">Preview</button></form>
+                    <form method="post" action="/profiles/preview"><AntiforgeryToken /><input type="hidden" name="id" value="@p.Id" /><button class="secondary" disabled="@Busy">Review changes</button></form>
                     <details class="action-menu"><summary class="button quiet" aria-label="More actions for @p.Name">More</summary><div class="action-menu-items">
                         <a class="button quiet" href="/profiles/edit?id=@p.Id">Edit</a>
                         <form method="post" action="/profiles/create"><AntiforgeryToken /><input type="hidden" name="copy" value="@p.Id" /><button class="quiet" disabled="@Busy">Duplicate</button></form>
@@ -85,13 +79,11 @@ else
 }
 @code {
     [SupplyParameterFromQuery] public string? Error {get;set;}
-    ProfileState? state;StationAccount[] accounts=[];
-    string UserLabel(Workload w)=>w.User?.Temporary==true?"Temporary user":w.User==null?"Existing workstation user":accounts.SingleOrDefault(a=>a.Username==w.User.Username && a.Uid==w.User.Uid)?.Name ?? w.User.Username;
+    ProfileState? state;
+    StationAccount[] accounts = [];
     int RunningCount=>state?.Runtime.Instances.Count(i=>i.State=="running") ?? 0;
-    bool IsCurrent(Profile p)=>state?.Active?.Id==p.Id && state.Active.Revision==p.Revision && state.Runtime.Instances.Length==p.Workloads.Length && p.Workloads.All(w=>state.Runtime.Instances.Any(i=>i.Id==w.Id && i.Fingerprint==w.Fingerprint && i.State=="running"));
     bool Busy=>state?.Operation?.Stage is "Applying" or "Cancelling" or "Failed";
     Workload? Definition(string id)=>state?.Active?.Workloads.FirstOrDefault(w=>w.Id==id) ?? state?.Profiles.SelectMany(p=>p.Workloads).FirstOrDefault(w=>w.Id==id);
-    string WorkloadName(string id)=>Definition(id)?.Recipe.Name ?? "Workload "+id;
-    string[] DeviceNames(Profile p)=>p.Workloads.SelectMany(w=>T3CodeWorkload.Is(w.Recipe)?new[]{"All GPUs (shared)"}:w.Gpus.Length==0?new[]{"CPU"}:w.Gpus.Select(id=>state!.Runtime.Gpus.SingleOrDefault(g=>g.Pci==id)?.DisplayName ?? "GPU "+id)).Distinct().ToArray();
+    string WorkloadName(string id)=>Definition(id) is {} w ? ProfileDisplay.Name(w) : "Workload "+id;
     protected override async Task OnInitializedAsync() { if(!Device.Installer)try {state=await Manager.State();accounts=await Device.Agent.GetFromJsonAsync<StationAccount[]>("/station-users") ?? [];}catch{} }
 }

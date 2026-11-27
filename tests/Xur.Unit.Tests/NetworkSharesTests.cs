@@ -55,6 +55,8 @@ static class NetworkSharesTests
         var recipe=new Recipe("test","Test","sha256:"+new string('a',64),[],0,"/","CPU",0,0,"Test",Kind:"Container",Engine:"Podman",Container:new([],[]));
         var ordinary=new Workload("test","Test",recipe,[],"test");
         var workload=ordinary with{NetworkShares=[new(connection.Id)]};
+        var storageAccess=await shares.RequireMounts(ordinary,[connection.Id]);
+        check(storageAccess.Units.Length==1&&storageAccess.Arguments.Contains("--group-add")&&!storageAccess.Arguments.Contains("--mount"),"Model download storage inherits SMB permissions and mount lifetime without exposing the entire share");
         var access=await shares.RequireMounts(workload);
         check(access.Arguments.Any(a=>a.Contains("bind-propagation=rprivate")&&a.Contains(",ro=true,")),"Assigned shares bind privately and read-only by default");
         check(access.Arguments.Contains("--group-add")&&access.Arguments.Contains("1000"),"Assigned containers receive the mount group without DAC override capabilities");

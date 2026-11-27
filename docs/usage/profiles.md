@@ -56,8 +56,16 @@ the user, local workstation when applicable, trigger and result; recovery keeps
 the original trigger. The access setting is included in configuration backups.
 
 The Profiles page shows the loaded profile, searchable saved profiles, and running
-workloads. Choose **Load profile** beside a saved profile to review its changes.
-Choose **Unload profile** in the loaded strip to drain requests and stop the set.
+workloads. Open a profile name to view its workload states and GPU assignments.
+Choose **Edit profile** in the viewer to change its saved configuration.
+**Partially running** reports a mismatch with the loaded revision. **Saved
+changes** means a newer revision is saved. Both can apply at once.
+
+Choose **Review changes** to see which workloads will stop, start or keep running.
+Home, Profiles and the web switcher show the same review and operation details.
+**Load profile** applies the reviewed plan. Choose **Review unload** in the
+loaded strip to review stopping the set. In the web switcher, expand **Display
+controls** to access display power independently.
 Open a row's **More → Delete profile** to remove its saved definition; unload the
 loaded profile before deleting it. Delete never removes downloaded models or
 workstation home directories. **More → Duplicate** creates an editable copy with
@@ -246,3 +254,18 @@ Unique serials follow port moves; devices without serials stay bound to a port.
 The primary receives unassigned input and built-in audio. USB and display audio
 follow their assigned devices. Assignment changes may restart other desktops to
 release open device handles; Preview lists those stops before loading.
+
+## Serving context and T3 model discovery
+
+The profile editor exposes **Serving context (tokens)** for llama.cpp and vLLM.
+Leaving it blank preserves the recipe's configured limit; setting a value replaces
+the serving flag and changes workload identity. Unload and reload the saved profile
+to apply it. Larger contexts require more memory.
+
+**Use Xur models in T3** reads the IDs served by the running workload. A single ID
+is shown directly; multiple served IDs can be selected. Discovery accepts current
+OpenAI-style and older llama.cpp model lists, and an empty response is reported as
+unavailable. The connection context defaults to the live serving limit (llama.cpp's
+per-slot `/props` value takes precedence over metadata). It never assumes the
+training context is available. An explicit override cannot exceed that serving
+limit; when the server reports no limit, enter its configured limit manually.

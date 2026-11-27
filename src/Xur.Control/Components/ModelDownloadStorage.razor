@@ -1,0 +1,35 @@
+@inject Appliance Device
+@if(locations is {} storage)
+{
+    var group=storage.Groups.Single(g=>g.Id=="models");
+    <details class="panel" id="data-storage">
+        <summary>Model download storage</summary>
+        <p>Choose where new model downloads and the shared Unsloth/vLLM cache live. This selects one library for all profiles. Existing models are copied and verified; originals are retained. Save profile edits before changing storage.</p>
+        <form data-group="models" method="post">
+            <AntiforgeryToken />
+            <label for="model-download-location">Download location</label><select id="model-download-location" name="destination" disabled="@storage.Busy">
+                <option value="inherit" selected="@(group.Selection=="inherit")">Use default data drive</option>
+                <option value="system" selected="@(group.Selection=="system")">System disk</option>
+                @foreach(var drive in storage.Drives)
+                { <option value="@drive.Uuid" selected="@(group.Selection==drive.Uuid)">@drive.Source · @drive.Path</option> }
+                @foreach(var share in storage.NetworkShares??[])
+                { <option value="@share.Connection.Id" selected="@(group.Selection==share.Connection.Id)" disabled="@share.Connection.ReadOnly">@share.Connection.Name · Network share @(share.Connection.ReadOnly?"· Read only":"")</option> }
+                @if(group.Selection is not ("system" or "inherit") && !storage.Drives.Any(d=>d.Uuid==group.Selection) && !(storage.NetworkShares??[]).Any(c=>c.Connection.Id==group.Selection))
+                { <option value="@group.Selection" selected>Unavailable storage · @group.Selection</option> }
+            </select>
+            <button type="submit" class="secondary" disabled="@storage.Busy">Unload profile and change storage</button>
+        </form>
+        @foreach(var path in group.Paths) { <p><a href="@StorageFiles.Url(path)"><code>@path</code></a></p> }
+        <p role="status" id="storage-move-status">@(group.Error??storage.Job?.Message)</p>
+        <p><a href="/storage/network">Connect a writable network share</a> · <a href="/storage#data-storage">Manage storage</a>. Disable T3 Code before moving storage if it is running.</p>
+        <script src="/storage-locations.js" defer></script>
+    </details>
+}
+@code {
+    DataStorageStatus? locations;
+    protected override async Task OnInitializedAsync()
+    {
+        if(Device.Installer)return;
+        try{locations=await Device.Agent.GetFromJsonAsync<DataStorageStatus>("/storage/locations");}catch{}
+    }
+}

@@ -16,7 +16,7 @@ public static class NetworkShareEndpoints
         app.MapGet("/storage/network",()=>Safe(async()=>await shares.Status(),false));
         app.MapPost("/storage/network/runtime",()=>Safe(async()=>{await shares.InstallRuntime();return new{accepted=true};},false));
         app.MapPost("/storage/network/connections",(SmbConnectionRequest r)=>Safe(async()=>await shares.AddConnection(r)));
-        app.MapPost("/storage/network/connections/action",(SmbAction r)=>Safe(async()=>{await shares.ConnectionAction(r,workloads.SavedWorkloads());return new{success=true};}));
+        app.MapPost("/storage/network/connections/action",(SmbAction r)=>Safe(async()=>{if(r.Action is "disconnect" or "remove"&&workloads.UsesStorageConnection(r.Id))throw new InvalidOperationException("Move the model library off this connection before disconnecting or removing it.");await shares.ConnectionAction(r,workloads.SavedWorkloads());return new{success=true};}));
         app.MapPost("/storage/network/hosted",(SmbHostRequest r)=>Safe(async()=>await shares.AddHosted(r)));
         app.MapPost("/storage/network/hosted/access",(SmbShareAccess r)=>Safe(async()=>{await shares.SetAccess(r);return new{success=true};}));
         app.MapPost("/storage/network/hosted/remove",(SmbAction r)=>Safe(async()=>{await shares.RemoveHosted(r.Id);return new{success=true};}));

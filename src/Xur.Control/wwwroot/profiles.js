@@ -199,6 +199,8 @@
   row.querySelector('.recipe-label').textContent=station?'Workstation':engine==='Unsloth'?'Unsloth server':engine==='Podman'?'Container':engine==='XLeRobot'?'Robot':'Model';
   row.querySelector('.container-library-link').hidden=engine!=='Podman';
   row.querySelector('.unsloth-link').hidden=engine!=='Unsloth';
+  row.querySelector('.model-context').hidden=!['llama.cpp','vLLM'].includes(engine);
+  if(row.querySelector('.model-context').hidden)row.querySelector('[name=contextTokens]').value='';
   row.querySelector('.audio-link').hidden=engine!=='audio.cpp';
   row.querySelector('.recipe-choice').hidden=station;row.querySelector('.station-devices').hidden=!station;
   const primary=row.querySelector('.station-primary');primary.disabled=!station;if(!station)primary.checked=false;usbChoices(row);
