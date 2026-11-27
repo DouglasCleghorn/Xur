@@ -90,9 +90,11 @@ static class UnslothTests
             var hash=Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData("GGUF fixture"u8));
             var blob=Path.Combine(root,"models/huggingface/hub/models--owner--model/blobs",hash);Directory.CreateDirectory(Path.GetDirectoryName(blob)!);await File.WriteAllTextAsync(blob,"GGUF fixture");
             var asset=new ModelAsset("https://huggingface.co/owner/model/resolve/revision/model.gguf",hash,12,"upstream license","owner/model","revision");
-            check(await SharedModelCache.FindAsset(new DataStorage(root),asset)==blob,"llama.cpp downloads reuse byte-verified GGUF blobs previously fetched by Studio");
+            var imported=Path.Combine(root,"models",hash+".gguf");
+            check(await SharedModelCache.ImportAsset(new DataStorage(root),asset)==imported,"llama.cpp downloads reuse byte-verified GGUF blobs previously fetched by Studio");
             await File.WriteAllTextAsync(blob,"GGUF corrupt");
-            check(await SharedModelCache.FindAsset(new DataStorage(root),asset)==null,"A same-length corrupted shared blob is never reused");
+            check(await File.ReadAllTextAsync(imported)=="GGUF fixture","A Studio cache edit cannot change the verified runtime copy");
+            check(await SharedModelCache.ImportAsset(new DataStorage(root),asset)==null,"A same-length corrupted shared blob is never reused");
             check(recipeMountsWritable(),"Training downloads and outputs remain writable in persistent workspace and Studio mounts");
         }finally{Directory.Delete(root,true);}
         static bool recipeMountsWritable()=>UnslothWorkload.Recipe.Container!.Mounts.All(m=>!m.ReadOnly);

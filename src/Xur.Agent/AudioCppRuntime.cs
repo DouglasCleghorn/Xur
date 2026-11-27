@@ -4,7 +4,7 @@ namespace Xur.Agent;
 
 public static class AudioCppRuntime
 {
-    public static async Task<string[]> Arguments(string models,string workloadId,string[] nodes,Func<string,string[],int,Task<ProcessResult>>? execute=null)
+    public static async Task<string[]> Arguments(string models,string workloadId,string[] nodes,Func<string,string[],int,Task<ProcessResult>>? execute=null,bool networkStorage=false)
     {
         if(!Xur.Domain.ProfilePolicy.EntityIdentifier(workloadId))throw new InvalidOperationException("Invalid audio workload ID.");
         // Keep complete upstream packages together, including sidecars and model-manager
@@ -13,7 +13,7 @@ public static class AudioCppRuntime
         Directory.CreateDirectory(path);
         // The upstream image runs as ubuntu. Podman's U option gives that container
         // user ownership of this workload's directory without changing other models.
-        var args=new List<string>{"--volume",path+":/app/models:rw,Z,U","--env","HOME=/app/models",
+        var args=new List<string>{"--volume",path+(networkStorage?":/app/models:rw":":/app/models:rw,Z,U"),"--env","HOME=/app/models",
             "--env","XDG_CACHE_HOME=/app/models/.cache","--env","XDG_CONFIG_HOME=/app/models/.config"};
         // Upstream runs as a non-root user; retain access to only the assigned
         // render nodes using their host numeric groups (names differ in images).

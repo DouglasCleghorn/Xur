@@ -164,7 +164,15 @@ public sealed class DataStorage(string state,Func<string,string[],int,Task<Proce
                 await Report("Copying","Copying "+group+". Originals remain in place.");
                 Directory.CreateDirectory(destination);
                 // One invocation preserves hard links between model blobs and snapshots.
-                if(group=="models")await Checked("cp",[connection==null?"--archive":"--recursive",connection==null?"--reflink=auto":"--no-dereference","--",..sources,destination],86400,"Storage copy failed; original data remains selected.");
+                if(group=="models")
+                {
+                    // CIFS reports the mount's forced UID/GID for every entry. Do
+                    // not carry these synthetic owners back onto local storage.
+                    string[] options=connection!=null?["--recursive","--no-dereference"]
+                        :old.Locations.GetValueOrDefault(group)?.ConnectionId!=null?["--archive","--reflink=auto","--no-preserve=ownership"]
+                        :["--archive","--reflink=auto"];
+                    await Checked("cp",[..options,"--",..sources,destination],86400,"Storage copy failed; original data remains selected.");
+                }
                 else for(int i=0;i<sources.Length;i++)
                     await Checked("cp",["--archive","--reflink=auto","--",sources[i],Path.Combine(destination,Parts(group)[i])],86400,"Storage copy failed; original data remains selected.");
                 await Report("Verifying","Verifying every file in "+group+" before switching storage.");

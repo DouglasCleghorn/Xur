@@ -324,7 +324,6 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 var args=new List<string> {"create","--name",Name(w.Id),"--label","io.xur.fingerprint="+w.Fingerprint,"--label","io.xur.id="+w.Id,
                     "--pull=never","--cap-drop=ALL","--security-opt=no-new-privileges","--pids-limit=4096",(UnslothWorkload.Is(w.Recipe)||w.Recipe.Kind=="Model"&&w.Recipe.Engine is "vLLM" or "vLLM-Omni")?"--shm-size=4g":"--shm-size=1g",w.Recipe.Kind=="Model"||UnslothWorkload.Is(w.Recipe)||Persisted(w)||w.NetworkShares is {Length:>0}?"--restart=no":"--restart=unless-stopped"};
                 if(SharedModelCache.Applies(w))args.AddRange(["--label",SharedModelCache.Label+"="+SharedModelCache.Policy(w,storage)]);
-                if(storageConnections.Length>0)args.Add("--security-opt=label=disable");
                 args.AddRange(network.Arguments);
                 if(w.Recipe.Port>0)args.AddRange(["--publish",T3CodeWorkload.Is(w.Recipe)?$"{T3CodeWorkload.HostPort}:{w.Recipe.Port}":UnslothWorkload.Is(w.Recipe)?UnslothWorkload.Publish:"127.0.0.1::"+w.Recipe.Port]);
                 if(w.Recipe.Container is {} container)
@@ -341,7 +340,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
                 else args.AddRange(["--volume","xur-cache-"+w.Id+":/root/.cache:Z"]);
                 if(UnslothWorkload.Is(w.Recipe))args.AddRange(UnslothRuntime.ModelArguments(Path.GetDirectoryName(directory)!,part=>storage.PathFor("models",part),storage.Config().Locations.GetValueOrDefault("models")?.ConnectionId!=null));
                 if(w.Recipe.Kind=="Model"&&w.Recipe.Hub!=null)args.AddRange(SharedModelCache.Arguments(storage));
-                if(w.Recipe.Engine=="audio.cpp")args.AddRange(await AudioCppRuntime.Arguments(storage.PathFor("models","models"),w.Id,selected.SelectMany(g=>g.Nodes).Distinct().ToArray()));
+                if(w.Recipe.Engine=="audio.cpp")args.AddRange(await AudioCppRuntime.Arguments(storage.PathFor("models","models"),w.Id,selected.SelectMany(g=>g.Nodes).Distinct().ToArray(),networkStorage:storageConnections.Length>0));
                 args.AddRange(TimezoneSettings.ContainerArguments());
                 if(w.Recipe.Kind=="Model" && w.Recipe.Hub!=null)args.AddRange(new HuggingFaceCredentials(Path.GetDirectoryName(directory)!).ContainerArguments());
                 args.AddRange(T3CodeWorkload.Is(w.Recipe)?await T3CodeGpuAccess.Arguments(observed.Gpus):ModelGpuArguments.For(w,observed.Gpus));
@@ -465,7 +464,7 @@ public sealed class WorkloadRuntime(string directory,RecipeCatalog catalog,Displ
         var path=Path.Combine(models,model.Sha256+".gguf");
         if(File.Exists(path) && new FileInfo(path).Length==model.Bytes)
         {await using var existing=File.OpenRead(path);if(Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(existing))==model.Sha256)return path;}
-        if(await SharedModelCache.FindAsset(storage,model) is {} shared)return shared;
+        if(await SharedModelCache.ImportAsset(storage,model) is {} shared)return shared;
         DataStorage.CheckCapacity(models,model.Bytes);
         using var timeout=new CancellationTokenSource(TimeSpan.FromHours(6));
         using var http=new HttpClient {Timeout=TimeSpan.FromHours(6)};

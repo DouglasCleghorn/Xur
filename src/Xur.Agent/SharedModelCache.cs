@@ -10,7 +10,7 @@ public static class SharedModelCache
         Models=storage.PathFor("models","models"),Sets=storage.PathFor("models","model-sets"),
         Studio=UnslothWorkload.Is(workload.Recipe)?new[]{storage.PathFor("unsloth","workspace"),storage.PathFor("unsloth","studio")}:[]});
     public static bool Applies(Workload workload)=>UnslothWorkload.Is(workload.Recipe)||workload.Recipe.Kind=="Model";
-    public static async Task<string?> FindAsset(DataStorage storage,ModelAsset asset)
+    public static async Task<string?> ImportAsset(DataStorage storage,ModelAsset asset)
     {
         if(!System.Text.RegularExpressions.Regex.IsMatch(asset.Sha256,@"\A[a-f0-9]{64}\z"))return null;
         if(!Uri.TryCreate(asset.Url,UriKind.Absolute,out var url)||url.Host!="huggingface.co")return null;
@@ -27,8 +27,22 @@ public static class SharedModelCache
             if(entry.FullName==root)break;
         }
         if(new FileInfo(blob).Length!=asset.Bytes)return null;
-        await using var stream=File.OpenRead(blob);
-        return Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(stream))==asset.Sha256?blob:null;
+        // Publish an independent inode. Studio may replace or modify its writable
+        // cache while a different runtime is serving the imported model.
+        var models=storage.PathFor("models","models");
+        DataStorage.CheckCapacity(models,asset.Bytes);
+        var target=Path.Combine(models,asset.Sha256+".gguf");
+        var temporary=target+"."+Guid.NewGuid().ToString("N")+".partial";
+        try
+        {
+            var copy=await Processes.Run("cp",["--reflink=auto","--no-dereference","--",blob,temporary],86400);
+            if(copy.ExitCode!=0||new FileInfo(temporary).LinkTarget!=null)return null;
+            await using(var stream=File.OpenRead(temporary))
+                if(stream.Length!=asset.Bytes||Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(stream))!=asset.Sha256)return null;
+            File.Move(temporary,target,true);
+            return target;
+        }
+        finally{File.Delete(temporary);}
     }
     public static string[] Arguments(DataStorage storage,string destination="/root/.cache/huggingface")
     {

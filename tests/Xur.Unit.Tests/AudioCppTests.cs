@@ -29,7 +29,8 @@ static class AudioCppTests
             var args=await AudioCppRuntime.Arguments(root,"audio-test",["/dev/dri/renderD128"],(exe,a,seconds)=>Task.FromResult(new ProcessResult(0,"109\n")));
             var path=Path.Combine(root,"audio.cpp","audio-test");File.WriteAllText(Path.Combine(path,"package.gguf"),"fixture");
             check(args.Contains(path+":/app/models:rw,Z,U")&&args.Contains("109"),"Audio model storage is writable by the upstream user and GPU groups are numeric");
-            await AudioCppRuntime.Arguments(root,"audio-test",[]);
+            var smb=await AudioCppRuntime.Arguments(root,"audio-test",[],networkStorage:true);
+            check(smb.Contains(path+":/app/models:rw"),"SMB model mounts use the share group and mount context without chown or relabel");
             check(File.ReadAllText(Path.Combine(path,"package.gguf"))=="fixture","Audio packages survive repeated container preparation");
             var failed=false;try{await AudioCppRuntime.Arguments(root,"audio-test",["/missing"],(exe,a,seconds)=>Task.FromResult(new ProcessResult(1,"")));}catch(InvalidOperationException){failed=true;}
             check(failed,"Missing GPU permissions fail explicitly");

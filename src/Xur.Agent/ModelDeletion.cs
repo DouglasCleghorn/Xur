@@ -14,7 +14,13 @@ public sealed partial class ModelLibrary
         if(!Path.IsPathFullyQualified(path)||Path.GetFullPath(path)!=path)
             throw new InvalidOperationException("Mount this storage first. Only models in Xur-managed storage can be deleted here.");
         string target=path;
-        if(!Within(path,ModelsRoot)&&!Within(path,SetsRoot))
+        var hub=Path.Combine(ModelsRoot,"huggingface","hub");
+        if(Within(path,hub))
+        {
+            var repo=Path.GetRelativePath(hub,path).Split('/')[0];
+            if(repo.StartsWith("models--",StringComparison.Ordinal))target=Path.Combine(hub,repo);
+        }
+        else if(!Within(path,ModelsRoot)&&!Within(path,SetsRoot))
         {
             var relative=Path.GetRelativePath(volumes,path).Split('/');
             if(relative.Length<4||!relative[0].StartsWith("xur-cache-",StringComparison.Ordinal)||relative[1]!="_data"||!Within(path,volumes))

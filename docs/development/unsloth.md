@@ -108,8 +108,9 @@ mounted or formatted by the tests.
 Studio's runtime overrides `HF_HOME` and `HF_HUB_CACHE` with the writable shared
 cache at `/shared-models/huggingface`, backed by `<models>/huggingface`. The built-in
 recipe remains compatible with existing saved profiles and volumes. vLLM mounts
-the same directory and Xur checks matching HF GGUF blobs by size and SHA-256 before
-reusing them. The immutable Xur blob/snapshot mounts remain read-only; dataset and
+the same directory. For GGUF, Xur copies a matching cached blob into the managed
+library, using a reflink when available, and verifies its size and SHA-256 before
+publishing it. Later Studio writes cannot change that copy. The immutable Xur blob/snapshot mounts remain read-only; dataset and
 training output writes belong in `/workspace`. Legacy workspace downloads remain
 available there, without rewriting or deleting them.
 
