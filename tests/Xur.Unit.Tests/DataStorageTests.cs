@@ -88,7 +88,39 @@ static class DataStorageTests
             check((await f.Storage.Status()).Job?.Stage=="Interrupted"&&!f.Storage.Selected("models"),"An interrupted process reports the unfinished move and keeps original locations");
             await Reject(()=>f.Storage.Move(new("default","../../wrong")),"Storage requests cannot supply arbitrary paths",check);
         }
+        await NetworkStorage(check);
         await Reject(()=>{DataStorage.CheckAvailable(20L<<30,19L<<30);return Task.CompletedTask;},"Download capacity reserves working space",check);
+    }
+    static async Task NetworkStorage(Action<bool,string> check)
+    {
+        using var f=new Fixture();var offline=false;var wrong=false;var readOnlyMount=false;var legacy=false;
+        const string id="smb-11111111111111111111111111111111";
+        var connection=new SmbConnection(id,"Models","nas.test","models","user","",1000,1000,ReadOnly:false);
+        Directory.CreateDirectory(f.Root+"/state/network-shares");
+        void Save(SmbConnection c)=>File.WriteAllText(f.Root+"/state/network-shares/settings.json",JsonSerializer.Serialize(new{Server=new SmbServerSettings(),Hosted=Array.Empty<SmbHostedShare>(),Connections=new[]{c}}));
+        Save(connection);
+        async Task<ProcessResult> Run(string exe,string[] args,int seconds)
+        {
+            if(exe=="systemd-escape")return new(0,"network.mount");
+            if(exe=="systemctl")return new(0,"");
+            if(exe=="podman")return new(offline?1:0,"");
+            if(exe=="findmnt"&&args.Contains("--mountpoint"))return new(0,JsonSerializer.Serialize(new{filesystems=new[]{new{source=wrong?"//other/share":"//nas.test/models",fstype="cifs",options=legacy?"rw,vers=3":readOnlyMount?"ro,vers=3,mfsymlinks":"rw,vers=3,mfsymlinks"}}}));
+            return await f.Run(exe,args,seconds);
+        }
+        var shares=new NetworkShares(f.Root+"/state",f.Root+"/units",f.Root+"/network",Run);
+        Directory.CreateDirectory(shares.MountPath(id));
+        var storage=new DataStorage(f.Root+"/state",Run,f.Root+"/mounts",f.Root+"/volumes",_=>100L<<30,shares);
+        await storage.Move(new("models",id));await storage.Require("models");
+        check(storage.Config().Locations["models"].ConnectionId==id&&File.ReadAllText(storage.PathFor("models","models")+"/blob.gguf")=="model bytes","A writable SMB connection can hold the verified model library");
+        check(storage.StorageConnections().SequenceEqual(new[]{id})&&(await storage.Status()).NetworkShares!.Single().Connection.Id==id,"Selected network storage exposes its persistent connection identity for startup and the picker");
+        offline=true;await Reject(()=>storage.Require("models"),"Offline model shares fail closed without using system storage",check);offline=false;
+        wrong=true;await Reject(()=>storage.Require("models"),"An unrelated filesystem at the SMB mount is rejected",check);wrong=false;
+        legacy=true;await Reject(()=>storage.Require("models"),"Legacy SMB mounts require reconnection before writing any model files",check);legacy=false;
+        readOnlyMount=true;await Reject(()=>storage.Require("models"),"A share remounted read-only blocks model startup",check);readOnlyMount=false;
+        Save(connection with{ReadOnly=true});await Reject(()=>storage.Require("models"),"Read-only network connections cannot receive model downloads",check);Save(connection);
+        await Reject(()=>storage.Move(new("default",id)),"Network model storage does not move Studio accounts onto SMB",check);
+        await storage.Move(new("models","system"));await storage.Require("models");
+        check(storage.StorageConnections().Length==0&&File.Exists(storage.PathFor("models","models")+"/blob.gguf"),"Models can move back from SMB while retaining the original share copy");
     }
     static async Task Reject(Func<Task> action,string name,Action<bool,string> check)
     {var failed=false;try{await action();}catch(InvalidOperationException){failed=true;}check(failed,name);}
@@ -109,7 +141,7 @@ static class DataStorageTests
             File.WriteAllText(Root+"/volumes/"+UnslothWorkload.Mounts[1].Volume+"/_data/settings.json","studio settings");
             Storage=new(Root+"/state",Run,Root+"/mounts",Root+"/volumes",_=>Free);
         }
-        async Task<ProcessResult> Run(string exe,string[] args,int seconds)
+        public async Task<ProcessResult> Run(string exe,string[] args,int seconds)
         {
             if(exe=="findmnt")return new(0,JsonSerializer.Serialize(new{filesystems=Present&&Mounted?new[]{new Dictionary<string,object>{{"source","/dev/fake"},{"target",Root+"/mounts/"+Uuid},{"fstype","ext4"},{"size",200L<<30},{"used",10L<<30},{"avail",Free},{"options",ReadOnly?"ro":"rw"},{"maj:min","9:1"}}}:[]}));
             if(exe=="lsblk")return new(0,JsonSerializer.Serialize(new{blockdevices=new[]{new Dictionary<string,object>{{"path","/dev/fake"},{"uuid",WrongIdentity?"c333-d444":Uuid},{"rota",false},{"disc-max",1000},{"maj:min","9:1"}}}}));

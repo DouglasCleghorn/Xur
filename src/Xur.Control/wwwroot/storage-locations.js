@@ -21,6 +21,8 @@
   event.preventDefault();disable(true);
   try{
    const before=await api('storage/locations');if(before.busy)throw Error('A storage move is already running. Refresh to check its status.');
+   const service=await api('t3-code/status');
+   if(service.enabled||service.state==='Running')throw Error('Disable T3 Code before moving storage.');
    const current=await api('profiles'),reload=current.active?.id;
    if(current.active||current.runtime?.instances?.length){
     status.textContent='Unloading the profile before moving storage…';

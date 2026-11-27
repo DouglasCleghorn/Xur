@@ -5,6 +5,9 @@ window.runDisplayPowerChecks=async()=>{
  const open=document.querySelector('[data-profile-switcher-open]');open.click();await wait(()=>displays.querySelectorAll('button').length===6);
  check(displays.querySelectorAll('button:disabled').length===2,'Unsupported display on/off controls are disabled');
  check(displays.textContent.includes('Example TV')&&displays.textContent.includes('Desk TV')&&displays.textContent.includes('Office monitor'),'Web overlay lists each connected display');
+ const disclosure=document.querySelector('#switcher-display-controls');
+ check(!disclosure.open,'Display controls start collapsed');
+ disclosure.querySelector('summary').click();
  let button=displays.querySelector('button[aria-label="CEC screen off: Desk TV"]');button.click();
  await wait(()=>document.getElementById('switcher-error').textContent.includes('acknowledged'));
  let requests=(await (await fetch('/test/state')).json()).requests;
@@ -15,6 +18,8 @@ window.runDisplayPowerChecks=async()=>{
  check(displays.querySelectorAll('button:disabled').length===2,'Failed CEC request displays the error and permits retry');
  await fetch('/test/mode?value=normal');
  const lastProfile=document.querySelector('#switcher-profiles button:not(:disabled):last-child');lastProfile.focus();
+ document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
+ check(document.activeElement===disclosure.querySelector('summary'),'Arrow/D-pad navigation reaches the display disclosure');
  document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
  check(document.activeElement===displays.querySelector('button:not(:disabled)'),'Arrow/D-pad navigation reaches CEC controls after profiles');
  check(document.documentElement.scrollWidth<=innerWidth+1,'Display controls fit the viewport');

@@ -19,7 +19,7 @@ const fs=require('node:fs');
   }
   const section=id=>page.locator(`article[data-profile="${id}"]`);
   async function apply(id){
-   await section(id).getByRole('button',{name:'Load profile',exact:true}).click();
+   await section(id).getByRole('button',{name:'Review changes',exact:true}).click();await page.waitForURL('**/profiles/review?*');await page.getByRole('button',{name:'Load profile',exact:true}).click();
    await page.waitForURL(base+'/profiles');
    return completed();
   }

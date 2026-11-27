@@ -13,7 +13,7 @@
   let find;let roots=[],selected=null,path='',version=0,rows=[],request,sizeTimer,sizeBusy=false,menu=null,truncated=false,folderSize=null,refreshSizes=false;
   const endpoint=storage?'/api/storage/files':'/api/files';
   const url=(action,target=path,extra={},location=selected)=>endpoint+'/'+action+'?'+new URLSearchParams({[storage?'id':'user']:location?.[storage?'id':'username']||'',path:target,...extra});
-  function folderUrl(location,folder){const u=new URL(window.location.href);u.searchParams.set('tab',storage?'storage':'workstation');for(const key of storage?['mount','folder']:['user','path'])u.searchParams.delete(key);if(location){u.searchParams.set(storage?'mount':'user',location[storage?'id':'username']);u.searchParams.set(storage?'folder':'path',folder);}return u.href;}
+  function folderUrl(location,folder){const u=new URL(window.location.href);u.searchParams.set('tab',storage?'storage':'workstation');for(const key of storage?['mount','folder','location']:['user','path'])u.searchParams.delete(key);if(location){u.searchParams.set(storage?'mount':'user',location[storage?'id':'username']);u.searchParams.set(storage?'folder':'path',folder);}return u.href;}
   const folderLink=(name,location,folder,cls)=>window.xurFileLink(name,folderUrl(location,folder),e=>open(location,folder,true,false,e.detail===0),cls);
   const target=row=>path?path+'/'+row.name:row.name;
   const absolute=relative=>(selected?.[storage?'path':'home']||'/home/'+selected?.username).replace(/\/$/,'')+(relative?'/'+relative:'')||'/';
@@ -104,7 +104,19 @@
   root.querySelector('#'+prefix+'-refresh').onclick=()=>open(selected,path,false,storage);
   find=button('Find name on server',async()=>{if(!selected)return;const gen=version;try{const d=await get(url('list',path,{q:search.value}));if(gen!==version)return;rows=d.entries.map(r=>storage&&r.kind==='file'?{...r,bytes:r.allocated??null}:r);truncated=d.truncated;grid.setGridOption('rowData',rows);report();scheduleSizes();}catch(e){status.textContent=e.message;}},'quiet');find.hidden=true;find.title='Search file names beyond the first 500 entries';root.querySelector('.file-toolbar').append(find);
   new MutationObserver(()=>{if(!root.hidden){grid.refreshHeader();scheduleSizes();}}).observe(root,{attributes:true,attributeFilter:['hidden']});
-  async function restore(){const q=new URLSearchParams(location.search);selected=roots.find(r=>r[storage?'id':'username']===q.get(storage?'mount':'user'))||(storage?null:roots[0]);if(user)user.value=selected?.username||'';await open(selected,q.get(storage?'folder':'path')||'',false);}
+  async function restore(){
+   const q=new URLSearchParams(location.search),requested=storage?q.get('location'):null;
+   let folder=q.get(storage?'folder':'path')||'';
+   if(requested){
+    const managed=requested.match(/^\/var\/mnt\/(?:xur|xur-smb)\/[^/]+/)?.[0];
+    const devicePath=/^\/dev\/[^:]+:(?:\/|$)/.test(requested);
+    selected=devicePath?null:roots.filter(r=>(!managed||r.path===managed||r.path.startsWith(managed+'/'))&&
+     (requested===r.path||requested.startsWith(r.path.replace(/\/$/,'')+'/'))).sort((a,b)=>b.path.length-a.path.length)[0];
+    if(!selected){rows=[];grid.setGridOption('rowData',[]);nav.replaceChildren();folderSize=null;reportTotal();status.textContent='This storage location is not mounted. Connect its drive or network share, then refresh.';return;}
+    folder=requested.slice(selected.path.replace(/\/$/,'').length).replace(/^\//,'');
+   }else selected=roots.find(r=>r[storage?'id':'username']===q.get(storage?'mount':'user'))||(storage?null:roots[0]);
+   if(user)user.value=selected?.username||'';await open(selected,folder,false);
+  }
   window.addEventListener('popstate',restore);
   try{roots=await get(storage?'/api/storage/mounts':'/api/files/roots');if(user){user.replaceChildren(...roots.map(u=>new Option(u.name+' · '+u.username,u.username)));user.onchange=()=>open(roots.find(r=>r.username===user.value),'');if(!roots.length){status.textContent='No workstation users yet. Add one in Profiles.';return;}}await restore();}catch(e){status.textContent=e.message;}
  };

@@ -56,6 +56,7 @@ public sealed class T3Storage(string state,DataStorage storage)
         return labels.TryGetProperty(Label,out var label)&&label.GetString()==expected
             ?T3CodeRuntime.Fingerprint(workload,labels):Canonical.Hash(new{Workload=workload.Fingerprint,Storage=expected,Stale=true});
     }
+    public Task<string[]> ModelMountUnits()=>Task.WhenAll(storage.StorageConnections().Select(storage.NetworkShares.Unit));
     public async Task<string[]> Arguments()
     {
         var config=Read();var args=new List<string>{"--label",Label+"="+PolicyFor(config)};

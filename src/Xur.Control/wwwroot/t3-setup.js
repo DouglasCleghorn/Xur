@@ -104,6 +104,7 @@
  async function models(){
   if(modelsBusy||connecting)return;modelsBusy=true;
   try{
+   if(modelList.contains(document.activeElement))return;
    const data=await api('models');const signature=JSON.stringify([data,running]);if(signature===previous)return;previous=signature;modelList.replaceChildren();
    modelStatus.textContent=data.models.length?'Choose a model below. Availability refreshes every 15 seconds.':'No saved language models. Add one to a profile first.';
    for(const model of data.models){
@@ -111,10 +112,14 @@
     if(model.profiles.length)row.append(el('p','Profiles: '+model.profiles.join(', '),'secondary-text'));
     if(model.error)row.append(el('p',model.error));
     if(model.state==='Ready'&&model.modelIds.length){
-     const modelLabel=el('label','Served model'),select=el('select');for(const id of model.modelIds){const option=el('option',id);option.value=id;select.append(option);}modelLabel.append(select);
+     const modelLabel=el('label','Served model'),select=el(model.modelIds.length===1?'input':'select');
+     if(model.modelIds.length===1){select.value=model.modelIds[0];select.readOnly=true;}
+     else for(const id of model.modelIds)select.add(new Option(id,id));
+     modelLabel.append(select);
      const harnessLabel=el('label','Harness'),harness=el('select');for(const [id,title] of [['opencode','OpenCode'],['codex','Codex']]){const option=el('option',title);option.value=id;harness.append(option);}harnessLabel.append(harness);
-     const contextLabel=el('label','Context limit (tokens)'),context=el('input');context.type='number';context.min='1024';context.max='2097152';context.required=true;context.placeholder='Serving limit';context.value=model.contextLimits?.[select.value]||'';contextLabel.append(context);
-     select.onchange=()=>context.value=model.contextLimits?.[select.value]||'';
+     const contextLabel=el('label','Context limit (tokens)'),context=el('input');context.type='number';context.min='1024';context.max='2097152';const contextHelp=el('small');contextLabel.append(context,contextHelp);
+     function servingLimit(){const limit=model.contextLimits?.[select.value]||0;context.max=String(limit||2097152);context.required=!limit;context.value='';context.placeholder=limit?'Automatic · '+limit.toLocaleString():'Enter serving limit';contextHelp.textContent=limit?'Defaults to the running model’s '+limit.toLocaleString()+'-token serving limit. Change serving context in the profile editor and reload to increase it.':'This server did not report its context. Enter its configured serving limit.';}
+     select.onchange=servingLimit;servingLimit();
      const button=el('button','Connect to T3'),result=el('p');result.setAttribute('role','status');button.type='button';button.disabled=!running;
      const fields=el('div',null,'t3-model-fields');fields.append(modelLabel,harnessLabel,contextLabel,button);row.append(fields,result);
      button.onclick=async()=>{

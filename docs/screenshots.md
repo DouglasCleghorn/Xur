@@ -7,6 +7,35 @@
   Privacy review found only fixture state and the inert sample code DEMO-CODE.
   Regenerate after changes to GitHub CLI setup.
 
+- 2026-11-23: Seven-page before-and-after design review of the working tree based on
+  `372413b`. Private captures under `.build/evidence/design-review/pairs/` use
+  `{storage,files,network-shares,unsloth,models,t3-code,home}-{mobile,desktop}-{before,after}.png`.
+  The associated working contact sheet is `contact.jpg`. The gallery compares
+  initial viewports at 390 × 844 and 1280 × 800. Before images use rendered
+  Razor fixtures with synthetic API responses. After images use static design
+  proposals for the same states. Privacy reviewed for synthetic paths, file
+  names, capacities and model IDs. No live accounts or appliance data.
+
+- 2026-11-23: Mobile comparison of the working tree and proposed layouts based on
+  `372413b`. Six private 390 × 844 screenshots in `.build/evidence/design-review/`
+  use `{t3,models,control-panel}-mobile-{current,proposed}.png`. Purpose: compare
+  first-screen actions and model storage visibility. Privacy review: local fixtures
+  and synthetic workload, account and share states only. Not distributed.
+
+- 2026-11-23: UI review proposals for the checkout based on `372413b`.
+  Private screenshots under `.build/evidence/design-review/` are `control-panel.png`,
+  `models.png` and `t3.png`. These illustrate proposed layouts with synthetic
+  workload names, storage paths, capacities and connection states. Privacy
+  review: no live appliance data, credentials or personal information.
+
+- 2026-11-14: Regenerated the private Files grid capture family under
+  `.build/evidence/files-grid/files-{1440,390}.png` and
+  `storage-{1440,390}.png`, from the working tree based on `372413b`.
+  Purpose: regression checks for storage folder links and mount resolution,
+  alongside existing responsive file navigation and usage views. Privacy review:
+  synthetic paths, capacities and file names only; no live files or credentials.
+  Supersedes the 2026-10-31 Files capture family. Not published or shipped.
+
 - 2026-10-31: Retired the connection controls shown in the T3 Code validation
   families dated 2026-10-17, 2026-10-21 and 2026-10-24 below. The page now guides
   users to pair the installed app using Copy link or the QR code; the browser

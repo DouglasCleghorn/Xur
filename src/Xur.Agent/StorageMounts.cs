@@ -17,7 +17,7 @@ public static class StorageMounts
     {
         using var fs=JsonDocument.Parse(mounts);using var dev=JsonDocument.Parse(disks);
         var nodes=dev.RootElement.GetProperty("blockdevices").EnumerateArray().ToArray();
-        return fs.RootElement.GetProperty("filesystems").EnumerateArray().Where(e=>S(e,"source").StartsWith("/dev/")&&S(e,"target").StartsWith('/')&&N(e,"size")>0).Select(e=>{
+        return fs.RootElement.GetProperty("filesystems").EnumerateArray().Where(e=>(S(e,"source").StartsWith("/dev/")||S(e,"fstype") is "cifs" or "nfs" or "nfs4")&&S(e,"target").StartsWith('/')&&N(e,"size")>0).Select(e=>{
             var node=nodes.FirstOrDefault(n=>S(n,"maj:min")==S(e,"maj:min"));
             var known=node.ValueKind==JsonValueKind.Object;var uuid=known?S(node,"uuid"):"";
             var source=S(e,"source");var path=S(e,"target");var type=S(e,"fstype");var opts=S(e,"options").Split(',');

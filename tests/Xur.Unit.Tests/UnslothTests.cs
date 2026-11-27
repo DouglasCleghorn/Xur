@@ -84,6 +84,17 @@ static class UnslothTests
         {
             var args=UnslothRuntime.ModelArguments(root);
             check(args.Contains(root+"/models:/models:ro,z")&&args.Contains(root+"/model-sets:/model-sets:ro,z"),"Existing Xur downloads and snapshots are shared read-only without private SELinux relabeling");
+            check(args.Contains(root+"/models/huggingface:/shared-models/huggingface:rw,z")&&args.Contains("HF_HOME=/shared-models/huggingface"),"Studio downloads use the shared model cache with its native environment override");
+            var cache=SharedModelCache.Arguments(new DataStorage(root));
+            check(cache.Contains(root+"/models/huggingface:/root/.cache/huggingface:rw,z"),"vLLM and Studio mount the same host Hugging Face cache without moving credentials");
+            var hash=Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData("GGUF fixture"u8));
+            var blob=Path.Combine(root,"models/huggingface/hub/models--owner--model/blobs",hash);Directory.CreateDirectory(Path.GetDirectoryName(blob)!);await File.WriteAllTextAsync(blob,"GGUF fixture");
+            var asset=new ModelAsset("https://huggingface.co/owner/model/resolve/revision/model.gguf",hash,12,"upstream license","owner/model","revision");
+            var imported=Path.Combine(root,"models",hash+".gguf");
+            check(await SharedModelCache.ImportAsset(new DataStorage(root),asset)==imported,"llama.cpp downloads reuse byte-verified GGUF blobs previously fetched by Studio");
+            await File.WriteAllTextAsync(blob,"GGUF corrupt");
+            check(await File.ReadAllTextAsync(imported)=="GGUF fixture","A Studio cache edit cannot change the verified runtime copy");
+            check(await SharedModelCache.ImportAsset(new DataStorage(root),asset)==null,"A same-length corrupted shared blob is never reused");
             check(recipeMountsWritable(),"Training downloads and outputs remain writable in persistent workspace and Studio mounts");
         }finally{Directory.Delete(root,true);}
         static bool recipeMountsWritable()=>UnslothWorkload.Recipe.Container!.Mounts.All(m=>!m.ReadOnly);

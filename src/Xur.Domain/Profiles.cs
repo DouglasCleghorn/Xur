@@ -5,10 +5,10 @@ public record Recipe(string Id,string Name,string Image,string[] Command,int Por
 public record ModelAsset(string Url,string Sha256,long Bytes,string License,string Upstream,string Revision);
 public record ModelFile(string Name,ModelAsset Asset);
 public record HubModel(string Repository,string Revision,string License);
-public record Workload(string Id,string Name,Recipe Recipe,string[] Gpus,string Route,StationUser? User=null,StationDevices? Devices=null,NetworkShareMount[]? NetworkShares=null)
+public record Workload(string Id,string Name,Recipe Recipe,string[] Gpus,string Route,StationUser? User=null,StationDevices? Devices=null,NetworkShareMount[]? NetworkShares=null,int? ContextTokens=null)
 {
     // Display names and routes do not change the runtime. GPU order defines tensor rank.
-    public string Fingerprint => NetworkShares is {Length:>0} ? Canonical.Hash(new{Runtime=RuntimeFingerprint,NetworkShares=NetworkShares.OrderBy(m=>m.ConnectionId,StringComparer.Ordinal).ToArray()}) : RuntimeFingerprint;
+    public string Fingerprint => ContextTokens!=null?Canonical.Hash(new{Runtime=RuntimeFingerprint,NetworkShares=(NetworkShares??[]).OrderBy(m=>m.ConnectionId,StringComparer.Ordinal).ToArray(),ContextTokens}):NetworkShares is {Length:>0} ? Canonical.Hash(new{Runtime=RuntimeFingerprint,NetworkShares=NetworkShares.OrderBy(m=>m.ConnectionId,StringComparer.Ordinal).ToArray()}) : RuntimeFingerprint;
     [System.Text.Json.Serialization.JsonIgnore] public string RuntimeFingerprint => (T3CodeWorkload.Is(Recipe) || UnslothWorkload.Is(Recipe)) ? Canonical.Hash(new{Recipe.Engine,Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Container,Gpus}) : Recipe.Kind=="Container" ? Canonical.Hash(new{Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Container,Gpus}) : Recipe.Kind=="Workstation" ? Devices?.Controllers is {Length:>0} ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User,Devices=new{Devices.Primary,Usb=(Devices.Usb??[]).Order(StringComparer.Ordinal).ToArray(),Controllers=Devices.Controllers.Order(StringComparer.Ordinal).ToArray()}}) : Devices!=null ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User,Devices=new{Devices.Primary,Usb=(Devices.Usb??[]).Order(StringComparer.Ordinal).ToArray()}}) : User==null ? Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus}) : Canonical.Hash(new{Recipe.Kind,Recipe.Image,Gpus,User}) : Recipe.Files==null && Recipe.Hub==null
         ? Canonical.Hash(new { Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Vendor,Recipe.GpuCount,Recipe.MemoryMiB,Recipe.Model,Gpus })
         : Canonical.Hash(new {Recipe.Image,Recipe.Command,Recipe.Port,Recipe.HealthPath,Recipe.Vendor,Recipe.GpuCount,Recipe.MemoryMiB,Files=Recipe.Files?.Select(f=>new{f.Name,f.Asset.Sha256,f.Asset.Bytes}).ToArray(),Hub=Recipe.Hub==null?null:new{Recipe.Hub.Repository,Recipe.Hub.Revision},Gpus});
@@ -68,6 +68,7 @@ public static class ProfilePolicy
                 throw new InvalidOperationException("Workload IDs and routes must be unique lowercase names.");
             ValidateRecipe(w.Recipe);
             NetworkSharePolicy.Validate(w);
+            ModelContext.Validate(w);
             if(w.User is {} user && (w.Recipe.Kind!="Workstation" || (user.Temporary ? user.Username!="temporary" || user.Uid!=0 : !UserName(user.Username) || user.Uid<1000 || user.Uid>=65534)))throw new InvalidOperationException("Select a workstation user.");
             if(w.Gpus.Length!=w.Recipe.GpuCount)throw new InvalidOperationException($"{w.Name} needs {w.Recipe.GpuCount} GPUs.");
             foreach(var pci in w.Gpus)

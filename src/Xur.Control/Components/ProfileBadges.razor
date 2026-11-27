@@ -1,0 +1,14 @@
+@if (State.Active?.Id == Profile.Id)
+{
+    var label = ProfileDisplay.RuntimeLabel(State);
+    <span class="state-label @(label == "Loaded" ? "running" : "pending")">@label</span>
+    @if (State.Active.Revision != Profile.Revision)
+    {
+        <span class="state-label pending">Saved changes</span>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public Profile Profile { get; set; } = default!;
+    [Parameter, EditorRequired] public ProfileState State { get; set; } = default!;
+}

@@ -27,6 +27,9 @@ static class ModelDeletionTests
             File.CreateSymbolicLink(Path.Combine(second,"model.safetensors"),"../../blobs/weights");
             // Recursive deletion must unlink a child link, never its outside target.
             Directory.CreateSymbolicLink(Path.Combine(repository,"outside-link"),Path.GetDirectoryName(outside)!);
+            var sharedRepo=Path.Combine(models,"huggingface","hub","models--shared--fixture");
+            var sharedSnapshot=Path.Combine(sharedRepo,"snapshots","rev");
+            Write(Path.Combine(sharedSnapshot,"model.safetensors"));
             var prior=new ModelScanStatus(null,false,[new("External",outside,"GGUF",11,1,"Attached storage"),new("Traversal",traversal,"GGUF",11,1,"Xur model storage")],[],[]);
             File.WriteAllText(Path.Combine(state,"model-library.json"),JsonSerializer.Serialize(prior));
             var library=new ModelLibrary(state,volumes:volumes);library.Load();
@@ -41,6 +44,7 @@ static class ModelDeletionTests
                 check(rejected,"Model deletion rejects unsafe, unconfirmed, stale or in-use request: "+request.Path);
             }
             check(Entry(gguf).DeletePath==gguf,"Managed GGUF inventory exposes its deletion path");
+            check(Entry(sharedSnapshot).DeletePath==sharedRepo,"Shared model storage deletes the confirmed repository and its blobs together");
             check(Entry(first).DeletePath==repository&&Entry(second).DeletePath==repository,"All HF snapshots identify the entire repository including blobs for deletion");
             check(Entry(outside).DeletePath==null&&Entry(traversal).DeletePath==null&&Entry(link).DeletePath==null,"External files, traversal paths and symbolic-link models cannot be deleted");
             await Reject(Request(outside));await Reject(Request(traversal));await Reject(Request(link));
