@@ -167,7 +167,10 @@ days. It keeps the active and rollback bundles, and defers application cleanup
 while an update holds the lock or recovery is pending.
 
 The same service runs Podman's dangling-image prune with a seven-day image
-creation-age filter. Tagged images, images referenced by containers, and
+creation-age filter. Before pruning, Xur tags locally available immutable image
+references in its catalog, saved profiles, and persisted workloads. If this
+inventory fails, image cleanup is skipped. Newly prepared custom containers
+also receive a local tag. Tagged images, images in use by containers, and
 volumes are retained. The job leaves application data, telemetry, benchmarks,
 recordings and journals in place.
 

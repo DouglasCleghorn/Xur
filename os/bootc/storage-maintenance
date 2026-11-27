@@ -1,12 +1,16 @@
 #!/usr/bin/python3
 """Remove obsolete installed application bundles and abandoned updater downloads."""
 import fcntl
+import hashlib
 import json
 import os
 import pathlib
 import re
 import shutil
+import sqlite3
 import subprocess
+import tempfile
+from contextlib import closing
 import sys
 import time
 
@@ -19,6 +23,7 @@ HASH = re.compile(r'[0-9a-f]{64}')
 def configure(source, units, configured):
     # The first agent start installs the timer on existing and new appliances.
     # Stable unit files let systemd run cleanup independently on future boots.
+    version = hashlib.sha256()
     changed = False
     for suffix in ('.service', '.timer'):
         name = UNIT + suffix
@@ -26,28 +31,43 @@ def configure(source, units, configured):
         if target.is_symlink():
             continue  # Keep administrator masks and overrides.
         content = (source / name).read_bytes()
+        version.update(content)
         if not target.exists() or target.read_bytes() != content:
-            temporary = target.with_suffix(suffix + '.tmp')
-            temporary.write_bytes(content)
-            temporary.chmod(0o644)
-            temporary.replace(target)
+            with tempfile.NamedTemporaryFile(dir=units, delete=False) as handle:
+                temporary = pathlib.Path(handle.name)
+            try:
+                temporary.write_bytes(content)
+                temporary.chmod(0o644)
+                temporary.replace(target)
+            finally:
+                temporary.unlink(missing_ok=True)
             changed = True
-    if changed or not configured.exists():
+    first = not configured.exists()
+    if first or changed or configured.read_text() != version.hexdigest():
+        paths = [units / (UNIT + suffix) for suffix in ('.service', '.timer')]
+        regular = [str(path) for path in paths if not path.is_symlink()]
+        if regular:
+            subprocess.run(['restorecon', *regular], check=True)
         subprocess.run(['systemctl', 'daemon-reload'], check=True)
-    if not configured.exists():
-        if not (units / (UNIT + '.timer')).is_symlink():
+        if first and not any(path.is_symlink() for path in paths):
             subprocess.run(['systemctl', 'enable', '--now', UNIT + '.timer'], check=True)
-        configured.touch()
+        configured.write_text(version.hexdigest())
 
 
 def clean(root, now):
+    root = root.resolve(strict=True)
+    def recovering():
+        return any(os.path.lexists(root / name) for name in ('transaction.json', 'maintenance'))
+
+    if recovering():
+        return
     with (root / 'update.lock').open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             print('Skipping application cleanup while the updater holds its lock.')
             return
-        if any(os.path.lexists(root / name) for name in ('transaction.json', 'maintenance')):
+        if recovering():
             print('Skipping application cleanup while update recovery is pending.')
             return
         selection = os.readlink(root / 'current')
@@ -66,7 +86,8 @@ def clean(root, now):
 
         # Bundle directories normally contain only files from a signed archive.
         # Stop before touching a filesystem or bind mount nested in a candidate.
-        mountpoints = [line.split()[4] for line in pathlib.Path('/proc/self/mountinfo').read_text().splitlines()]
+        mountpoints = [re.sub(r'\\([0-7]{3})', lambda m: chr(int(m[1], 8)), line.split()[4])
+                       for line in pathlib.Path('/proc/self/mountinfo').read_text().splitlines()]
 
         def removable(path):
             prefix = str(path) + '/'
@@ -80,18 +101,92 @@ def clean(root, now):
         for path in root.glob('download-*'):
             if re.fullmatch(r'download-(?:[0-9a-f]{32}|[a-z0-9_]{8})', path.name) and expired(path):
                 print('Removing abandoned update download', path.name, flush=True)
-                shutil.rmtree(path)
-        # Rename before deletion so a crash cannot leave a partially removed
-        # directory where a subsequent update expects a complete release.
-        for path in root.glob('obsolete-*'):
-            if re.fullmatch(r'obsolete-[0-9a-f]{64}', path.name) and removable(path):
-                shutil.rmtree(path)
+                target = root / ('obsolete-' + path.name)
+                if not os.path.lexists(target):
+                    path.rename(target)
         for path in releases.iterdir():
             if path.name not in keep and HASH.fullmatch(path.name) and expired(path):
                 print('Removing obsolete application release', path.name, flush=True)
                 obsolete = root / ('obsolete-' + path.name)
-                path.rename(obsolete)
-                shutil.rmtree(obsolete)
+                if not os.path.lexists(obsolete):
+                    path.rename(obsolete)
+
+    # No updater can select a quarantined directory. Recursive removal can take minutes.
+    for path in root.glob('obsolete-*'):
+        if re.fullmatch(r'obsolete-(?:[0-9a-f]{64}|download-(?:[0-9a-f]{32}|[a-z0-9_]{8}))', path.name) and removable(path):
+            shutil.rmtree(path)
+
+
+def image_references(root):
+    """Read immutable selections, including older recipes embedded in saved profiles."""
+    references = set()
+
+    def collect(value):
+        if isinstance(value, list):
+            for element in value:
+                collect(element)
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                if key.lower() == 'image' and isinstance(item, str):
+                    if re.fullmatch(r'(?:[A-Za-z0-9][A-Za-z0-9./:_-]*@)?sha256:[a-f0-9]{64}', item):
+                        references.add(item)
+                        if item.startswith('docker.io/'):
+                            references.add('mirror.gcr.io/' + item[len('docker.io/'):])
+                else:
+                    collect(item)
+
+    state = root.parent
+    catalogs = [state / 'catalog-selected', state / 'workloads']
+    catalogs.extend(path / 'catalog' for path in (root / 'releases').iterdir()
+                   if HASH.fullmatch(path.name) and not path.is_symlink())
+    for catalog in catalogs:
+        if catalog.exists():
+            for directory, _, names in os.walk(catalog, onerror=raise_error):
+                for name in names:
+                    if name.endswith('.json'):
+                        collect(json.loads((pathlib.Path(directory) / name).read_text()))
+    persisted = state / 'persisted-compute.json'
+    if persisted.exists():
+        collect(json.loads(persisted.read_text()))
+    database = state / 'profiles.db'
+    if database.exists():
+        with closing(sqlite3.connect(database.as_uri() + '?mode=ro', uri=True)) as db:
+            for (document,) in db.execute("SELECT json FROM documents WHERE kind IN ('profile','active','journal')"):
+                collect(json.loads(document))
+    return references
+
+
+def raise_error(error):
+    raise error
+
+
+def prune_images(root):
+    # Protect legacy selections in Podman's own store, including untagged parent
+    # layers that recursive prune may reach. A failed inventory skips the prune.
+    podman = '/usr/bin/podman'
+    retained = set()
+    for reference in sorted(image_references(root)):
+        exists = subprocess.run([podman, 'image', 'exists', reference])
+        if exists.returncode == 1:
+            continue
+        exists.check_returncode()
+        result = subprocess.run([podman, 'image', 'inspect', '--format', '{{.Id}}', reference],
+                                text=True, capture_output=True, check=True)
+        identity = result.stdout.strip().removeprefix('sha256:')
+        if not HASH.fullmatch(identity):
+            raise ValueError('Invalid Podman image identity')
+        if identity not in retained:
+            subprocess.run([podman, 'tag', identity, 'localhost/xur-retained:' + identity], check=True)
+            retained.add(identity)
+
+    # Release Xur's own retention tags once the associated selection is gone.
+    listed = subprocess.run([podman, 'image', 'ls', '--format', '{{.Repository}}:{{.Tag}}'],
+                            text=True, capture_output=True, check=True)
+    for tag in listed.stdout.splitlines():
+        identity = tag.removeprefix('localhost/xur-retained:')
+        if tag != identity and HASH.fullmatch(identity) and identity not in retained:
+            subprocess.run([podman, 'untag', tag, tag], check=True)
+    subprocess.run([podman, 'image', 'prune', '--force', '--filter', 'until=168h'], check=True)
 
 
 def maintain(root):
@@ -103,8 +198,12 @@ def maintain(root):
         failed = True
     # Podman selects dangling images under its own storage locks. A failure
     # reading application state must not prevent reclamation in this store.
-    result = subprocess.run(['/usr/bin/podman', 'image', 'prune', '--force', '--filter', 'until=168h'])
-    return 1 if failed else result.returncode
+    try:
+        prune_images(root)
+    except (OSError, ValueError, sqlite3.Error, subprocess.CalledProcessError) as error:
+        print(f'Image cleanup failed: {error}', file=sys.stderr, flush=True)
+        failed = True
+    return int(failed)
 
 
 if __name__ == '__main__':
@@ -112,6 +211,11 @@ if __name__ == '__main__':
         configure(pathlib.Path(__file__).resolve().parent, pathlib.Path('/etc/systemd/system'),
                   APP.parent / 'storage-maintenance-configured')
     elif not sys.argv[1:]:
-        sys.exit(maintain(APP))
+        with (APP / 'storage-maintenance.lock').open('a') as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                sys.exit('Storage maintenance is already running')
+            sys.exit(maintain(APP))
     else:
         sys.exit('Usage: storage-maintenance [configure]')

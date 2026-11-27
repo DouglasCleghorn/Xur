@@ -43,18 +43,15 @@ if(!installer && File.Exists(hostUtility))
 
 if (!installer && File.Exists("/var/lib/xur/installed"))
 {
-    _ = Task.Run(async () =>
+    try
     {
-        try
-        {
-            var result = await Processes.Run("/var/lib/xur/app/current/host/storage-maintenance", ["configure"], 60);
-            if (result.ExitCode != 0) throw new IOException(result.Output);
-        }
-        catch (Exception e)
-        {
-            applicationLog.Write("StorageMaintenance", Microsoft.Extensions.Logging.LogLevel.Warning, Redaction.Logs(e.Message));
-        }
-    });
+        var result = await Processes.Run("/var/lib/xur/app/current/host/storage-maintenance", ["configure"], 60);
+        if (result.ExitCode != 0) throw new IOException(result.Output);
+    }
+    catch (Exception e)
+    {
+        applicationLog.Write("StorageMaintenance", Microsoft.Extensions.Logging.LogLevel.Warning, Redaction.Logs(e.Message));
+    }
 }
 
 var stateDir = installer ? run : "/var/lib/xur";

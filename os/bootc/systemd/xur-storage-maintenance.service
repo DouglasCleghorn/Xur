@@ -1,5 +1,6 @@
 [Unit]
 Description=Reclaim unused Xur application and container storage
+After=xur-app-prepare-recovery.service xur-app-recovery.service
 ConditionPathExists=/var/lib/xur/installed
 ConditionFileIsExecutable=/var/lib/xur/app/current/host/storage-maintenance
 

@@ -61,6 +61,12 @@ public sealed class ContainerLibrary
             var inspect=await Processes.Run("podman",["image","inspect",reference],15);if(inspect.ExitCode!=0)throw new IOException("Image inspection failed.");
             using var image=JsonDocument.Parse(inspect.Output);var identity=image.RootElement[0].GetProperty("Id").GetString()!;
             if(Regex.IsMatch(identity,@"^[a-f0-9]{64}$"))identity="sha256:"+identity;
+            if (string.IsNullOrWhiteSpace(request.Dockerfile))
+            {
+                // The recipe saves an immutable ID, even when a subsequent pull moves the registry tag.
+                var retained = await Processes.Run("podman", ["tag", identity, "localhost/xur-custom:" + job.Id], 15);
+                if (retained.ExitCode != 0) throw new IOException("Could not retain the prepared image.");
+            }
             var mounts=new List<ContainerMount>();
             foreach(var volume in request.Volumes??[])
             {
