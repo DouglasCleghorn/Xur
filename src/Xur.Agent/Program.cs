@@ -41,6 +41,22 @@ if(!installer && File.Exists(hostUtility))
     catch(Exception e){applicationLog.Write("JournalCompression",Microsoft.Extensions.Logging.LogLevel.Warning,"Journal compression setup failed; retrying on next agent start: "+Redaction.Logs(e.Message));}
 }
 
+if (!installer && File.Exists("/var/lib/xur/installed"))
+{
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            var result = await Processes.Run("/var/lib/xur/app/current/host/storage-maintenance", ["configure"], 60);
+            if (result.ExitCode != 0) throw new IOException(result.Output);
+        }
+        catch (Exception e)
+        {
+            applicationLog.Write("StorageMaintenance", Microsoft.Extensions.Logging.LogLevel.Warning, Redaction.Logs(e.Message));
+        }
+    });
+}
+
 var stateDir = installer ? run : "/var/lib/xur";
 var systemDiagnostics=new SystemDiagnostics();
 app.MapGet("/diagnostics/system",async Task<IResult>()=>{

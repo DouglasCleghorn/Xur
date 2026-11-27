@@ -48,9 +48,11 @@ copy(repo/'os/bootc/logging',bundle/'host/logging')
 copy(context/'publish/util/xurutil',bundle/'host/xurutil')
 (bundle/'host/xurutil').chmod(0o755)
 copy(context/'publish/util/licenses',bundle/'host/licenses')
-for name in ('os-update','update-schedule','app-update','update-all','xur-network','host-service-migrate','log-compression','hardware-hooks/reboot'):
+for name in ('os-update','update-schedule','app-update','update-all','xur-network','host-service-migrate','log-compression','storage-maintenance','hardware-hooks/reboot'):
     copy(repo/'os/bootc'/name,bundle/'host'/name)
     (bundle/'host'/name).chmod(0o755)
+for name in ('xur-storage-maintenance.service','xur-storage-maintenance.timer'):
+    copy(repo/'os/bootc/systemd'/name,bundle/'host'/name)
 files={str(p.relative_to(bundle)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(bundle.rglob('*')) if p.is_file()}
 bundle_id=hashlib.sha256(json.dumps(files,sort_keys=True).encode()).hexdigest()
 (bundle/'bundle.json').write_text(json.dumps({'schema':1,'hostAbi':1,'buildSequence':int(time.time()),'version':bundle_id[:12],'id':bundle_id,'files':files},indent=2)+'\n')

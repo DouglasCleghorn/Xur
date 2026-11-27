@@ -1,0 +1,116 @@
+#!/usr/bin/python3
+"""Remove obsolete installed application bundles and abandoned updater downloads."""
+import fcntl
+import json
+import os
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import time
+
+APP = pathlib.Path('/var/lib/xur/app')
+UNIT = 'xur-storage-maintenance'
+WEEK = 7 * 86400
+HASH = re.compile(r'[0-9a-f]{64}')
+
+
+def configure(source, units, configured):
+    # The first agent start installs the timer on existing and new appliances.
+    # Stable unit files let systemd run cleanup independently on future boots.
+    changed = False
+    for suffix in ('.service', '.timer'):
+        name = UNIT + suffix
+        target = units / name
+        if target.is_symlink():
+            continue  # Keep administrator masks and overrides.
+        content = (source / name).read_bytes()
+        if not target.exists() or target.read_bytes() != content:
+            temporary = target.with_suffix(suffix + '.tmp')
+            temporary.write_bytes(content)
+            temporary.chmod(0o644)
+            temporary.replace(target)
+            changed = True
+    if changed or not configured.exists():
+        subprocess.run(['systemctl', 'daemon-reload'], check=True)
+    if not configured.exists():
+        if not (units / (UNIT + '.timer')).is_symlink():
+            subprocess.run(['systemctl', 'enable', '--now', UNIT + '.timer'], check=True)
+        configured.touch()
+
+
+def clean(root, now):
+    with (root / 'update.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print('Skipping application cleanup while the updater holds its lock.')
+            return
+        if any(os.path.lexists(root / name) for name in ('transaction.json', 'maintenance')):
+            print('Skipping application cleanup while update recovery is pending.')
+            return
+        selection = os.readlink(root / 'current')
+        current = (root / selection).resolve(strict=True)
+        releases = root / 'releases'
+        if releases.is_symlink() or current.parent != releases or not HASH.fullmatch(current.name):
+            raise ValueError('Unrecognized current release selection')
+        keep = {current.name}
+        previous = root / 'previous.json'
+        if os.path.lexists(previous):
+            identity = json.loads(previous.read_text())['id']
+            if (not HASH.fullmatch(identity) or (releases / identity).is_symlink()
+                    or not (releases / identity).is_dir()):
+                raise ValueError('Unrecognized rollback selection')
+            keep.add(identity)
+
+        # Bundle directories normally contain only files from a signed archive.
+        # Stop before touching a filesystem or bind mount nested in a candidate.
+        mountpoints = [line.split()[4] for line in pathlib.Path('/proc/self/mountinfo').read_text().splitlines()]
+
+        def removable(path):
+            prefix = str(path) + '/'
+            return (not path.is_symlink() and path.is_dir()
+                    and not any(m == str(path) or m.startswith(prefix) for m in mountpoints))
+
+        def expired(path):
+            return removable(path) and path.stat().st_mtime < now - WEEK
+
+        for path in root.glob('download-*'):
+            if re.fullmatch(r'download-[0-9a-f]{32}', path.name) and expired(path):
+                print('Removing abandoned update download', path.name, flush=True)
+                shutil.rmtree(path)
+        # Rename before deletion so a crash cannot leave a partially removed
+        # directory where a subsequent update expects a complete release.
+        for path in root.glob('obsolete-*'):
+            if re.fullmatch(r'obsolete-[0-9a-f]{64}', path.name) and removable(path):
+                shutil.rmtree(path)
+        for path in releases.iterdir():
+            if path.name not in keep and HASH.fullmatch(path.name) and expired(path):
+                print('Removing obsolete application release', path.name, flush=True)
+                obsolete = root / ('obsolete-' + path.name)
+                path.rename(obsolete)
+                shutil.rmtree(obsolete)
+
+
+def maintain(root):
+    failed = False
+    try:
+        clean(root, time.time())
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        print(f'Application cleanup failed: {error}', file=sys.stderr, flush=True)
+        failed = True
+    # Podman selects dangling images under its own storage locks. A failure
+    # reading application state must not prevent reclamation in this store.
+    result = subprocess.run(['/usr/bin/podman', 'image', 'prune', '--force', '--filter', 'until=168h'])
+    return 1 if failed else result.returncode
+
+
+if __name__ == '__main__':
+    if sys.argv[1:] == ['configure']:
+        configure(pathlib.Path(__file__).resolve().parent, pathlib.Path('/etc/systemd/system'),
+                  APP.parent / 'storage-maintenance-configured')
+    elif not sys.argv[1:]:
+        sys.exit(maintain(APP))
+    else:
+        sys.exit('Usage: storage-maintenance [configure]')
