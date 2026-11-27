@@ -506,45 +506,51 @@ usernames, file paths, account names, or model prompts in public screenshots.
 
 | Image | Used in | Type / source | Last review | Next review |
 | --- | --- | --- | --- | --- |
-| `docs/assets/xur-header.png` | README header; website social sharing | User-supplied artwork, unchanged | 2026-09-20; no private data or embedded metadata | Branding changes |
-| `docs/assets/workstations-and-llm.png` | README example profiles; website home/model guide | User-supplied diagram, unchanged | 2026-09-20; illustrative allocation, not a benchmark | Workstation/profile changes |
+| `docs/assets/xur-header.png` | README header; website social sharing; synthetic workstation preview | User-supplied artwork, unchanged | 2026-09-20; no private data or embedded metadata | Branding changes |
+| `docs/assets/workstations-and-llm.png` | README example profiles; legacy website asset URL | User-supplied diagram, unchanged | 2026-09-20; illustrative allocation, not a benchmark | Workstation/profile changes |
 
-No live-server screenshots are published. The diagrams above are artwork.
-The following app screenshots are produced by `node eng/capture-website.cjs`
-using the actual Razor renderer and synthetic test fixtures. No real host is
-contacted. All nine images were regenerated and visually reviewed on
-**2026-11-01 UTC** from source `b766f6353b61ac29c4e5c250ec11d25eed2fc524`
-for Stable release preparation. This does not establish hardware acceptance.
+The 15 published JPEGs below were captured and reviewed on **2026-11-27 UTC**
+using the Razor UI at `2b83d0b` (Nightly 26.11.014) with the website fixture
+updates. The renderer uses temporary application state, simulated services and
+a synthetic network inventory. The browser loads fixture responses, checked-in
+app assets and the approved Xur artwork. All images were inspected visually
+and checked for EXIF and location data. No live accounts, addresses, credentials,
+projects, prompts, camera images or desktop sessions appear.
 
-| Image | Used in | Capture / privacy review | Next review |
+| Published image under `docs/assets/` | Website use | What was reviewed | Refresh after changes to |
 | --- | --- | --- | --- |
-| `docs/assets/control-panel.jpg` | Website home; getting-started guide | 2026-11-01; synthetic Gaming/Studio profiles and displays, no personal data, 1200×800 | Home/profile picker changes |
-| `docs/assets/workstations.jpg` | Website home; workstation guide | 2026-11-01; synthetic desktops, GPU and fixture accounts only; connection details collapsed, 1200×800 | Workstation management/layout changes |
-| `docs/assets/profile-editor.jpg` | Getting-started guide | 2026-11-01; synthetic GPU, workstation and controllers, no real account details, 1200×800 | Profile editor or USB assignment changes |
-| `docs/assets/model-lab.jpg` | Models guide | 2026-11-01; synthetic target, blank prompt, no responses or benchmark results, 1200×800 | Model lab controls changes |
-| `docs/assets/update-channel.jpg` | Updates guide | 2026-11-01; current selector rechecked and recaptured with identical bytes; Nightly selected, local server/key fields excluded, 944×327 | Update settings changes |
-| `docs/assets/setup-phone-sign-in.jpg` | `/guides/setup/`, step 3: enter the console code | 2026-11-01; empty code field with ABC-DEF placeholder, no real code, 390×844 | Login or mobile layout changes |
-| `docs/assets/setup-phone-account.jpg` | `/guides/setup/`, step 4: create the administrator | 2026-11-01; empty username/password fields, no credentials, 390×844 | Account creation or password-help changes |
-| `docs/assets/setup-phone-profile.jpg` | `/guides/setup/`, step 5: choose a workstation and GPU | 2026-11-01; synthetic Gaming desk, workstation and GPU, no personal data, 390×844 | Profile fields, device assignments or mobile navigation changes |
-| `docs/assets/setup-phone-home.jpg` | `/guides/setup/`, step 6: load a saved profile | 2026-11-01; synthetic Gaming/Studio profiles, idle state and update notice, no private data, 390×844 | Home/profile picker or mobile navigation changes |
+| `control-panel.jpg` | Getting started | Gaming desk and Model server on a sample host, 1200×800 | Home or profile selection |
+| `workstations.jpg` | Home tour and workstation guide | Synthetic workstation identities and GPU. The desktop preview displays the Xur banner, 1200×800 | Workstations, desktop previews or Moonlight |
+| `profile-editor.jpg` | Getting started | Example workstation, GPU and input assignments, 1200×800 | Profile or peripheral editor |
+| `model-lab.jpg` | Home tour and models guide | Synthetic target, empty prompt and results, 1200×800 | Model lab or benchmarks |
+| `update-channel.jpg` | Updates guide | Nightly selector only, with local server and key fields hidden, 944×326 | Update channel settings |
+| `t3-connect.jpg`, `t3-connect-phone.jpg` | Home tour and T3 Code guide | Running fixture before pairing. No link, QR or account, 944×236 and 358×302 | T3 connection flow |
+| `t3-github.jpg`, `t3-github-phone.jpg` | Home tour and T3 Code guide | Signed-out CLI. No name, account, device code or token, 944×153 and 358×175 | GitHub CLI setup in T3 |
+| `network-shares.jpg`, `network-shares-phone.jpg` | Home tour and network shares guide | Read-only datasets on the reserved example host `nas.example`. Synthetic paths and IDs, 944×495 and 358×733 | SMB connection display and assignment |
+| `setup-phone-sign-in.jpg` | Phone setup, console code step | Empty sign-in form and app placeholder, 390×844 | Sign-in form or mobile navigation |
+| `setup-phone-account.jpg` | Phone setup, administrator step | Empty account and password fields, 390×844 | Account creation |
+| `setup-phone-profile.jpg` | Phone setup, workload step | Gaming desk with a synthetic GPU and controllers, 390×844 | Profile editor or mobile navigation |
+| `setup-phone-home.jpg` | Phone setup, load step | Example gaming and model profiles, 390×844 | Home or profile selection |
 
-All nine JPEGs were visually reviewed and have no EXIF or location metadata.
-Guide captions identify their example data. Full-resolution images are linked for
-readability; key actions are also described in text. These replace the September
-20 desktop and October 10 phone captures and resolve the refresh list below.
+`eng/capture-website.cjs` stages JPEGs under `.build/evidence/website-captures/`
+and fixture markup under `.build/evidence/website-fixtures/`. The images
+supersede the nine desktop/phone captures reviewed on 2026-11-01 at `b766f63`.
+The earlier contact sheet remains private in
+`.build/evidence/release-stable/screenshots-review.jpg`.
 
-Private rendered fixtures remain under `.build/evidence/website-fixtures/`.
-The review contact sheet is
-`.build/evidence/release-stable/screenshots-review.jpg`, generated on 2026-11-01
-from the same synthetic images solely to review all nine together. It contains no
-live host information, credentials or personal data and is not shipped. Website
-regression captures remain in the documented `.build/evidence/website/` family.
-Regenerate these private review families after changing their source images.
+The 2026-11-27 private site review family in `.build/evidence/website/` covers
+home, download and guide renders at 1440, 768, 390 and 320 pixels as applicable,
+desktop/mobile layout and asset-review sheets, and the in-thread homepage preview.
+It contains public site content and the synthetic images above. The existing
+private `.build/evidence/profile-editor/` and `.build/evidence/workstation-design/`
+browser-test families were also exercised with the neutral example account at
+the same revision. These show fixture workstation and peripheral data. Regenerate
+after changes to the layout, guides, profile editor or workstation UI.
 
 ## Release review — 2026-10-04
 
 Historical source review through `92fdea6` identified the following refresh work,
-completed by the 2026-11-01 refresh above. This historical comparison did not
+completed by the 2026-11-01 refresh. This historical comparison did not
 constitute a new image capture or privacy approval; the current capture dates
 and privacy outcomes are recorded in the published-image table above.
 

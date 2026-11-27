@@ -12,6 +12,7 @@ static class ControlPanelRender
     public static async Task Run(string output, bool documentation = false)
     {
         var root=Path.GetFullPath(Path.Combine(".build/evidence","h-"+Guid.NewGuid().ToString("N")[..12]));Directory.CreateDirectory(root);Directory.CreateDirectory(output);
+        var previousState=Environment.GetEnvironmentVariable("XUR_STATE");
         var previous=Environment.GetEnvironmentVariable("XUR_RUN");var mode=Environment.GetEnvironmentVariable("XUR_MODE");
         Environment.SetEnvironmentVariable("XUR_RUN",root);Environment.SetEnvironmentVariable("XUR_MODE","Installed");
         var builder=WebApplication.CreateBuilder();builder.Logging.ClearProviders();builder.WebHost.ConfigureKestrel(k=>k.ListenUnixSocket(root+"/agent.sock"));
@@ -47,9 +48,8 @@ static class ControlPanelRender
         StationStreamStatus[] streams=[];
         agent.MapGet("/workstations",()=>streams);
         agent.MapGet("/station-allocations",()=>Array.Empty<StationDeviceAllocation>());
-        agent.MapGet("/station-users",()=>documentation
-            ?new[]{new StationAccount("example-user",1000,"Example user","/var/home/example-user")}
-            :new[]{new StationAccount("doug",1000,"Doug","/var/home/doug")});
+        var stationAccount = new StationAccount("example-user", 1000, "Example user", "/var/home/example-user");
+        agent.MapGet("/station-users", () => new[] { stationAccount });
         agent.MapGet("/update-all",()=>new UpdateAllStatus(false,null));
         agent.MapGet("/displays",()=>new DisplayPowerStatus([
             new("display-console","card0-HDMI-A-1","0000:01:00.0","Example TV",null,"native",true,null),
@@ -66,11 +66,23 @@ static class ControlPanelRender
         {
             observer.Snapshot=new RuntimeObservation("example",[gpu with {ShortId="GPU 1",Cards=["/dev/dri/card0"]}],[]);
             store.Save(new Profile("1","Gaming desk",2,[new("w1","Gaming",stationRecipe,[gpu.Pci],"desktop")]));
-            store.Save(new Profile("2","Studio desk",2,[new("doc-studio","Studio",stationRecipe,[gpu.Pci],"desktop")]));
+            var model = RecipeGpuSelection.Apply(RecipeGpuSelectionTests.Llama() with {Name="Local assistant"}, "NVIDIA", 1);
+            store.Save(new Profile("2","Model server",2,[new("doc-model","Local assistant",model,[gpu.Pci],"assistant")]));
         }
         try
         {
-            await agent.StartAsync();var services=new ServiceCollection();services.AddLogging();var context=new DefaultHttpContext();context.Request.Scheme="https";context.Request.Host=new HostString("stations.test");services.AddSingleton<IHttpContextAccessor>(new HttpContextAccessor{HttpContext=context});services.AddSingleton(new Appliance());services.AddSingleton(manager);services.AddSingleton(new ProfileAccessSettings(root+"/profile-access.json"));services.AddSingleton(new RecipeCatalog(root+"/catalog"));services.AddSingleton(new Bootstrap(directory:root));services.AddSingleton<NavigationManager>(new Navigation());
+            if(documentation)Environment.SetEnvironmentVariable("XUR_STATE",root);
+            await agent.StartAsync();
+            var services = new ServiceCollection();
+            services.AddLogging();
+            var context = new DefaultHttpContext();
+            context.Request.Scheme = "https";
+            context.Request.Host = new HostString("stations.test");
+            services.AddSingleton<IHttpContextAccessor>(new HttpContextAccessor {HttpContext = context});
+            services.AddSingleton(documentation
+                ? new Appliance((_, _, _) => Task.FromResult(new ProcessResult(1, "")), () => [])
+                : new Appliance());
+            services.AddSingleton(manager);services.AddSingleton(new ProfileAccessSettings(root+"/profile-access.json"));services.AddSingleton(new RecipeCatalog(root+"/catalog"));services.AddSingleton(new Bootstrap(directory:root));services.AddSingleton<NavigationManager>(new Navigation());
             await using var provider=services.BuildServiceProvider();await using var renderer=new HtmlRenderer(provider,provider.GetRequiredService<ILoggerFactory>());
             if(documentation)
             {
@@ -81,7 +93,10 @@ static class ControlPanelRender
                     await File.WriteAllTextAsync(Path.Combine(output,page+".html"),"<!doctype html><html lang=\"en\"><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><link rel=stylesheet href='/setup.css'></head><body>"+html+"</body></html>");
                 }
             }
-            foreach(var page in new[]{"unsloth","t3-code","t3-install","home","displays","workstations","endpoints","monitoring","files","models","model-lab","api-keys","settings","settings-ssh-enabled","diagnostics","network-settings","storage","network-shares","profile-edit","profile-switch"})
+            string[] pages = documentation
+                ? ["home", "model-lab", "settings", "t3-code", "network-shares", "profile-edit"]
+                : ["unsloth","t3-code","t3-install","home","displays","workstations","endpoints","monitoring","files","models","model-lab","api-keys","settings","settings-ssh-enabled","diagnostics","network-settings","storage","network-shares","profile-edit","profile-switch"];
+            foreach(var page in pages)
             {
                 if(page=="t3-install")File.Move(root+"/catalog/t3-code.json",root+"/t3-code.json");
                 diagnosticSsh=page=="settings-ssh-enabled"?new(true,2):new();
@@ -129,8 +144,8 @@ static class ControlPanelRender
             }
             wifi=availableWifi;
             // Exercise the actual workstation renderer with running, shared, stopped and unassigned desktops.
-            var gaming=new Workload("w1","Gaming workstation",stationRecipe,[gpu.Pci],"desktop",new("doug",1000,false));
-            var studio=new Workload("w2","Studio desktop",stationRecipe,[gpu.Pci],"desktop",new("doug",1000,false));
+            var gaming=new Workload("w1","Gaming workstation",stationRecipe,[gpu.Pci],"desktop",new(stationAccount.Username,stationAccount.Uid,false));
+            var studio=new Workload("w2","Studio desktop",stationRecipe,[gpu.Pci],"desktop",new(stationAccount.Username,stationAccount.Uid,false));
             var guest=new Workload("w3","Guest desktop",stationRecipe,[gpu.Pci],"desktop",new("",0,true));
             store.Put("station","w1",new StationDefinition(gaming.Id,gaming.Name,gaming.User));
             store.Save(new Profile("1","AI and gaming",2,[gaming]));
@@ -144,7 +159,13 @@ static class ControlPanelRender
             var workstations=await renderer.Dispatcher.InvokeAsync(async()=> (await renderer.RenderComponentAsync<Xur.Control.Components.Pages.Workstations>()).ToHtmlString());
             await File.WriteAllTextAsync(Path.Combine(output,"workstations-populated.html"),"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><link rel=stylesheet href='/setup.css'><link rel=stylesheet href='/workstations.css'></head><body><main>"+workstations+"</main></body></html>");
         }
-        finally{await agent.StopAsync();Environment.SetEnvironmentVariable("XUR_RUN",previous);Environment.SetEnvironmentVariable("XUR_MODE",mode);}
+        finally
+        {
+            Environment.SetEnvironmentVariable("XUR_RUN",previous);
+            Environment.SetEnvironmentVariable("XUR_MODE",mode);
+            if(documentation)Environment.SetEnvironmentVariable("XUR_STATE",previousState);
+            await agent.StopAsync();
+        }
         store.Dispose();Directory.Delete(root,true);
     }
     sealed class ProfileEditor:Xur.Control.Components.Pages.ProfileEdit { protected override async Task OnInitializedAsync(){Id="1";await base.OnInitializedAsync();} }

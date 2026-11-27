@@ -1,32 +1,27 @@
 # xur.app design direction
 
-Based on Anthropic's current `frontend-design` skill, read from
-`anthropics/skills/main/skills/frontend-design/SKILL.md` on 2026-09-20.
+The homepage is for someone deciding what else their GPU PC could do. Start
+with a familiar job, playing a game, and show how the same hardware can serve a
+local model. Introduce Xur as an operating system before offering the installer.
 
-Audience: people who own GPU hardware and want desktops and local models on one
-host. The first job is to explain profiles; the second is to get them to a guide.
+The profile diagram borrows its shapes from a workstation chassis. Four
+physical card slots stay in place while two profile controls change their
+destinations. One pair of traces joins at a single language model. The
+four-card layout is an example. A visitor with one card can switch jobs too.
 
-Palette: app charcoal `#15181d`, surface `#20252d`, text `#edf1f7`,
-action blue `#99c5ff`, rules `#373f4b`, and teal `#8ed7b7`. IBM Plex Sans, already licensed
-and bundled with Xur, serves text and display headings. Headlines use compact
-spacing and a deliberately large scale; body copy stays below 70 characters.
+Use the app’s charcoal canvas (#15181d), raised surface (#20252d), light text
+(#edf1f7), action blue (#99c5ff) and mint (#8ed7b7). Reserve the drafting grid
+for GPU routing. Use the locally bundled IBM Plex Sans for display and body
+text, with short left-aligned headlines and readable line lengths.
 
-The distinctive element is a usable GPU allocation diagram. Profile buttons
-reassign four illustrated slots so the concept is understandable before install.
-Everything else stays quiet: left-aligned copy, broad whitespace, readable guides,
-and blue/teal details tied to workload identity.
+Below the diagram, let visitors choose a task and inspect the actual controls
+before following its guide. Keep each product view readable without JavaScript
+and offer a full-size capture. The narrower T3 and SMB views are captured at
+phone width. All application images use synthetic fixtures.
 
-    logo                  Profiles   Guides   GitHub
-    One host.             [ Gaming + AI | Model serving ]
-    More possibilities.   [ GPU 1 ] ── desktop / speech
-    explanation           [ GPU 2 ] ── desktop / speech
-    guide / source        [ GPU 3 + GPU 4 ] ── language model
-    examples / practical guide links / early-release status
+Close with the hardware requirements, disk erasure and current test coverage.
+Keep the main navigation short. Installer discovery belongs on the download
+page and runs only when a visitor opens it.
 
-The user requested a dark site matching the software on 2026-09-20. Keep the
-editorial layout and interactive allocation diagram with the app's accessible
-charcoal/blue palette. Header navigation is Guides, GitHub (with icon), Download now.
-The download page checks public GitHub releases without adding a server runtime.
-Homepage and guide screenshots come from the actual Razor renderer with synthetic
-fixtures; see docs/screenshots.md. No pricing, sign-up form, analytics, stock
-photography, or fabricated benchmark results.
+Reviewed 2026-11-27 against the published homepage, the Xur app and
+[Anthropic’s current frontend-design skill](https://github.com/anthropics/skills/blob/main/skills/frontend-design/SKILL.md).

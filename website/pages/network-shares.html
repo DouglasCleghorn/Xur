@@ -1,0 +1,26 @@
+<div class="guide wrap">
+{{guide_nav}}
+<article>
+  <h1>Give a workload a folder from your NAS.</h1>
+  <p class="intro">Keep a dataset in one place. Xur can mount an SMB3 share from your file server and make it available to selected containers and model workloads.</p>
+  <h2>Connect the share</h2>
+  <ol>
+    <li>Open <strong>Storage → Network shares</strong>. Under <strong>SMB runtime</strong>, install the runtime if needed. The installation requires internet access.</li>
+    <li>Choose <strong>Add connection</strong>. Enter a name, the server and share, the SMB credentials, and the local user and group IDs that should have access. Read-only access and required encryption are selected by default.</li>
+    <li>Save, then choose <strong>Connect</strong>. Use <strong>Test access</strong> to check both the SMB login and filesystem access.</li>
+  </ol>
+  <figure class="guide-screenshot">
+    <a href="/assets/network-shares.jpg" aria-label="Enlarge the saved NAS connection"><picture>
+          <source media="(max-width: 32rem)" srcset="/assets/network-shares-phone.jpg" width="358" height="733">
+          <img src="/assets/network-shares.jpg" width="944" height="495" loading="lazy" alt="Connected shares lists an example datasets folder with read-only access and encryption required.">
+        </picture></a>
+    <figcaption>An example connection saved before mounting. The panel shows the path the workload will use.</figcaption>
+  </figure>
+  <h2>Assign it to a workload</h2>
+  <p>Edit a model or container in <strong>Profiles</strong>. Expand <strong>Shared network folders</strong>, select the connection and save. Load the profile. The folder appears at the displayed <code>/shared/…</code> path inside that workload. To allow writes, both the connection and its workload assignment must permit them.</p>
+  <p>Xur checks required shares when the workload starts. If the NAS is unavailable, startup reports the problem. Unload workloads using a share before disconnecting or removing it.</p>
+  <h2>Share a folder from the Xur PC</h2>
+  <p>Under <strong>Hosted here</strong>, choose an existing local data folder. Set a dedicated SMB account, the filesystem user and group IDs, and the client IPv4 addresses or subnets allowed to connect. A blank allowed-systems list denies access.</p>
+  <p>Choose the host’s LAN or VPN address and start hosting. Clients use the displayed connection address and the share’s credentials. Hosting continues across GPU profile changes. See the <a href="https://github.com/DouglasCleghorn/Xur/blob/main/docs/usage/storage.md#network-shares">network shares reference</a> for supported folders, permissions and backup details.</p>
+</article>
+</div>
